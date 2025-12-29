@@ -1,0 +1,194 @@
+//
+// Created by Luke on 06/12/2025.
+//
+
+#include "./Lexer.h"
+#include <unordered_map>
+
+static std::unordered_map<std::string, TokenType> keywords = {
+    {"void", TokenType::VOID},
+    {"return", TokenType::RETURN},
+    {"string", TokenType::STRING},
+    {"auto", TokenType::AUTO},
+};
+
+Lexer::Lexer(std::string source) : source(std::move(source)) {}
+
+char Lexer::peek() const {
+    if (pos >= source.size()) return '\0';
+    return source[pos];
+}
+
+char Lexer::peekNext() const {
+    if (pos + 1 >= source.size()) return '\0';
+    return source[pos + 1];
+}
+
+char Lexer::advance() {
+    char c = peek();
+    pos++;
+    if (c == '\n') {
+        line++;
+        column = 1;
+    } else {
+        column++;
+    }
+    return c;
+}
+
+void Lexer::skip_whitespace() {
+    while (pos < source.size()) {
+        char c = peek();
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            advance();
+        } else if (c == '/' && pos + 1 < source.size() && source[pos + 1] == '/') {
+            // Comentário de linha
+            while (peek() != '\n' && peek() != '\0') advance();
+        } else {
+            break;
+        }
+    }
+}
+
+Token Lexer::make_token(TokenType type, const std::string& value) {
+    return Token{{line, column, static_cast<uint32_t>(pos)}, type, value};
+}
+
+Token Lexer::read_string() {
+    advance(); // pula "
+    std::string value;
+    while (peek() != '"' && peek() != '\0') {
+        if (peek() == '\\') {
+            advance();
+            char escaped = advance();
+            switch (escaped) {
+                case 'n': value += '\n'; break;
+                case 't': value += '\t'; break;
+                case '\\': value += '\\'; break;
+                case '"': value += '"'; break;
+                default: value += escaped;
+            }
+        } else {
+            value += advance();
+        }
+    }
+    if (peek() == '"') advance(); // pula " final
+    return make_token(TokenType::STRING_LITERAL, value);
+}
+
+Token Lexer::read_number() {
+    std::string value;
+    while (isdigit(peek())) {
+        value += advance();
+    }
+
+    return make_token(TokenType::INTEGER_LITERAL, value);
+}
+
+Token Lexer::read_identifier() {
+    std::string value;
+    while (isalnum(peek()) || peek() == '_') {
+        value += advance();
+    }
+
+    if (const auto it = keywords.find(value); it != keywords.end()) {
+        return make_token(it->second, value);
+    }
+    return make_token(TokenType::IDENTIFIER, value);
+}
+
+std::vector<Token> Lexer::tokenize() {
+    std::vector<Token> tokens;
+
+    while (pos < source.size()) {
+        skip_whitespace();
+        if (pos >= source.size()) break;
+
+        char c = peek();
+
+        if (c == '"') {
+            tokens.push_back(read_string());
+        } else if (isdigit(c)) {
+            tokens.push_back(read_number());
+        } else if (isalpha(c) || c == '_') {
+            tokens.push_back(read_identifier());
+        } else {
+            switch (c) {
+                case '(': tokens.push_back(make_token(TokenType::LPAREN, "(")); advance(); break;
+                case ')': tokens.push_back(make_token(TokenType::RPAREN, ")")); advance(); break;
+                case '{': tokens.push_back(make_token(TokenType::LBRACE, "{")); advance(); break;
+                case '}': tokens.push_back(make_token(TokenType::RBRACE, "}")); advance(); break;
+                case '[': tokens.push_back(make_token(TokenType::LBRACKET, "[")); advance(); break;
+                case ']': tokens.push_back(make_token(TokenType::RBRACKET, "]")); advance(); break;
+                case ';': tokens.push_back(make_token(TokenType::SEMICOLON, ";")); advance(); break;
+                case ',': tokens.push_back(make_token(TokenType::COMMA, ",")); advance(); break;
+                case '+': tokens.push_back(make_token(TokenType::PLUS, "+")); advance(); break;
+                case '-': tokens.push_back(make_token(TokenType::MINUS, "-")); advance(); break;
+                case '*': tokens.push_back(make_token(TokenType::STAR, "*")); advance(); break;
+                case '/': tokens.push_back(make_token(TokenType::SLASH, "/")); advance(); break;
+                case '%': tokens.push_back(make_token(TokenType::PERCENT, "%")); advance(); break;
+                case '=':
+                    if (peekNext() == '=') {
+                        tokens.push_back(make_token(TokenType::EQUAL_EQUAL, "=="));
+                        advance(); advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::EQUAL, "="));
+                        advance();
+                    }
+                    break;
+                case '!':
+                    if (peekNext() == '=') {
+                        tokens.push_back(make_token(TokenType::BANG_EQUAL, "!="));
+                        advance(); advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::BANG, "!"));
+                        advance();
+                    }
+                    break;
+                case '<':
+                    if (peekNext() == '=') {
+                        tokens.push_back(make_token(TokenType::LESS_EQUAL, "<="));
+                        advance(); advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::LESS, "<"));
+                        advance();
+                    }
+                    break;
+                case '>':
+                    if (peekNext() == '=') {
+                        tokens.push_back(make_token(TokenType::GREATER_EQUAL, ">="));
+                        advance(); advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::GREATER, ">"));
+                        advance();
+                    }
+                    break;
+                case '&':
+                    if (peekNext() == '&') {
+                        tokens.push_back(make_token(TokenType::AND_AND, "&&"));
+                        advance(); advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::UNKNOWN, std::string(1, c)));
+                        advance();
+                    }
+                    break;
+                case '|':
+                    if (peekNext() == '|') {
+                        tokens.push_back(make_token(TokenType::OR_OR, "||"));
+                        advance(); advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::UNKNOWN, std::string(1, c)));
+                        advance();
+                    }
+                    break;
+                default:
+                    tokens.push_back(make_token(TokenType::UNKNOWN, std::string(1, c)));
+                    advance();
+                    break;
+            }
+        }
+    }
+
+    tokens.push_back(make_token(TokenType::END_OF_FILE, ""));
+    return tokens;
+}

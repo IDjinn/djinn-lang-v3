@@ -1,0 +1,55 @@
+#include <fstream>
+#include <iostream>
+#include <thread>
+
+#include "lexer/Lexer.h"
+#include "parser/parser.h"
+#include "codegen/CodeGen.h"
+
+int main(int argc, char *argv[]) {
+    const std::string source = R"(
+          i64 soma(i64 a, i64 b) {
+              return a + b;
+          }
+
+          void main() {
+              auto x = 100;
+              auto y = 200;
+              auto total = soma(x, y);
+
+              string greeting = "Ola";
+
+              i32[] ids;
+              string[] names;
+
+              printf("Hello: %s\n", greeting);
+              printf("Total: %d\n", total);
+          }
+    )";
+
+    printf("===SOURCE===\n%s\n\n", source.c_str());
+
+    Lexer lexer(source);
+    const auto tokens = lexer.tokenize();
+
+    Parser parser(tokens);
+    const auto program = parser.parse();
+    std::cout << "===PROGRAM===\n";
+    program->print(std::cout, 2);
+    std::cout << "\n\n";
+
+    CodeGen codegen;
+    codegen.generate(*program);
+    codegen.optimize();
+    const auto result = codegen.print();
+    printf("===LLVM RESULT===\n%s\n\n", result.c_str());
+
+    std::ofstream output;
+    output.open("output.ll");
+    output << result;
+    output.close();
+
+    system("clang output.ll -o output.exe");
+    system("output.exe");
+    return 0;
+}
