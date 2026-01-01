@@ -8,23 +8,9 @@
 
 int main(int argc, char *argv[]) {
     const std::string source = R"(
-          i64 soma(i64 a, i64 b) {
-              return a + b;
-          }
-
-          void main() {
-              auto x = 100;
-              auto y = 200;
-              auto total = soma(x, y);
-
-              string greeting = "Ola";
-
-              i32[] ids;
-              string[] names;
-
-              printf("Hello: %s\n", greeting);
-              printf("Total: %d\n", total);
-          }
+        i32 sum(i32 a, i32 b) {
+            return a + b;
+        }
     )";
 
     printf("===SOURCE===\n%s\n\n", source.c_str());

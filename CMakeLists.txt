@@ -1,45 +1,30 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.26)
 
 cmake_policy(SET CMP0091 NEW)
 
-project(djinn)
+project(djinn LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# MSVC: usar runtime library estática (consistência com LLVM)
-if(MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+if (MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
 
-# Habilitar testes
-enable_testing()
-
-
-file(GLOB_RECURSE SOURCES
-        "lexer/*.cpp"
-        "lexer/*.h"
-        "parser/*.cpp"
-        "parser/*.h"
-        "codegen/*.cpp"
-        "codegen/*.h"
-        "main.cpp"
+file(GLOB_RECURSE DJINN_SOURCES
+        lexer/*.cpp
+        parser/*.cpp
+        codegen/*.cpp
 )
 
-set(GLAD_SOURCES src/glad.c)
-
-set(OPT_FLAGS
-        -O3 -march=native -mtune=native -flto
-        -fstack-protector-strong
-        -fstack-clash-protection
-        -fcf-protection
+file(GLOB_RECURSE DJINN_HEADERS
+        lexer/*.h
+        parser/*.h
+        codegen/*.h
 )
 
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${OPT_FLAGS}")
-include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/include)
-
-# LLVM
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -48,10 +33,7 @@ include_directories(${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
-add_executable(djinn ${SOURCES})
-target_compile_options(djinn PRIVATE ${COMMON_COMPILE_OPTIONS})
-
-llvm_map_components_to_libnames(llvm_libs
+llvm_map_components_to_libnames(LLVM_LIBS
         Core
         Support
         IRReader
@@ -60,5 +42,38 @@ llvm_map_components_to_libnames(llvm_libs
         native
         Passes
 )
-target_link_libraries(djinn ${llvm_libs})
 
+add_library(djinn_lib STATIC
+        ${DJINN_SOURCES}
+        ${DJINN_HEADERS}
+        DjinnCompiler.cpp
+        DjinnCompiler.h
+)
+
+target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
+target_compile_features(djinn_lib PUBLIC cxx_std_23)
+
+add_executable(djinn main.cpp)
+target_link_libraries(djinn PRIVATE djinn_lib)
+
+# ========================
+
+add_subdirectory(external/googletest)
+
+enable_testing()
+
+file(GLOB_RECURSE TEST_SOURCES
+        tests/*.cpp
+)
+
+add_executable(tests ${TEST_SOURCES})
+
+target_link_libraries(tests PRIVATE
+        gtest_main
+        djinn_lib
+)
+
+target_compile_features(tests PRIVATE cxx_std_23)
+
+include(GoogleTest)
+gtest_discover_tests(tests)
