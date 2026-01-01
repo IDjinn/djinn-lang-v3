@@ -56,18 +56,18 @@ struct Type : ASTNode {
     TypeKind kind;
     bool sign;
     bool nullable;
-    std::unique_ptr<Type> elementType;  // Para arrays: o tipo do elemento
+    std::unique_ptr<Type> elementType;
 
-    Type(TypeKind kind, size_t size, bool sign)
-        : kind(kind),
-          size(size),
+    Type(const TypeKind kind, const size_t size, const bool sign)
+        : size(size),
+          kind(kind),
           sign(sign),
           elementType(nullptr) {
     }
 
     Type(const Type& other)
-        : kind(other.kind),
-          size(other.size),
+        : size(other.size),
+          kind(other.kind),
           sign(other.sign),
           nullable(other.nullable),
           elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr) {
@@ -115,11 +115,11 @@ struct Type : ASTNode {
         return arr;
     }
 
-    static Type integer(size_t bits, bool sign) {
+    static Type integer(const size_t bits, const bool sign) {
         return Type(TypeKind::INTEGER, bits, sign);
     }
 
-    static std::string kindToString(TypeKind k) {
+    static std::string kindToString(const TypeKind k) {
         switch (k) {
             case TypeKind::INTEGER: return "INTEGER";
             case TypeKind::STRING: return "STRING";
@@ -197,7 +197,7 @@ struct VariableDeclaration : Expression {
           name(std::move(name)) {
     }
 
-    void print(std::ostream &os, int indent) const override {
+    void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
         os << "VariableDeclaration(" << name << ": " << type << ")";
     }
@@ -211,7 +211,7 @@ struct Assignment : Expression {
         : name(std::move(name)), value(std::move(value)) {
     }
 
-    void print(std::ostream &os, int indent) const override {
+    void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
         os << "Assignment(" << name << " =\n";
         value->print(os, indent + 2);
@@ -228,7 +228,7 @@ struct VariableInit : Expression {
         : type(std::move(type)), name(std::move(name)), value(std::move(value)) {
     }
 
-    void print(std::ostream &os, int indent) const override {
+    void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
         os << "VariableInit(" << name << ": " << type << " =\n";
         value->print(os, indent + 2);
@@ -252,7 +252,7 @@ struct IntegerLiteral : Expression {
     std::string value;
     bool sign;
 
-    IntegerLiteral(const std::string &val, bool sign) : value(val), sign(sign) {
+    IntegerLiteral(const std::string &val, const bool sign) : value(val), sign(sign) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
@@ -291,7 +291,7 @@ struct FunctionCall : Expression {
     }
 };
 
-inline std::string tokenTypeToString(TokenType type) {
+inline std::string tokenTypeToString(const TokenType type) {
     switch (type) {
         case TokenType::PLUS: return "+";
         case TokenType::MINUS: return "-";
@@ -316,7 +316,7 @@ struct UnaryExpression : Expression {
     TokenType op;
     std::unique_ptr<Expression> operand;
 
-    UnaryExpression(TokenType op, std::unique_ptr<Expression> operand)
+    UnaryExpression(const TokenType op, std::unique_ptr<Expression> operand)
         : op(op), operand(std::move(operand)) {
     }
 
@@ -332,7 +332,7 @@ struct BinaryExpression : Expression {
     TokenType op;
     std::unique_ptr<Expression> right;
 
-    BinaryExpression(std::unique_ptr<Expression> left, TokenType op, std::unique_ptr<Expression> right)
+    BinaryExpression(std::unique_ptr<Expression> left, const TokenType op, std::unique_ptr<Expression> right)
         : left(std::move(left)), op(op), right(std::move(right)) {
     }
 
