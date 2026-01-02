@@ -14,15 +14,16 @@ endif()
 file(GLOB_RECURSE DJINN_SOURCES
         lexer/*.cpp
         parser/*.cpp
-        codegen/*.cpp
+        generator/*.cpp
         diagnostics/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
         lexer/*.h
         parser/*.h
-        codegen/*.h
+        generator/*.h
         diagnostics/*.h
+        parser/ast/*.h
 )
 
 include_directories(${CMAKE_SOURCE_DIR}/include)

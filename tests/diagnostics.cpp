@@ -43,7 +43,7 @@ i32 main() {
     engine.emit(diag);
 
     EXPECT_TRUE(engine.hasErrors());
-    std::string output = engine.render();
+    const std::string output = engine.render();
     EXPECT_TRUE(output.find("campos disponiveis") != std::string::npos);
 }
 

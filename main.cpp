@@ -4,7 +4,7 @@
 
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
-#include "codegen/CodeGen.h"
+#include "generator/Generator.h"
 #include "diagnostics/Diagnostic.h"
 
 int main(int argc, char *argv[]) {
@@ -32,10 +32,10 @@ int main(int argc, char *argv[]) {
         program->print(std::cout, 2);
         std::cout << "\n\n";
 
-        CodeGen codegen;
-        codegen.generate(*program);
-        codegen.optimize();
-        const auto result = codegen.print();
+        Generator generator;
+        generator.generate(*program);
+        // generator.optimize();
+        const auto result = generator.print();
         printf("===LLVM RESULT===\n%s\n\n", result.c_str());
 
         std::ofstream output;

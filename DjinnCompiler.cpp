@@ -7,7 +7,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "codegen/CodeGen.h"
+#include "generator/Generator.h"
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 
@@ -23,10 +23,10 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         // program->print(std::cout, 2);
         // std::cout << "\n\n";
 
-        CodeGen codegen;
-        codegen.generate(*program);
-        if (options.optimize) codegen.optimize();
-        const auto result = codegen.print();
+        Generator generator;
+        generator.generate(*program);
+        if (options.optimize) generator.optimize();
+        const auto result = generator.print();
 
         std::ofstream output;
         output.open(options.outputFileName + ".ll");

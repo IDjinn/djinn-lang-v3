@@ -40,6 +40,11 @@ void process_io() {
     parallel { 
         this.requests.dequeue().execute(TIMEOUT);
     }
+    
+    atomic {
+        this.bank.decrease_currency(99.99);
+        this.bank.save();
+    }
 }
 ```
 

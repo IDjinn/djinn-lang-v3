@@ -11,7 +11,6 @@
 #include "parser/AST.h"
 
 
-
 struct CompilerOptions {
     bool optimize = true;
     std::string outputFileName = "output";
