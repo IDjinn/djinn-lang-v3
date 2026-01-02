@@ -69,6 +69,51 @@ void Generator::generate_default_main() {
     builder->CreateRet(builder->getInt32(0));
 }
 
+llvm::Function *Generator::generate_function(
+    const std::string &name,
+    const Type &returnType,
+    const std::vector<std::pair<Type, std::string> > &parameters
+) {
+    const auto return_value = generate_type(returnType);
+    const auto llvmFunc = llvm::Function::Create(
+        llvm::FunctionType::get(return_value, false),
+        llvm::Function::ExternalLinkage,
+        name,
+        *module
+    );
+    functions[name] = llvmFunc;
+
+    const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+    builder->SetInsertPoint(entry);
+
+    push_scope();
+    size_t idx = 0;
+    for (auto &arg: llvmFunc->args()) {
+        const auto &param = parameters[idx];
+        arg.setName(param.second);
+
+        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.second);
+        builder->CreateStore(&arg, alloca);
+        std::string structTypeName = param.first.kind == TypeKind::STRUCT ? param.first.structName : "";
+        currentScope->define_variable(param.second, alloca, structTypeName);
+        idx++;
+    }
+    if (builder->GetInsertBlock()->getTerminator()) {
+        pop_scope();
+        return llvmFunc;
+    }
+
+    if (return_value->isVoidTy()) {
+        builder->CreateRetVoid();
+        pop_scope();
+        return llvmFunc;
+    }
+
+    builder->CreateRet(llvm::Constant::getNullValue(return_value));
+    pop_scope();
+    return llvmFunc;
+}
+
 void Generator::optimize() const {
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;

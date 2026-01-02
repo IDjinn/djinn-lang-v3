@@ -3,12 +3,12 @@
 //
 #include "../Generator.h"
 
-void Generator::generate_struct(const StructDeclaration &structDecl) {
+void Generator::generate_struct(const StructDeclaration &struct_declaration) {
     std::vector<llvm::Type *> fieldTypes;
     std::unordered_map<std::string, unsigned> fieldIndices;
 
     unsigned idx = 0;
-    for (const auto &field: structDecl.fields) {
+    for (const auto &field: struct_declaration.fields) {
         fieldTypes.push_back(generate_type(*field.type));
         fieldIndices[field.name] = idx++;
     }
@@ -16,8 +16,21 @@ void Generator::generate_struct(const StructDeclaration &structDecl) {
     llvm::StructType *structType = llvm::StructType::create(
         *context,
         fieldTypes,
-        structDecl.name
+        struct_declaration.name
     );
 
-    currentScope->define_struct(structDecl.name, structType, std::move(fieldIndices));
+    currentScope->define_struct(struct_declaration.name, structType, std::move(fieldIndices));
+
+    // ~destructor() //
+    {
+        const auto method_name = struct_declaration.name + "__destroy";
+        const auto destroy_function = generate_function(method_name, Type::voided(), {});
+        currentScope->define_method(struct_declaration.name, method_name, destroy_function);
+    }
+    // constructor() //
+    {
+        const auto method_name = struct_declaration.name + "__constructor";
+        const auto destroy_function = generate_function(method_name, Type::voided(), {});
+        currentScope->define_method(struct_declaration.name, method_name, destroy_function);
+    }
 }

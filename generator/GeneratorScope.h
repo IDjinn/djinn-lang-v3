@@ -10,14 +10,17 @@
 #include <unordered_map>
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Function.h"
 
 struct GeneratorScope {
     std::shared_ptr<GeneratorScope> parent = nullptr;
 
     std::unordered_map<std::string, llvm::StructType *> structTypes{};
-    std::unordered_map<std::string, std::unordered_map<std::string, unsigned> > structFieldIndices{};
+    std::unordered_map<std::string, std::unordered_map<std::string, unsigned>> structFieldIndices{};
     std::unordered_map<std::string, llvm::AllocaInst *> namedValues{};
     std::unordered_map<std::string, std::string> variableStructTypes{};
+    std::unordered_map<std::string, std::unordered_map<std::string, llvm::Function *>> structMethods{};
+    std::unordered_map<std::string, llvm::Function *> localFunctions{};
 
     explicit GeneratorScope(std::shared_ptr<GeneratorScope> parent = nullptr)
         : parent(std::move(parent)) {
@@ -83,6 +86,47 @@ struct GeneratorScope {
 
     [[nodiscard]] bool has_variable_in_current_scope(const std::string &name) const {
         return namedValues.contains(name);
+    }
+
+    void define_method(const std::string &structName, const std::string &methodName, llvm::Function *func) {
+        structMethods[structName][methodName] = func;
+    }
+
+    [[nodiscard]] llvm::Function *lookup_method(const std::string &structName, const std::string &methodName) const {
+        if (const auto structIt = structMethods.find(structName); structIt != structMethods.end()) {
+            if (const auto methodIt = structIt->second.find(methodName); methodIt != structIt->second.end()) {
+                return methodIt->second;
+            }
+        }
+        if (parent) {
+            return parent->lookup_method(structName, methodName);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool has_method_in_current_scope(const std::string &structName, const std::string &methodName) const {
+        if (const auto structIt = structMethods.find(structName); structIt != structMethods.end()) {
+            return structIt->second.contains(methodName);
+        }
+        return false;
+    }
+
+    void define_local_function(const std::string &name, llvm::Function *func) {
+        localFunctions[name] = func;
+    }
+
+    [[nodiscard]] llvm::Function *lookup_local_function(const std::string &name) const {
+        if (const auto it = localFunctions.find(name); it != localFunctions.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->lookup_local_function(name);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool has_local_function_in_current_scope(const std::string &name) const {
+        return localFunctions.contains(name);
     }
 };
 

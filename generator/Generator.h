@@ -42,7 +42,10 @@ private:
 
     void generate_default_main();
 
-    void generate_struct(const StructDeclaration &structDecl);
+    llvm::Function *generate_function(const std::string &name, const Type &returnType,
+                                      const std::vector<std::pair<Type, std::string> > &parameters);
+
+    void generate_struct(const StructDeclaration &struct_declaration);
 
     void generate_function(const FunctionDeclaration &func);
 
