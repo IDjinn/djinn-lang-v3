@@ -12,6 +12,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "../parser/AST.h"
+#include "../diagnostics/Diagnostic.h"
 
 class CodeGen {
 public:

@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <stdexcept>
 #include <unordered_set>
 #include "../lexer/Token.h"
 #include "../lexer/TokenType.h"
+#include "../diagnostics/Diagnostic.h"
 #include "AST.h"
 
 class Parser {

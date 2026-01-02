@@ -15,7 +15,7 @@ void Parser::pushScope() {
 
 void Parser::popScope() {
     if (!currentScope->parent) {
-        throw std::runtime_error("Tentativa de sair do escopo global");
+        throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "tentativa de sair do escopo global");
     }
     currentScope = currentScope->parent;
 }
@@ -79,14 +79,20 @@ bool Parser::isType(const Token &token) {
 
 Token &Parser::expect(const std::string &message, const TokenType type) {
     if (check(type)) return advance();
-    throw std::runtime_error(message + " na linha " + std::to_string(peek().position.line));
+    const auto &token = previous();
+    const uint32_t col = token.position.column + token.value.length();
+    throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
+                       SourceLocation(token.position.line, col, 1));
 }
 
 Token &Parser::expect(const std::string &message, const std::vector<TokenType> &types) {
     for (auto &type: types) {
         if (check(type)) return advance();
     }
-    throw std::runtime_error(message);
+    const auto &token = previous();
+    uint32_t col = token.position.column + token.value.length();
+    throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
+                       SourceLocation(token.position.line, col, 1));
 }
 
 bool Parser::isAtEnd() {
@@ -118,7 +124,8 @@ std::unique_ptr<Type> Parser::parse_type() {
     } else if (this->currentScope->has_struct_in_current_scope(identifier.value)) {
         baseType = std::make_unique<Type>(Type::struct_type(identifier.value));
     } else {
-        throw std::exception(("invalid type kind with identifier " + identifier.value).c_str());
+        throw CompileError(DiagnosticCode::EXPECTED_TYPE, "tipo inválido: " + identifier.value,
+                           SourceLocation(identifier.position.line, identifier.position.column, identifier.value.length()));
     }
 
     if (match(TokenType::LBRACKET)) {
@@ -425,7 +432,9 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return expr;
     }
 
-    throw std::runtime_error("Expressão inesperada na linha " + std::to_string(peek().position.line));
+    const auto &tok = peek();
+    throw CompileError(DiagnosticCode::EXPECTED_EXPRESSION, "expressão inesperada",
+                       SourceLocation(tok.position.line, tok.position.column, tok.value.empty() ? 1 : tok.value.length()));
 }
 
 std::unique_ptr<Expression> Parser::parse_brace_initializer() {

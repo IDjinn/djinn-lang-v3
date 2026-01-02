@@ -15,12 +15,14 @@ file(GLOB_RECURSE DJINN_SOURCES
         lexer/*.cpp
         parser/*.cpp
         codegen/*.cpp
+        diagnostics/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
         lexer/*.h
         parser/*.h
         codegen/*.h
+        diagnostics/*.h
 )
 
 include_directories(${CMAKE_SOURCE_DIR}/include)

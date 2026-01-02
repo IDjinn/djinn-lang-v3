@@ -144,14 +144,14 @@ llvm::Type *CodeGen::generate_type(Type &type) {
         case TypeKind::F128: return llvm::Type::getFP128Ty(*context);
         case TypeKind::ARRAY: {
             if (!type.elementType) {
-                throw std::exception("array type must have element type");
+                throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo array deve ter tipo de elemento");
             }
             llvm::Type *elemType = generate_type(*type.elementType);
             return llvm::PointerType::get(elemType, 0);
         }
         case TypeKind::POINTER: {
             if (!type.elementType) {
-                throw std::exception("pointer type must have element type");
+                throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo ponteiro deve ter tipo de elemento");
             }
             llvm::Type *pointeeType = generate_type(*type.elementType);
             return llvm::PointerType::get(pointeeType, 0);
@@ -159,13 +159,13 @@ llvm::Type *CodeGen::generate_type(Type &type) {
         case TypeKind::STRUCT: {
             auto it = structTypes.find(type.structName);
             if (it == structTypes.end()) {
-                throw std::exception(("struct type not found: " + type.structName).c_str());
+                throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + type.structName);
             }
             return it->second;
         }
         case TypeKind::AUTO:
-            throw std::exception("auto type must be inferred before code generation");
-        default: throw std::exception("invalid type provided");
+            throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo auto deve ser inferido antes da geração de código");
+        default: throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo inválido");
     }
 }
 
@@ -208,8 +208,7 @@ llvm::Value *CodeGen::generate_brace_init_for_struct(const BraceInitializer &bra
             // Designated initializer: .field = value
             auto it = fieldIndices.find(elem.fieldName);
             if (it == fieldIndices.end()) {
-                llvm::errs() << "Erro: campo não encontrado: " << elem.fieldName << "\n";
-                return nullptr;
+                throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + elem.fieldName);
             }
             fieldIdx = it->second;
         } else {
@@ -291,8 +290,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
                 return builder->CreateOr(left, right, "ortmp");
 
             default:
-                llvm::errs() << "Erro: operador binário não suportado\n";
-                return nullptr;
+                throw CompileError(DiagnosticCode::UNSUPPORTED_OPERATOR, "operador binário não suportado");
         }
     }
 
@@ -306,16 +304,14 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
             case TokenType::BANG:
                 return builder->CreateNot(operand, "nottmp");
             default:
-                llvm::errs() << "Erro: operador unário não suportado\n";
-                return nullptr;
+                throw CompileError(DiagnosticCode::UNSUPPORTED_OPERATOR, "operador unário não suportado");
         }
     }
 
     if (auto *call = dynamic_cast<const FunctionCall *>(&expr)) {
         const auto it = functions.find(call->name);
         if (it == functions.end()) {
-            llvm::errs() << "Erro: função não encontrada: " << call->name << "\n";
-            return nullptr;
+            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "função não encontrada: " + call->name);
         }
 
         llvm::Function *func = it->second;
@@ -334,7 +330,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
                     argVal = builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
                 }
             }
-            auto value = llvm::to_string(*argVal);
+            const auto value = llvm::to_string(*argVal);
             args.push_back(argVal);
             argIdx++;
         }
@@ -347,8 +343,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
         if (it != namedValues.end()) {
             return builder->CreateLoad(it->second->getAllocatedType(), it->second, ident->name);
         }
-        llvm::errs() << "Erro: variável não encontrada: " << ident->name << "\n";
-        return nullptr;
+        throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + ident->name);
     }
 
     if (auto *varDecl = dynamic_cast<const VariableDeclaration *>(&expr)) {
@@ -367,8 +362,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
         if (auto *ident = dynamic_cast<const Identifier *>(fieldAccess->object.get())) {
             auto allocaIt = namedValues.find(ident->name);
             if (allocaIt == namedValues.end()) {
-                llvm::errs() << "Erro: variável não encontrada: " << ident->name << "\n";
-                return nullptr;
+                throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + ident->name);
             }
 
             std::string structName;
@@ -383,8 +377,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
                     structType = llvmStructType;
                     structName = llvmStructType->getName().str();
                 } else {
-                    llvm::errs() << "Erro: variável não é uma struct: " << ident->name << "\n";
-                    return nullptr;
+                    throw CompileError(DiagnosticCode::NOT_A_STRUCT, "variável não é uma struct: " + ident->name);
                 }
             }
 
@@ -392,8 +385,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
 
             auto fieldIt = fieldIndices.find(fieldAccess->fieldName);
             if (fieldIt == fieldIndices.end()) {
-                llvm::errs() << "Erro: campo não encontrado: " << fieldAccess->fieldName << "\n";
-                return nullptr;
+                throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + fieldAccess->fieldName);
             }
 
             unsigned fieldIdx = fieldIt->second;
@@ -403,8 +395,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
             return builder->CreateLoad(fieldType, fieldPtr, fieldAccess->fieldName);
         }
 
-        llvm::errs() << "Erro: acesso a campo só suportado em identificadores simples\n";
-        return nullptr;
+        throw CompileError(DiagnosticCode::INVALID_OPERATION, "acesso a campo só suportado em identificadores simples");
     }
 
     if (auto *varInit = dynamic_cast<const VariableInit *>(&expr)) {
@@ -414,8 +405,8 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
             if (varInit->type.kind == TypeKind::STRUCT) {
                 llvm::StructType *structType = structTypes[varInit->type.structName];
                 if (!structType) {
-                    llvm::errs() << "Erro: struct não encontrada: " << varInit->type.structName << "\n";
-                    return nullptr;
+                    throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
+                                       "struct não encontrada: " + varInit->type.structName);
                 }
 
                 auto *alloca = builder->CreateAlloca(structType, nullptr, varInit->name);
@@ -434,8 +425,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
                         // Designated initializer: .field = value
                         auto it = fieldIndices.find(elem.fieldName);
                         if (it == fieldIndices.end()) {
-                            llvm::errs() << "Erro: campo não encontrado: " << elem.fieldName << "\n";
-                            return nullptr;
+                            throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + elem.fieldName);
                         }
                         fieldIdx = it->second;
                     } else {
@@ -457,8 +447,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
             if (braceInit->elements.size() == 1 && !braceInit->elements[0].isDesignated()) {
                 llvm::Value *initVal = generate_expression(*braceInit->elements[0].value);
                 if (!initVal) {
-                    llvm::errs() << "Erro: não foi possível gerar valor inicial para: " << varInit->name << "\n";
-                    return nullptr;
+                    throw CompileError(DiagnosticCode::INVALID_OPERATION, "não foi possível gerar valor inicial para: " + varInit->name);
                 }
 
                 llvm::Type *type = generate_type(const_cast<Type &>(varInit->type));
@@ -474,8 +463,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
         // Regular initialization (not brace initializer)
         llvm::Value *initVal = generate_expression(*varInit->value);
         if (!initVal) {
-            llvm::errs() << "Erro: não foi possível gerar valor inicial para: " << varInit->name << "\n";
-            return nullptr;
+            throw CompileError(DiagnosticCode::INVALID_OPERATION, "não foi possível gerar valor inicial para: " + varInit->name);
         }
 
         llvm::Type *type;
@@ -496,8 +484,7 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
     if (auto *assign = dynamic_cast<const Assignment *>(&expr)) {
         auto it = namedValues.find(assign->name);
         if (it == namedValues.end()) {
-            llvm::errs() << "Erro: variável não encontrada: " << assign->name << "\n";
-            return nullptr;
+            throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + assign->name);
         }
 
         llvm::Value *val = generate_expression(*assign->value);
@@ -529,8 +516,8 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
         }
 
         if (hasDesignated && hasPositional) {
-            llvm::errs() << "Erro: não é possível misturar inicializadores designados e posicionais\n";
-            return nullptr;
+            throw CompileError(DiagnosticCode::MIXED_INITIALIZERS,
+                               "não é possível misturar inicializadores designados e posicionais");
         }
 
         // Generate values for all elements
