@@ -105,16 +105,16 @@ public:
     [[nodiscard]] bool hasErrors() const { return total_errors > 0; }
     [[nodiscard]] size_t errorCount() const { return total_errors; }
     [[nodiscard]] size_t warningCount() const { return total_warnings; }
-    [[nodiscard]] const std::vector<Diagnostic> &diagnostics() const { return diagnostics_; }
-
     [[nodiscard]] std::string render() const;
+
+    [[nodiscard]] const std::vector<Diagnostic> &get_diagnostics() const;
 
     void printToStderr() const;
 
 private:
     std::string source_;
     std::vector<size_t> lineOffsets_;
-    std::vector<Diagnostic> diagnostics_;
+    std::vector<Diagnostic> diagnostics;
     size_t total_errors = 0;
     size_t total_warnings = 0;
 

@@ -12,30 +12,38 @@
 #include "parser/parser.h"
 
 CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptions &options) {
-    Lexer lexer(source);
-    const auto tokens = lexer.tokenize();
+    DiagnosticEngine diagnostics(source);
 
-    Parser parser(tokens);
-    auto program = parser.parse();
-    // program->print(std::cout, 2);
-    // std::cout << "\n\n";
+    try {
+        Lexer lexer(source);
+        const auto tokens = lexer.tokenize();
 
-    CodeGen codegen;
-    codegen.generate(*program);
-    if (options.optimize) codegen.optimize();
-    const auto result = codegen.print();
+        Parser parser(tokens);
+        auto program = parser.parse();
+        // program->print(std::cout, 2);
+        // std::cout << "\n\n";
 
-    std::ofstream output;
-    output.open(options.outputFileName + ".ll");
-    output << result;
-    output.close();
+        CodeGen codegen;
+        codegen.generate(*program);
+        if (options.optimize) codegen.optimize();
+        const auto result = codegen.print();
 
-    system(("clang " + options.outputFileName + ".ll -o " + options.outputFileName + ".exe").c_str());
-    const auto returnCode = system((options.outputFileName + ".exe").c_str());
-    return {
-        .returnCode = returnCode,
-        .tokens = tokens,
-        .program = std::move(program),
-        .ir = result,
-    };
+        std::ofstream output;
+        output.open(options.outputFileName + ".ll");
+        output << result;
+        output.close();
+
+        system(("clang " + options.outputFileName + ".ll -o " + options.outputFileName + ".exe").c_str());
+        const auto returnCode = system((options.outputFileName + ".exe").c_str());
+        return {
+            .returnCode = returnCode,
+            .tokens = tokens,
+            .program = std::move(program),
+            .ir = result,
+        };
+    } catch (const CompileError &e) {
+        diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
+        diagnostics.printToStderr();
+        return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+    }
 }

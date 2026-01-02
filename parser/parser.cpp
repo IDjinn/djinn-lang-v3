@@ -70,7 +70,7 @@ bool Parser::isType(const Token &token) {
         return std::ranges::all_of(bits, [](const char c) { return isalnum(c); });
     }
 
-    if (currentScope->has_struct_in_current_scope(token.value)) {
+    if (currentScope->has_struct_declared(token.value)) {
         return true;
     }
 
@@ -121,7 +121,7 @@ std::unique_ptr<Type> Parser::parse_type() {
         baseType = std::make_unique<Type>(Type::stringed());
     } else if (identifier.value == "auto" || identifier.type == TokenType::AUTO) {
         baseType = std::make_unique<Type>(Type::autod());
-    } else if (this->currentScope->has_struct_in_current_scope(identifier.value)) {
+    } else if (this->currentScope->has_struct_declared(identifier.value)) {
         baseType = std::make_unique<Type>(Type::struct_type(identifier.value));
     } else {
         throw CompileError(DiagnosticCode::EXPECTED_TYPE, "tipo inválido: " + identifier.value,
@@ -164,7 +164,9 @@ std::unique_ptr<Program> Parser::parse() {
             auto structDecl = parse_struct();
 
             // struct { ... } func() { ... }
-            if (!check(TokenType::IDENTIFIER)) {
+            // Se o próximo token é um tipo (i32, void, etc), é uma nova função
+            // Se é um identificador simples (não tipo), é o nome da função que retorna a struct
+            if (!check(TokenType::IDENTIFIER) || isType()) {
                 program->structs.push_back(std::move(structDecl));
             } else {
                 auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name));

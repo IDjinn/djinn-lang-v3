@@ -597,7 +597,7 @@ struct Scope {
         if (structs.contains(name)) return true;
 
         if (parent) {
-            return parent->has_struct_in_current_scope(name);
+            return parent->has_struct_declared(name);
         }
 
         return false;

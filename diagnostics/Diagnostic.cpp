@@ -69,7 +69,7 @@ std::string DiagnosticEngine::formatCode(const uint32_t code) {
 }
 
 void DiagnosticEngine::emit(const Diagnostic &diag) {
-    diagnostics_.push_back(diag);
+    diagnostics.push_back(diag);
 
     if (diag.severity == Severity::Error) {
         total_errors++;
@@ -139,7 +139,7 @@ std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {
 std::string DiagnosticEngine::render() const {
     std::ostringstream out;
 
-    for (const auto &diag: diagnostics_) {
+    for (const auto &diag: diagnostics) {
         out << renderDiagnostic(diag) << "\n";
     }
 
@@ -156,6 +156,10 @@ std::string DiagnosticEngine::render() const {
     }
 
     return out.str();
+}
+
+const std::vector<Diagnostic> &DiagnosticEngine::get_diagnostics() const {
+    return this->diagnostics;
 }
 
 void DiagnosticEngine::printToStderr() const {

@@ -14,6 +14,7 @@ TEST(Struct, Definition) {
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
     EXPECT_EQ(result.program->structs.size(), 1);
@@ -33,6 +34,7 @@ TEST(Struct, BraceInitializerPositional) {
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->structs.size(), 1);
 }
@@ -51,6 +53,7 @@ TEST(Struct, BraceInitializerDesignated) {
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->structs.size(), 1);
 }
@@ -86,6 +89,7 @@ TEST(Struct, FieldAccessSecondField) {
     )";
 
     const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
 
@@ -106,6 +110,7 @@ TEST(Struct, MethodReturnWithBraceInit) {
     )";
 
     const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
 }
 
@@ -144,6 +149,7 @@ TEST(Struct, MultipleFieldsPositional) {
     )";
 
     const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6);
 }
 
@@ -161,6 +167,7 @@ TEST(Struct, FieldAccessInExpression) {
     )";
 
     const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
@@ -182,6 +189,7 @@ TEST(Struct, StructAsParameter) {
     )";
 
     const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 123);
 }
 
@@ -194,5 +202,6 @@ TEST(Struct, SimpleBraceInitScalar) {
     )";
 
     const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }

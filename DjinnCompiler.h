@@ -6,8 +6,10 @@
 #define DJINN_DJINNCOMPILER_H
 #include <string>
 
+#include "diagnostics/Diagnostic.h"
 #include "lexer/Token.h"
 #include "parser/AST.h"
+
 
 
 struct CompilerOptions {
@@ -17,9 +19,10 @@ struct CompilerOptions {
 
 struct CompilerResult {
     int returnCode;
-    std::vector<Token> tokens;
+    std::vector<Token> tokens{};
     std::unique_ptr<Program> program;
     std::string ir;
+    std::vector<Diagnostic> diagnostics{};
 };
 
 struct DjinnCompiler {

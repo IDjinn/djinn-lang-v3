@@ -9,15 +9,12 @@
 
 int main(int argc, char *argv[]) {
     const std::string source = R"(
-        struct {
+        struct Result {
             i32 value;
-        } sum(i32 a, i32 b) {
-            return { .value = a + b };
         }
 
         void main() {
-            auto result = sum(1,1);
-            printf("sum = %d", result.value);
+            Result result;
         }
     )";
 
