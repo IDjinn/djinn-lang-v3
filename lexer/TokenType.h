@@ -11,7 +11,7 @@ enum class TokenType {
     END_OF_FILE,
 
     RETURN,
-    TYPE,
+    STRUCT,
 
     // VALUE TYPES //
     INT,
@@ -63,6 +63,7 @@ enum class TokenType {
     // ATRIBUIÇÃO //
     EQUAL,         // =
     // -------- //
+    DOT, // .
 };
 
 

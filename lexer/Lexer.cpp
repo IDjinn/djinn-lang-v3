@@ -10,6 +10,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"return", TokenType::RETURN},
     {"string", TokenType::STRING},
     {"auto", TokenType::AUTO},
+    {"struct", TokenType::STRUCT},
 };
 
 Lexer::Lexer(std::string source) : source(std::move(source)) {
@@ -39,11 +40,9 @@ char Lexer::advance() {
 
 void Lexer::skip_whitespace() {
     while (pos < source.size()) {
-        char c = peek();
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+        if (const char c = peek(); c == ' ' || c == '\t' || c == '\n' || c == '\r') {
             advance();
         } else if (c == '/' && pos + 1 < source.size() && source[pos + 1] == '/') {
-            // Comentário de linha
             while (peek() != '\n' && peek() != '\0') advance();
         } else {
             break;
@@ -51,12 +50,12 @@ void Lexer::skip_whitespace() {
     }
 }
 
-Token Lexer::make_token(const TokenType type, const std::string &value) {
+Token Lexer::make_token(const TokenType type, const std::string &value) const {
     return Token{{line, column, static_cast<uint32_t>(pos)}, type, value};
 }
 
 Token Lexer::read_string() {
-    advance(); // pula "
+    advance();
     std::string value;
     while (peek() != '"' && peek() != '\0') {
         if (peek() == '\\') {
@@ -77,7 +76,7 @@ Token Lexer::read_string() {
             value += advance();
         }
     }
-    if (peek() == '"') advance(); // pula " final
+    if (peek() == '"') advance();
     return make_token(TokenType::STRING_LITERAL, value);
 }
 
@@ -141,6 +140,9 @@ std::vector<Token> Lexer::tokenize() {
                     advance();
                     break;
                 case ',': tokens.push_back(make_token(TokenType::COMMA, ","));
+                    advance();
+                    break;
+                case '.': tokens.push_back(make_token(TokenType::DOT, "."));
                     advance();
                     break;
                 case '+': tokens.push_back(make_token(TokenType::PLUS, "+"));

@@ -12,6 +12,7 @@
 class Lexer {
 public:
     explicit Lexer(std::string source);
+
     std::vector<Token> tokenize();
 
 private:
@@ -21,12 +22,19 @@ private:
     uint32_t column = 1;
 
     char peek() const;
+
     char peekNext() const;
+
     char advance();
+
     void skip_whitespace();
-    Token make_token(TokenType type, const std::string& value);
+
+    Token make_token(TokenType type, const std::string &value) const;
+
     Token read_string();
+
     Token read_number();
+
     Token read_identifier();
 };
 

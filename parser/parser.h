@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <unordered_set>
 #include "../lexer/Token.h"
 #include "../lexer/TokenType.h"
 #include "AST.h"
@@ -16,41 +17,76 @@
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens);
+
     std::unique_ptr<Program> parse();
 
 private:
     std::vector<Token> tokens;
     size_t current = 0;
 
-    Token& peek();
-    Token& previous();
-    Token& advance();
+    std::shared_ptr<Scope> currentScope = std::make_shared<Scope>();
+
+    void pushScope();
+
+    void popScope();
+
+    Token &peek();
+
+    Token &previous();
+
+    Token &advance();
+
     bool check(const std::vector<TokenType> &types);
+
     bool check(TokenType type);
+
     bool match(TokenType type);
+
     bool isType();
 
-    static bool isType(const Token& token);
-    Token& expect(const std::string& message, TokenType type);
-    Token& expect(const std::string& message, const std::vector<TokenType> &types);
+    bool isType(const Token &token);
+
+    Token &expect(const std::string &message, TokenType type);
+
+    Token &expect(const std::string &message, const std::vector<TokenType> &types);
+
     bool isAtEnd();
 
     std::unique_ptr<Type> parse_type();
+
+    std::unique_ptr<StructDeclaration> parse_struct();
+
     std::unique_ptr<FunctionDeclaration> parse_function();
 
+    std::unique_ptr<FunctionDeclaration> parse_function_with_type(std::unique_ptr<Type> returnType);
+
     std::vector<Parameter> parse_parameters();
+
     std::unique_ptr<Block> parse_block();
+
     std::unique_ptr<Statement> parse_statement();
 
     std::unique_ptr<Expression> parse_expression();
+
     std::unique_ptr<Expression> parse_or();
+
     std::unique_ptr<Expression> parse_and();
+
     std::unique_ptr<Expression> parse_equality();
+
     std::unique_ptr<Expression> parse_comparison();
+
     std::unique_ptr<Expression> parse_term();
+
     std::unique_ptr<Expression> parse_factor();
+
     std::unique_ptr<Expression> parse_unary();
+
+    std::unique_ptr<Expression> parse_postfix();
+
     std::unique_ptr<Expression> parse_primary();
+
+    std::unique_ptr<Expression> parse_brace_initializer();
 };
 
 #endif //DJINN_PARSER_H

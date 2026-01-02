@@ -11,7 +11,7 @@
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 
-CompilerResult DjinnCompiler::run(const std::string &source) {
+CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptions &options) {
     Lexer lexer(source);
     const auto tokens = lexer.tokenize();
 
@@ -22,18 +22,18 @@ CompilerResult DjinnCompiler::run(const std::string &source) {
 
     CodeGen codegen;
     codegen.generate(*program);
-    codegen.optimize();
+    if (options.optimize) codegen.optimize();
     const auto result = codegen.print();
 
     std::ofstream output;
-    output.open("output.ll");
+    output.open(options.outputFileName + ".ll");
     output << result;
     output.close();
 
-    system("clang output.ll -o output.exe");
-    const auto returnCode = system("output.exe");
+    system(("clang " + options.outputFileName + ".ll -o " + options.outputFileName + ".exe").c_str());
+    const auto returnCode = system((options.outputFileName + ".exe").c_str());
     return {
-        .returnCode =  returnCode,
+        .returnCode = returnCode,
         .tokens = tokens,
         .program = std::move(program),
         .ir = result,

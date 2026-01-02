@@ -9,6 +9,17 @@
 Parser::Parser(std::vector<Token> tokens) : tokens(std::move(tokens)) {
 }
 
+void Parser::pushScope() {
+    currentScope = std::make_shared<Scope>(currentScope);
+}
+
+void Parser::popScope() {
+    if (!currentScope->parent) {
+        throw std::runtime_error("Tentativa de sair do escopo global");
+    }
+    currentScope = currentScope->parent;
+}
+
 Token &Parser::peek() {
     return tokens[current];
 }
@@ -59,6 +70,10 @@ bool Parser::isType(const Token &token) {
         return std::ranges::all_of(bits, [](const char c) { return isalnum(c); });
     }
 
+    if (currentScope->has_struct_in_current_scope(token.value)) {
+        return true;
+    }
+
     return token.value == "void" || token.value == "string" || token.value == "auto";
 }
 
@@ -79,7 +94,9 @@ bool Parser::isAtEnd() {
 }
 
 std::unique_ptr<Type> Parser::parse_type() {
-    const auto identifier = expect("Expected a type", {TokenType::IDENTIFIER, TokenType::VOID, TokenType::STRING, TokenType::AUTO});
+    const auto identifier = expect("Expected a type", {
+                                       TokenType::IDENTIFIER, TokenType::VOID, TokenType::STRING, TokenType::AUTO
+                                   });
 
     std::unique_ptr<Type> baseType;
 
@@ -98,11 +115,12 @@ std::unique_ptr<Type> Parser::parse_type() {
         baseType = std::make_unique<Type>(Type::stringed());
     } else if (identifier.value == "auto" || identifier.type == TokenType::AUTO) {
         baseType = std::make_unique<Type>(Type::autod());
+    } else if (this->currentScope->has_struct_in_current_scope(identifier.value)) {
+        baseType = std::make_unique<Type>(Type::struct_type(identifier.value));
     } else {
         throw std::exception(("invalid type kind with identifier " + identifier.value).c_str());
     }
 
-    // Verifica se é um array: tipo[]
     if (match(TokenType::LBRACKET)) {
         expect("Expected ']' after '['", TokenType::RBRACKET);
         return std::make_unique<Type>(Type::array(std::move(*baseType)));
@@ -111,20 +129,67 @@ std::unique_ptr<Type> Parser::parse_type() {
     return baseType;
 }
 
+std::unique_ptr<StructDeclaration> Parser::parse_struct() {
+    expect("Esperado 'struct'", TokenType::STRUCT);
+    const auto name = match(TokenType::IDENTIFIER) ? previous().value : Type::generate_struct_name();
+
+    currentScope->define_struct(name, Type::struct_type(name));
+
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    std::vector<StructField> fields;
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        auto fieldType = parse_type();
+        Token &fieldName = expect("Esperado nome do campo", TokenType::IDENTIFIER);
+        expect("Esperado ';' após campo", TokenType::SEMICOLON);
+        fields.emplace_back(std::move(fieldType), fieldName.value);
+    }
+
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    return std::make_unique<StructDeclaration>(name, std::move(fields));
+}
+
 std::unique_ptr<Program> Parser::parse() {
     auto program = std::make_unique<Program>();
     while (!isAtEnd()) {
-        program->functions.push_back(parse_function());
+        if (check(TokenType::STRUCT)) {
+            auto structDecl = parse_struct();
+
+            // struct { ... } func() { ... }
+            if (!check(TokenType::IDENTIFIER)) {
+                program->structs.push_back(std::move(structDecl));
+            } else {
+                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name));
+                program->structs.push_back(std::move(structDecl));
+                program->functions.push_back(parse_function_with_type(std::move(returnType)));
+            }
+        } else {
+            program->functions.push_back(parse_function());
+        }
     }
     return program;
 }
 
 std::unique_ptr<FunctionDeclaration> Parser::parse_function() {
     auto returnType = this->parse_type();
+    return parse_function_with_type(std::move(returnType));
+}
 
+std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::unique_ptr<Type> returnType) {
     Token &name = expect("Esperado nome da função", TokenType::IDENTIFIER);
+
+    pushScope();
+
     auto params = parse_parameters();
+
+    for (const auto &param: params) {
+        currentScope->define_variable(param.name, *param.type);
+    }
+
     auto body = parse_block();
+
+    popScope();
 
     return std::make_unique<FunctionDeclaration>(std::move(returnType), name.value, params, std::move(body));
 }
@@ -148,10 +213,14 @@ std::vector<Parameter> Parser::parse_parameters() {
 std::unique_ptr<Block> Parser::parse_block() {
     expect("Esperado '{'", TokenType::LBRACE);
 
+    pushScope();
+
     auto block = std::make_unique<Block>();
     while (!check(TokenType::RBRACE) && !isAtEnd()) {
         block->statements.push_back(parse_statement());
     }
+
+    popScope();
 
     expect("Esperado '}'", TokenType::RBRACE);
     return block;
@@ -257,7 +326,22 @@ std::unique_ptr<Expression> Parser::parse_unary() {
         return std::make_unique<UnaryExpression>(op, std::move(operand));
     }
 
-    return parse_primary();
+    return parse_postfix();
+}
+
+std::unique_ptr<Expression> Parser::parse_postfix() {
+    auto expr = parse_primary();
+
+    while (true) {
+        if (match(TokenType::DOT)) {
+            Token &fieldName = expect("Esperado nome do campo após '.'", TokenType::IDENTIFIER);
+            expr = std::make_unique<FieldAccess>(std::move(expr), fieldName.value);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::parse_primary() {
@@ -273,24 +357,27 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<StringLiteral>(previous().value);
     }
 
-    // Verifica se é um tipo (incluindo STRING, AUTO como tokens)
     if (check(TokenType::STRING) || check(TokenType::AUTO) ||
         (check(TokenType::IDENTIFIER) && isType(peek()))) {
         const auto identifier = advance();
 
-        // Verifica se é array: tipo[]
         bool isArray = false;
         if (match(TokenType::LBRACKET)) {
             expect("Expected ']' after '['", TokenType::RBRACKET);
             isArray = true;
         }
 
-        if (check(TokenType::IDENTIFIER)) { // type + identifier, should be variable creation
+        if (check(TokenType::IDENTIFIER)) {
+            // type + identifier, should be variable creation
             const auto varName = advance().value;
-            Type varType = Type::fromToken(identifier);
+            Type varType = currentScope->has_struct_declared(identifier.value)
+                               ? Type::struct_type(identifier.value)
+                               : Type::fromToken(identifier);
             if (isArray) {
                 varType = Type::array(std::move(varType));
             }
+
+            currentScope->define_variable(varName, varType);
             if (match(TokenType::EQUAL)) {
                 auto value = parse_expression();
                 return std::make_unique<VariableInit>(std::move(varType), varName, std::move(value));
@@ -298,8 +385,6 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             return std::make_unique<VariableDeclaration>(std::move(varType), varName);
         }
 
-        // Se não é declaração de variável mas é um tipo, pode ser erro ou uso especial
-        // Retorna como identificador se não for um tipo conhecido
         if (!isType(identifier)) {
             return std::make_unique<Identifier>(identifier.value);
         }
@@ -307,11 +392,6 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
     if (check(TokenType::IDENTIFIER)) {
         const auto identifier = advance();
-
-        // if (match(TokenType::SEMICOLON)) {
-        //     return std::make_unique<VariableDeclaration>(Type::autod(), identifier.value);
-        // }
-
         std::string name = identifier.value;
 
         if (match(TokenType::LPAREN)) {
@@ -335,7 +415,10 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<Identifier>(name);
     }
 
-    // Expressão agrupada: (expr)
+    if (check(TokenType::LBRACE)) {
+        return parse_brace_initializer();
+    }
+
     if (match(TokenType::LPAREN)) {
         auto expr = parse_expression();
         expect("Esperado ')' após expressão", TokenType::RPAREN);
@@ -343,4 +426,30 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     }
 
     throw std::runtime_error("Expressão inesperada na linha " + std::to_string(peek().position.line));
+}
+
+std::unique_ptr<Expression> Parser::parse_brace_initializer() {
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    std::vector<InitializerElement> elements;
+
+    if (!check(TokenType::RBRACE)) {
+        do {
+            if (match(TokenType::DOT)) {
+                // Designated initializer: .field = value
+                Token &fieldName = expect("Esperado nome do campo", TokenType::IDENTIFIER);
+                expect("Esperado '=' após nome do campo", TokenType::EQUAL);
+                auto value = parse_expression();
+                elements.emplace_back(fieldName.value, std::move(value));
+            } else {
+                // Positional initializer: value
+                auto value = parse_expression();
+                elements.emplace_back(std::move(value));
+            }
+        } while (match(TokenType::COMMA));
+    }
+
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    return std::make_unique<BraceInitializer>(std::move(elements));
 }

@@ -10,6 +10,11 @@
 #include "parser/AST.h"
 
 
+struct CompilerOptions {
+    bool optimize = true;
+    std::string outputFileName = "output";
+};
+
 struct CompilerResult {
     int returnCode;
     std::vector<Token> tokens;
@@ -18,7 +23,7 @@ struct CompilerResult {
 };
 
 struct DjinnCompiler {
-    static CompilerResult run(const std::string& source);
+    static CompilerResult run(const std::string &source, const CompilerOptions &options = {});
 };
 
 

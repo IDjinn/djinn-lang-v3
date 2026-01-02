@@ -8,8 +8,15 @@
 
 int main(int argc, char *argv[]) {
     const std::string source = R"(
-        i32 sum(i32 a, i32 b) {
-            return a + b;
+        struct {
+            i32 value;
+        } sum(i32 a, i32 b) {
+            return { .value = a + b };
+        }
+
+        void main() {
+            auto result = sum(1,1);
+            printf("sum = %d", result.value);
         }
     )";
 

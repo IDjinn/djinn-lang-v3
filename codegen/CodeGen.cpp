@@ -32,6 +32,10 @@ void CodeGen::declare_extern_functions() {
 }
 
 void CodeGen::generate(const Program &program) {
+    for (const auto &structDecl: program.structs) {
+        generate_struct(*structDecl);
+    }
+
     for (const auto &func: program.functions) {
         generate_function(*func);
     }
@@ -39,6 +43,26 @@ void CodeGen::generate(const Program &program) {
     if (!functions.contains("main")) {
         generate_default_main();
     }
+}
+
+void CodeGen::generate_struct(const StructDeclaration &structDecl) {
+    std::vector<llvm::Type *> fieldTypes;
+    std::unordered_map<std::string, unsigned> fieldIndices;
+
+    unsigned idx = 0;
+    for (const auto &field: structDecl.fields) {
+        fieldTypes.push_back(generate_type(*field.type));
+        fieldIndices[field.name] = idx++;
+    }
+
+    llvm::StructType *structType = llvm::StructType::create(
+        *context,
+        fieldTypes,
+        structDecl.name
+    );
+
+    structTypes[structDecl.name] = structType;
+    structFieldIndices[structDecl.name] = std::move(fieldIndices);
 }
 
 void CodeGen::generate_default_main() {
@@ -57,6 +81,7 @@ void CodeGen::generate_default_main() {
 
 void CodeGen::generate_function(const FunctionDeclaration &func) {
     namedValues.clear();
+    variableStructTypes.clear();
 
     llvm::Type *returnType = this->generate_type(*func.returnType);
 
@@ -73,6 +98,7 @@ void CodeGen::generate_function(const FunctionDeclaration &func) {
         *module
     );
     functions[func.name] = llvmFunc;
+    currentFunction = llvmFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
@@ -85,6 +111,9 @@ void CodeGen::generate_function(const FunctionDeclaration &func) {
         auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.name);
         builder->CreateStore(&arg, alloca);
         namedValues[param.name] = alloca;
+        if (param.type->kind == TypeKind::STRUCT) {
+            variableStructTypes[param.name] = param.type->structName;
+        }
         idx++;
     }
 
@@ -104,7 +133,7 @@ void CodeGen::generate_function(const FunctionDeclaration &func) {
     builder->CreateRet(llvm::Constant::getNullValue(returnType));
 }
 
-llvm::Type *CodeGen::generate_type(Type &type) const {
+llvm::Type *CodeGen::generate_type(Type &type) {
     switch (type.kind) {
         case TypeKind::INTEGER: return builder->getIntNTy(type.size);
         case TypeKind::STRING: return builder->getPtrTy();
@@ -118,12 +147,23 @@ llvm::Type *CodeGen::generate_type(Type &type) const {
                 throw std::exception("array type must have element type");
             }
             llvm::Type *elemType = generate_type(*type.elementType);
-            // Array dinâmico: representado como ponteiro para o tipo de elemento
-            // A alocação real (stack/heap) será implementada posteriormente
             return llvm::PointerType::get(elemType, 0);
         }
+        case TypeKind::POINTER: {
+            if (!type.elementType) {
+                throw std::exception("pointer type must have element type");
+            }
+            llvm::Type *pointeeType = generate_type(*type.elementType);
+            return llvm::PointerType::get(pointeeType, 0);
+        }
+        case TypeKind::STRUCT: {
+            auto it = structTypes.find(type.structName);
+            if (it == structTypes.end()) {
+                throw std::exception(("struct type not found: " + type.structName).c_str());
+            }
+            return it->second;
+        }
         case TypeKind::AUTO:
-            // AUTO não deve chegar aqui diretamente - deve ser inferido antes
             throw std::exception("auto type must be inferred before code generation");
         default: throw std::exception("invalid type provided");
     }
@@ -132,6 +172,16 @@ llvm::Type *CodeGen::generate_type(Type &type) const {
 void CodeGen::generate_statement(const Statement &stmt) {
     if (auto *retStmt = dynamic_cast<const ReturnStatement *>(&stmt)) {
         if (retStmt->value) {
+            if (auto *braceInit = dynamic_cast<const BraceInitializer *>(retStmt->value.get())) {
+                const auto returnType = currentFunction->getReturnType();
+                if (auto *structType = llvm::dyn_cast<llvm::StructType>(returnType)) {
+                    const auto structName = structType->getName().str();
+                    if (const auto structVal = generate_brace_init_for_struct(*braceInit, structType, structName)) {
+                        builder->CreateRet(structVal);
+                        return;
+                    }
+                }
+            }
             const auto val = generate_expression(*retStmt->value);
             builder->CreateRet(val);
         } else {
@@ -140,6 +190,40 @@ void CodeGen::generate_statement(const Statement &stmt) {
     } else if (auto *exprStmt = dynamic_cast<const ExpressionStatement *>(&stmt)) {
         generate_expression(*exprStmt->expression);
     }
+}
+
+llvm::Value *CodeGen::generate_brace_init_for_struct(const BraceInitializer &braceInit, llvm::StructType *structType,
+                                                     const std::string &structName) {
+    auto *alloca = builder->CreateAlloca(structType, nullptr, "struct_init");
+    builder->CreateStore(llvm::Constant::getNullValue(structType), alloca);
+
+    const auto &fieldIndices = structFieldIndices[structName];
+    for (size_t i = 0; i < braceInit.elements.size(); ++i) {
+        const auto &elem = braceInit.elements[i];
+        llvm::Value *val = generate_expression(*elem.value);
+        if (!val) return nullptr;
+
+        unsigned fieldIdx;
+        if (elem.isDesignated()) {
+            // Designated initializer: .field = value
+            auto it = fieldIndices.find(elem.fieldName);
+            if (it == fieldIndices.end()) {
+                llvm::errs() << "Erro: campo não encontrado: " << elem.fieldName << "\n";
+                return nullptr;
+            }
+            fieldIdx = it->second;
+        } else {
+            fieldIdx = static_cast<unsigned>(i);
+        }
+
+        llvm::Type *fieldType = structType->getElementType(fieldIdx);
+        val = cast_value(val, fieldType);
+
+        auto *fieldPtr = builder->CreateStructGEP(structType, alloca, fieldIdx);
+        builder->CreateStore(val, fieldPtr);
+    }
+
+    return builder->CreateLoad(structType, alloca, "struct_val");
 }
 
 llvm::Value *CodeGen::generate_expression(const Expression &expr) {
@@ -273,10 +357,121 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
         // Initialize with default value (0)
         builder->CreateStore(llvm::Constant::getNullValue(type), alloca);
         namedValues[varDecl->name] = alloca;
+        if (varDecl->type.kind == TypeKind::STRUCT) {
+            variableStructTypes[varDecl->name] = varDecl->type.structName;
+        }
         return alloca;
     }
 
+    if (auto *fieldAccess = dynamic_cast<const FieldAccess *>(&expr)) {
+        if (auto *ident = dynamic_cast<const Identifier *>(fieldAccess->object.get())) {
+            auto allocaIt = namedValues.find(ident->name);
+            if (allocaIt == namedValues.end()) {
+                llvm::errs() << "Erro: variável não encontrada: " << ident->name << "\n";
+                return nullptr;
+            }
+
+            std::string structName;
+            llvm::StructType *structType = nullptr;
+
+            if (auto structTypeIt = variableStructTypes.find(ident->name); structTypeIt != variableStructTypes.end()) {
+                structName = structTypeIt->second;
+                structType = structTypes[structName];
+            } else {
+                const auto allocatedType = allocaIt->second->getAllocatedType();
+                if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                    structType = llvmStructType;
+                    structName = llvmStructType->getName().str();
+                } else {
+                    llvm::errs() << "Erro: variável não é uma struct: " << ident->name << "\n";
+                    return nullptr;
+                }
+            }
+
+            const auto &fieldIndices = structFieldIndices[structName];
+
+            auto fieldIt = fieldIndices.find(fieldAccess->fieldName);
+            if (fieldIt == fieldIndices.end()) {
+                llvm::errs() << "Erro: campo não encontrado: " << fieldAccess->fieldName << "\n";
+                return nullptr;
+            }
+
+            unsigned fieldIdx = fieldIt->second;
+            auto *fieldPtr = builder->CreateStructGEP(structType, allocaIt->second, fieldIdx,
+                                                      fieldAccess->fieldName + "_ptr");
+            llvm::Type *fieldType = structType->getElementType(fieldIdx);
+            return builder->CreateLoad(fieldType, fieldPtr, fieldAccess->fieldName);
+        }
+
+        llvm::errs() << "Erro: acesso a campo só suportado em identificadores simples\n";
+        return nullptr;
+    }
+
     if (auto *varInit = dynamic_cast<const VariableInit *>(&expr)) {
+        // Check if initializing with a BraceInitializer
+        if (auto *braceInit = dynamic_cast<const BraceInitializer *>(varInit->value.get())) {
+            // Handle struct initialization with brace initializer
+            if (varInit->type.kind == TypeKind::STRUCT) {
+                llvm::StructType *structType = structTypes[varInit->type.structName];
+                if (!structType) {
+                    llvm::errs() << "Erro: struct não encontrada: " << varInit->type.structName << "\n";
+                    return nullptr;
+                }
+
+                auto *alloca = builder->CreateAlloca(structType, nullptr, varInit->name);
+                namedValues[varInit->name] = alloca;
+                variableStructTypes[varInit->name] = varInit->type.structName;
+
+                const auto &fieldIndices = structFieldIndices[varInit->type.structName];
+
+                for (size_t i = 0; i < braceInit->elements.size(); ++i) {
+                    const auto &elem = braceInit->elements[i];
+                    llvm::Value *val = generate_expression(*elem.value);
+                    if (!val) return nullptr;
+
+                    unsigned fieldIdx;
+                    if (elem.isDesignated()) {
+                        // Designated initializer: .field = value
+                        auto it = fieldIndices.find(elem.fieldName);
+                        if (it == fieldIndices.end()) {
+                            llvm::errs() << "Erro: campo não encontrado: " << elem.fieldName << "\n";
+                            return nullptr;
+                        }
+                        fieldIdx = it->second;
+                    } else {
+                        // Positional initializer
+                        fieldIdx = static_cast<unsigned>(i);
+                    }
+
+                    llvm::Type *fieldType = structType->getElementType(fieldIdx);
+                    val = cast_value(val, fieldType);
+
+                    auto *fieldPtr = builder->CreateStructGEP(structType, alloca, fieldIdx);
+                    builder->CreateStore(val, fieldPtr);
+                }
+
+                return alloca;
+            }
+
+            // For non-struct types with single value initializer: i32 x = { 10 }
+            if (braceInit->elements.size() == 1 && !braceInit->elements[0].isDesignated()) {
+                llvm::Value *initVal = generate_expression(*braceInit->elements[0].value);
+                if (!initVal) {
+                    llvm::errs() << "Erro: não foi possível gerar valor inicial para: " << varInit->name << "\n";
+                    return nullptr;
+                }
+
+                llvm::Type *type = generate_type(const_cast<Type &>(varInit->type));
+                initVal = cast_value(initVal, type);
+
+                auto *alloca = builder->CreateAlloca(type, nullptr, varInit->name);
+                namedValues[varInit->name] = alloca;
+                builder->CreateStore(initVal, alloca);
+                return alloca;
+            }
+        }
+
+        // Regular initialization (not brace initializer)
         llvm::Value *initVal = generate_expression(*varInit->value);
         if (!initVal) {
             llvm::errs() << "Erro: não foi possível gerar valor inicial para: " << varInit->name << "\n";
@@ -311,6 +506,50 @@ llvm::Value *CodeGen::generate_expression(const Expression &expr) {
             builder->CreateStore(val, it->second);
         }
         return val;
+    }
+
+    if (auto *braceInit = dynamic_cast<const BraceInitializer *>(&expr)) {
+        // BraceInitializer creates a struct value
+        // For now, we need context to know the target type
+        // This is typically used in VariableInit, so we return an aggregate
+
+        if (braceInit->elements.empty()) {
+            return nullptr;
+        }
+
+        // Check if all elements are designated (struct init) or positional
+        bool hasDesignated = false;
+        bool hasPositional = false;
+        for (const auto &elem: braceInit->elements) {
+            if (elem.isDesignated()) {
+                hasDesignated = true;
+            } else {
+                hasPositional = true;
+            }
+        }
+
+        if (hasDesignated && hasPositional) {
+            llvm::errs() << "Erro: não é possível misturar inicializadores designados e posicionais\n";
+            return nullptr;
+        }
+
+        // Generate values for all elements
+        std::vector<llvm::Value *> values;
+        for (const auto &elem: braceInit->elements) {
+            llvm::Value *val = generate_expression(*elem.value);
+            if (!val) return nullptr;
+            values.push_back(val);
+        }
+
+        // If there's only one value and it's not designated, return it directly
+        if (values.size() == 1 && !hasDesignated) {
+            return values[0];
+        }
+
+        // For multiple values, we need a target struct type
+        // This will be handled by VariableInit which knows the target type
+        // For now, return the first value (aggregate handling requires more context)
+        return values[0];
     }
 
     return nullptr;

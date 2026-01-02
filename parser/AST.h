@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <llvm/IR/Type.h>
 
+
 inline void writeIndent(std::ostream &os, const int indent) {
     for (int i = 0; i < indent; ++i) os.put(' ');
 }
@@ -36,7 +37,8 @@ enum class TypeKind: uint8_t {
     F128,
     STRUCT,
     AUTO,
-    ARRAY
+    ARRAY,
+    POINTER
 };
 
 const std::unordered_map<std::string, TypeKind> string_to_type_kind = {
@@ -57,6 +59,7 @@ struct Type : ASTNode {
     bool sign;
     bool nullable;
     std::unique_ptr<Type> elementType;
+    std::string structName;
 
     Type(const TypeKind kind, const size_t size, const bool sign)
         : size(size),
@@ -65,27 +68,40 @@ struct Type : ASTNode {
           elementType(nullptr) {
     }
 
-    Type(const Type& other)
+    Type(const Type &other)
         : size(other.size),
           kind(other.kind),
           sign(other.sign),
           nullable(other.nullable),
-          elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr) {
+          elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr),
+          structName(other.structName) {
     }
 
-    Type& operator=(const Type& other) {
+    Type &operator=(const Type &other) {
         if (this != &other) {
             kind = other.kind;
             size = other.size;
             sign = other.sign;
             nullable = other.nullable;
             elementType = other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr;
+            structName = other.structName;
         }
         return *this;
     }
 
-    Type(Type&&) = default;
-    Type& operator=(Type&&) = default;
+    static std::string generate_struct_name() {
+        return "__anon_struct_" + std::to_string(rand());
+    }
+
+    static Type struct_type(const std::string &name) {
+        Type structy(TypeKind::STRUCT, 0, false);
+        structy.structName = name;
+        return structy;
+    }
+
+    Type(Type &&) = default;
+
+    Type &operator=(Type &&) = default;
 
     static Type autod() {
         return Type(TypeKind::AUTO, 0, false);
@@ -115,6 +131,12 @@ struct Type : ASTNode {
         return arr;
     }
 
+    static Type pointer(Type pointeeType) {
+        Type ptr(TypeKind::POINTER, 0, false);
+        ptr.elementType = std::make_unique<Type>(std::move(pointeeType));
+        return ptr;
+    }
+
     static Type integer(const size_t bits, const bool sign) {
         return Type(TypeKind::INTEGER, bits, sign);
     }
@@ -131,6 +153,7 @@ struct Type : ASTNode {
             case TypeKind::STRUCT: return "STRUCT";
             case TypeKind::AUTO: return "AUTO";
             case TypeKind::ARRAY: return "ARRAY";
+            case TypeKind::POINTER: return "POINTER";
             default: return "UNKNOWN";
         }
     }
@@ -138,7 +161,9 @@ struct Type : ASTNode {
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "Type(" << kindToString(kind);
-        if (kind == TypeKind::ARRAY && elementType) {
+        if (kind == TypeKind::STRUCT && !structName.empty()) {
+            os << "<" << structName << ">";
+        } else if ((kind == TypeKind::ARRAY || kind == TypeKind::POINTER) && elementType) {
             os << "<";
             elementType->print(os, 0);
             os << ">";
@@ -173,16 +198,36 @@ inline std::ostream &operator<<(std::ostream &os, const ASTNode &node) {
     return os;
 }
 
-struct FieldType{
-    Type type;
-    uint8_t index{};
-    bool pointer;
-    bool stack;
-} ;
-
-struct Struct : ASTNode {
+struct StructField : ASTNode {
+    std::unique_ptr<Type> type;
     std::string name;
-    std::unordered_map<uint32_t, FieldType> fields{};
+
+    StructField(std::unique_ptr<Type> type, std::string name)
+        : type(std::move(type)), name(std::move(name)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "StructField(" << name << ": " << *type << ")";
+    }
+};
+
+struct StructDeclaration : ASTNode {
+    std::string name;
+    std::vector<StructField> fields;
+
+    StructDeclaration(std::string name, std::vector<StructField> fields)
+        : name(std::move(name)), fields(std::move(fields)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "StructDeclaration(" << name << ")\n";
+        for (const auto &field: fields) {
+            field.print(os, indent + 2);
+            os << '\n';
+        }
+    }
 };
 
 struct Expression : ASTNode {
@@ -273,6 +318,21 @@ struct Identifier : Expression {
     }
 };
 
+struct FieldAccess : Expression {
+    std::unique_ptr<Expression> object;
+    std::string fieldName;
+
+    FieldAccess(std::unique_ptr<Expression> obj, std::string field)
+        : object(std::move(obj)), fieldName(std::move(field)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "FieldAccess(." << fieldName << ")\n";
+        object->print(os, indent + 2);
+    }
+};
+
 struct FunctionCall : Expression {
     std::string name;
     std::vector<std::unique_ptr<Expression> > arguments;
@@ -342,6 +402,51 @@ struct BinaryExpression : Expression {
         left->print(os, indent + 2);
         os << '\n';
         right->print(os, indent + 2);
+    }
+};
+
+struct InitializerElement : ASTNode {
+    std::string fieldName; // empty if positional
+    std::unique_ptr<Expression> value;
+
+    InitializerElement(std::string fieldName, std::unique_ptr<Expression> value)
+        : fieldName(std::move(fieldName)), value(std::move(value)) {
+    }
+
+    explicit InitializerElement(std::unique_ptr<Expression> value)
+        : fieldName(""), value(std::move(value)) {
+    }
+
+    [[nodiscard]] bool isDesignated() const { return !fieldName.empty(); }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        if (isDesignated()) {
+            os << "DesignatedInit(." << fieldName << " =\n";
+        } else {
+            os << "PositionalInit(\n";
+        }
+        value->print(os, indent + 2);
+        os << ")";
+    }
+};
+
+struct BraceInitializer : Expression {
+    std::vector<InitializerElement> elements;
+
+    explicit BraceInitializer(std::vector<InitializerElement> elements)
+        : elements(std::move(elements)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "BraceInitializer {\n";
+        for (const auto &elem: elements) {
+            elem.print(os, indent + 2);
+            os << '\n';
+        }
+        writeIndent(os, indent);
+        os << "}";
     }
 };
 
@@ -427,10 +532,15 @@ struct FunctionDeclaration : ASTNode {
 };
 
 struct Program : ASTNode {
+    std::vector<std::unique_ptr<StructDeclaration> > structs;
     std::vector<std::unique_ptr<FunctionDeclaration> > functions;
 
     void print(std::ostream &os, const int indent = 0) const override {
         os << "Program\n";
+        for (const auto &s: structs) {
+            s->print(os, indent + 2);
+            os << '\n';
+        }
         for (const auto &func: functions) {
             func->print(os, indent + 2);
             os << '\n';
@@ -438,4 +548,59 @@ struct Program : ASTNode {
     }
 };
 
+struct Scope {
+    std::shared_ptr<Scope> parent = nullptr;
+
+    std::unordered_map<std::string, std::shared_ptr<Type> > structs{};
+    std::unordered_map<std::string, std::shared_ptr<Type> > variables{};
+
+    explicit Scope(std::shared_ptr<Scope> parent = nullptr) : parent(std::move(parent)) {
+    }
+
+    void define_variable(const std::string &name, const Type &type) {
+        variables[name] = std::make_shared<Type>(type);
+    }
+
+    void define_struct(const std::string &name, const Type &type) {
+        structs[name] = std::make_shared<Type>(type);
+    }
+
+    std::shared_ptr<Type> lookup_variable(const std::string &name) {
+        if (const auto it = variables.find(name); it != variables.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->lookup_variable(name);
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<Type> lookup_struct(const std::string &name) {
+        if (const auto it = structs.find(name); it != structs.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->lookup_struct(name);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool has_variable_in_current_scope(const std::string &name) const {
+        return variables.contains(name);
+    }
+
+    [[nodiscard]] bool has_struct_in_current_scope(const std::string &name) const {
+        return structs.contains(name);
+    }
+
+    [[nodiscard]] bool has_struct_declared(const std::string &name) const {
+        if (structs.contains(name)) return true;
+
+        if (parent) {
+            return parent->has_struct_in_current_scope(name);
+        }
+
+        return false;
+    }
+};
 #endif //DJINN_AST_H
