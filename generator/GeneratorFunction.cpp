@@ -4,29 +4,9 @@
 
 #include "Generator.h"
 
-void Generator::generate_struct(const StructDeclaration &structDecl) {
-    std::vector<llvm::Type *> fieldTypes;
-    std::unordered_map<std::string, unsigned> fieldIndices;
-
-    unsigned idx = 0;
-    for (const auto &field: structDecl.fields) {
-        fieldTypes.push_back(generate_type(*field.type));
-        fieldIndices[field.name] = idx++;
-    }
-
-    llvm::StructType *structType = llvm::StructType::create(
-        *context,
-        fieldTypes,
-        structDecl.name
-    );
-
-    structTypes[structDecl.name] = structType;
-    structFieldIndices[structDecl.name] = std::move(fieldIndices);
-}
 
 void Generator::generate_function(const FunctionDeclaration &func) {
-    namedValues.clear();
-    variableStructTypes.clear();
+    push_scope();
 
     llvm::Type *returnType = this->generate_type(*func.returnType);
 
@@ -55,10 +35,8 @@ void Generator::generate_function(const FunctionDeclaration &func) {
 
         auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.name);
         builder->CreateStore(&arg, alloca);
-        namedValues[param.name] = alloca;
-        if (param.type->kind == TypeKind::STRUCT) {
-            variableStructTypes[param.name] = param.type->structName;
-        }
+        std::string structTypeName = param.type->kind == TypeKind::STRUCT ? param.type->structName : "";
+        currentScope->define_variable(param.name, alloca, structTypeName);
         idx++;
     }
 
@@ -68,12 +46,17 @@ void Generator::generate_function(const FunctionDeclaration &func) {
         }
     }
 
-    if (builder->GetInsertBlock()->getTerminator()) return;
+    if (builder->GetInsertBlock()->getTerminator()) {
+        pop_scope();
+        return;
+    }
 
     if (returnType->isVoidTy()) {
         builder->CreateRetVoid();
+        pop_scope();
         return;
     }
 
     builder->CreateRet(llvm::Constant::getNullValue(returnType));
+    pop_scope();
 }

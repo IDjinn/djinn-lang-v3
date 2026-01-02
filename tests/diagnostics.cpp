@@ -68,7 +68,7 @@ TEST(Diagnostics, CodeFormatting) {
 
     engine.error(DiagnosticCode::UNEXPECTED_CHARACTER, "caractere inesperado", SourceLocation(1, 1, 1));
 
-    std::string output = engine.render();
+    const std::string output = engine.render();
     // Code should be E1001 (UNEXPECTED_CHARACTER = 1001)
     EXPECT_TRUE(output.find("E1001") != std::string::npos);
 }

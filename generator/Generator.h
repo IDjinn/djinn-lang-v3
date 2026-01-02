@@ -10,9 +10,9 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/Passes/PassBuilder.h"
 #include "../parser/AST.h"
 #include "../diagnostics/Diagnostic.h"
+#include "GeneratorScope.h"
 
 class Generator {
 public:
@@ -20,7 +20,7 @@ public:
 
     void generate(const Program &program);
 
-    void optimize();
+    void optimize() const;
 
     std::string print() const;
 
@@ -32,10 +32,11 @@ private:
     std::unique_ptr<llvm::IRBuilder<> > builder;
 
     std::unordered_map<std::string, llvm::Function *> functions;
-    std::unordered_map<std::string, llvm::AllocaInst *> namedValues;
-    std::unordered_map<std::string, std::string> variableStructTypes;
-    std::unordered_map<std::string, llvm::StructType *> structTypes;
-    std::unordered_map<std::string, std::unordered_map<std::string, unsigned> > structFieldIndices;
+    std::shared_ptr<GeneratorScope> currentScope;
+
+    void push_scope();
+
+    void pop_scope();
 
     void declare_extern_functions();
 
@@ -45,16 +46,38 @@ private:
 
     void generate_function(const FunctionDeclaration &func);
 
-    llvm::Type *generate_type(Type &type);
+    llvm::Type *generate_type(const Type &type);
 
     void generate_statement(const Statement &stmt);
 
     llvm::Value *generate_expression(const Expression &expr);
 
+    llvm::Value *generate_integer_literal(const IntegerLiteral &expr);
+
+    llvm::Value *generate_string_literal(const StringLiteral &expr);
+
+    llvm::Value *generate_binary_expression(const BinaryExpression &expr);
+
+    llvm::Value *generate_unary_expression(const UnaryExpression &expr);
+
+    llvm::Value *generate_function_call(const FunctionCall &expr);
+
+    llvm::Value *generate_identifier(const Identifier &expr);
+
+    llvm::Value *generate_variable_declaration(const VariableDeclaration &expr);
+
+    llvm::Value *generate_field_access(const FieldAccess &expr);
+
+    llvm::Value *generate_variable_init(const VariableInit &expr);
+
+    llvm::Value *generate_assignment(const Assignment &expr);
+
+    llvm::Value *generate_brace_initializer(const BraceInitializer &expr);
+
     llvm::Value *generate_brace_init_for_struct(const BraceInitializer &braceInit, llvm::StructType *structType,
                                                 const std::string &structName);
 
-    llvm::Value *cast_value(llvm::Value *value, llvm::Type *targetType);
+    llvm::Value *cast_value(llvm::Value *value, llvm::Type *targetType) const;
 
     llvm::Function *currentFunction = nullptr;
 };

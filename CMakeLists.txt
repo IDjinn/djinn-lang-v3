@@ -15,6 +15,8 @@ file(GLOB_RECURSE DJINN_SOURCES
         lexer/*.cpp
         parser/*.cpp
         generator/*.cpp
+        generator/expressions/*.cpp
+        generator/statements/*.cpp
         diagnostics/*.cpp
 )
 

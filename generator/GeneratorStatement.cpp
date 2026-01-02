@@ -32,7 +32,11 @@ llvm::Value *Generator::generate_brace_init_for_struct(const BraceInitializer &b
     auto *alloca = builder->CreateAlloca(structType, nullptr, "struct_init");
     builder->CreateStore(llvm::Constant::getNullValue(structType), alloca);
 
-    const auto &fieldIndices = structFieldIndices[structName];
+    const auto *fieldIndices = currentScope->lookup_field_indices(structName);
+    if (!fieldIndices) {
+        throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
+    }
+
     for (size_t i = 0; i < braceInit.elements.size(); ++i) {
         const auto &elem = braceInit.elements[i];
         llvm::Value *val = generate_expression(*elem.value);
@@ -40,8 +44,8 @@ llvm::Value *Generator::generate_brace_init_for_struct(const BraceInitializer &b
 
         unsigned fieldIdx;
         if (elem.isDesignated()) {
-            auto it = fieldIndices.find(elem.fieldName);
-            if (it == fieldIndices.end()) {
+            auto it = fieldIndices->find(elem.fieldName);
+            if (it == fieldIndices->end()) {
                 throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + elem.fieldName);
             }
             fieldIdx = it->second;

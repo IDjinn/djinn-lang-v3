@@ -4,7 +4,7 @@
 
 #include "Generator.h"
 
-llvm::Type *Generator::generate_type(Type &type) {
+llvm::Type *Generator::generate_type(const Type &type) {
     switch (type.kind) {
         case TypeKind::INTEGER: return builder->getIntNTy(type.size);
         case TypeKind::STRING: return builder->getPtrTy();
@@ -28,11 +28,11 @@ llvm::Type *Generator::generate_type(Type &type) {
             return llvm::PointerType::get(pointeeType, 0);
         }
         case TypeKind::STRUCT: {
-            auto it = structTypes.find(type.structName);
-            if (it == structTypes.end()) {
+            llvm::StructType *structType = currentScope->lookup_struct(type.structName);
+            if (!structType) {
                 throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + type.structName);
             }
-            return it->second;
+            return structType;
         }
         case TypeKind::AUTO:
             throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo auto deve ser inferido antes da geração de código");
@@ -40,19 +40,20 @@ llvm::Type *Generator::generate_type(Type &type) {
     }
 }
 
-llvm::Value *Generator::cast_value(llvm::Value *value, llvm::Type *targetType) {
+llvm::Value *Generator::cast_value(llvm::Value *value, llvm::Type *targetType) const {
     if (!value || !targetType) return value;
 
-    llvm::Type *srcType = value->getType();
+    const llvm::Type *srcType = value->getType();
     if (srcType == targetType) return value;
 
     if (srcType->isIntegerTy() && targetType->isIntegerTy()) {
-        unsigned srcBits = srcType->getIntegerBitWidth();
-        unsigned dstBits = targetType->getIntegerBitWidth();
+        const unsigned srcBits = srcType->getIntegerBitWidth();
+        const unsigned dstBits = targetType->getIntegerBitWidth();
 
         if (srcBits < dstBits) {
             return builder->CreateSExt(value, targetType, "sext");
-        } else if (srcBits > dstBits) {
+        }
+        if (srcBits > dstBits) {
             return builder->CreateTrunc(value, targetType, "trunc");
         }
     }
@@ -60,9 +61,8 @@ llvm::Value *Generator::cast_value(llvm::Value *value, llvm::Type *targetType) {
     if (srcType->isFloatingPointTy() && targetType->isFloatingPointTy()) {
         if (srcType->getPrimitiveSizeInBits() < targetType->getPrimitiveSizeInBits()) {
             return builder->CreateFPExt(value, targetType, "fpext");
-        } else {
-            return builder->CreateFPTrunc(value, targetType, "fptrunc");
         }
+        return builder->CreateFPTrunc(value, targetType, "fptrunc");
     }
 
     if (srcType->isIntegerTy() && targetType->isFloatingPointTy()) {

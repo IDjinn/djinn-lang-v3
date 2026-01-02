@@ -21,7 +21,7 @@ std::string DiagnosticEngine::getLine(const uint32_t lineNum) const {
         return "";
     }
 
-    size_t start = lineOffsets_[lineNum - 1];
+    const size_t start = lineOffsets_[lineNum - 1];
     size_t end = (lineNum < lineOffsets_.size())
                      ? lineOffsets_[lineNum] - 1
                      : source_.size();

@@ -27,7 +27,7 @@ char Lexer::peekNext() const {
 }
 
 char Lexer::advance() {
-    char c = peek();
+    const char c = peek();
     pos++;
     if (c == '\n') {
         line++;
@@ -60,7 +60,7 @@ Token Lexer::read_string() {
     while (peek() != '"' && peek() != '\0') {
         if (peek() == '\\') {
             advance();
-            char escaped = advance();
+            const char escaped = advance();
             switch (escaped) {
                 case 'n': value += '\n';
                     break;
@@ -108,7 +108,7 @@ std::vector<Token> Lexer::tokenize() {
         skip_whitespace();
         if (pos >= source.size()) break;
 
-        char c = peek();
+        const char c = peek();
 
         if (c == '"') {
             tokens.push_back(read_string());

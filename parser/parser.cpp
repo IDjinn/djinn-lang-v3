@@ -90,7 +90,7 @@ Token &Parser::expect(const std::string &message, const std::vector<TokenType> &
         if (check(type)) return advance();
     }
     const auto &token = previous();
-    uint32_t col = token.position.column + token.value.length();
+    const uint32_t col = token.position.column + token.value.length();
     throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
                        SourceLocation(token.position.line, col, 1));
 }

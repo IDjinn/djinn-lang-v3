@@ -13,8 +13,19 @@
 Generator::Generator()
     : context(std::make_unique<llvm::LLVMContext>()),
       module(std::make_unique<llvm::Module>("djinn", *context)),
-      builder(std::make_unique<llvm::IRBuilder<> >(*context)) {
+      builder(std::make_unique<llvm::IRBuilder<> >(*context)),
+      currentScope(std::make_shared<GeneratorScope>()) {
     declare_extern_functions();
+}
+
+void Generator::push_scope() {
+    currentScope = std::make_shared<GeneratorScope>(currentScope);
+}
+
+void Generator::pop_scope() {
+    if (currentScope->parent) {
+        currentScope = currentScope->parent;
+    }
 }
 
 void Generator::declare_extern_functions() {
@@ -58,7 +69,7 @@ void Generator::generate_default_main() {
     builder->CreateRet(builder->getInt32(0));
 }
 
-void Generator::optimize() {
+void Generator::optimize() const {
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;
