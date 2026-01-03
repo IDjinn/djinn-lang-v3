@@ -11,6 +11,7 @@
 #include "ASTNode.h"
 #include "Type.h"
 #include "Statement.h"
+#include "Generic.h"
 
 struct StructField : ASTNode {
     std::unique_ptr<Type> type;
@@ -28,15 +29,33 @@ struct StructField : ASTNode {
 
 struct StructDeclaration : ASTNode {
     std::string name;
+    GenericParams genericParams;
     std::vector<StructField> fields;
 
     StructDeclaration(std::string name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields)) {
     }
 
+    StructDeclaration(std::string name, GenericParams genericParams, std::vector<StructField> fields)
+        : name(std::move(name)), genericParams(std::move(genericParams)), fields(std::move(fields)) {
+    }
+
+    [[nodiscard]] bool isGeneric() const {
+        return !genericParams.empty();
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "StructDeclaration(" << name << ")\n";
+        os << "StructDeclaration(" << name;
+        if (!genericParams.empty()) {
+            os << "<";
+            for (size_t i = 0; i < genericParams.size(); ++i) {
+                if (i > 0) os << ", ";
+                os << genericParams.params[i].name;
+            }
+            os << ">";
+        }
+        os << ")\n";
         for (const auto &field: fields) {
             field.print(os, indent + 2);
             os << '\n';

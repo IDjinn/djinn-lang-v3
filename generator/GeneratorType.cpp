@@ -28,6 +28,44 @@ llvm::Type *Generator::generate_type(const Type &type) {
             return llvm::PointerType::get(pointeeType, 0);
         }
         case TypeKind::STRUCT: {
+            if (type.hasGenericArgs()) {
+                llvm::StructType *existingType = currentScope->lookup_monomorphized_struct(
+                    type.structName, type.genericArgs);
+                if (existingType) {
+                    return existingType;
+                }
+
+                // Lookup generic definition
+                const GenericStructDef *genericDef = currentScope->lookup_generic_struct(type.structName);
+                if (!genericDef) {
+                    throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
+                                       "struct genérica não encontrada: " + type.structName);
+                }
+
+                GenericArgs args;
+                for (const auto &argType: type.genericArgs) {
+                    args.add(argType);
+                }
+                GenericContext ctx = GenericContext::create(genericDef->params, args);
+
+                std::vector<llvm::Type *> fieldTypes;
+                std::unordered_map<std::string, unsigned> fieldIndices;
+                unsigned idx = 0;
+                for (const auto &[fieldName, fieldType]: genericDef->fields) {
+                    Type substituted = ctx.substitute(fieldType);
+                    fieldTypes.push_back(generate_type(substituted));
+                    fieldIndices[fieldName] = idx++;
+                }
+
+                std::string mangledName = Mangler::mangle_generic_struct(type.structName, type.genericArgs);
+                llvm::StructType *structType = llvm::StructType::create(*context, fieldTypes, mangledName);
+
+                currentScope->define_monomorphized_struct(type.structName, type.genericArgs,
+                                                          structType, std::move(fieldIndices));
+
+                return structType;
+            }
+
             llvm::StructType *structType = currentScope->lookup_struct(type.structName);
             if (!structType) {
                 throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + type.structName);

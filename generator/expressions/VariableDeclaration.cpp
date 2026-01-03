@@ -8,7 +8,16 @@ llvm::Value *Generator::generate_variable_declaration(const VariableDeclaration 
     llvm::Type *type = generate_type(const_cast<Type &>(expr.type));
     auto *alloca = builder->CreateAlloca(type, nullptr, expr.name);
     builder->CreateStore(llvm::Constant::getNullValue(type), alloca);
-    std::string structTypeName = expr.type.kind == TypeKind::STRUCT ? expr.type.structName : "";
+
+    std::string structTypeName;
+    if (expr.type.kind == TypeKind::STRUCT) {
+        if (expr.type.hasGenericArgs()) {
+            structTypeName = Mangler::mangle_generic_struct(expr.type.structName, expr.type.genericArgs);
+        } else {
+            structTypeName = expr.type.structName;
+        }
+    }
+
     currentScope->define_variable(expr.name, alloca, structTypeName);
     return alloca;
 }

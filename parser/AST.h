@@ -7,6 +7,7 @@
 
 #include "ast/ASTNode.h"
 #include "ast/Type.h"
+#include "ast/Generic.h"
 #include "ast/Expression.h"
 #include "ast/Statement.h"
 #include "ast/Declaration.h"

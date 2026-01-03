@@ -14,7 +14,7 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) {
         std::string structName;
         llvm::StructType *structType = nullptr;
 
-        std::string varStructType = currentScope->lookup_variable_struct_type(ident->name);
+        const std::string varStructType = currentScope->lookup_variable_struct_type(ident->name);
         if (!varStructType.empty()) {
             structName = varStructType;
             structType = currentScope->lookup_struct(structName);

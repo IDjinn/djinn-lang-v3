@@ -128,6 +128,17 @@ std::unique_ptr<Type> Parser::parse_type() {
                            SourceLocation(identifier.position.line, identifier.position.column, identifier.value.length()));
     }
 
+    // Parse generic arguments: Array<i32>, Map<string, i32>
+    if (baseType->kind == TypeKind::STRUCT && match(TokenType::LESS)) {
+        std::vector<Type> genericArgs;
+        do {
+            auto argType = parse_type();
+            genericArgs.push_back(std::move(*argType));
+        } while (match(TokenType::COMMA));
+        expect("Esperado '>' após argumentos genéricos", TokenType::GREATER);
+        baseType->genericArgs = std::move(genericArgs);
+    }
+
     if (match(TokenType::LBRACKET)) {
         expect("Expected ']' after '['", TokenType::RBRACKET);
         return std::make_unique<Type>(Type::array(std::move(*baseType)));
@@ -140,7 +151,24 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     expect("Esperado 'struct'", TokenType::STRUCT);
     const auto name = match(TokenType::IDENTIFIER) ? previous().value : Type::generate_struct_name();
 
+    // Parse generic parameters: struct Array<T, U> { ... }
+    GenericParams genericParams;
+    if (match(TokenType::LESS)) {
+        do {
+            Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
+            genericParams.add(GenericParam(paramName.value));
+        } while (match(TokenType::COMMA));
+        expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
+    }
+
     currentScope->define_struct(name, Type::struct_type(name));
+
+    // Register generic param names as types within struct scope for field parsing
+    if (!genericParams.empty()) {
+        for (const auto &param: genericParams.params) {
+            currentScope->define_struct(param.name, Type::struct_type(param.name));
+        }
+    }
 
     expect("Esperado '{'", TokenType::LBRACE);
 
@@ -154,7 +182,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
 
     expect("Esperado '}'", TokenType::RBRACE);
 
-    return std::make_unique<StructDeclaration>(name, std::move(fields));
+    return std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));
 }
 
 std::unique_ptr<Program> Parser::parse() {
@@ -370,6 +398,16 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         (check(TokenType::IDENTIFIER) && isType(peek()))) {
         const auto identifier = advance();
 
+        // Parse generic arguments: Array<i32>
+        std::vector<Type> genericArgs;
+        if (currentScope->has_struct_declared(identifier.value) && match(TokenType::LESS)) {
+            do {
+                auto argType = parse_type();
+                genericArgs.push_back(std::move(*argType));
+            } while (match(TokenType::COMMA));
+            expect("Esperado '>' após argumentos genéricos", TokenType::GREATER);
+        }
+
         bool isArray = false;
         if (match(TokenType::LBRACKET)) {
             expect("Expected ']' after '['", TokenType::RBRACKET);
@@ -382,6 +420,12 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             Type varType = currentScope->has_struct_declared(identifier.value)
                                ? Type::struct_type(identifier.value)
                                : Type::fromToken(identifier);
+
+            // Add generic arguments if present
+            if (!genericArgs.empty()) {
+                varType.genericArgs = std::move(genericArgs);
+            }
+
             if (isArray) {
                 varType = Type::array(std::move(varType));
             }

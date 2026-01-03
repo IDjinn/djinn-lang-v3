@@ -4,6 +4,19 @@
 #include "../Generator.h"
 
 void Generator::generate_struct(const StructDeclaration &struct_declaration) {
+    if (struct_declaration.isGeneric()) {
+        GenericStructDef genericDef;
+        genericDef.name = struct_declaration.name;
+        genericDef.params = struct_declaration.genericParams;
+
+        for (const auto &field: struct_declaration.fields) {
+            genericDef.fields.push_back({field.name, *field.type});
+        }
+
+        currentScope->define_generic_struct(struct_declaration.name, std::move(genericDef));
+        return;
+    }
+
     std::vector<llvm::Type *> fieldTypes;
     std::unordered_map<std::string, unsigned> fieldIndices;
 

@@ -37,18 +37,20 @@ const std::unordered_map<std::string, TypeKind> string_to_type_kind = {
 };
 
 struct Type : ASTNode {
-    size_t size;
-    TypeKind kind;
-    bool sign;
-    bool nullable;
+    size_t size = 0;
+    TypeKind kind = TypeKind::VOID;
+    bool sign = false;
+    bool nullable = false;
     std::unique_ptr<Type> elementType;
     std::string structName;
+    std::vector<Type> genericArgs;
+
+    Type() = default;
 
     Type(const TypeKind kind, const size_t size, const bool sign)
         : size(size),
           kind(kind),
-          sign(sign),
-          elementType(nullptr) {
+          sign(sign) {
     }
 
     Type(const Type &other)
@@ -57,7 +59,8 @@ struct Type : ASTNode {
           sign(other.sign),
           nullable(other.nullable),
           elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr),
-          structName(other.structName) {
+          structName(other.structName),
+          genericArgs(other.genericArgs) {
     }
 
     Type &operator=(const Type &other) {
@@ -68,6 +71,7 @@ struct Type : ASTNode {
             nullable = other.nullable;
             elementType = other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr;
             structName = other.structName;
+            genericArgs = other.genericArgs;
         }
         return *this;
     }
@@ -84,6 +88,17 @@ struct Type : ASTNode {
         Type structy(TypeKind::STRUCT, 0, false);
         structy.structName = name;
         return structy;
+    }
+
+    static Type generic_struct_type(const std::string &name, std::vector<Type> args) {
+        Type structy(TypeKind::STRUCT, 0, false);
+        structy.structName = name;
+        structy.genericArgs = std::move(args);
+        return structy;
+    }
+
+    [[nodiscard]] bool hasGenericArgs() const {
+        return !genericArgs.empty();
     }
 
     static Type autod() {
@@ -145,7 +160,16 @@ struct Type : ASTNode {
         writeIndent(os, indent);
         os << "Type(" << kindToString(kind);
         if (kind == TypeKind::STRUCT && !structName.empty()) {
-            os << "<" << structName << ">";
+            os << "<" << structName;
+            if (!genericArgs.empty()) {
+                os << "<";
+                for (size_t i = 0; i < genericArgs.size(); ++i) {
+                    if (i > 0) os << ", ";
+                    genericArgs[i].print(os, 0);
+                }
+                os << ">";
+            }
+            os << ">";
         } else if ((kind == TypeKind::ARRAY || kind == TypeKind::POINTER) && elementType) {
             os << "<";
             elementType->print(os, 0);
