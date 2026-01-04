@@ -54,7 +54,7 @@ bool Parser::isType() {
     return isType(peek());
 }
 
-bool Parser::isType(const Token &token) {
+bool Parser::isType(const Token &token) const {
     if (token.type == TokenType::STRING || token.type == TokenType::AUTO || token.type == TokenType::VOID) {
         return true;
     }
@@ -160,7 +160,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     GenericParams genericParams;
     if (match(TokenType::LESS)) {
         do {
-            Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
+            const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
             genericParams.add(GenericParam(paramName.value));
         } while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
@@ -520,7 +520,7 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer() {
 
 std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const std::string &abi) {
     std::unique_ptr<Type> returnType = parse_type();
-    Token &name = expect("Esperado nome", TokenType::IDENTIFIER);
+    const Token &name = expect("Esperado nome", TokenType::IDENTIFIER);
 
     // Parse parameters manually to support variadic (...)
     expect("Esperado '('", TokenType::LPAREN);

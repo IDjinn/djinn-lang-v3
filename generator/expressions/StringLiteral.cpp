@@ -4,6 +4,6 @@
 
 #include "../Generator.h"
 
-llvm::Value *Generator::generate_string_literal(const StringLiteral &expr) {
+llvm::Value *Generator::generate_string_literal(const StringLiteral &expr) const {
     return builder->CreateGlobalString(expr.value);
 }

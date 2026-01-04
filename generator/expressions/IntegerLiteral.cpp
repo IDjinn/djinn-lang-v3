@@ -4,7 +4,7 @@
 
 #include "../Generator.h"
 
-llvm::Value *Generator::generate_integer_literal(const IntegerLiteral &expr) {
+llvm::Value *Generator::generate_integer_literal(const IntegerLiteral &expr) const {
     const llvm::APInt apVal(128, expr.value, 10);
     const unsigned activeBits = apVal.getActiveBits();
 

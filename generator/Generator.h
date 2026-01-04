@@ -24,7 +24,7 @@ public:
 
     std::string print() const;
 
-    llvm::Module &getModule() { return *module; }
+    llvm::Module &getModule() const { return *module; }
 
 private:
     std::unique_ptr<llvm::LLVMContext> context;
@@ -57,9 +57,9 @@ private:
 
     llvm::Value *generate_expression(const Expression &expr);
 
-    llvm::Value *generate_integer_literal(const IntegerLiteral &expr);
+    llvm::Value *generate_integer_literal(const IntegerLiteral &expr) const;
 
-    llvm::Value *generate_string_literal(const StringLiteral &expr);
+    llvm::Value *generate_string_literal(const StringLiteral &expr) const;
 
     llvm::Value *generate_binary_expression(const BinaryExpression &expr);
 
@@ -67,11 +67,11 @@ private:
 
     llvm::Value *generate_function_call(const FunctionCall &expr);
 
-    llvm::Value *generate_identifier(const Identifier &expr);
+    llvm::Value *generate_identifier(const Identifier &expr) const;
 
     llvm::Value *generate_variable_declaration(const VariableDeclaration &expr);
 
-    llvm::Value *generate_field_access(const FieldAccess &expr);
+    llvm::Value *generate_field_access(const FieldAccess &expr) const;
 
     llvm::Value *generate_variable_init(const VariableInit &expr);
 

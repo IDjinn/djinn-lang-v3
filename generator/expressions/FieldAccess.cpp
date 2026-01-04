@@ -4,9 +4,9 @@
 
 #include "../Generator.h"
 
-llvm::Value *Generator::generate_field_access(const FieldAccess &expr) {
+llvm::Value *Generator::generate_field_access(const FieldAccess &expr) const {
     if (auto *ident = dynamic_cast<const Identifier *>(expr.object.get())) {
-        llvm::AllocaInst *alloca = currentScope->lookup_variable(ident->name);
+        const auto alloca = currentScope->lookup_variable(ident->name);
         if (!alloca) {
             throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + ident->name);
         }

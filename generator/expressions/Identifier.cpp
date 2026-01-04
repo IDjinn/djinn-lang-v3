@@ -4,7 +4,7 @@
 
 #include "../Generator.h"
 
-llvm::Value *Generator::generate_identifier(const Identifier &expr) {
+llvm::Value *Generator::generate_identifier(const Identifier &expr) const {
     if (llvm::AllocaInst *alloca = currentScope->lookup_variable(expr.name)) {
         return builder->CreateLoad(alloca->getAllocatedType(), alloca, expr.name);
     }

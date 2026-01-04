@@ -18,6 +18,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         generator/expressions/*.cpp
         generator/statements/*.cpp
         diagnostics/*.cpp
+        binder/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -26,6 +27,7 @@ file(GLOB_RECURSE DJINN_HEADERS
         generator/*.h
         diagnostics/*.h
         parser/ast/*.h
+        binder/*.h
 )
 
 include_directories(${CMAKE_SOURCE_DIR}/include)

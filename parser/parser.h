@@ -44,7 +44,7 @@ private:
 
     bool isType();
 
-    bool isType(const Token &token);
+    bool isType(const Token &token) const;
 
     Token &expect(const std::string &message, TokenType type);
 

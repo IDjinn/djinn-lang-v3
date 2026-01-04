@@ -46,7 +46,7 @@ llvm::Type *Generator::generate_type(const Type &type) {
                 for (const auto &argType: type.genericArgs) {
                     args.add(argType);
                 }
-                GenericContext ctx = GenericContext::create(genericDef->params, args);
+                const GenericContext ctx = GenericContext::create(genericDef->params, args);
 
                 std::vector<llvm::Type *> fieldTypes;
                 std::unordered_map<std::string, unsigned> fieldIndices;
@@ -57,7 +57,7 @@ llvm::Type *Generator::generate_type(const Type &type) {
                     fieldIndices[fieldName] = idx++;
                 }
 
-                std::string mangledName = Mangler::mangle_generic_struct(type.structName, type.genericArgs);
+                const std::string mangledName = Mangler::mangle_generic_struct(type.structName, type.genericArgs);
                 llvm::StructType *structType = llvm::StructType::create(*context, fieldTypes, mangledName);
 
                 currentScope->define_monomorphized_struct(type.structName, type.genericArgs,
