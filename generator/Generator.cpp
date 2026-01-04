@@ -46,6 +46,22 @@ void Generator::generate(const Program &program) {
         generate_extern_function(*externFunc);
     }
 
+    for (const auto &import: program.imports) {
+        const std::string nsPath = import->namespacePath.toString();
+        for (const auto &[name, func]: functions) {
+            if (name.starts_with(nsPath + "::")) {
+                const std::string shortName = name.substr(nsPath.length() + 2);
+                if (shortName.find("::") == std::string::npos && !functions.contains(shortName)) {
+                    functions[shortName] = func;
+                }
+            }
+        }
+    }
+
+    for (const auto &ns: program.namespaces) {
+        generate_namespace(*ns);
+    }
+
     for (const auto &structDecl: program.structs) {
         generate_struct(*structDecl);
     }
@@ -56,6 +72,22 @@ void Generator::generate(const Program &program) {
 
     if (!functions.contains("main")) {
         generate_default_main();
+    }
+}
+
+void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &structDecl: ns.structs) {
+        generate_struct(*structDecl);
+    }
+
+    for (const auto &func: ns.functions) {
+        generate_function(*func, qualifiedPrefix);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        generate_namespace(*nestedNs, qualifiedPrefix);
     }
 }
 

@@ -40,15 +40,16 @@ struct Expression : ASTNode {
 struct VariableDeclaration : Expression {
     Type type;
     std::string name;
+    bool isMutable;
 
-    VariableDeclaration(Type type, std::string name)
+    VariableDeclaration(Type type, std::string name, const bool isMutable)
         : type(std::move(type)),
-          name(std::move(name)) {
+          name(std::move(name)), isMutable(isMutable) {
     }
 
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
-        os << "VariableDeclaration(" << name << ": " << type << ")";
+        os << "VariableDeclaration(" << name << ": " << type << (isMutable ? ": mut" : "") << ")";
     }
 };
 
@@ -72,9 +73,10 @@ struct VariableInit : Expression {
     Type type;
     std::string name;
     std::unique_ptr<Expression> value;
+    bool isMutable;
 
-    VariableInit(Type type, std::string name, std::unique_ptr<Expression> value)
-        : type(std::move(type)), name(std::move(name)), value(std::move(value)) {
+    VariableInit(Type type, std::string name, std::unique_ptr<Expression> value, bool isMutable)
+        : type(std::move(type)), name(std::move(name)), value(std::move(value)), isMutable(isMutable) {
     }
 
     void print(std::ostream &os, const int indent) const override {

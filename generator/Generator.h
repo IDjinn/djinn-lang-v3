@@ -47,9 +47,11 @@ private:
 
     void generate_struct(const StructDeclaration &struct_declaration);
 
-    void generate_function(const FunctionDeclaration &func);
+    void generate_function(const FunctionDeclaration &func, const std::string &prefix = "");
 
     void generate_extern_function(const ExternFunctionDeclaration &decl);
+
+    void generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix = "");
 
     llvm::Type *generate_type(const Type &type);
 

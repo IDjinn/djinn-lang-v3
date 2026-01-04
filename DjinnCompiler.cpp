@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "binder/Binder.h"
 #include "generator/Generator.h"
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
@@ -22,6 +23,13 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         auto program = parser.parse();
         // program->print(std::cout, 2);
         // std::cout << "\n\n";
+
+        Binder binder(diagnostics);
+        const auto bindResult = binder.bind(*program);
+        if (!bindResult.success) {
+            diagnostics.printToStderr();
+            return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+        }
 
         Generator generator;
         generator.generate(*program);

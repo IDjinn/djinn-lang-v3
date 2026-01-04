@@ -192,15 +192,32 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
 
 std::unique_ptr<Program> Parser::parse() {
     auto program = std::make_unique<Program>();
+
     while (!isAtEnd()) {
-        if (check(TokenType::EXTERN)) {
+        if (check(TokenType::IMPORT)) {
+            program->imports.push_back(parse_import());
+        } else if (check(TokenType::EXTERN)) {
             parse_extern(program.get());
+        } else if (check(TokenType::NAMESPACE)) {
+            const size_t saved = current;
+            advance();
+
+            if (check(TokenType::IDENTIFIER)) {
+                const auto qualified_name = parse_qualified_name();
+
+                if (match(TokenType::SEMICOLON)) {
+                    program->fileNamespace = qualified_name.toString();
+                    continue;
+                }
+                current = saved;
+            } else {
+                current = saved;
+            }
+            program->namespaces.push_back(parse_namespace());
         } else if (check(TokenType::STRUCT)) {
             auto structDecl = parse_struct();
 
             // struct { ... } func() { ... }
-            // Se o próximo token é um tipo (i32, void, etc), é uma nova função
-            // Se é um identificador simples (não tipo), é o nome da função que retorna a struct
             if (!check(TokenType::IDENTIFIER) || isType()) {
                 program->structs.push_back(std::move(structDecl));
             } else {
@@ -246,7 +263,7 @@ std::vector<Parameter> Parser::parse_parameters() {
         do {
             auto type = this->parse_type();
             Token &paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-            parameters.emplace_back(std::move(type), paramName.value);
+            parameters.emplace_back(std::move(type), paramName.value, match(TokenType::MUT));
         } while (match(TokenType::COMMA));
     }
 
@@ -401,11 +418,11 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<StringLiteral>(previous().value);
     }
 
-    if (check(TokenType::STRING) || check(TokenType::AUTO) ||
+    if (check(TokenType::STRING) || check(TokenType::AUTO) || check(TokenType::MUT) ||
         (check(TokenType::IDENTIFIER) && isType(peek()))) {
         const auto identifier = advance();
+        const auto isMutable = match(TokenType::MUT);
 
-        // Parse generic arguments: Array<i32>
         std::vector<Type> genericArgs;
         if (currentScope->has_struct_declared(identifier.value) && match(TokenType::LESS)) {
             do {
@@ -428,7 +445,6 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                                ? Type::struct_type(identifier.value)
                                : Type::fromToken(identifier);
 
-            // Add generic arguments if present
             if (!genericArgs.empty()) {
                 varType.genericArgs = std::move(genericArgs);
             }
@@ -440,9 +456,9 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             currentScope->define_variable(varName, varType);
             if (match(TokenType::EQUAL)) {
                 auto value = parse_expression();
-                return std::make_unique<VariableInit>(std::move(varType), varName, std::move(value));
+                return std::make_unique<VariableInit>(std::move(varType), varName, std::move(value), isMutable);
             }
-            return std::make_unique<VariableDeclaration>(std::move(varType), varName);
+            return std::make_unique<VariableDeclaration>(std::move(varType), varName, isMutable);
         }
 
         if (!isType(identifier)) {
@@ -453,6 +469,12 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     if (check(TokenType::IDENTIFIER)) {
         const auto identifier = advance();
         std::string name = identifier.value;
+
+        // foo::bar::baz
+        while (match(TokenType::COLON_COLON)) {
+            const Token &part = expect("Esperado identificador após '::'", TokenType::IDENTIFIER);
+            name += "::" + part.value;
+        }
 
         if (match(TokenType::LPAREN)) {
             std::vector<std::unique_ptr<Expression> > args;
@@ -522,7 +544,6 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     std::unique_ptr<Type> returnType = parse_type();
     const Token &name = expect("Esperado nome", TokenType::IDENTIFIER);
 
-    // Parse parameters manually to support variadic (...)
     expect("Esperado '('", TokenType::LPAREN);
 
     std::vector<Parameter> parameters;
@@ -530,7 +551,7 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
         if (!check(TokenType::RPAREN) && !check(TokenType::DOT_DOT_DOT)) {
             auto type = parse_type();
             Token &paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-            parameters.emplace_back(std::move(type), paramName.value);
+            parameters.emplace_back(std::move(type), paramName.value, match(TokenType::MUT));
         }
     } while (match(TokenType::COMMA));
 
@@ -553,20 +574,76 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
 void Parser::parse_extern(Program *program) {
     expect("Esperado 'extern'", TokenType::EXTERN);
 
-    // Opcional: extern "C" { ... } ou só extern fn ...
     std::string abi = "C";
     if (match(TokenType::STRING_LITERAL)) {
         abi = previous().value;
     }
 
     if (match(TokenType::LBRACE)) {
-        // extern "C" { fn1(); fn2(); }
         while (!check(TokenType::RBRACE) && !isAtEnd()) {
             program->externFunctions.push_back(parse_extern_function(abi));
         }
         expect("Esperado '}'", TokenType::RBRACE);
     } else {
-        // extern fn printf();
         program->externFunctions.push_back(parse_extern_function(abi));
     }
+}
+
+std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace() {
+    expect("Esperado 'namespace'", TokenType::NAMESPACE);
+    const Token &name = expect("Esperado nome do namespace", TokenType::IDENTIFIER);
+
+    auto ns = std::make_unique<NamespaceDeclaration>(name.value);
+
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    pushScope();
+
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        if (check(TokenType::NAMESPACE)) {
+            ns->namespaces.push_back(parse_namespace());
+        } else if (check(TokenType::STRUCT)) {
+            auto structDecl = parse_struct();
+
+            if (!check(TokenType::IDENTIFIER) || isType()) {
+                ns->structs.push_back(std::move(structDecl));
+            } else {
+                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name));
+                ns->structs.push_back(std::move(structDecl));
+                ns->functions.push_back(parse_function_with_type(std::move(returnType)));
+            }
+        } else {
+            ns->functions.push_back(parse_function());
+        }
+    }
+
+    popScope();
+
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    return ns;
+}
+
+QualifiedName Parser::parse_qualified_name() {
+    QualifiedName qname;
+
+    const Token &first = expect("Esperado identificador", TokenType::IDENTIFIER);
+    qname.addPart(first.value);
+
+    while (match(TokenType::COLON_COLON)) {
+        const Token &part = expect("Esperado identificador após '::'", TokenType::IDENTIFIER);
+        qname.addPart(part.value);
+    }
+
+    return qname;
+}
+
+std::unique_ptr<ImportDeclaration> Parser::parse_import() {
+    expect("Esperado 'import'", TokenType::IMPORT);
+
+    auto qname = parse_qualified_name();
+
+    expect("Esperado ';' após import", TokenType::SEMICOLON);
+
+    return std::make_unique<ImportDeclaration>(std::move(qname));
 }

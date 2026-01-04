@@ -57,12 +57,22 @@ private:
 
     void collectFunction(const FunctionDeclaration &decl) const;
 
+    void collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const;
+
+    void collectStructWithPrefix(const StructDeclaration &decl, const std::string &prefix) const;
+
+    void collectNamespace(const NamespaceDeclaration &ns, const std::string &prefix) const;
+
+    void processImports(const Program &program) const;
+
     // Pass 2: Bind all references within function bodies
     void bindProgram(const Program &program);
 
     void bindFunction(const FunctionDeclaration &func);
 
     void bindBlock(const Block &block);
+
+    void bindNamespace(const NamespaceDeclaration &ns, const std::string &prefix);
 
     void bindStatement(const Statement &stmt);
 
@@ -93,6 +103,8 @@ private:
     bool isTypeDefined(const Type &type);
 
     // Error reporting helpers
+    void errorImmutableVariable(const std::string &name, SourceLocation loc) const;
+
     void errorUndefinedVariable(const std::string &name, SourceLocation loc) const;
 
     void errorUndefinedFunction(const std::string &name, SourceLocation loc) const;

@@ -5,8 +5,10 @@
 #include "Generator.h"
 
 
-void Generator::generate_function(const FunctionDeclaration &func) {
+void Generator::generate_function(const FunctionDeclaration &func, const std::string &prefix) {
     push_scope();
+
+    const std::string qualifiedName = prefix.empty() ? func.name : prefix + "::" + func.name;
 
     llvm::Type *returnType = this->generate_type(*func.returnType);
 
@@ -22,7 +24,7 @@ void Generator::generate_function(const FunctionDeclaration &func) {
         func.name,
         *module
     );
-    functions[func.name] = llvmFunc;
+    functions[qualifiedName] = llvmFunc;
     currentFunction = llvmFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);

@@ -91,6 +91,12 @@ private:
     std::unique_ptr<ExternFunctionDeclaration> parse_extern_function(const std::string &abi);
 
     void parse_extern(Program *program);
+
+    std::unique_ptr<NamespaceDeclaration> parse_namespace();
+
+    QualifiedName parse_qualified_name();
+
+    std::unique_ptr<ImportDeclaration> parse_import();
 };
 
 #endif //DJINN_PARSER_H

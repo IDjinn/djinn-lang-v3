@@ -15,6 +15,7 @@ BindingResult Binder::bind(const Program &program) {
     result.globalScope = _global_scope;
 
     collectDeclarations(program);
+    processImports(program);
     bindProgram(program);
 
     result.success = !_diagnostics.hasErrors();
@@ -40,16 +41,22 @@ void Binder::popScope() {
 }
 
 void Binder::collectDeclarations(const Program &program) {
+    const std::string filePrefix = program.fileNamespace;
+
     for (const auto &ext: program.externFunctions) {
         collectExternFunction(*ext);
     }
 
     for (const auto &struc: program.structs) {
-        collectStruct(*struc);
+        collectStructWithPrefix(*struc, filePrefix);
     }
 
     for (const auto &func: program.functions) {
-        collectFunction(*func);
+        collectFunctionWithPrefix(*func, filePrefix);
+    }
+
+    for (const auto &ns: program.namespaces) {
+        collectNamespace(*ns, "");
     }
 }
 
@@ -88,14 +95,79 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
 }
 
 void Binder::collectFunction(const FunctionDeclaration &decl) const {
-    const auto funcSym = std::make_shared<FunctionSymbol>(decl.name, *decl.returnType);
+    collectFunctionWithPrefix(decl, "");
+}
+
+void Binder::collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const {
+    // "main" is always in global namespace
+    const std::string qualifiedName = (decl.name == "main" || prefix.empty())
+                                          ? decl.name
+                                          : prefix + "::" + decl.name;
+    const auto funcSym = std::make_shared<FunctionSymbol>(qualifiedName, *decl.returnType);
 
     for (const auto &param: decl.parameters) {
         funcSym->addParameter(param.name, *param.type);
     }
 
     if (!_global_scope->defineFunction(funcSym)) {
-        errorDuplicateDefinition(decl.name, SymbolKind::Function, {});
+        errorDuplicateDefinition(qualifiedName, SymbolKind::Function, {});
+    }
+}
+
+void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::string &prefix) const {
+    const std::string qualifiedName = prefix.empty() ? decl.name : prefix + "::" + decl.name;
+    const auto structSym = std::make_shared<StructSymbol>(qualifiedName);
+
+    for (const auto &genParam: decl.genericParams.params) {
+        structSym->addGenericParam(genParam.name);
+    }
+
+    for (const auto &field: decl.fields) {
+        if (structSym->hasField(field.name)) {
+            errorDuplicateDefinition(field.name, SymbolKind::Field, {});
+        } else {
+            structSym->addField(field.name, *field.type);
+        }
+    }
+
+    if (!_global_scope->defineStruct(structSym)) {
+        errorDuplicateDefinition(qualifiedName, SymbolKind::Struct, {});
+    }
+}
+
+void Binder::collectNamespace(const NamespaceDeclaration &ns, const std::string &prefix) const {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    // Collect structs in namespace
+    for (const auto &struc: ns.structs) {
+        collectStructWithPrefix(*struc, qualifiedPrefix);
+    }
+
+    // Collect functions in namespace
+    for (const auto &func: ns.functions) {
+        collectFunctionWithPrefix(*func, qualifiedPrefix);
+    }
+
+    // Recursively collect nested namespaces
+    for (const auto &nestedNs: ns.namespaces) {
+        collectNamespace(*nestedNs, qualifiedPrefix);
+    }
+}
+
+void Binder::processImports(const Program &program) const {
+    for (const auto &import: program.imports) {
+        const std::string nsPath = import->namespacePath.toString();
+
+        for (const auto &[name, symbol]: _global_scope->symbols()) {
+            if (name.starts_with(nsPath + "::")) {
+                if (const std::string shortName = name.substr(nsPath.length() + 2);
+                    shortName.find("::") == std::string::npos) {
+                    if (!_global_scope->isDefinedLocally(shortName)) {
+                        _global_scope->defineAlias(shortName, symbol);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -105,7 +177,9 @@ void Binder::bindProgram(const Program &program) {
         for (const auto &field: struc->fields) {
             if (!isTypeDefined(*field.type)) {
                 if (field.type->kind == TypeKind::STRUCT) {
-                    errorUndefinedStruct(field.type->structName, {});
+                    if (struc->genericParams.find(field.type->structName) == nullptr) {
+                        errorUndefinedStruct(field.type->structName, {});
+                    }
                 }
             }
         }
@@ -113,6 +187,10 @@ void Binder::bindProgram(const Program &program) {
 
     for (const auto &func: program.functions) {
         bindFunction(*func);
+    }
+
+    for (const auto &ns: program.namespaces) {
+        bindNamespace(*ns, "");
     }
 }
 
@@ -122,7 +200,7 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
     pushScope();
 
     for (const auto &param: func.parameters) {
-        if (!_current_scope->defineParameter(param.name, *param.type)) {
+        if (!_current_scope->defineParameter(param.name, *param.type, param.isMutable)) {
             errorDuplicateDefinition(param.name, SymbolKind::Parameter, {});
         }
     }
@@ -144,6 +222,30 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
 void Binder::bindBlock(const Block &block) {
     for (const auto &stmt: block.statements) {
         bindStatement(*stmt);
+    }
+}
+
+void Binder::bindNamespace(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &struc: ns.structs) {
+        for (const auto &field: struc->fields) {
+            if (!isTypeDefined(*field.type)) {
+                if (field.type->kind == TypeKind::STRUCT) {
+                    if (struc->genericParams.find(field.type->structName) == nullptr) {
+                        errorUndefinedStruct(field.type->structName, {});
+                    }
+                }
+            }
+        }
+    }
+
+    for (const auto &func: ns.functions) {
+        bindFunction(*func);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        bindNamespace(*nestedNs, qualifiedPrefix);
     }
 }
 
@@ -233,7 +335,7 @@ void Binder::bindVariableDeclaration(const VariableDeclaration &decl) {
         }
     }
 
-    if (!_current_scope->defineVariable(decl.name, decl.type)) {
+    if (!_current_scope->defineVariable(decl.name, decl.type, decl.isMutable)) {
         errorDuplicateDefinition(decl.name, SymbolKind::Variable, {});
     }
 }
@@ -253,16 +355,21 @@ void Binder::bindVariableInit(const VariableInit &init) {
         }
     }
 
-    const auto sym = std::make_shared<Symbol>(SymbolKind::Variable, init.name, init.type);
-    sym->isInitialized = true;
-    if (!_current_scope->define(sym)) {
+    const auto symbol = std::make_shared<Symbol>(SymbolKind::Variable, init.name, init.type, SourceLocation{},
+                                                 init.isMutable);
+    symbol->isInitialized = true;
+    if (!_current_scope->define(symbol)) {
         errorDuplicateDefinition(init.name, SymbolKind::Variable, {});
     }
 }
 
 void Binder::bindAssignment(const Assignment &assign) {
-    if (const auto sym = _current_scope->lookupVariable(assign.name); sym) {
-        sym->isInitialized = true;
+    if (const auto symbol = _current_scope->lookupVariable(assign.name); symbol) {
+        if (!symbol->isMutable) {
+            errorImmutableVariable(assign.name, {});
+        }
+
+        symbol->isInitialized = true;
         _current_scope->markUsed(assign.name);
     } else {
         errorUndefinedVariable(assign.name, {});
@@ -326,6 +433,11 @@ bool Binder::isTypeDefined(const Type &type) {
         default:
             return false;
     }
+}
+
+void Binder::errorImmutableVariable(const std::string &name, const SourceLocation loc) const {
+    _diagnostics.error(DiagnosticCode::IMMUTABLE_MODIFICATION,
+                       "tried to modify a immutable variable '" + name + "'", loc);
 }
 
 void Binder::errorUndefinedVariable(const std::string &name, const SourceLocation loc) const {

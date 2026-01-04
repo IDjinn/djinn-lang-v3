@@ -14,11 +14,8 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) const {
         std::string structName;
         llvm::StructType *structType = nullptr;
 
-        const std::string varStructType = currentScope->lookup_variable_struct_type(ident->name);
-        if (!varStructType.empty()) {
-            structName = varStructType;
-            structType = currentScope->lookup_struct(structName);
-        } else {
+        if (const std::string varStructType = currentScope->lookup_variable_struct_type(ident->name); varStructType.
+            empty()) {
             llvm::Type *allocatedType = alloca->getAllocatedType();
             if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
                 structType = llvmStructType;
@@ -26,6 +23,9 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) const {
             } else {
                 throw CompileError(DiagnosticCode::NOT_A_STRUCT, "variável não é uma struct: " + ident->name);
             }
+        } else {
+            structName = varStructType;
+            structType = currentScope->lookup_struct(structName);
         }
 
         const auto *fieldIndices = currentScope->lookup_field_indices(structName);

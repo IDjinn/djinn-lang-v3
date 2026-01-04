@@ -47,6 +47,7 @@ namespace DiagnosticCode {
     constexpr uint32_t INVALID_TYPE = 4001;
     constexpr uint32_t INVALID_OPERATION = 4002;
     constexpr uint32_t UNSUPPORTED_OPERATOR = 4003;
+    constexpr uint32_t IMMUTABLE_MODIFICATION = 4004;
 }
 
 struct SourceLocation {

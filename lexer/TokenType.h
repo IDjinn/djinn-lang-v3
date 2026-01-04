@@ -12,6 +12,9 @@ enum class TokenType {
     EXTERN,
     RETURN,
     STRUCT,
+    NAMESPACE,
+    IMPORT,
+    MUT,
 
     // VALUE TYPES //
     INT,
@@ -63,6 +66,8 @@ enum class TokenType {
     // ATRIBUIÇÃO //
     EQUAL, // =
     // -------- //
+    COLON, // :
+    COLON_COLON, // ::
     DOT, // .
     DOT_DOT,
     DOT_DOT_DOT,

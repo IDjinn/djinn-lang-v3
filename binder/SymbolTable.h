@@ -36,12 +36,20 @@ public:
         return true;
     }
 
-    bool defineVariable(const std::string &name, const Type &type, SourceLocation loc = {}) {
-        return define(std::make_shared<Symbol>(SymbolKind::Variable, name, type, loc));
+    bool defineAlias(const std::string &alias, std::shared_ptr<Symbol> symbol) {
+        if (_symbols.contains(alias))
+            return false;
+
+        _symbols[alias] = std::move(symbol);
+        return true;
     }
 
-    bool defineParameter(const std::string &name, const Type &type, SourceLocation loc = {}) {
-        return define(std::make_shared<Symbol>(SymbolKind::Parameter, name, type, loc));
+    bool defineVariable(const std::string &name, const Type &type, const bool isMutable, SourceLocation loc = {}) {
+        return define(std::make_shared<Symbol>(SymbolKind::Variable, name, type, loc, isMutable));
+    }
+
+    bool defineParameter(const std::string &name, const Type &type, const bool isMutable, SourceLocation loc = {}) {
+        return define(std::make_shared<Symbol>(SymbolKind::Parameter, name, type, loc, isMutable));
     }
 
     bool defineFunction(std::shared_ptr<FunctionSymbol> func) {

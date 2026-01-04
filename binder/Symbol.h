@@ -17,6 +17,7 @@ enum class SymbolKind : uint8_t {
     Function,
     ExternFunction,
     Struct,
+    StructField,
     Field,
     GenericParam
 };
@@ -28,9 +29,11 @@ struct Symbol {
     SourceLocation location;
     bool isInitialized = false;
     bool isUsed = false;
+    bool isMutable = false;
 
-    Symbol(const SymbolKind kind, std::string name, Type type, const SourceLocation loc = {})
-        : kind(kind), name(std::move(name)), type(std::move(type)), location(loc) {
+    Symbol(const SymbolKind kind, std::string name, Type type, const SourceLocation loc = {},
+           const bool is_mutable = false)
+        : kind(kind), name(std::move(name)), type(std::move(type)), location(loc), isMutable(is_mutable) {
     }
 
     virtual ~Symbol() = default;
@@ -55,6 +58,7 @@ struct Symbol {
     }
 };
 
+
 struct FunctionSymbol : Symbol {
     Type returnType;
     std::vector<Type> paramTypes;
@@ -74,43 +78,50 @@ struct FunctionSymbol : Symbol {
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
 };
 
+struct FieldSymbol : Symbol {
+    FieldSymbol(const SymbolKind kind, const std::string &name, const Type &type, const SourceLocation &loc,
+                const bool is_mutable)
+        : Symbol(kind, name, type, loc, is_mutable) {
+    }
+};
+
 struct StructSymbol : Symbol {
-    std::vector<std::string> fieldNames;
-    std::vector<Type> fieldTypes;
+    std::vector<FieldSymbol> fields;
     std::vector<std::string> genericParams;
-    bool isGeneric = false;
+
+    bool isGeneric() const {
+        return this->genericParams.size() > 0;
+    }
 
     explicit StructSymbol(std::string name, const SourceLocation loc = {})
         : Symbol(SymbolKind::Struct, std::move(name), Type::voided(), loc) {
     }
 
-    void addField(const std::string &fieldName, const Type &fieldType) {
-        fieldNames.push_back(fieldName);
-        fieldTypes.push_back(fieldType);
+    void addField(const std::string &fieldName, const Type &fieldType, const bool isMutable = false) {
+        fields.push_back({SymbolKind::Struct, fieldName, fieldType, {}, isMutable});
     }
 
     void addGenericParam(const std::string &param) {
         genericParams.push_back(param);
-        isGeneric = true;
     }
 
     [[nodiscard]] bool hasField(const std::string &name) const {
-        for (const auto &f: fieldNames) {
-            if (f == name) return true;
+        for (const auto &field: fields) {
+            if (field.name == name) return true;
         }
         return false;
     }
 
     [[nodiscard]] const Type *getFieldType(const std::string &name) const {
-        for (size_t i = 0; i < fieldNames.size(); ++i) {
-            if (fieldNames[i] == name) return &fieldTypes[i];
+        for (size_t i = 0; i < fields.size(); ++i) {
+            if (fields[i].name == name) return &fields[i].type;
         }
         return nullptr;
     }
 
     [[nodiscard]] int getFieldIndex(const std::string &name) const {
-        for (size_t i = 0; i < fieldNames.size(); ++i) {
-            if (fieldNames[i] == name) return static_cast<int>(i);
+        for (size_t i = 0; i < fields.size(); ++i) {
+            if (fields[i].name == name) return static_cast<int>(i);
         }
         return -1;
     }

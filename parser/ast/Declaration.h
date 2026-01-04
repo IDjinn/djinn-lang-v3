@@ -66,32 +66,16 @@ struct StructDeclaration : ASTNode {
 struct Parameter : ASTNode {
     std::unique_ptr<Type> type;
     std::string name;
+    bool isMutable;
 
-    Parameter(std::unique_ptr<Type> type, std::string name) : type(std::move(type)), name(std::move(name)) {
+    Parameter(std::unique_ptr<Type> type, std::string name, const bool isMutable = false) : type(std::move(type)),
+        name(std::move(name)),
+        isMutable(isMutable) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "Parameter(" << type << " " << name << ")";
-    }
-};
-
-struct ExternFunctionDeclaration : ASTNode {
-    std::unique_ptr<Type> returnType;
-    std::string name;
-    std::vector<Parameter> parameters;
-    bool isVariadic = false;
-    std::string abi = "C";
-
-    void print(std::ostream &os, const int indent = 0) const override {
-        writeIndent(os, indent);
-        os << "extern \"" << abi << "\" fn " << name << "(";
-        for (size_t i = 0; i < parameters.size(); ++i) {
-            if (i > 0) os << ", ";
-            os << parameters[i].type << " " << parameters[i].name;
-        }
-        if (isVariadic) os << ", ...";
-        os << ") -> " << *returnType;
     }
 };
 
@@ -119,13 +103,124 @@ struct FunctionDeclaration : ASTNode {
     }
 };
 
+
+struct NamespaceDeclaration : ASTNode {
+    std::string name;
+    std::vector<std::unique_ptr<StructDeclaration> > structs;
+    std::vector<std::unique_ptr<FunctionDeclaration> > functions;
+    std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces; // Nested namespaces
+
+    explicit NamespaceDeclaration(std::string name) : name(std::move(name)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "Namespace(" << name << ")\n";
+        for (const auto &s: structs) {
+            s->print(os, indent + 2);
+            os << '\n';
+        }
+        for (const auto &func: functions) {
+            func->print(os, indent + 2);
+            os << '\n';
+        }
+        for (const auto &ns: namespaces) {
+            ns->print(os, indent + 2);
+            os << '\n';
+        }
+    }
+};
+
+struct QualifiedName {
+    std::vector<std::string> parts;
+
+    QualifiedName() = default;
+
+    explicit QualifiedName(std::string single) { parts.push_back(std::move(single)); }
+
+    QualifiedName(std::vector<std::string> parts) : parts(std::move(parts)) {
+    }
+
+    void addPart(const std::string &part) { parts.push_back(part); }
+
+    [[nodiscard]] bool isQualified() const { return parts.size() > 1; }
+    [[nodiscard]] std::string lastName() const { return parts.empty() ? "" : parts.back(); }
+
+    [[nodiscard]] std::string toString() const {
+        std::string result;
+        for (size_t i = 0; i < parts.size(); ++i) {
+            if (i > 0) result += "::";
+            result += parts[i];
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<std::string> namespacePath() const {
+        if (parts.size() <= 1) return {};
+        return std::vector<std::string>(parts.begin(), parts.end() - 1);
+    }
+};
+
+struct ImportDeclaration : ASTNode {
+    QualifiedName namespacePath;
+
+    explicit ImportDeclaration(QualifiedName path) : namespacePath(std::move(path)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "Import(" << namespacePath.toString() << ")";
+    }
+};
+
+struct ExternFunctionDeclaration : ASTNode {
+    std::unique_ptr<Type> returnType;
+    std::string name;
+    std::vector<Parameter> parameters;
+    bool isVariadic = false;
+    std::string abi = "C";
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "extern \"" << abi << "\" fn " << name << "(";
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            if (i > 0) os << ", ";
+            os << parameters[i].type << " " << parameters[i].name;
+        }
+        if (isVariadic) os << ", ...";
+        os << ") -> " << *returnType;
+    }
+};
+
+// Forward declarations
+
 struct Program : ASTNode {
+    // File-scoped namespace: "namespace foo;" at top of file
+    // Empty string means global namespace
+    std::string fileNamespace;
+
+    std::vector<std::unique_ptr<ImportDeclaration> > imports;
     std::vector<std::unique_ptr<ExternFunctionDeclaration> > externFunctions;
     std::vector<std::unique_ptr<StructDeclaration> > structs;
     std::vector<std::unique_ptr<FunctionDeclaration> > functions;
+    std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces;
+
+    [[nodiscard]] bool hasFileNamespace() const { return !fileNamespace.empty(); }
+
+    [[nodiscard]] std::string getNamespacePrefix() const {
+        return fileNamespace.empty() ? "" : fileNamespace + "::";
+    }
 
     void print(std::ostream &os, const int indent = 0) const override {
-        os << "Program\n";
+        os << "Program";
+        if (!fileNamespace.empty()) {
+            os << " (namespace " << fileNamespace << ")";
+        }
+        os << "\n";
+        for (const auto &imp: imports) {
+            imp->print(os, indent + 2);
+            os << '\n';
+        }
         for (const auto &ext: externFunctions) {
             ext->print(os, indent + 2);
             os << '\n';
@@ -138,7 +233,12 @@ struct Program : ASTNode {
             func->print(os, indent + 2);
             os << '\n';
         }
+        for (const auto &ns: namespaces) {
+            ns->print(os, indent + 2);
+            os << '\n';
+        }
     }
 };
+
 
 #endif //DJINN_DECLARATION_H
