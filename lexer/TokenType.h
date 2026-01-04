@@ -5,11 +5,11 @@
 #ifndef DJINN_TOKENTYPE_H
 #define DJINN_TOKENTYPE_H
 
-
 enum class TokenType {
     UNKNOWN = 0,
     END_OF_FILE,
 
+    EXTERN,
     RETURN,
     STRUCT,
 
@@ -27,43 +27,45 @@ enum class TokenType {
     INTEGER_LITERAL,
 
     // -------- //
-    LPAREN,      // (
-    RPAREN,      // )
-    LBRACE,      // {
-    RBRACE,      // }
-    LBRACKET,    // [
-    RBRACKET,    // ]
-    SEMICOLON,   // ;
-    COMMA,       // ,
+    LPAREN, // (
+    RPAREN, // )
+    LBRACE, // {
+    RBRACE, // }
+    LBRACKET, // [
+    RBRACKET, // ]
+    SEMICOLON, // ;
+    COMMA, // ,
     // -------- //
 
     // OPERADORES ARITMÉTICOS //
-    PLUS,        // +
-    MINUS,       // -
-    STAR,        // *
-    SLASH,       // /
-    PERCENT,     // %
+    PLUS, // +
+    MINUS, // -
+    STAR, // *
+    SLASH, // /
+    PERCENT, // %
     // -------- //
 
     // OPERADORES DE COMPARAÇÃO //
-    EQUAL_EQUAL,   // ==
-    BANG_EQUAL,    // !=
-    LESS,          // <
-    LESS_EQUAL,    // <=
-    GREATER,       // >
+    EQUAL_EQUAL, // ==
+    BANG_EQUAL, // !=
+    LESS, // <
+    LESS_EQUAL, // <=
+    GREATER, // >
     GREATER_EQUAL, // >=
     // -------- //
 
     // OPERADORES LÓGICOS //
-    BANG,          // !
-    AND_AND,       // &&
-    OR_OR,         // ||
+    BANG, // !
+    AND_AND, // &&
+    OR_OR, // ||
     // -------- //
 
     // ATRIBUIÇÃO //
-    EQUAL,         // =
+    EQUAL, // =
     // -------- //
     DOT, // .
+    DOT_DOT,
+    DOT_DOT_DOT,
 };
 
 

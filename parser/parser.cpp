@@ -125,7 +125,8 @@ std::unique_ptr<Type> Parser::parse_type() {
         baseType = std::make_unique<Type>(Type::struct_type(identifier.value));
     } else {
         throw CompileError(DiagnosticCode::EXPECTED_TYPE, "tipo inválido: " + identifier.value,
-                           SourceLocation(identifier.position.line, identifier.position.column, identifier.value.length()));
+                           SourceLocation(identifier.position.line, identifier.position.column,
+                                          identifier.value.length()));
     }
 
     // Parse generic arguments: Array<i32>, Map<string, i32>
@@ -137,6 +138,10 @@ std::unique_ptr<Type> Parser::parse_type() {
         } while (match(TokenType::COMMA));
         expect("Esperado '>' após argumentos genéricos", TokenType::GREATER);
         baseType->genericArgs = std::move(genericArgs);
+    }
+
+    while (match(TokenType::STAR)) {
+        baseType = std::make_unique<Type>(Type::pointer(std::move(*baseType)));
     }
 
     if (match(TokenType::LBRACKET)) {
@@ -188,7 +193,9 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
 std::unique_ptr<Program> Parser::parse() {
     auto program = std::make_unique<Program>();
     while (!isAtEnd()) {
-        if (check(TokenType::STRUCT)) {
+        if (check(TokenType::EXTERN)) {
+            parse_extern(program.get());
+        } else if (check(TokenType::STRUCT)) {
             auto structDecl = parse_struct();
 
             // struct { ... } func() { ... }
@@ -480,7 +487,8 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
     const auto &tok = peek();
     throw CompileError(DiagnosticCode::EXPECTED_EXPRESSION, "expressão inesperada",
-                       SourceLocation(tok.position.line, tok.position.column, tok.value.empty() ? 1 : tok.value.length()));
+                       SourceLocation(tok.position.line, tok.position.column,
+                                      tok.value.empty() ? 1 : tok.value.length()));
 }
 
 std::unique_ptr<Expression> Parser::parse_brace_initializer() {
@@ -507,4 +515,58 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer() {
     expect("Esperado '}'", TokenType::RBRACE);
 
     return std::make_unique<BraceInitializer>(std::move(elements));
+}
+
+
+std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const std::string &abi) {
+    std::unique_ptr<Type> returnType = parse_type();
+    Token &name = expect("Esperado nome", TokenType::IDENTIFIER);
+
+    // Parse parameters manually to support variadic (...)
+    expect("Esperado '('", TokenType::LPAREN);
+
+    std::vector<Parameter> parameters;
+    do {
+        if (!check(TokenType::RPAREN) && !check(TokenType::DOT_DOT_DOT)) {
+            auto type = parse_type();
+            Token &paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+            parameters.emplace_back(std::move(type), paramName.value);
+        }
+    } while (match(TokenType::COMMA));
+
+
+    const bool isVariadic = match(TokenType::DOT_DOT_DOT);
+
+    expect("Esperado ')'", TokenType::RPAREN);
+    expect("Esperado ';'", TokenType::SEMICOLON);
+
+    auto decl = std::make_unique<ExternFunctionDeclaration>();
+    decl->name = name.value;
+    decl->returnType = std::move(returnType);
+    decl->parameters = std::move(parameters);
+    decl->isVariadic = isVariadic;
+    decl->abi = abi;
+
+    return decl;
+}
+
+void Parser::parse_extern(Program *program) {
+    expect("Esperado 'extern'", TokenType::EXTERN);
+
+    // Opcional: extern "C" { ... } ou só extern fn ...
+    std::string abi = "C";
+    if (match(TokenType::STRING_LITERAL)) {
+        abi = previous().value;
+    }
+
+    if (match(TokenType::LBRACE)) {
+        // extern "C" { fn1(); fn2(); }
+        while (!check(TokenType::RBRACE) && !isAtEnd()) {
+            program->externFunctions.push_back(parse_extern_function(abi));
+        }
+        expect("Esperado '}'", TokenType::RBRACE);
+    } else {
+        // extern fn printf();
+        program->externFunctions.push_back(parse_extern_function(abi));
+    }
 }

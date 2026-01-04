@@ -29,19 +29,23 @@ void Generator::pop_scope() {
 }
 
 void Generator::declare_extern_functions() {
-    functions["printf"] = llvm::Function::Create(
-        llvm::FunctionType::get(
-            builder->getInt32Ty(),
-            {builder->getPtrTy()},
-            true
-        ),
-        llvm::Function::ExternalLinkage,
-        "printf",
-        *module
-    );
+    // functions["printf"] = llvm::Function::Create(
+    //     llvm::FunctionType::get(
+    //         builder->getInt32Ty(),
+    //         {builder->getPtrTy()},
+    //         true
+    //     ),
+    //     llvm::Function::ExternalLinkage,
+    //     "printf",
+    //     *module
+    // );
 }
 
 void Generator::generate(const Program &program) {
+    for (const auto &externFunc: program.externFunctions) {
+        generate_extern_function(*externFunc);
+    }
+
     for (const auto &structDecl: program.structs) {
         generate_struct(*structDecl);
     }

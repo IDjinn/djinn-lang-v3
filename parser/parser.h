@@ -87,6 +87,10 @@ private:
     std::unique_ptr<Expression> parse_primary();
 
     std::unique_ptr<Expression> parse_brace_initializer();
+
+    std::unique_ptr<ExternFunctionDeclaration> parse_extern_function(const std::string &abi);
+
+    void parse_extern(Program *program);
 };
 
 #endif //DJINN_PARSER_H

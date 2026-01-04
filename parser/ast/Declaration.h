@@ -76,6 +76,25 @@ struct Parameter : ASTNode {
     }
 };
 
+struct ExternFunctionDeclaration : ASTNode {
+    std::unique_ptr<Type> returnType;
+    std::string name;
+    std::vector<Parameter> parameters;
+    bool isVariadic = false;
+    std::string abi = "C";
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "extern \"" << abi << "\" fn " << name << "(";
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            if (i > 0) os << ", ";
+            os << parameters[i].type << " " << parameters[i].name;
+        }
+        if (isVariadic) os << ", ...";
+        os << ") -> " << *returnType;
+    }
+};
+
 struct FunctionDeclaration : ASTNode {
     std::unique_ptr<Type> returnType;
     std::string name;
@@ -101,11 +120,16 @@ struct FunctionDeclaration : ASTNode {
 };
 
 struct Program : ASTNode {
+    std::vector<std::unique_ptr<ExternFunctionDeclaration> > externFunctions;
     std::vector<std::unique_ptr<StructDeclaration> > structs;
     std::vector<std::unique_ptr<FunctionDeclaration> > functions;
 
     void print(std::ostream &os, const int indent = 0) const override {
         os << "Program\n";
+        for (const auto &ext: externFunctions) {
+            ext->print(os, indent + 2);
+            os << '\n';
+        }
         for (const auto &s: structs) {
             s->print(os, indent + 2);
             os << '\n';

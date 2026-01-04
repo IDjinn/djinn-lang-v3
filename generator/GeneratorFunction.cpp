@@ -60,3 +60,31 @@ void Generator::generate_function(const FunctionDeclaration &func) {
     builder->CreateRet(llvm::Constant::getNullValue(returnType));
     pop_scope();
 }
+
+void Generator::generate_extern_function(const ExternFunctionDeclaration &decl) {
+    std::vector<llvm::Type *> paramTypes;
+    for (const auto &param: decl.parameters) {
+        paramTypes.push_back(generate_type(*param.type));
+    }
+
+    llvm::Type *returnType = generate_type(*decl.returnType);
+
+    llvm::FunctionType *funcType = llvm::FunctionType::get(
+        returnType,
+        paramTypes,
+        decl.isVariadic
+    );
+
+    llvm::Function *func = llvm::Function::Create(
+        funcType,
+        llvm::Function::ExternalLinkage,
+        decl.name,
+        *module
+    );
+
+    functions[decl.name] = func;
+
+    if (decl.abi == "C") {
+        func->setCallingConv(llvm::CallingConv::C);
+    }
+}

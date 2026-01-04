@@ -10,6 +10,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"return", TokenType::RETURN},
     {"string", TokenType::STRING},
     {"auto", TokenType::AUTO},
+    {"extern", TokenType::EXTERN},
     {"struct", TokenType::STRUCT},
 };
 
@@ -142,8 +143,16 @@ std::vector<Token> Lexer::tokenize() {
                 case ',': tokens.push_back(make_token(TokenType::COMMA, ","));
                     advance();
                     break;
-                case '.': tokens.push_back(make_token(TokenType::DOT, "."));
-                    advance();
+                case '.':
+                    if (pos + 2 < source.size() && source[pos + 1] == '.' && source[pos + 2] == '.') {
+                        tokens.push_back(make_token(TokenType::DOT_DOT_DOT, "..."));
+                        advance();
+                        advance();
+                        advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::DOT, "."));
+                        advance();
+                    }
                     break;
                 case '+': tokens.push_back(make_token(TokenType::PLUS, "+"));
                     advance();

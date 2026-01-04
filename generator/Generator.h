@@ -49,6 +49,8 @@ private:
 
     void generate_function(const FunctionDeclaration &func);
 
+    void generate_extern_function(const ExternFunctionDeclaration &decl);
+
     llvm::Type *generate_type(const Type &type);
 
     void generate_statement(const Statement &stmt);
