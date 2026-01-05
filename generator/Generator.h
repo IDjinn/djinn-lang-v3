@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
@@ -57,6 +58,18 @@ private:
 
     void generate_statement(const Statement &stmt);
 
+    void generate_if_statement(const IfStatement &stmt);
+
+    void generate_for_statement(const ForStatement &stmt);
+
+    void generate_while_statement(const WhileStatement &stmt);
+
+    void generate_do_while_statement(const DoWhileStatement &stmt);
+
+    void generate_switch_statement(const SwitchStatement &stmt);
+
+    void generate_block(const Block &block);
+
     llvm::Value *generate_expression(const Expression &expr);
 
     llvm::Value *generate_integer_literal(const IntegerLiteral &expr) const;
@@ -87,6 +100,10 @@ private:
     llvm::Value *cast_value(llvm::Value *value, llvm::Type *targetType) const;
 
     llvm::Function *currentFunction = nullptr;
+
+    // Stack for break/continue targets
+    std::vector<llvm::BasicBlock *> breakTargets;
+    std::vector<llvm::BasicBlock *> continueTargets;
 };
 
 #endif //DJINN_GENERATOR_H

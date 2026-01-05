@@ -43,6 +43,8 @@ private:
     std::shared_ptr<ScopedSymbolTable> _global_scope;
 
     std::string currentFunction_;
+    int loopDepth_ = 0;
+    int switchDepth_ = 0;
 
     void pushScope();
 
@@ -75,6 +77,16 @@ private:
     void bindNamespace(const NamespaceDeclaration &ns, const std::string &prefix);
 
     void bindStatement(const Statement &stmt);
+
+    void bindIfStatement(const IfStatement &stmt);
+
+    void bindForStatement(const ForStatement &stmt);
+
+    void bindWhileStatement(const WhileStatement &stmt);
+
+    void bindDoWhileStatement(const DoWhileStatement &stmt);
+
+    void bindSwitchStatement(const SwitchStatement &stmt);
 
     void bindExpression(const Expression &expr);
 

@@ -66,6 +66,16 @@ private:
 
     std::unique_ptr<Statement> parse_statement();
 
+    std::unique_ptr<IfStatement> parse_if_statement();
+
+    std::unique_ptr<ForStatement> parse_for_statement();
+
+    std::unique_ptr<WhileStatement> parse_while_statement();
+
+    std::unique_ptr<DoWhileStatement> parse_do_while_statement();
+
+    std::unique_ptr<SwitchStatement> parse_switch_statement();
+
     std::unique_ptr<Expression> parse_expression();
 
     std::unique_ptr<Expression> parse_or();

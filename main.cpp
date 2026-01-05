@@ -2,6 +2,7 @@
 #include <iostream>
 #include <thread>
 
+#include "DjinnCompiler.h"
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 #include "generator/Generator.h"
@@ -18,38 +19,7 @@ int main(int argc, char *argv[]) {
         }
     )";
 
-    printf("===SOURCE===\n%s\n\n", source.c_str());
-
-    DiagnosticEngine diagnostics(source);
-
-    try {
-        Lexer lexer(source);
-        const auto tokens = lexer.tokenize();
-
-        Parser parser(tokens);
-        const auto program = parser.parse();
-        std::cout << "===PROGRAM===\n";
-        program->print(std::cout, 2);
-        std::cout << "\n\n";
-
-        Generator generator;
-        generator.generate(*program);
-        // generator.optimize();
-        const auto result = generator.print();
-        printf("===LLVM RESULT===\n%s\n\n", result.c_str());
-
-        std::ofstream output;
-        output.open("output.ll");
-        output << result;
-        output.close();
-
-        system("clang output.ll -o output.exe");
-        system("output.exe");
-    } catch (const CompileError &e) {
-        diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
-        diagnostics.printToStderr();
-        return 1;
-    }
-
+    const auto result = DjinnCompiler::run(source, {false, ""});
+    printf(result.ir.c_str());
     return 0;
 }

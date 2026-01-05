@@ -297,10 +297,176 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         return std::make_unique<ReturnStatement>(std::move(value));
     }
 
+    if (check(TokenType::IF)) {
+        return parse_if_statement();
+    }
+
+    if (check(TokenType::FOR)) {
+        return parse_for_statement();
+    }
+
+    if (check(TokenType::WHILE)) {
+        return parse_while_statement();
+    }
+
+    if (check(TokenType::DO)) {
+        return parse_do_while_statement();
+    }
+
+    if (check(TokenType::SWITCH)) {
+        return parse_switch_statement();
+    }
+
+    if (match(TokenType::BREAK)) {
+        expect("Esperado ';' após break", TokenType::SEMICOLON);
+        return std::make_unique<BreakStatement>();
+    }
+
+    if (match(TokenType::CONTINUE)) {
+        expect("Esperado ';' após continue", TokenType::SEMICOLON);
+        return std::make_unique<ContinueStatement>();
+    }
+
     // Expression statement
     auto expr = parse_expression();
     expect("Esperado ';'", TokenType::SEMICOLON);
     return std::make_unique<ExpressionStatement>(std::move(expr));
+}
+
+std::unique_ptr<IfStatement> Parser::parse_if_statement() {
+    expect("Esperado 'if'", TokenType::IF);
+    expect("Esperado '(' após if", TokenType::LPAREN);
+    auto condition = parse_expression();
+    expect("Esperado ')' após condição", TokenType::RPAREN);
+
+    auto thenBranch = parse_block();
+
+    std::unique_ptr<Block> elseBranch = nullptr;
+    if (match(TokenType::ELSE)) {
+        if (check(TokenType::IF)) {
+            // else if - wrap in a block
+            elseBranch = std::make_unique<Block>();
+            elseBranch->statements.push_back(parse_if_statement());
+        } else {
+            elseBranch = parse_block();
+        }
+    }
+
+    auto stmt = std::make_unique<IfStatement>();
+    stmt->condition = std::move(condition);
+    stmt->thenBranch = std::move(thenBranch);
+    stmt->elseBranch = std::move(elseBranch);
+    return stmt;
+}
+
+std::unique_ptr<ForStatement> Parser::parse_for_statement() {
+    expect("Esperado 'for'", TokenType::FOR);
+    expect("Esperado '(' após for", TokenType::LPAREN);
+
+    pushScope();
+
+    std::unique_ptr<Expression> initializer = nullptr;
+    if (!check(TokenType::SEMICOLON)) {
+        initializer = parse_expression();
+    }
+    expect("Esperado ';' após inicializador", TokenType::SEMICOLON);
+
+    std::unique_ptr<Expression> condition = nullptr;
+    if (!check(TokenType::SEMICOLON)) {
+        condition = parse_expression();
+    }
+    expect("Esperado ';' após condição", TokenType::SEMICOLON);
+
+    std::unique_ptr<Expression> postfix = nullptr;
+    if (!check(TokenType::RPAREN)) {
+        postfix = parse_expression();
+    }
+    expect("Esperado ')' após incremento", TokenType::RPAREN);
+
+    auto body = parse_block();
+
+    popScope();
+
+    auto stmt = std::make_unique<ForStatement>();
+    stmt->initializer = std::move(initializer);
+    stmt->condition = std::move(condition);
+    stmt->postfix = std::move(postfix);
+    stmt->body = std::move(body);
+    return stmt;
+}
+
+std::unique_ptr<WhileStatement> Parser::parse_while_statement() {
+    expect("Esperado 'while'", TokenType::WHILE);
+    expect("Esperado '(' após while", TokenType::LPAREN);
+    auto condition = parse_expression();
+    expect("Esperado ')' após condição", TokenType::RPAREN);
+
+    auto body = parse_block();
+
+    auto stmt = std::make_unique<WhileStatement>();
+    stmt->condition = std::move(condition);
+    stmt->body = std::move(body);
+    return stmt;
+}
+
+std::unique_ptr<DoWhileStatement> Parser::parse_do_while_statement() {
+    expect("Esperado 'do'", TokenType::DO);
+
+    auto body = parse_block();
+
+    expect("Esperado 'while' após corpo do do-while", TokenType::WHILE);
+    expect("Esperado '(' após while", TokenType::LPAREN);
+    auto condition = parse_expression();
+    expect("Esperado ')' após condição", TokenType::RPAREN);
+    expect("Esperado ';' após do-while", TokenType::SEMICOLON);
+
+    auto stmt = std::make_unique<DoWhileStatement>();
+    stmt->body = std::move(body);
+    stmt->condition = std::move(condition);
+    return stmt;
+}
+
+std::unique_ptr<SwitchStatement> Parser::parse_switch_statement() {
+    expect("Esperado 'switch'", TokenType::SWITCH);
+    expect("Esperado '(' após switch", TokenType::LPAREN);
+    auto value = parse_expression();
+    expect("Esperado ')' após expressão", TokenType::RPAREN);
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    std::vector<std::unique_ptr<SwitchCaseStatement> > cases;
+
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        auto caseStmt = std::make_unique<SwitchCaseStatement>();
+
+        if (match(TokenType::CASE)) {
+            caseStmt->expression = parse_expression();
+            expect("Esperado ':' após case", TokenType::COLON);
+        } else if (match(TokenType::DEFAULT)) {
+            caseStmt->expression = nullptr; // default case
+            expect("Esperado ':' após default", TokenType::COLON);
+        } else {
+            const auto &tok = peek();
+            throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "esperado 'case' ou 'default'",
+                               SourceLocation(tok.position.line, tok.position.column, tok.value.length()));
+        }
+
+        // Parse case body statements until next case/default/rbrace
+        auto caseBody = std::make_unique<Block>();
+        while (!check(TokenType::CASE) && !check(TokenType::DEFAULT) &&
+               !check(TokenType::RBRACE) && !isAtEnd()) {
+            caseBody->statements.push_back(parse_statement());
+        }
+        caseStmt->body = std::move(caseBody);
+
+        cases.push_back(std::move(caseStmt));
+    }
+
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    auto stmt = std::make_unique<SwitchStatement>();
+    stmt->value = std::move(value);
+    stmt->cases = std::move(cases);
+    return stmt;
 }
 
 std::unique_ptr<Expression> Parser::parse_expression() {

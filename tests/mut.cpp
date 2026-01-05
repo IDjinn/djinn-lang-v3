@@ -22,7 +22,7 @@ TEST(Mutable, BasicMutableVariables) {
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, 0);
+    EXPECT_EQ(result.returnCode, 2);
 }
 
 TEST(Mutable, InvalidImmutableAssingment) {

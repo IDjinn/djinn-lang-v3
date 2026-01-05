@@ -34,16 +34,16 @@ void Generator::generate_struct(const StructDeclaration &struct_declaration) {
 
     currentScope->define_struct(struct_declaration.name, structType, std::move(fieldIndices));
 
-    // ~destructor() //
-    {
-        const auto method_name = struct_declaration.name + "__destroy";
-        const auto destroy_function = generate_function(method_name, Type::voided(), {});
-        currentScope->define_method(struct_declaration.name, method_name, destroy_function);
-    }
-    // constructor() //
-    {
-        const auto method_name = struct_declaration.name + "__constructor";
-        const auto destroy_function = generate_function(method_name, Type::voided(), {});
-        currentScope->define_method(struct_declaration.name, method_name, destroy_function);
-    }
+    // // ~destructor() //
+    // {
+    //     const auto method_name = struct_declaration.name + "__destroy";
+    //     const auto destroy_function = generate_function(method_name, Type::voided(), {});
+    //     currentScope->define_method(struct_declaration.name, method_name, destroy_function);
+    // }
+    // // constructor() //
+    // {
+    //     const auto method_name = struct_declaration.name + "__constructor";
+    //     const auto destroy_function = generate_function(method_name, Type::voided(), {});
+    //     currentScope->define_method(struct_declaration.name, method_name, destroy_function);
+    // }
 }

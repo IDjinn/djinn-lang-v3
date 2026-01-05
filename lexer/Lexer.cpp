@@ -15,6 +15,17 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"namespace", TokenType::NAMESPACE},
     {"import", TokenType::IMPORT},
     {"mut", TokenType::MUT},
+    // Control flow
+    {"if", TokenType::IF},
+    {"else", TokenType::ELSE},
+    {"for", TokenType::FOR},
+    {"while", TokenType::WHILE},
+    {"do", TokenType::DO},
+    {"switch", TokenType::SWITCH},
+    {"case", TokenType::CASE},
+    {"default", TokenType::DEFAULT},
+    {"break", TokenType::BREAK},
+    {"continue", TokenType::CONTINUE},
 };
 
 Lexer::Lexer(std::string source) : source(std::move(source)) {

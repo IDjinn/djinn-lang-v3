@@ -260,7 +260,111 @@ void Binder::bindStatement(const Statement &stmt) {
         pushScope();
         bindBlock(*blockStmt);
         popScope();
+    } else if (const auto *ifStmt = dynamic_cast<const IfStatement *>(&stmt)) {
+        bindIfStatement(*ifStmt);
+    } else if (const auto *forStmt = dynamic_cast<const ForStatement *>(&stmt)) {
+        bindForStatement(*forStmt);
+    } else if (const auto *whileStmt = dynamic_cast<const WhileStatement *>(&stmt)) {
+        bindWhileStatement(*whileStmt);
+    } else if (const auto *doWhileStmt = dynamic_cast<const DoWhileStatement *>(&stmt)) {
+        bindDoWhileStatement(*doWhileStmt);
+    } else if (const auto *switchStmt = dynamic_cast<const SwitchStatement *>(&stmt)) {
+        bindSwitchStatement(*switchStmt);
+    } else if (dynamic_cast<const BreakStatement *>(&stmt)) {
+        if (loopDepth_ == 0 && switchDepth_ == 0) {
+            _diagnostics.error(DiagnosticCode::UNEXPECTED_TOKEN,
+                               "'break' outside of loop or switch", {});
+        }
+    } else if (dynamic_cast<const ContinueStatement *>(&stmt)) {
+        if (loopDepth_ == 0) {
+            _diagnostics.error(DiagnosticCode::UNEXPECTED_TOKEN,
+                               "'continue' outside of loop", {});
+        }
     }
+}
+
+void Binder::bindIfStatement(const IfStatement &stmt) {
+    bindExpression(*stmt.condition);
+
+    pushScope();
+    if (stmt.thenBranch) {
+        bindBlock(*stmt.thenBranch);
+    }
+    popScope();
+
+    if (stmt.elseBranch) {
+        pushScope();
+        bindBlock(*stmt.elseBranch);
+        popScope();
+    }
+}
+
+void Binder::bindForStatement(const ForStatement &stmt) {
+    pushScope();
+    loopDepth_++;
+
+    if (stmt.initializer) {
+        bindExpression(*stmt.initializer);
+    }
+    if (stmt.condition) {
+        bindExpression(*stmt.condition);
+    }
+    if (stmt.postfix) {
+        bindExpression(*stmt.postfix);
+    }
+    if (stmt.body) {
+        bindBlock(*stmt.body);
+    }
+
+    loopDepth_--;
+    popScope();
+}
+
+void Binder::bindWhileStatement(const WhileStatement &stmt) {
+    bindExpression(*stmt.condition);
+
+    pushScope();
+    loopDepth_++;
+
+    if (stmt.body) {
+        bindBlock(*stmt.body);
+    }
+
+    loopDepth_--;
+    popScope();
+}
+
+void Binder::bindDoWhileStatement(const DoWhileStatement &stmt) {
+    pushScope();
+    loopDepth_++;
+
+    if (stmt.body) {
+        bindBlock(*stmt.body);
+    }
+
+    loopDepth_--;
+    popScope();
+
+    bindExpression(*stmt.condition);
+}
+
+void Binder::bindSwitchStatement(const SwitchStatement &stmt) {
+    bindExpression(*stmt.value);
+
+    switchDepth_++;
+
+    for (const auto &caseStmt: stmt.cases) {
+        if (caseStmt->expression) {
+            bindExpression(*caseStmt->expression);
+        }
+        if (caseStmt->body) {
+            pushScope();
+            bindBlock(*caseStmt->body);
+            popScope();
+        }
+    }
+
+    switchDepth_--;
 }
 
 void Binder::bindExpression(const Expression &expr) {

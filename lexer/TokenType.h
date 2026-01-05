@@ -16,6 +16,19 @@ enum class TokenType {
     IMPORT,
     MUT,
 
+    // CONTROL FLOW //
+    IF,
+    ELSE,
+    FOR,
+    WHILE,
+    DO,
+    SWITCH,
+    CASE,
+    DEFAULT,
+    BREAK,
+    CONTINUE,
+    // -------- //
+
     // VALUE TYPES //
     INT,
     UINT,

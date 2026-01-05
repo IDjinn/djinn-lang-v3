@@ -4,6 +4,7 @@
 
 #include "DjinnCompiler.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
@@ -12,7 +13,13 @@
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 
-CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptions &options) {
+CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions options) {
+    namespace fs = std::filesystem;
+    if (options.outputFileName == "") {
+        const auto temp_file = fs::temp_directory_path() / std::to_string(rand());
+        options.outputFileName = temp_file.string();
+    }
+
     DiagnosticEngine diagnostics(source);
 
     try {
@@ -25,8 +32,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         // std::cout << "\n\n";
 
         Binder binder(diagnostics);
-        const auto bindResult = binder.bind(*program);
-        if (!bindResult.success) {
+        if (const auto bindResult = binder.bind(*program); !bindResult.success) {
             diagnostics.printToStderr();
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }

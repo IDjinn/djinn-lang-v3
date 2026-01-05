@@ -13,7 +13,7 @@
 
 struct CompilerOptions {
     bool optimize = true;
-    std::string outputFileName = "output";
+    std::string outputFileName{};
 };
 
 struct CompilerResult {
@@ -25,7 +25,7 @@ struct CompilerResult {
 };
 
 struct DjinnCompiler {
-    static CompilerResult run(const std::string &source, const CompilerOptions &options = {});
+    static CompilerResult run(const std::string &source, CompilerOptions options = {});
 };
 
 
