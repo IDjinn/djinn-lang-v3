@@ -48,6 +48,7 @@ namespace DiagnosticCode {
     constexpr uint32_t INVALID_OPERATION = 4002;
     constexpr uint32_t UNSUPPORTED_OPERATOR = 4003;
     constexpr uint32_t IMMUTABLE_MODIFICATION = 4004;
+    constexpr uint32_t INVALID_ARGUMENT_COUNT = 4005;
 }
 
 struct SourceLocation {
@@ -106,6 +107,7 @@ public:
     [[nodiscard]] bool hasErrors() const { return total_errors > 0; }
     [[nodiscard]] size_t errorCount() const { return total_errors; }
     [[nodiscard]] size_t warningCount() const { return total_warnings; }
+
     [[nodiscard]] std::string render() const;
 
     [[nodiscard]] const std::vector<Diagnostic> &get_diagnostics() const;

@@ -58,6 +58,11 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
         }
     }
 
+    // Collect base type for transparent types (struct Size : i32;)
+    if (decl.baseType) {
+        structSym->baseType = std::make_unique<Type>(*decl.baseType);
+    }
+
     if (!_global_scope->defineStruct(structSym)) {
         errorDuplicateDefinition(decl.name, SymbolKind::Struct, {});
     }
@@ -150,6 +155,11 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
     // Collect implements
     for (const auto &ifaceName: decl.implements) {
         structSym->addImplements(ifaceName);
+    }
+
+    // Collect base type for transparent types (struct Size : i32;)
+    if (decl.baseType) {
+        structSym->baseType = std::make_unique<Type>(*decl.baseType);
     }
 
     if (!_global_scope->defineStruct(structSym)) {

@@ -106,6 +106,25 @@ Token Lexer::read_number() {
         value += advance();
     }
 
+    // Check for floating point
+    if (peek() == '.' && isdigit(peekNext())) {
+        value += advance(); // consume '.'
+        while (isdigit(peek())) {
+            value += advance();
+        }
+        // Optional exponent: 1.5e10, 1.5E-10
+        if (peek() == 'e' || peek() == 'E') {
+            value += advance();
+            if (peek() == '+' || peek() == '-') {
+                value += advance();
+            }
+            while (isdigit(peek())) {
+                value += advance();
+            }
+        }
+        return make_token(TokenType::FLOAT_LITERAL, value);
+    }
+
     return make_token(TokenType::INTEGER_LITERAL, value);
 }
 

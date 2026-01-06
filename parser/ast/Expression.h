@@ -112,6 +112,18 @@ struct IntegerLiteral : Expression {
     }
 };
 
+struct FloatLiteral : Expression {
+    std::string value;
+
+    explicit FloatLiteral(const std::string &val) : value(val) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "FloatLiteral(" << value << ")";
+    }
+};
+
 struct Identifier : Expression {
     std::string name;
 

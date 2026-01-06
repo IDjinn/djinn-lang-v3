@@ -46,6 +46,7 @@ enum class TokenType {
     IDENTIFIER,
     STRING_LITERAL,
     INTEGER_LITERAL,
+    FLOAT_LITERAL,
 
     // -------- //
     LPAREN, // (

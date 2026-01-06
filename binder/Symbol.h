@@ -120,9 +120,19 @@ struct StructSymbol : Symbol {
     std::vector<std::shared_ptr<MethodSymbol> > methods;
     std::vector<std::string> genericParams;
     std::vector<std::string> implements; // interface names
+    std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
 
     [[nodiscard]] bool isGeneric() const {
         return !this->genericParams.empty();
+    }
+
+    // Transparent type: inherits from primitive and has no fields
+    [[nodiscard]] bool isTransparent() const {
+        return baseType != nullptr && fields.empty() && baseType->kind != TypeKind::STRUCT;
+    }
+
+    [[nodiscard]] bool hasBaseType() const {
+        return baseType != nullptr;
     }
 
     explicit StructSymbol(std::string name, const SourceLocation loc = {})

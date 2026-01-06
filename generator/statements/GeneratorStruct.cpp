@@ -17,6 +17,29 @@ void Generator::generate_struct(const StructDeclaration &struct_declaration) {
         return;
     }
 
+    // Handle transparent types: struct Size : i32; (no fields, inherits from primitive)
+    if (struct_declaration.isTransparent()) {
+        llvm::Type *underlyingType = generate_type(*struct_declaration.baseType);
+        currentScope->define_transparent_type(struct_declaration.name, underlyingType);
+
+        // Generate methods for transparent type
+        // For methods, we create a wrapper struct type just for 'this' pointer semantics
+        llvm::StructType *wrapperType = llvm::StructType::create(
+            *context,
+            {underlyingType},
+            struct_declaration.name
+        );
+
+        // Also register as regular struct for method resolution
+        std::unordered_map<std::string, unsigned> fieldIndices;
+        currentScope->define_struct(struct_declaration.name, wrapperType, std::move(fieldIndices));
+
+        for (const auto &method: struct_declaration.methods) {
+            generate_method(*method, struct_declaration.name, wrapperType);
+        }
+        return;
+    }
+
     std::vector<llvm::Type *> fieldTypes;
     std::unordered_map<std::string, unsigned> fieldIndices;
 

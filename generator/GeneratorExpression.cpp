@@ -9,6 +9,10 @@ llvm::Value *Generator::generate_expression(const Expression &expr) {
         return generate_integer_literal(*intLit);
     }
 
+    if (auto *floatLit = dynamic_cast<const FloatLiteral *>(&expr)) {
+        return generate_float_literal(*floatLit);
+    }
+
     if (auto *strLit = dynamic_cast<const StringLiteral *>(&expr)) {
         return generate_string_literal(*strLit);
     }

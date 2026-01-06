@@ -276,13 +276,32 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
 
-    // Parse implements: struct Foo : interface IBar, interface IBaz { ... }
+    // Parse base type or implements: struct Size : i32; or struct Foo : IBar { ... }
     std::vector<std::string> implements;
+    std::unique_ptr<Type> baseType;
     if (match(TokenType::COLON)) {
-        do {
-            match(TokenType::INTERFACE);
-            implements.push_back(expect("Esperado nome do tipo base", TokenType::IDENTIFIER).value);
-        } while (match(TokenType::COMMA));
+        // Check if it's a primitive type (transparent type inheritance)
+        if (isType() && !check(TokenType::INTERFACE)) {
+            const size_t saved = current;
+            auto potentialType = parse_type();
+
+            // If it's a primitive type, use as baseType
+            if (potentialType->kind != TypeKind::STRUCT) {
+                baseType = std::move(potentialType);
+            } else {
+                // It's a struct/interface, treat as implements
+                current = saved;
+                do {
+                    match(TokenType::INTERFACE);
+                    implements.push_back(expect("Esperado nome do tipo base", TokenType::IDENTIFIER).value);
+                } while (match(TokenType::COMMA));
+            }
+        } else {
+            do {
+                match(TokenType::INTERFACE);
+                implements.push_back(expect("Esperado nome do tipo base", TokenType::IDENTIFIER).value);
+            } while (match(TokenType::COMMA));
+        }
     }
 
     currentScope->define_struct(name, Type::struct_type(name));
@@ -337,6 +356,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     auto structDecl = std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));
     structDecl->methods = std::move(methods);
     structDecl->implements = std::move(implements);
+    structDecl->baseType = std::move(baseType);
     return structDecl;
 }
 
@@ -735,6 +755,10 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 2), true);
         }
         return std::make_unique<IntegerLiteral>(value, true);
+    }
+
+    if (match(TokenType::FLOAT_LITERAL)) {
+        return std::make_unique<FloatLiteral>(previous().value);
     }
 
     if (match(TokenType::STRING_LITERAL)) {

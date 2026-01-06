@@ -28,6 +28,10 @@ llvm::Type *Generator::generate_type(const Type &type) {
             return llvm::PointerType::get(pointeeType, 0);
         }
         case TypeKind::STRUCT: {
+            if (llvm::Type *transparentType = currentScope->lookup_transparent_type(type.structName)) {
+                return transparentType;
+            }
+
             if (type.hasGenericArgs()) {
                 llvm::StructType *existingType = currentScope->lookup_monomorphized_struct(
                     type.structName, type.genericArgs);

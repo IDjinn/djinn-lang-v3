@@ -95,6 +95,7 @@ struct StructDeclaration : ASTNode {
     std::vector<StructField> fields;
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
     std::vector<std::string> implements; // interfaces this struct implements
+    std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
 
     StructDeclaration(std::string name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields)) {
@@ -108,6 +109,15 @@ struct StructDeclaration : ASTNode {
         return !genericParams.empty();
     }
 
+    // Transparent type: inherits from primitive and has no fields
+    [[nodiscard]] bool isTransparent() const {
+        return baseType != nullptr && fields.empty() && baseType->kind != TypeKind::STRUCT;
+    }
+
+    [[nodiscard]] bool hasBaseType() const {
+        return baseType != nullptr;
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "StructDeclaration(" << name;
@@ -119,12 +129,19 @@ struct StructDeclaration : ASTNode {
             }
             os << ">";
         }
-        if (!implements.empty()) {
+        if (baseType) {
             os << " : ";
+            baseType->print(os, 0);
+        }
+        if (!implements.empty()) {
+            os << " implements ";
             for (size_t i = 0; i < implements.size(); ++i) {
                 if (i > 0) os << ", ";
                 os << implements[i];
             }
+        }
+        if (isTransparent()) {
+            os << " [transparent]";
         }
         os << ")\n";
         for (const auto &field: fields) {

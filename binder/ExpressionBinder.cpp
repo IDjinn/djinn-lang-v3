@@ -3,6 +3,7 @@
 //
 
 #include "Binder.h"
+#include <unordered_set>
 
 void Binder::bindExpression(const Expression &expr) {
     if (const auto *id = dynamic_cast<const Identifier *>(&expr)) {
@@ -40,6 +41,18 @@ void Binder::bindIdentifier(const Identifier &id) const {
 }
 
 void Binder::bindFunctionCall(const FunctionCall &call) {
+    static const std::unordered_set<std::string> intrinsics = {
+        "sizeof", "alignof", "bitcast", "trap", "unreachable", "expect", "likely", "unlikely"
+    };
+
+    if (intrinsics.contains(call.name)) {
+        // Bind arguments for intrinsics
+        for (const auto &arg: call.arguments) {
+            bindExpression(*arg);
+        }
+        return;
+    }
+
     if (const auto funcSym = _global_scope->lookupFunction(call.name); funcSym) {
         if (!funcSym->isVariadic && call.arguments.size() != funcSym->arity()) {
             errorWrongArgumentCount(call.name, funcSym->arity(), call.arguments.size(), {});

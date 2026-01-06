@@ -45,6 +45,7 @@ struct GeneratorScope {
 
     std::unordered_map<std::string, llvm::StructType *> structTypes{};
     std::unordered_map<std::string, std::unordered_map<std::string, unsigned>> structFieldIndices{};
+    std::unordered_map<std::string, llvm::Type *> transparentTypes{};
 
     std::unordered_map<std::string, llvm::AllocaInst *> namedValues{};
     std::unordered_map<std::string, std::string> variableStructTypes{};
@@ -115,6 +116,26 @@ struct GeneratorScope {
 
     [[nodiscard]] bool has_struct_in_current_scope(const std::string &name) const {
         return structTypes.contains(name);
+    }
+
+    void define_transparent_type(const std::string &name, llvm::Type *underlyingType) {
+        transparentTypes[name] = underlyingType;
+    }
+
+    [[nodiscard]] llvm::Type *lookup_transparent_type(const std::string &name) const {
+        if (const auto it = transparentTypes.find(name); it != transparentTypes.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->lookup_transparent_type(name);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool is_transparent_type(const std::string &name) const {
+        if (transparentTypes.contains(name)) return true;
+        if (parent) return parent->is_transparent_type(name);
+        return false;
     }
 
     [[nodiscard]] bool has_variable_in_current_scope(const std::string &name) const {

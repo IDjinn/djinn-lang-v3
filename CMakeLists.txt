@@ -36,9 +36,15 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-include_directories(${LLVM_INCLUDE_DIRS})
+# Mark LLVM includes as SYSTEM to suppress warnings
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
+
+# Suppress LLVM-related warnings on MSVC
+if (MSVC)
+    add_compile_options(/wd4624 /wd4267 /wd4244 /wd4996 /wd4146)
+endif ()
 
 llvm_map_components_to_libnames(LLVM_LIBS
         Core

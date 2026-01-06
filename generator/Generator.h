@@ -77,6 +77,8 @@ private:
 
     llvm::Value *generate_integer_literal(const IntegerLiteral &expr) const;
 
+    llvm::Value *generate_float_literal(const FloatLiteral &expr) const;
+
     llvm::Value *generate_string_literal(const StringLiteral &expr) const;
 
     llvm::Value *generate_binary_expression(const BinaryExpression &expr);
@@ -84,6 +86,10 @@ private:
     llvm::Value *generate_unary_expression(const UnaryExpression &expr);
 
     llvm::Value *generate_function_call(const FunctionCall &expr);
+
+    llvm::Value *generate_intrinsic_call(const FunctionCall &call);
+
+    static bool is_intrinsic(const std::string &name);
 
     llvm::Value *generate_identifier(const Identifier &expr) const;
 
