@@ -5,6 +5,8 @@
 #ifndef DJINN_DJINNCOMPILER_H
 #define DJINN_DJINNCOMPILER_H
 #include <string>
+#include <vector>
+#include <filesystem>
 
 #include "diagnostics/Diagnostic.h"
 #include "lexer/Token.h"
@@ -13,6 +15,7 @@
 
 struct CompilerOptions {
     bool optimize = true;
+    bool executeAfterCompile = true;
     std::string outputFileName{};
 };
 
@@ -26,6 +29,11 @@ struct CompilerResult {
 
 struct DjinnCompiler {
     static CompilerResult run(const std::string &source, CompilerOptions options = {});
+
+    static CompilerResult runFromFile(const std::filesystem::path &filePath, CompilerOptions options = {});
+
+    static CompilerResult runFromFiles(const std::vector<std::filesystem::path> &filePaths,
+                                       CompilerOptions options = {});
 };
 
 

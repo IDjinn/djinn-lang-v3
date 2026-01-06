@@ -27,6 +27,11 @@ enum class TokenType {
     DEFAULT,
     BREAK,
     CONTINUE,
+    INTERFACE,
+    PUBLIC,
+    PRIVATE,
+    STATIC,
+    THIS,
     // -------- //
 
     // VALUE TYPES //
@@ -78,6 +83,7 @@ enum class TokenType {
 
     // ATRIBUIÇÃO //
     EQUAL, // =
+    ARROW, // =>
     // -------- //
     COLON, // :
     COLON_COLON, // ::

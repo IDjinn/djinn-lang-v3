@@ -71,7 +71,7 @@ TEST(Struct, FieldAccess) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -109,7 +109,7 @@ TEST(Struct, MethodReturnWithBraceInit) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
 }
@@ -130,7 +130,7 @@ TEST(Struct, AutoInferStructType) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.returnCode, 77);
 }
 
@@ -148,7 +148,7 @@ TEST(Struct, MultipleFieldsPositional) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6);
 }
@@ -166,7 +166,7 @@ TEST(Struct, FieldAccessInExpression) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -188,7 +188,7 @@ TEST(Struct, StructAsParameter) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 123);
 }
@@ -201,7 +201,7 @@ TEST(Struct, SimpleBraceInitScalar) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }

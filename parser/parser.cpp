@@ -4,6 +4,7 @@
 
 #include "parser.h"
 
+#include <cctype>
 #include <llvm/IR/Intrinsics.h>
 
 Parser::Parser(std::vector<Token> tokens) : tokens(std::move(tokens)) {
@@ -61,15 +62,18 @@ bool Parser::isType(const Token &token) const {
 
     if (token.type != TokenType::IDENTIFIER) return false;
 
+    // Built-in float types
     if (token.value.starts_with('f')) {
         return string_to_type_kind.contains(token.value);
     }
 
+    // Built-in integer types (i32, u64, etc.)
     if (token.value.starts_with('i') || token.value.starts_with('u')) {
         const auto bits = token.value.substr(1);
-        return std::ranges::all_of(bits, [](const char c) { return isalnum(c); });
+        return !bits.empty() && std::ranges::all_of(bits, [](const unsigned char c) { return std::isdigit(c); });
     }
 
+    // Already declared struct in current scope
     if (currentScope->has_struct_declared(token.value)) {
         return true;
     }
@@ -106,13 +110,15 @@ std::unique_ptr<Type> Parser::parse_type() {
 
     std::unique_ptr<Type> baseType;
 
-    if (identifier.value.starts_with('f')) {
+    if (identifier.value.starts_with('f') && string_to_type_kind.contains(identifier.value)) {
         const size_t bits = std::stol(identifier.value.substr(1));
         baseType = std::make_unique<Type>(Type::floated(bits));
-    } else if (identifier.value.starts_with('i')) {
+    } else if (identifier.value.starts_with('i') && identifier.value.length() > 1 &&
+               std::ranges::all_of(identifier.value.substr(1), [](const unsigned char c) { return std::isdigit(c); })) {
         const auto bits = std::stol(identifier.value.substr(1));
         baseType = std::make_unique<Type>(Type::integer(bits, true));
-    } else if (identifier.value.starts_with('u')) {
+    } else if (identifier.value.starts_with('u') && identifier.value.length() > 1 &&
+               std::ranges::all_of(identifier.value.substr(1), [](const unsigned char c) { return std::isdigit(c); })) {
         const auto bits = std::stol(identifier.value.substr(1));
         baseType = std::make_unique<Type>(Type::integer(bits, false));
     } else if (identifier.value == "void" || identifier.type == TokenType::VOID) {
@@ -121,12 +127,10 @@ std::unique_ptr<Type> Parser::parse_type() {
         baseType = std::make_unique<Type>(Type::stringed());
     } else if (identifier.value == "auto" || identifier.type == TokenType::AUTO) {
         baseType = std::make_unique<Type>(Type::autod());
-    } else if (this->currentScope->has_struct_declared(identifier.value)) {
-        baseType = std::make_unique<Type>(Type::struct_type(identifier.value));
     } else {
-        throw CompileError(DiagnosticCode::EXPECTED_TYPE, "tipo inválido: " + identifier.value,
-                           SourceLocation(identifier.position.line, identifier.position.column,
-                                          identifier.value.length()));
+        // Accept any identifier as a potential custom type
+        // The Binder will validate that the type actually exists
+        baseType = std::make_unique<Type>(Type::struct_type(identifier.value));
     }
 
     // Parse generic arguments: Array<i32>, Map<string, i32>
@@ -152,6 +156,112 @@ std::unique_ptr<Type> Parser::parse_type() {
     return baseType;
 }
 
+std::vector<VisibilityModifier> Parser::parse_modifiers() {
+    std::vector<VisibilityModifier> modifiers;
+    while (true) {
+        if (match(TokenType::PUBLIC)) {
+            modifiers.push_back(VisibilityModifier::PUBLIC);
+        } else if (match(TokenType::PRIVATE)) {
+            modifiers.push_back(VisibilityModifier::PRIVATE);
+        } else if (match(TokenType::STATIC)) {
+            modifiers.push_back(VisibilityModifier::STATIC);
+        } else {
+            break;
+        }
+    }
+    return modifiers;
+}
+
+std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBody) {
+    auto method = std::make_unique<StructMethodDeclaration>();
+
+    // Parse modifiers: public, private, static
+    method->modifiers = parse_modifiers();
+
+    // Parse return type
+    method->returnType = parse_type();
+
+    // Parse method name
+    method->name = expect("Esperado nome do método", TokenType::IDENTIFIER).value;
+
+    // Parse generic parameters: method<T>()
+    if (match(TokenType::LESS)) {
+        do {
+            const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
+            method->genericParams.add(GenericParam(paramName.value));
+        } while (match(TokenType::COMMA));
+        expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
+    }
+
+    // Parse parameters
+    expect("Esperado '('", TokenType::LPAREN);
+    if (!check(TokenType::RPAREN)) {
+        do {
+            auto paramType = parse_type();
+            std::string paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER).value;
+            bool isMutable = match(TokenType::MUT);
+            method->parameters.emplace_back(std::move(paramType), std::move(paramName), isMutable);
+        } while (match(TokenType::COMMA));
+    }
+    expect("Esperado ')'", TokenType::RPAREN);
+
+    if (!allowBody) {
+        // Interface method - just a semicolon
+        expect("Esperado ';' após assinatura do método", TokenType::SEMICOLON);
+        return method;
+    }
+
+    // Parse body: { ... } or => expr;
+    if (match(TokenType::ARROW)) {
+        // Expression body: => expr;
+        method->expression = parse_expression();
+        expect("Esperado ';' após expressão", TokenType::SEMICOLON);
+    } else if (check(TokenType::LBRACE)) {
+        // Block body: { ... }
+        method->body = parse_block();
+    } else {
+        // Abstract method in struct (just declaration)
+        expect("Esperado ';' após declaração do método", TokenType::SEMICOLON);
+    }
+
+    return method;
+}
+
+std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
+    expect("Esperado 'interface'", TokenType::INTERFACE);
+    const auto name = expect("Esperado nome da interface", TokenType::IDENTIFIER).value;
+
+    auto iface = std::make_unique<InterfaceDeclaration>();
+    iface->name = name;
+
+    // Parse generic parameters: interface IComparable<T> { ... }
+    if (match(TokenType::LESS)) {
+        do {
+            const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
+            iface->genericParams.add(GenericParam(paramName.value));
+        } while (match(TokenType::COMMA));
+        expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
+    }
+
+    // Register generic param names as types within interface scope
+    if (!iface->genericParams.empty()) {
+        for (const auto &param: iface->genericParams.params) {
+            currentScope->define_struct(param.name, Type::struct_type(param.name));
+        }
+    }
+
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    // Parse method signatures (no body)
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        iface->methods.push_back(parse_method(false));
+    }
+
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    return iface;
+}
+
 std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     expect("Esperado 'struct'", TokenType::STRUCT);
     const auto name = match(TokenType::IDENTIFIER) ? previous().value : Type::generate_struct_name();
@@ -166,6 +276,15 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
 
+    // Parse implements: struct Foo : interface IBar, interface IBaz { ... }
+    std::vector<std::string> implements;
+    if (match(TokenType::COLON)) {
+        do {
+            match(TokenType::INTERFACE);
+            implements.push_back(expect("Esperado nome do tipo base", TokenType::IDENTIFIER).value);
+        } while (match(TokenType::COMMA));
+    }
+
     currentScope->define_struct(name, Type::struct_type(name));
 
     // Register generic param names as types within struct scope for field parsing
@@ -175,19 +294,50 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
         }
     }
 
-    expect("Esperado '{'", TokenType::LBRACE);
-
     std::vector<StructField> fields;
-    while (!check(TokenType::RBRACE) && !isAtEnd()) {
-        auto fieldType = parse_type();
-        Token &fieldName = expect("Esperado nome do campo", TokenType::IDENTIFIER);
-        expect("Esperado ';' após campo", TokenType::SEMICOLON);
-        fields.emplace_back(std::move(fieldType), fieldName.value);
+    std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
+    if (!match(TokenType::LBRACE)) {
+        expect("expected semi colon for no-body struct", TokenType::SEMICOLON);
+    } else {
+        while (!check(TokenType::RBRACE) && !isAtEnd()) {
+            // Check for modifiers first (indicates a method)
+            if (check(TokenType::PUBLIC) || check(TokenType::PRIVATE) || check(TokenType::STATIC)) {
+                methods.push_back(parse_method(true));
+                continue;
+            }
+
+            // Save position to distinguish field from method
+            const size_t saved = current;
+
+            auto fieldType = parse_type();
+
+            if (!check(TokenType::IDENTIFIER)) {
+                current = saved;
+                methods.push_back(parse_method(true));
+                continue;
+            }
+
+            const auto memberName = expect("Esperado nome", TokenType::IDENTIFIER).value;
+
+            // Check if this is a method (has parenthesis) or field (has semicolon)
+            if (check(TokenType::LPAREN) || check(TokenType::LESS)) {
+                // It's a method - backtrack and parse as method
+                current = saved;
+                methods.push_back(parse_method(true));
+            } else {
+                // It's a field
+                expect("Esperado ';' após campo", TokenType::SEMICOLON);
+                fields.emplace_back(std::move(fieldType), memberName);
+            }
+        }
+
+        expect("Esperado '}'", TokenType::RBRACE);
     }
 
-    expect("Esperado '}'", TokenType::RBRACE);
-
-    return std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));
+    auto structDecl = std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));
+    structDecl->methods = std::move(methods);
+    structDecl->implements = std::move(implements);
+    return structDecl;
 }
 
 std::unique_ptr<Program> Parser::parse() {
@@ -214,6 +364,8 @@ std::unique_ptr<Program> Parser::parse() {
                 current = saved;
             }
             program->namespaces.push_back(parse_namespace());
+        } else if (check(TokenType::INTERFACE)) {
+            program->interfaces.push_back(parse_interface());
         } else if (check(TokenType::STRUCT)) {
             auto structDecl = parse_struct();
 
@@ -562,6 +714,11 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
     while (true) {
         if (match(TokenType::DOT)) {
             Token &fieldName = expect("Esperado nome do campo após '.'", TokenType::IDENTIFIER);
+            // Check if this is a field assignment (this.field = value)
+            if (match(TokenType::EQUAL)) {
+                auto value = parse_expression();
+                return std::make_unique<FieldAssignment>(std::move(expr), fieldName.value, std::move(value));
+            }
             expr = std::make_unique<FieldAccess>(std::move(expr), fieldName.value);
         } else {
             break;
@@ -584,19 +741,44 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<StringLiteral>(previous().value);
     }
 
+    // Handle 'this' keyword as a simple identifier
+    if (match(TokenType::THIS)) {
+        return std::make_unique<Identifier>("this");
+    }
+
     if (check(TokenType::STRING) || check(TokenType::AUTO) || check(TokenType::MUT) ||
-        (check(TokenType::IDENTIFIER) && isType(peek()))) {
+        check(TokenType::IDENTIFIER)) {
         const auto identifier = advance();
         const auto isMutable = match(TokenType::MUT);
 
         std::vector<Type> genericArgs;
-        if (currentScope->has_struct_declared(identifier.value) && match(TokenType::LESS)) {
+        // Check if this is a primitive type (i32, u64, f32, etc.) or a custom struct type
+        auto isPrimitiveType = [](const std::string &name) {
+            if (name == "void" || name == "string" || name == "auto") return true;
+            if (name.starts_with('f') && string_to_type_kind.contains(name)) return true;
+            if ((name.starts_with('i') || name.starts_with('u')) && name.length() > 1) {
+                return std::ranges::all_of(name.substr(1), [](const unsigned char c) { return std::isdigit(c); });
+            }
+            return false;
+        };
+
+        const bool isDeclaredStruct = currentScope->has_struct_declared(identifier.value);
+
+        // Only parse generic args if this is a known struct type
+        // This avoids consuming '<' in expressions like 'x < 5'
+        if (isDeclaredStruct && match(TokenType::LESS)) {
             do {
                 auto argType = parse_type();
                 genericArgs.push_back(std::move(*argType));
             } while (match(TokenType::COMMA));
             expect("Esperado '>' após argumentos genéricos", TokenType::GREATER);
         }
+
+        // Determine if this is a struct type (declared or undeclared custom type)
+        // but only if followed by an identifier (indicating variable declaration)
+        const bool isStructType = isDeclaredStruct ||
+                                  (identifier.type == TokenType::IDENTIFIER && !isPrimitiveType(identifier.value) &&
+                                   check(TokenType::IDENTIFIER));
 
         bool isArray = false;
         if (match(TokenType::LBRACKET)) {
@@ -607,7 +789,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         if (check(TokenType::IDENTIFIER)) {
             // type + identifier, should be variable creation
             const auto varName = advance().value;
-            Type varType = currentScope->has_struct_declared(identifier.value)
+            Type varType = isStructType
                                ? Type::struct_type(identifier.value)
                                : Type::fromToken(identifier);
 
@@ -627,13 +809,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             return std::make_unique<VariableDeclaration>(std::move(varType), varName, isMutable);
         }
 
-        if (!isType(identifier)) {
-            return std::make_unique<Identifier>(identifier.value);
-        }
-    }
-
-    if (check(TokenType::IDENTIFIER)) {
-        const auto identifier = advance();
+        // Not a variable declaration - handle as identifier/call/assignment
         std::string name = identifier.value;
 
         // foo::bar::baz

@@ -280,6 +280,15 @@ void Generator::generate_switch_statement(const SwitchStatement &stmt) {
         if (caseStmt->expression) {
             caseBB = llvm::BasicBlock::Create(*context, "switch.case", currentFunction);
             llvm::Value *caseValue = generate_expression(*caseStmt->expression);
+
+            // Cast case value to match switch value type
+            if (caseValue->getType() != switchValue->getType()) {
+                if (auto *caseConst = llvm::dyn_cast<llvm::ConstantInt>(caseValue)) {
+                    caseValue = llvm::ConstantInt::get(switchValue->getType(),
+                                                       caseConst->getSExtValue());
+                }
+            }
+
             if (auto *caseConst = llvm::dyn_cast<llvm::ConstantInt>(caseValue)) {
                 switchInst->addCase(caseConst, caseBB);
             }

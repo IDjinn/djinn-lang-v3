@@ -26,6 +26,11 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"default", TokenType::DEFAULT},
     {"break", TokenType::BREAK},
     {"continue", TokenType::CONTINUE},
+    {"interface", TokenType::INTERFACE},
+    {"public", TokenType::PUBLIC},
+    {"private", TokenType::PRIVATE},
+    {"static", TokenType::STATIC},
+    {"this", TokenType::THIS},
 };
 
 Lexer::Lexer(std::string source) : source(std::move(source)) {
@@ -196,6 +201,10 @@ std::vector<Token> Lexer::tokenize() {
                 case '=':
                     if (peekNext() == '=') {
                         tokens.push_back(make_token(TokenType::EQUAL_EQUAL, "=="));
+                        advance();
+                        advance();
+                    } else if (peekNext() == '>') {
+                        tokens.push_back(make_token(TokenType::ARROW, "=>"));
                         advance();
                         advance();
                     } else {

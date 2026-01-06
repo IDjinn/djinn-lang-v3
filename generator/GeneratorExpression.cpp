@@ -37,6 +37,10 @@ llvm::Value *Generator::generate_expression(const Expression &expr) {
         return generate_field_access(*fieldAccess);
     }
 
+    if (auto *fieldAssign = dynamic_cast<const FieldAssignment *>(&expr)) {
+        return generate_field_assignment(*fieldAssign);
+    }
+
     if (auto *varInit = dynamic_cast<const VariableInit *>(&expr)) {
         return generate_variable_init(*varInit);
     }

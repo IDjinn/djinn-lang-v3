@@ -1,6 +1,6 @@
 extern "C" {
-  fn puts(string s) -> i32;
-  fn printf(string fmt, ...) -> i32;
-  fn malloc(i64 size) -> *void;
-  fn free(*void ptr);
+  i32 puts(i8* s);
+  i32 printf(i8* fmt, ...);
+  void* malloc(i64 size);
+  void free(void* ptr);
 }

@@ -56,6 +56,12 @@ private:
 
     std::unique_ptr<StructDeclaration> parse_struct();
 
+    std::unique_ptr<InterfaceDeclaration> parse_interface();
+
+    std::unique_ptr<StructMethodDeclaration> parse_method(bool allowBody = true);
+
+    std::vector<VisibilityModifier> parse_modifiers();
+
     std::unique_ptr<FunctionDeclaration> parse_function();
 
     std::unique_ptr<FunctionDeclaration> parse_function_with_type(std::unique_ptr<Type> returnType);

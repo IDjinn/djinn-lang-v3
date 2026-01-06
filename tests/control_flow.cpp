@@ -254,7 +254,7 @@ TEST(ControlFlow, WhileLoopWithContinue) {
 TEST(ControlFlow, WhileLoopNeverExecutes) {
     const auto source = R"(
         i32 main() {
-            i32 x = 10;
+            i32 mut x = 10;
             while (x < 5) {
                 x = x + 1;
             }

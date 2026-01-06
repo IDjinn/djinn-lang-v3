@@ -13,6 +13,68 @@
 #include "Statement.h"
 #include "Generic.h"
 
+enum class VisibilityModifier {
+    PUBLIC,
+    PRIVATE,
+    STATIC,
+};
+
+struct MethodParameter {
+    std::unique_ptr<Type> type;
+    std::string name;
+    bool isMutable = false;
+
+    MethodParameter(std::unique_ptr<Type> type, std::string name, bool isMutable = false)
+        : type(std::move(type)), name(std::move(name)), isMutable(isMutable) {
+    }
+};
+
+struct StructMethodDeclaration : ASTNode {
+    std::unique_ptr<Type> returnType;
+    std::string name;
+    std::vector<MethodParameter> parameters;
+    GenericParams genericParams;
+    std::vector<VisibilityModifier> modifiers;
+    std::unique_ptr<Block> body; // { ... }
+    std::unique_ptr<Expression> expression; // => expr;
+
+    [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
+    [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        for (const auto &mod: modifiers) {
+            switch (mod) {
+                case VisibilityModifier::PUBLIC: os << "public ";
+                    break;
+                case VisibilityModifier::PRIVATE: os << "private ";
+                    break;
+                case VisibilityModifier::STATIC: os << "static ";
+                    break;
+            }
+        }
+        os << *returnType << " " << name;
+        if (!genericParams.empty()) {
+            os << "<";
+            for (size_t i = 0; i < genericParams.size(); ++i) {
+                if (i > 0) os << ", ";
+                os << genericParams.params[i].name;
+            }
+            os << ">";
+        }
+        os << "(";
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            if (i > 0) os << ", ";
+            os << *parameters[i].type << " " << parameters[i].name;
+        }
+        os << ")";
+        if (isExpressionBody()) {
+            os << " => ...";
+        }
+        os << "\n";
+    }
+};
+
 struct StructField : ASTNode {
     std::unique_ptr<Type> type;
     std::string name;
@@ -31,6 +93,8 @@ struct StructDeclaration : ASTNode {
     std::string name;
     GenericParams genericParams;
     std::vector<StructField> fields;
+    std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
+    std::vector<std::string> implements; // interfaces this struct implements
 
     StructDeclaration(std::string name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields)) {
@@ -55,10 +119,43 @@ struct StructDeclaration : ASTNode {
             }
             os << ">";
         }
+        if (!implements.empty()) {
+            os << " : ";
+            for (size_t i = 0; i < implements.size(); ++i) {
+                if (i > 0) os << ", ";
+                os << implements[i];
+            }
+        }
         os << ")\n";
         for (const auto &field: fields) {
             field.print(os, indent + 2);
             os << '\n';
+        }
+        for (const auto &method: methods) {
+            method->print(os, indent + 2);
+        }
+    }
+};
+
+struct InterfaceDeclaration : ASTNode {
+    std::string name;
+    GenericParams genericParams;
+    std::vector<std::unique_ptr<StructMethodDeclaration> > methods; // abstract method signatures
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "InterfaceDeclaration(" << name;
+        if (!genericParams.empty()) {
+            os << "<";
+            for (size_t i = 0; i < genericParams.size(); ++i) {
+                if (i > 0) os << ", ";
+                os << genericParams.params[i].name;
+            }
+            os << ">";
+        }
+        os << ")\n";
+        for (const auto &method: methods) {
+            method->print(os, indent + 2);
         }
     }
 };
@@ -201,6 +298,7 @@ struct Program : ASTNode {
 
     std::vector<std::unique_ptr<ImportDeclaration> > imports;
     std::vector<std::unique_ptr<ExternFunctionDeclaration> > externFunctions;
+    std::vector<std::unique_ptr<InterfaceDeclaration> > interfaces;
     std::vector<std::unique_ptr<StructDeclaration> > structs;
     std::vector<std::unique_ptr<FunctionDeclaration> > functions;
     std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces;
@@ -223,6 +321,10 @@ struct Program : ASTNode {
         }
         for (const auto &ext: externFunctions) {
             ext->print(os, indent + 2);
+            os << '\n';
+        }
+        for (const auto &iface: interfaces) {
+            iface->print(os, indent + 2);
             os << '\n';
         }
         for (const auto &s: structs) {

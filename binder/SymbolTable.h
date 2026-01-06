@@ -60,6 +60,15 @@ public:
         return define(std::move(structSym));
     }
 
+    bool defineInterface(std::shared_ptr<InterfaceSymbol> ifaceSym) {
+        // Interfaces are stored with "interface:" prefix to allow same name as struct
+        const std::string key = "interface:" + ifaceSym->name;
+        if (_symbols.contains(key))
+            return false;
+        _symbols[key] = std::move(ifaceSym);
+        return true;
+    }
+
     [[nodiscard]] std::shared_ptr<Symbol> lookup(const std::string &name) const {
         if (const auto it = _symbols.find(name); it != _symbols.end()) {
             return it->second;
@@ -98,6 +107,27 @@ public:
             return std::dynamic_pointer_cast<StructSymbol>(symbol);
         }
         return nullptr;
+    }
+
+    [[nodiscard]] std::shared_ptr<InterfaceSymbol> lookupInterface(const std::string &name) const {
+        // Look up with interface prefix
+        const std::string key = "interface:" + name;
+        if (const auto it = _symbols.find(key); it != _symbols.end()) {
+            if (it->second->isInterface()) {
+                return std::dynamic_pointer_cast<InterfaceSymbol>(it->second);
+            }
+        }
+        if (_parent) {
+            if (const auto parentTable = std::dynamic_pointer_cast<SymbolTable>(_parent)) {
+                return parentTable->lookupInterface(name);
+            }
+        }
+        return nullptr;
+    }
+
+    // Check if a name refers to an interface (for type resolution)
+    [[nodiscard]] bool hasInterface(const std::string &name) const {
+        return lookupInterface(name) != nullptr;
     }
 
     [[nodiscard]] bool isDefined(const std::string &name) const {

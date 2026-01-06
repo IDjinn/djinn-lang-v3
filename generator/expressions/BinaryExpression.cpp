@@ -10,6 +10,29 @@ llvm::Value *Generator::generate_binary_expression(const BinaryExpression &expr)
 
     if (!left || !right) return nullptr;
 
+    // Ensure both operands have the same type
+    llvm::Type *leftType = left->getType();
+    llvm::Type *rightType = right->getType();
+
+    if (leftType != rightType) {
+        if (leftType->isIntegerTy() && rightType->isIntegerTy()) {
+            // Cast to the larger type
+            unsigned leftBits = leftType->getIntegerBitWidth();
+            unsigned rightBits = rightType->getIntegerBitWidth();
+            if (leftBits > rightBits) {
+                right = builder->CreateSExt(right, leftType, "sext");
+            } else {
+                left = builder->CreateSExt(left, rightType, "sext");
+            }
+        } else if (leftType->isFloatingPointTy() && rightType->isFloatingPointTy()) {
+            if (leftType->getPrimitiveSizeInBits() > rightType->getPrimitiveSizeInBits()) {
+                right = builder->CreateFPExt(right, leftType, "fpext");
+            } else {
+                left = builder->CreateFPExt(left, rightType, "fpext");
+            }
+        }
+    }
+
     switch (expr.op) {
         case TokenType::PLUS:
             return builder->CreateAdd(left, right, "addtmp");

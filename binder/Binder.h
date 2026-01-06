@@ -57,6 +57,10 @@ private:
 
     void collectStruct(const StructDeclaration &decl) const;
 
+    void collectInterface(const InterfaceDeclaration &decl) const;
+
+    void collectInterfaceWithPrefix(const InterfaceDeclaration &decl, const std::string &prefix) const;
+
     void collectFunction(const FunctionDeclaration &decl) const;
 
     void collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const;
@@ -71,6 +75,8 @@ private:
     void bindProgram(const Program &program);
 
     void bindFunction(const FunctionDeclaration &func);
+
+    void bindMethod(const StructMethodDeclaration &method, const StructDeclaration &struc);
 
     void bindBlock(const Block &block);
 
@@ -96,6 +102,8 @@ private:
     void bindFunctionCall(const FunctionCall &call);
 
     void bindFieldAccess(const FieldAccess &access);
+
+    void bindFieldAssignment(const FieldAssignment &assign);
 
     void bindBinaryExpression(const BinaryExpression &expr);
 

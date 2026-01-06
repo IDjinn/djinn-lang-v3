@@ -139,6 +139,25 @@ struct FieldAccess : Expression {
     }
 };
 
+struct FieldAssignment : Expression {
+    std::unique_ptr<Expression> object;
+    std::string fieldName;
+    std::unique_ptr<Expression> value;
+
+    FieldAssignment(std::unique_ptr<Expression> obj, std::string field, std::unique_ptr<Expression> val)
+        : object(std::move(obj)), fieldName(std::move(field)), value(std::move(val)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "FieldAssignment(." << fieldName << " =\n";
+        object->print(os, indent + 2);
+        os << "\n";
+        value->print(os, indent + 2);
+        os << ")";
+    }
+};
+
 struct FunctionCall : Expression {
     std::string name;
     std::vector<std::unique_ptr<Expression> > arguments;

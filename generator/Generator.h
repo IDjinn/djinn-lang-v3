@@ -48,6 +48,9 @@ private:
 
     void generate_struct(const StructDeclaration &struct_declaration);
 
+    void generate_method(const StructMethodDeclaration &method, const std::string &structName,
+                         llvm::StructType *structType);
+
     void generate_function(const FunctionDeclaration &func, const std::string &prefix = "");
 
     void generate_extern_function(const ExternFunctionDeclaration &decl);
@@ -87,6 +90,8 @@ private:
     llvm::Value *generate_variable_declaration(const VariableDeclaration &expr);
 
     llvm::Value *generate_field_access(const FieldAccess &expr) const;
+
+    llvm::Value *generate_field_assignment(const FieldAssignment &expr);
 
     llvm::Value *generate_variable_init(const VariableInit &expr);
 

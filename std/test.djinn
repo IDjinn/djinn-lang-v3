@@ -1,0 +1,7 @@
+import std::types;
+
+namespace std;
+
+void main() {
+    String str;
+}
