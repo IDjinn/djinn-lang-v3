@@ -38,6 +38,11 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
 
         Parser parser(tokens);
         auto program = parser.parse();
+        if (options.print_ast) {
+            std::cout << "=====AST=====\n";
+            program->print(std::cout);
+            std::cout << "=====" << std::endl;
+        }
 
         Binder binder(diagnostics);
         if (const auto bindResult = binder.bind(*program); !bindResult.success) {
@@ -47,6 +52,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
 
         auto generator = Generator(options.outputFileName);
         generator.generate(*program);
+        if (options.print_ir) std::cout << "=====IR=====\n" << generator.print() << "=====";
 
         // Save unoptimized IR
         const auto unoptimizedResult = generator.print();
@@ -129,7 +135,6 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
         return {.returnCode = 1};
     }
 
-    // Programa combinado que receberá todas as declarações
     auto combinedProgram = std::make_unique<Program>();
 
     for (const auto &filePath: filePaths) {
@@ -150,14 +155,12 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
 
         const std::string source = buffer.str();
 
-        // Cada arquivo é parseado separadamente
         Lexer lexer(source);
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens);
         auto program = parser.parse();
 
-        // Mescla o programa parseado no programa combinado
         mergePrograms(*combinedProgram, std::move(program));
     }
 
@@ -170,9 +173,7 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
 }
 
 void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> source) {
-    // Se o arquivo fonte tem um fileNamespace, movemos todas as declarações para um NamespaceDeclaration
     if (source->hasFileNamespace()) {
-        // Cria ou encontra o namespace correspondente
         NamespaceDeclaration *targetNs = nullptr;
 
         for (auto &ns: target.namespaces) {
@@ -188,40 +189,30 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
             target.namespaces.push_back(std::move(newNs));
         }
 
-        // Move structs para o namespace
         for (auto &s: source->structs) {
             targetNs->structs.push_back(std::move(s));
         }
 
-        // Move functions para o namespace
         for (auto &f: source->functions) {
             targetNs->functions.push_back(std::move(f));
         }
 
-        // Move nested namespaces para o namespace
         for (auto &ns: source->namespaces) {
             targetNs->namespaces.push_back(std::move(ns));
         }
     } else {
-        // Sem fileNamespace - merge direto no nível global
-
-        // Move structs
         for (auto &s: source->structs) {
             target.structs.push_back(std::move(s));
         }
 
-        // Move functions
         for (auto &f: source->functions) {
             target.functions.push_back(std::move(f));
         }
 
-        // Move namespaces
         for (auto &ns: source->namespaces) {
-            // Verifica se já existe um namespace com esse nome no target
             bool found = false;
             for (auto &existingNs: target.namespaces) {
                 if (existingNs->name == ns->name) {
-                    // Mescla no namespace existente
                     for (auto &s: ns->structs) {
                         existingNs->structs.push_back(std::move(s));
                     }
@@ -241,23 +232,25 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
         }
     }
 
-    // Imports são sempre mesclados no nível do programa
     for (auto &imp: source->imports) {
         target.imports.push_back(std::move(imp));
     }
 
-    // Extern functions são sempre mesclados no nível global
     for (auto &ext: source->externFunctions) {
         target.externFunctions.push_back(std::move(ext));
     }
 
-    // Interfaces são sempre mesclados no nível global
     for (auto &iface: source->interfaces) {
         target.interfaces.push_back(std::move(iface));
     }
 }
 
 CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, CompilerOptions options) {
+    if (options.print_ast) {
+        std::cout << "=====AST=====\n";
+        program->print(std::cout);
+        std::cout << "=====" << std::endl;
+    }
     namespace fs = std::filesystem;
 
     // Ensure output directory exists
@@ -272,8 +265,6 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
         options.outputFileName = (fs::path(options.outputDirectory) / options.outputFileName).string();
     }
 
-    // Usamos uma string vazia como source para o DiagnosticEngine
-    // (em produção, você poderia melhorar isso para ter contexto por arquivo)
     DiagnosticEngine diagnostics("");
 
     try {
@@ -285,6 +276,7 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
 
         auto generator = Generator(options.outputFileName);
         generator.generate(*program);
+        if (options.print_ir) std::cout << "=====IR=====\n" << generator.print() << "=====";
 
         // Save unoptimized IR
         const auto unoptimizedResult = generator.print();
