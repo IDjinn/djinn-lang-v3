@@ -3,39 +3,191 @@
 //
 #include "../Generator.h"
 
-void Generator::generate_struct(const StructDeclaration &struct_declaration) {
+// ============================================================================
+// Multi-pass struct generation (like C#)
+// Phase 1: Forward declare all struct types as opaque
+// Phase 2: Resolve struct bodies (fill in fields)
+// Phase 3: Generate methods
+// ============================================================================
+
+void Generator::forward_declare_struct(const StructDeclaration &struct_declaration, const std::string &prefix) {
+    const std::string qualifiedName = prefix.empty()
+                                          ? struct_declaration.name
+                                          : prefix + "::" + struct_declaration.name;
+
+    // Generic structs are handled lazily during monomorphization
     if (struct_declaration.isGeneric()) {
         GenericStructDef genericDef;
-        genericDef.name = struct_declaration.name;
+        genericDef.name = qualifiedName;
         genericDef.params = struct_declaration.genericParams;
 
         for (const auto &field: struct_declaration.fields) {
             genericDef.fields.push_back({field.name, *field.type});
         }
 
-        currentScope->define_generic_struct(struct_declaration.name, std::move(genericDef));
+        currentScope->define_generic_struct(qualifiedName, std::move(genericDef));
+        return;
+    }
+
+    // For transparent types, we need the base type, but that should always be a primitive
+    if (struct_declaration.isTransparent()) {
+        llvm::Type *underlyingType = generate_type(*struct_declaration.baseType);
+        currentScope->define_transparent_type(qualifiedName, underlyingType);
+
+        // Create opaque wrapper struct for method resolution
+        llvm::StructType *wrapperType = llvm::StructType::create(*context, qualifiedName);
+        std::unordered_map<std::string, unsigned> fieldIndices;
+        currentScope->define_struct(qualifiedName, wrapperType, std::move(fieldIndices));
+        return;
+    }
+
+    // Create opaque struct type (no body yet)
+    llvm::StructType *structType = llvm::StructType::create(*context, qualifiedName);
+    std::unordered_map<std::string, unsigned> fieldIndices;
+    currentScope->define_struct(qualifiedName, structType, std::move(fieldIndices));
+}
+
+void Generator::resolve_struct_body(const StructDeclaration &struct_declaration, const std::string &prefix) {
+    const std::string qualifiedName = prefix.empty()
+                                          ? struct_declaration.name
+                                          : prefix + "::" + struct_declaration.name;
+
+    // Generic structs are resolved during monomorphization
+    if (struct_declaration.isGeneric()) {
+        return;
+    }
+
+    // Transparent types: set the wrapper body
+    if (struct_declaration.isTransparent()) {
+        llvm::StructType *wrapperType = currentScope->lookup_struct(qualifiedName);
+        if (wrapperType && wrapperType->isOpaque()) {
+            llvm::Type *underlyingType = currentScope->lookup_transparent_type(qualifiedName);
+            wrapperType->setBody({underlyingType});
+        }
+        return;
+    }
+
+    // Get the opaque struct and fill its body
+    llvm::StructType *structType = currentScope->lookup_struct(qualifiedName);
+    if (!structType) {
+        throw std::runtime_error("Struct not forward declared: " + qualifiedName);
+    }
+
+    std::vector<llvm::Type *> fieldTypes;
+    std::unordered_map<std::string, unsigned> fieldIndices;
+
+    unsigned idx = 0;
+    for (const auto &field: struct_declaration.fields) {
+        fieldTypes.push_back(generate_type(*field.type));
+        fieldIndices[field.name] = idx++;
+    }
+
+    // Set the struct body
+    structType->setBody(fieldTypes);
+
+    // Update field indices in scope
+    currentScope->structFieldIndices[qualifiedName] = std::move(fieldIndices);
+}
+
+void Generator::generate_struct_methods(const StructDeclaration &struct_declaration, const std::string &prefix) {
+    const std::string qualifiedName = prefix.empty()
+                                          ? struct_declaration.name
+                                          : prefix + "::" + struct_declaration.name;
+
+    // Generic structs don't have methods generated here
+    if (struct_declaration.isGeneric()) {
+        return;
+    }
+
+    llvm::StructType *structType = currentScope->lookup_struct(qualifiedName);
+    if (!structType) {
+        throw std::runtime_error("Struct not found for method generation: " + qualifiedName);
+    }
+
+    for (const auto &method: struct_declaration.methods) {
+        generate_method(*method, qualifiedName, structType);
+    }
+}
+
+// Namespace helpers for multi-pass
+void Generator::forward_declare_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &structDecl: ns.structs) {
+        forward_declare_struct(*structDecl, qualifiedPrefix);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        forward_declare_namespace_structs(*nestedNs, qualifiedPrefix);
+    }
+}
+
+void Generator::resolve_namespace_struct_bodies(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &structDecl: ns.structs) {
+        resolve_struct_body(*structDecl, qualifiedPrefix);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        resolve_namespace_struct_bodies(*nestedNs, qualifiedPrefix);
+    }
+}
+
+void Generator::generate_namespace_struct_methods(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &structDecl: ns.structs) {
+        generate_struct_methods(*structDecl, qualifiedPrefix);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        generate_namespace_struct_methods(*nestedNs, qualifiedPrefix);
+    }
+}
+
+// ============================================================================
+// Original single-pass method (kept for compatibility)
+// ============================================================================
+
+void Generator::generate_struct(const StructDeclaration &struct_declaration, const std::string &prefix) {
+    // Nome qualificado da struct
+    const std::string qualifiedName = prefix.empty()
+                                          ? struct_declaration.name
+                                          : prefix + "::" + struct_declaration.name;
+
+    if (struct_declaration.isGeneric()) {
+        GenericStructDef genericDef;
+        genericDef.name = qualifiedName;
+        genericDef.params = struct_declaration.genericParams;
+
+        for (const auto &field: struct_declaration.fields) {
+            genericDef.fields.push_back({field.name, *field.type});
+        }
+
+        currentScope->define_generic_struct(qualifiedName, std::move(genericDef));
         return;
     }
 
     // Handle transparent types: struct Size : i32; (no fields, inherits from primitive)
     if (struct_declaration.isTransparent()) {
         llvm::Type *underlyingType = generate_type(*struct_declaration.baseType);
-        currentScope->define_transparent_type(struct_declaration.name, underlyingType);
+        currentScope->define_transparent_type(qualifiedName, underlyingType);
 
         // Generate methods for transparent type
         // For methods, we create a wrapper struct type just for 'this' pointer semantics
         llvm::StructType *wrapperType = llvm::StructType::create(
             *context,
             {underlyingType},
-            struct_declaration.name
+            qualifiedName
         );
 
         // Also register as regular struct for method resolution
         std::unordered_map<std::string, unsigned> fieldIndices;
-        currentScope->define_struct(struct_declaration.name, wrapperType, std::move(fieldIndices));
+        currentScope->define_struct(qualifiedName, wrapperType, std::move(fieldIndices));
 
         for (const auto &method: struct_declaration.methods) {
-            generate_method(*method, struct_declaration.name, wrapperType);
+            generate_method(*method, qualifiedName, wrapperType);
         }
         return;
     }
@@ -52,14 +204,14 @@ void Generator::generate_struct(const StructDeclaration &struct_declaration) {
     llvm::StructType *structType = llvm::StructType::create(
         *context,
         fieldTypes,
-        struct_declaration.name
+        qualifiedName
     );
 
-    currentScope->define_struct(struct_declaration.name, structType, std::move(fieldIndices));
+    currentScope->define_struct(qualifiedName, structType, std::move(fieldIndices));
 
     // Generate methods
     for (const auto &method: struct_declaration.methods) {
-        generate_method(*method, struct_declaration.name, structType);
+        generate_method(*method, qualifiedName, structType);
     }
 }
 
@@ -72,9 +224,13 @@ void Generator::generate_method(const StructMethodDeclaration &method, const std
 
     llvm::Type *returnType = generate_type(*method.returnType);
 
-    // First parameter is always 'this' (pointer to struct)
     std::vector<llvm::Type *> paramTypes;
-    paramTypes.push_back(llvm::PointerType::get(structType, 0)); // this pointer
+
+    // Static methods don't have 'this' parameter
+    const bool isStatic = method.isStatic();
+    if (!isStatic) {
+        paramTypes.push_back(llvm::PointerType::get(structType, 0)); // this pointer
+    }
 
     for (const auto &param: method.parameters) {
         paramTypes.push_back(generate_type(*param.type));
@@ -95,13 +251,16 @@ void Generator::generate_method(const StructMethodDeclaration &method, const std
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
-    // Define 'this' parameter
     auto argIt = llvmFunc->arg_begin();
-    argIt->setName("this");
-    auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
-    builder->CreateStore(&*argIt, thisAlloca);
-    currentScope->define_variable("this", thisAlloca, structName);
-    ++argIt;
+
+    // Define 'this' parameter only for non-static methods
+    if (!isStatic) {
+        argIt->setName("this");
+        auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, structName);
+        ++argIt;
+    }
 
     // Define other parameters
     size_t paramIdx = 0;

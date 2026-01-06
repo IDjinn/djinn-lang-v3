@@ -10,12 +10,11 @@
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
 
-Generator::Generator()
+Generator::Generator(const std::string &module_name)
     : context(std::make_unique<llvm::LLVMContext>()),
-      module(std::make_unique<llvm::Module>("djinn", *context)),
+      module(std::make_unique<llvm::Module>(module_name, *context)),
       builder(std::make_unique<llvm::IRBuilder<> >(*context)),
       currentScope(std::make_shared<GeneratorScope>()) {
-    declare_extern_functions();
 }
 
 void Generator::push_scope() {
@@ -28,26 +27,93 @@ void Generator::pop_scope() {
     }
 }
 
-void Generator::declare_extern_functions() {
-    // functions["printf"] = llvm::Function::Create(
-    //     llvm::FunctionType::get(
-    //         builder->getInt32Ty(),
-    //         {builder->getPtrTy()},
-    //         true
-    //     ),
-    //     llvm::Function::ExternalLinkage,
-    //     "printf",
-    //     *module
-    // );
-}
-
 void Generator::generate(const Program &program) {
+    // ========================================================================
+    // Multi-pass code generation (like C#/Roslyn)
+    // This allows cyclic type references and order-independent declarations
+    // ========================================================================
+
+    // PASS 1: Forward declare ALL struct types as opaque
+    // This must happen FIRST so all types are known before any usage
+    for (const auto &ns: program.namespaces) {
+        forward_declare_namespace_structs(*ns, "");
+    }
+    for (const auto &structDecl: program.structs) {
+        forward_declare_struct(*structDecl);
+    }
+
+    // PASS 2: Process imports to create aliases for types
+    // Now all types exist (as opaque), so aliases can be created
+    for (const auto &import: program.imports) {
+        const std::string nsPath = import->namespacePath.toString();
+
+        // Cria aliases para structs
+        for (const auto &[name, structType]: currentScope->structTypes) {
+            if (name.starts_with(nsPath + "::")) {
+                const std::string shortName = name.substr(nsPath.length() + 2);
+                if (shortName.find("::") == std::string::npos) {
+                    if (!currentScope->has_struct_in_current_scope(shortName)) {
+                        currentScope->define_struct_alias(shortName, name);
+                    }
+                }
+            }
+        }
+
+        // Cria aliases para tipos transparentes
+        for (const auto &[name, type]: currentScope->transparentTypes) {
+            if (name.starts_with(nsPath + "::")) {
+                const std::string shortName = name.substr(nsPath.length() + 2);
+                if (shortName.find("::") == std::string::npos) {
+                    if (!currentScope->is_transparent_type(shortName)) {
+                        currentScope->define_transparent_alias(shortName, name);
+                    }
+                }
+            }
+        }
+
+        // Cria aliases para generic structs
+        for (const auto &[name, genericDef]: currentScope->genericStructs) {
+            if (name.starts_with(nsPath + "::")) {
+                const std::string shortName = name.substr(nsPath.length() + 2);
+                if (shortName.find("::") == std::string::npos) {
+                    if (!currentScope->has_struct_in_current_scope(shortName) &&
+                        !currentScope->has_generic_struct(shortName)) {
+                        currentScope->define_struct_alias(shortName, name);
+                    }
+                }
+            }
+        }
+    }
+
+    // PASS 3: External functions (C ABI)
+    // Now type aliases exist, so extern functions can use types like c_result
     for (const auto &externFunc: program.externFunctions) {
         generate_extern_function(*externFunc);
     }
 
+    // PASS 4: Resolve struct bodies (fill in fields)
+    // Now all types are known and extern functions declared
+    for (const auto &ns: program.namespaces) {
+        resolve_namespace_struct_bodies(*ns, "");
+    }
+    for (const auto &structDecl: program.structs) {
+        resolve_struct_body(*structDecl);
+    }
+
+    // PASS 5: Generate struct methods
+    // Bodies are complete, methods can use all types
+    for (const auto &ns: program.namespaces) {
+        generate_namespace_struct_methods(*ns, "");
+    }
+    for (const auto &structDecl: program.structs) {
+        generate_struct_methods(*structDecl);
+    }
+
+    // PASS 6: Create function aliases from imports
+    // Methods are generated, so function aliases can be created
     for (const auto &import: program.imports) {
         const std::string nsPath = import->namespacePath.toString();
+
         for (const auto &[name, func]: functions) {
             if (name.starts_with(nsPath + "::")) {
                 const std::string shortName = name.substr(nsPath.length() + 2);
@@ -58,18 +124,17 @@ void Generator::generate(const Program &program) {
         }
     }
 
+    // PASS 7: Generate namespace functions
     for (const auto &ns: program.namespaces) {
-        generate_namespace(*ns);
+        generate_namespace_functions(*ns, "");
     }
 
-    for (const auto &structDecl: program.structs) {
-        generate_struct(*structDecl);
-    }
-
+    // PASS 8: Generate global functions
     for (const auto &func: program.functions) {
         generate_function(*func);
     }
 
+    // PASS 9: Default main if not defined
     if (!functions.contains("main")) {
         generate_default_main();
     }
@@ -79,7 +144,7 @@ void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::st
     const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
 
     for (const auto &structDecl: ns.structs) {
-        generate_struct(*structDecl);
+        generate_struct(*structDecl, qualifiedPrefix);
     }
 
     for (const auto &func: ns.functions) {
@@ -88,6 +153,30 @@ void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::st
 
     for (const auto &nestedNs: ns.namespaces) {
         generate_namespace(*nestedNs, qualifiedPrefix);
+    }
+}
+
+void Generator::generate_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &structDecl: ns.structs) {
+        generate_struct(*structDecl, qualifiedPrefix);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        generate_namespace_structs(*nestedNs, qualifiedPrefix);
+    }
+}
+
+void Generator::generate_namespace_functions(const NamespaceDeclaration &ns, const std::string &prefix) {
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+
+    for (const auto &func: ns.functions) {
+        generate_function(*func, qualifiedPrefix);
+    }
+
+    for (const auto &nestedNs: ns.namespaces) {
+        generate_namespace_functions(*nestedNs, qualifiedPrefix);
     }
 }
 

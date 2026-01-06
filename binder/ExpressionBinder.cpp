@@ -3,7 +3,7 @@
 //
 
 #include "Binder.h"
-#include <unordered_set>
+#include "../generator/Intrinsics.h"
 
 void Binder::bindExpression(const Expression &expr) {
     if (const auto *id = dynamic_cast<const Identifier *>(&expr)) {
@@ -35,17 +35,44 @@ void Binder::bindIdentifier(const Identifier &id) const {
         return;
     }
 
-    if (const auto funcSym = _current_scope->lookupFunction(id.name); !funcSym) {
-        errorUndefinedVariable(id.name, {});
+    // Check for function
+    if (_current_scope->lookupFunction(id.name)) {
+        return;
     }
+
+    // Check for struct (for static method calls like StructName.method())
+    if (_global_scope->lookupStruct(id.name)) {
+        return;
+    }
+
+    errorUndefinedVariable(id.name, {});
 }
 
 void Binder::bindFunctionCall(const FunctionCall &call) {
-    static const std::unordered_set<std::string> intrinsics = {
-        "sizeof", "alignof", "bitcast", "trap", "unreachable", "expect", "likely", "unlikely"
-    };
+    // Handle method calls (receiver.method())
+    if (call.isMethodCall()) {
+        // Check if receiver is an Identifier (could be struct name for static method)
+        if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
+            // If it's a struct name, this is a static method call - don't bind as variable
+            if (!_global_scope->lookupStruct(ident->name)) {
+                // Not a struct name, bind as regular expression (instance method)
+                bindExpression(*call.receiver);
+            }
+        } else {
+            // Not an identifier, bind the receiver expression
+            bindExpression(*call.receiver);
+        }
 
-    if (intrinsics.contains(call.name)) {
+        // Bind all arguments
+        for (const auto &arg: call.arguments) {
+            bindExpression(*arg);
+        }
+
+        // TODO: Validate method exists on the struct type
+        return;
+    }
+
+    if (is_intrinsic(call.name)) {
         // Bind arguments for intrinsics
         for (const auto &arg: call.arguments) {
             bindExpression(*arg);

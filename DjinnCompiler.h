@@ -12,7 +12,6 @@
 #include "lexer/Token.h"
 #include "parser/AST.h"
 
-
 struct CompilerOptions {
     bool optimize = true;
     bool executeAfterCompile = true;
@@ -35,6 +34,13 @@ struct DjinnCompiler {
 
     static CompilerResult runFromFiles(const std::vector<std::filesystem::path> &filePaths,
                                        CompilerOptions options = {});
+
+    // Compila com um Program já parseado (usado quando múltiplos arquivos são parseados separadamente)
+    static CompilerResult runFromProgram(std::unique_ptr<Program> program, CompilerOptions options = {});
+
+private:
+    // Mescla múltiplos Programs em um único, respeitando namespaces de cada arquivo
+    static void mergePrograms(Program &target, std::unique_ptr<Program> source);
 };
 
 

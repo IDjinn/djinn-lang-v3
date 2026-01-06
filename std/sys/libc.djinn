@@ -1,6 +1,10 @@
+import std::types;
+
 extern "C" {
-  i32 puts(i8* s);
-  i32 printf(i8* fmt, ...);
-  void* malloc(i64 size);
+  c_result puts(i8* s);
+  c_result printf(i8* fmt, ...);
+  void* malloc(size_long size);
   void free(void* ptr);
+  c_result strlen(i8* s);
+  c_result write(size file_descriptor, void* buf, size count);
 }

@@ -733,13 +733,40 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
 
     while (true) {
         if (match(TokenType::DOT)) {
-            Token &fieldName = expect("Esperado nome do campo após '.'", TokenType::IDENTIFIER);
-            // Check if this is a field assignment (this.field = value)
-            if (match(TokenType::EQUAL)) {
-                auto value = parse_expression();
-                return std::make_unique<FieldAssignment>(std::move(expr), fieldName.value, std::move(value));
+            // Accept identifier or keywords as field/method names after '.'
+            std::string memberName;
+            if (check(TokenType::IDENTIFIER)) {
+                memberName = advance().value;
+            } else if (check(TokenType::BREAK) || check(TokenType::CONTINUE) || check(TokenType::RETURN) ||
+                       check(TokenType::IF) || check(TokenType::ELSE) || check(TokenType::FOR) ||
+                       check(TokenType::WHILE) || check(TokenType::DO) || check(TokenType::SWITCH) ||
+                       check(TokenType::CASE) || check(TokenType::DEFAULT) || check(TokenType::STATIC) ||
+                       check(TokenType::PUBLIC) || check(TokenType::PRIVATE)) {
+                memberName = advance().value;
+            } else {
+                throw std::runtime_error("Esperado nome do campo após '.'");
             }
-            expr = std::make_unique<FieldAccess>(std::move(expr), fieldName.value);
+
+            // Check if this is a method call: object.method(args)
+            if (match(TokenType::LPAREN)) {
+                std::vector<std::unique_ptr<Expression> > args;
+                if (!check(TokenType::RPAREN)) {
+                    do {
+                        args.push_back(parse_expression());
+                    } while (match(TokenType::COMMA));
+                }
+                expect("Esperado ')' após argumentos", TokenType::RPAREN);
+                expr = std::make_unique<FunctionCall>(memberName, std::move(args), std::move(expr));
+            }
+            // Check if this is a field assignment (this.field = value)
+            else if (match(TokenType::EQUAL)) {
+                auto value = parse_expression();
+                return std::make_unique<FieldAssignment>(std::move(expr), memberName, std::move(value));
+            }
+            // Otherwise it's a field access
+            else {
+                expr = std::make_unique<FieldAccess>(std::move(expr), memberName);
+            }
         } else {
             break;
         }

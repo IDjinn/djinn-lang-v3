@@ -5,10 +5,12 @@
 #ifndef DJINN_DIAGNOSTIC_H
 #define DJINN_DIAGNOSTIC_H
 
+#include <complex.h>
 #include <string>
 #include <vector>
 #include <sstream>
 #include <cstdint>
+#include <stacktrace>
 
 enum class Severity { Error, Warning, Note, Help };
 
@@ -112,7 +114,7 @@ public:
 
     [[nodiscard]] const std::vector<Diagnostic> &get_diagnostics() const;
 
-    void printToStderr() const;
+    void printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry> > &stack) const;
 
 private:
     std::string source_;

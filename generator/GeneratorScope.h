@@ -44,13 +44,17 @@ struct GeneratorScope {
     std::shared_ptr<GeneratorScope> parent = nullptr;
 
     std::unordered_map<std::string, llvm::StructType *> structTypes{};
-    std::unordered_map<std::string, std::unordered_map<std::string, unsigned>> structFieldIndices{};
+    std::unordered_map<std::string, std::unordered_map<std::string, unsigned> > structFieldIndices{};
     std::unordered_map<std::string, llvm::Type *> transparentTypes{};
+
+    // Aliases para suportar imports (ex: "c_result" -> "std::types::c_result")
+    std::unordered_map<std::string, std::string> structAliases{};
+    std::unordered_map<std::string, std::string> transparentAliases{};
 
     std::unordered_map<std::string, llvm::AllocaInst *> namedValues{};
     std::unordered_map<std::string, std::string> variableStructTypes{};
 
-    std::unordered_map<std::string, std::unordered_map<std::string, llvm::Function *>> structMethods{};
+    std::unordered_map<std::string, std::unordered_map<std::string, llvm::Function *> > structMethods{};
     std::unordered_map<std::string, llvm::Function *> localFunctions{};
 
     std::unordered_map<std::string, GenericStructDef> genericStructs{};
@@ -74,9 +78,43 @@ struct GeneratorScope {
         }
     }
 
+    void define_struct_alias(const std::string &alias, const std::string &qualifiedName) {
+        structAliases[alias] = qualifiedName;
+    }
+
+    void define_transparent_alias(const std::string &alias, const std::string &qualifiedName) {
+        transparentAliases[alias] = qualifiedName;
+    }
+
+    [[nodiscard]] std::string resolve_struct_alias(const std::string &name) const {
+        if (const auto it = structAliases.find(name); it != structAliases.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->resolve_struct_alias(name);
+        }
+        return name; // retorna o próprio nome se não houver alias
+    }
+
+    [[nodiscard]] std::string resolve_transparent_alias(const std::string &name) const {
+        if (const auto it = transparentAliases.find(name); it != transparentAliases.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->resolve_transparent_alias(name);
+        }
+        return name;
+    }
+
     [[nodiscard]] llvm::StructType *lookup_struct(const std::string &name) const {
         if (const auto it = structTypes.find(name); it != structTypes.end()) {
             return it->second;
+        }
+        const std::string resolved = resolve_struct_alias(name);
+        if (resolved != name) {
+            if (const auto it = structTypes.find(resolved); it != structTypes.end()) {
+                return it->second;
+            }
         }
         if (parent) {
             return parent->lookup_struct(name);
@@ -87,6 +125,13 @@ struct GeneratorScope {
     [[nodiscard]] const std::unordered_map<std::string, unsigned> *lookup_field_indices(const std::string &name) const {
         if (const auto it = structFieldIndices.find(name); it != structFieldIndices.end()) {
             return &it->second;
+        }
+        // Tenta resolver alias
+        const std::string resolved = resolve_struct_alias(name);
+        if (resolved != name) {
+            if (const auto it = structFieldIndices.find(resolved); it != structFieldIndices.end()) {
+                return &it->second;
+            }
         }
         if (parent) {
             return parent->lookup_field_indices(name);
@@ -126,6 +171,13 @@ struct GeneratorScope {
         if (const auto it = transparentTypes.find(name); it != transparentTypes.end()) {
             return it->second;
         }
+        // Tenta resolver alias
+        const std::string resolved = resolve_transparent_alias(name);
+        if (resolved != name) {
+            if (const auto it = transparentTypes.find(resolved); it != transparentTypes.end()) {
+                return it->second;
+            }
+        }
         if (parent) {
             return parent->lookup_transparent_type(name);
         }
@@ -134,6 +186,9 @@ struct GeneratorScope {
 
     [[nodiscard]] bool is_transparent_type(const std::string &name) const {
         if (transparentTypes.contains(name)) return true;
+        // Tenta resolver alias
+        const std::string resolved = resolve_transparent_alias(name);
+        if (resolved != name && transparentTypes.contains(resolved)) return true;
         if (parent) return parent->is_transparent_type(name);
         return false;
     }
@@ -147,9 +202,19 @@ struct GeneratorScope {
     }
 
     [[nodiscard]] llvm::Function *lookup_method(const std::string &structName, const std::string &methodName) const {
+        // Primeiro tenta o nome direto
         if (const auto structIt = structMethods.find(structName); structIt != structMethods.end()) {
             if (const auto methodIt = structIt->second.find(methodName); methodIt != structIt->second.end()) {
                 return methodIt->second;
+            }
+        }
+        // Depois tenta resolver alias
+        const std::string resolved = resolve_struct_alias(structName);
+        if (resolved != structName) {
+            if (const auto structIt = structMethods.find(resolved); structIt != structMethods.end()) {
+                if (const auto methodIt = structIt->second.find(methodName); methodIt != structIt->second.end()) {
+                    return methodIt->second;
+                }
             }
         }
         if (parent) {
@@ -191,6 +256,13 @@ struct GeneratorScope {
         if (const auto it = genericStructs.find(name); it != genericStructs.end()) {
             return &it->second;
         }
+        // Tenta resolver alias
+        const std::string resolved = resolve_struct_alias(name);
+        if (resolved != name) {
+            if (const auto it = genericStructs.find(resolved); it != genericStructs.end()) {
+                return &it->second;
+            }
+        }
         if (parent) {
             return parent->lookup_generic_struct(name);
         }
@@ -199,6 +271,9 @@ struct GeneratorScope {
 
     [[nodiscard]] bool has_generic_struct(const std::string &name) const {
         if (genericStructs.contains(name)) return true;
+        // Tenta resolver alias
+        const std::string resolved = resolve_struct_alias(name);
+        if (resolved != name && genericStructs.contains(resolved)) return true;
         if (parent) return parent->has_generic_struct(name);
         return false;
     }

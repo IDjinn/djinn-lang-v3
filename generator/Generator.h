@@ -17,7 +17,7 @@
 
 class Generator {
 public:
-    Generator();
+    explicit Generator(const std::string &module_name);
 
     void generate(const Program &program);
 
@@ -39,14 +39,26 @@ private:
 
     void pop_scope();
 
-    void declare_extern_functions();
-
     void generate_default_main();
 
     llvm::Function *generate_function(const std::string &name, const Type &returnType,
                                       const std::vector<std::pair<Type, std::string> > &parameters);
 
-    void generate_struct(const StructDeclaration &struct_declaration);
+    void generate_struct(const StructDeclaration &struct_declaration, const std::string &prefix = "");
+
+    // Multi-pass struct generation (like C#)
+    void forward_declare_struct(const StructDeclaration &struct_declaration, const std::string &prefix = "");
+
+    void resolve_struct_body(const StructDeclaration &struct_declaration, const std::string &prefix = "");
+
+    void generate_struct_methods(const StructDeclaration &struct_declaration, const std::string &prefix = "");
+
+    // Namespace multi-pass helpers
+    void forward_declare_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix);
+
+    void resolve_namespace_struct_bodies(const NamespaceDeclaration &ns, const std::string &prefix);
+
+    void generate_namespace_struct_methods(const NamespaceDeclaration &ns, const std::string &prefix);
 
     void generate_method(const StructMethodDeclaration &method, const std::string &structName,
                          llvm::StructType *structType);
@@ -56,6 +68,10 @@ private:
     void generate_extern_function(const ExternFunctionDeclaration &decl);
 
     void generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix = "");
+
+    void generate_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix);
+
+    void generate_namespace_functions(const NamespaceDeclaration &ns, const std::string &prefix);
 
     llvm::Type *generate_type(const Type &type);
 
@@ -86,6 +102,8 @@ private:
     llvm::Value *generate_unary_expression(const UnaryExpression &expr);
 
     llvm::Value *generate_function_call(const FunctionCall &expr);
+
+    llvm::Value *generate_method_call_internal(const FunctionCall &call);
 
     llvm::Value *generate_intrinsic_call(const FunctionCall &call);
 

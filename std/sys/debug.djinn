@@ -1,0 +1,7 @@
+namespace std::debug;
+
+struct Debug {
+    public static void pause() {
+        debugtrap();
+    }
+}

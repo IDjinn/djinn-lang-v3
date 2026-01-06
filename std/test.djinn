@@ -1,7 +1,10 @@
 import std::types;
+import std::sys;
 
 namespace std;
 
 void main() {
-    String str;
+    size size_test = -10;
+    c_result res = -1;
+    printf("teste output:\n size=%d\nres=%d", size_test, res);
 }

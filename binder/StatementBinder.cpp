@@ -5,6 +5,22 @@
 #include "Binder.h"
 
 void Binder::bindProgram(const Program &program) {
+    // Validate extern function types (they may use imported types)
+    for (const auto &ext: program.externFunctions) {
+        if (!isTypeDefined(*ext->returnType)) {
+            if (ext->returnType->kind == TypeKind::STRUCT) {
+                errorUndefinedStruct(ext->returnType->structName, {});
+            }
+        }
+        for (const auto &param: ext->parameters) {
+            if (!isTypeDefined(*param.type)) {
+                if (param.type->kind == TypeKind::STRUCT) {
+                    errorUndefinedStruct(param.type->structName, {});
+                }
+            }
+        }
+    }
+
     for (const auto &struc: program.structs) {
         for (const auto &field: struc->fields) {
             if (!isTypeDefined(*field.type)) {

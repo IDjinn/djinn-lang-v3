@@ -41,6 +41,27 @@ struct StructMethodDeclaration : ASTNode {
     [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
 
+    [[nodiscard]] bool isStatic() const {
+        for (const auto &mod: modifiers) {
+            if (mod == VisibilityModifier::STATIC) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool isPublic() const {
+        for (const auto &mod: modifiers) {
+            if (mod == VisibilityModifier::PUBLIC) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool isPrivate() const {
+        for (const auto &mod: modifiers) {
+            if (mod == VisibilityModifier::PRIVATE) return true;
+        }
+        return false;
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         for (const auto &mod: modifiers) {

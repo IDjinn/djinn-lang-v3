@@ -8,7 +8,6 @@
 static std::unordered_map<std::string, TokenType> keywords = {
     {"void", TokenType::VOID},
     {"return", TokenType::RETURN},
-    {"string", TokenType::STRING},
     {"auto", TokenType::AUTO},
     {"extern", TokenType::EXTERN},
     {"struct", TokenType::STRUCT},

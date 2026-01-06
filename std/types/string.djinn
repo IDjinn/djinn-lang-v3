@@ -1,6 +1,0 @@
-namespace std::types;
-
-struct String {
-    Size size;
-    i8* data;
-}

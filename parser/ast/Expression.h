@@ -173,14 +173,27 @@ struct FieldAssignment : Expression {
 struct FunctionCall : Expression {
     std::string name;
     std::vector<std::unique_ptr<Expression> > arguments;
+    std::unique_ptr<Expression> receiver; // optional: for method calls (object.method())
 
     FunctionCall(std::string n, std::vector<std::unique_ptr<Expression> > args)
         : name(std::move(n)), arguments(std::move(args)) {
     }
 
+    FunctionCall(std::string n, std::vector<std::unique_ptr<Expression> > args, std::unique_ptr<Expression> recv)
+        : name(std::move(n)), arguments(std::move(args)), receiver(std::move(recv)) {
+    }
+
+    [[nodiscard]] bool isMethodCall() const { return receiver != nullptr; }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "FunctionCall(" << name << ")\n";
+        if (isMethodCall()) {
+            os << "MethodCall(." << name << ")\n";
+            receiver->print(os, indent + 2);
+            os << '\n';
+        } else {
+            os << "FunctionCall(" << name << ")\n";
+        }
         for (const auto &arg: arguments) {
             arg->print(os, indent + 2);
             os << '\n';
