@@ -17,6 +17,7 @@ struct CompilerOptions {
     bool optimize = true;
     bool executeAfterCompile = true;
     std::string outputFileName{};
+    std::string outputDirectory{"build"};
 };
 
 struct CompilerResult {

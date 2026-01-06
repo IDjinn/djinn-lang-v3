@@ -9,6 +9,7 @@ void printUsage(const char *programName) {
     std::cout << "Usage: " << programName << " [options] <file.djinn|directory> [more files/dirs...]\n"
             << "\nOptions:\n"
             << "  -o <name>     Output file name (without extension)\n"
+            << "  -out <dir>     Output file directory (default=build)\n"
             << "  -O            Enable optimizations (default)\n"
             << "  -O0           Disable optimizations\n"
             << "  -c            Compile only, do not execute\n"
@@ -65,6 +66,8 @@ int main(int argc, char *argv[]) {
             return 0;
         } else if (arg == "-o" && i + 1 < argc) {
             options.outputFileName = argv[++i];
+        } else if (arg == "-out" && i + 1 < argc) {
+            options.outputDirectory = argv[++i];
         } else if (arg == "-O") {
             options.optimize = true;
         } else if (arg == "-O0") {

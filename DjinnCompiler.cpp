@@ -16,9 +16,17 @@
 
 CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions options) {
     namespace fs = std::filesystem;
+
+    // Ensure output directory exists
+    if (!options.outputDirectory.empty()) {
+        fs::create_directories(options.outputDirectory);
+    }
+
     if (options.outputFileName.empty()) {
         const auto temp_file = fs::temp_directory_path() / std::to_string(rand());
         options.outputFileName = temp_file.string();
+    } else if (!options.outputDirectory.empty()) {
+        options.outputFileName = (fs::path(options.outputDirectory) / options.outputFileName).string();
     }
 
     DiagnosticEngine diagnostics(source);
@@ -38,17 +46,31 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
 
         Generator generator;
         generator.generate(*program);
-        if (options.optimize) generator.optimize();
-        const auto result = generator.print();
 
-        std::ofstream output;
-        output.open(options.outputFileName + ".ll");
-        output << result;
-        output.close();
+        // Save unoptimized IR
+        const auto unoptimizedResult = generator.print();
+        std::ofstream unoptOutput(options.outputFileName + ".ll");
+        unoptOutput << unoptimizedResult;
+        unoptOutput.close();
+
+        std::string finalIrFile = options.outputFileName + ".ll";
+        std::string result = unoptimizedResult;
+
+        if (options.optimize) {
+            generator.optimize();
+            result = generator.print();
+
+            // Save optimized IR with .opt.ll suffix
+            std::ofstream optOutput(options.outputFileName + ".opt.ll");
+            optOutput << result;
+            optOutput.close();
+
+            finalIrFile = options.outputFileName + ".opt.ll";
+        }
 
         int returnCode = 0;
         if (options.executeAfterCompile) {
-            system(("clang " + options.outputFileName + ".ll -o " + options.outputFileName + ".exe").c_str());
+            system(("clang " + finalIrFile + " -o " + options.outputFileName + ".exe").c_str());
             returnCode = system((options.outputFileName + ".exe").c_str());
         }
 
