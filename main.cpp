@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
             options.optimize = true;
         } else if (arg == "-ir") {
             options.print_ir = true;
-        }else if (arg == "-ast") {
+        } else if (arg == "-ast") {
             options.print_ast = true;
         } else if (arg == "-O0") {
             options.optimize = false;

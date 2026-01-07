@@ -778,9 +778,15 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
 std::unique_ptr<Expression> Parser::parse_primary() {
     if (match(TokenType::INTEGER_LITERAL)) {
         const auto value = previous().value;
-        if (value.ends_with("i") || value.ends_with("u")) {
-            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 2), true);
+        if (value.ends_with("i")) {
+            // Signed integer suffix (e.g., 10i)
+            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), true);
         }
+        if (value.ends_with("u")) {
+            // Unsigned integer suffix (e.g., 10u)
+            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), false);
+        }
+        // Default: signed integer
         return std::make_unique<IntegerLiteral>(value, true);
     }
 

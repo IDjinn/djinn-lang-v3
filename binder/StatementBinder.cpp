@@ -52,11 +52,8 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
     pushScope();
 
     for (const auto &param: func.parameters) {
-        // Validate parameter type
-        if (!isTypeDefined(*param.type)) {
-            if (param.type->kind == TypeKind::STRUCT) {
-                errorUndefinedStruct(param.type->structName, {});
-            }
+        if (!isTypeDefined(*param.type) && param.type->kind == TypeKind::STRUCT) {
+            errorUndefinedStruct(param.type->structName, {});
         }
 
         if (!_current_scope->defineParameter(param.name, *param.type, param.isMutable)) {
@@ -91,7 +88,6 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
     thisType.elementType->structName = struc.name;
     _current_scope->defineVariable("this", thisType, false);
 
-    // Add method parameters
     for (const auto &param: method.parameters) {
         if (!isTypeDefined(*param.type)) {
             if (param.type->kind == TypeKind::STRUCT) {
@@ -103,14 +99,12 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
         }
     }
 
-    // Validate return type
     if (!isTypeDefined(*method.returnType)) {
         if (method.returnType->kind == TypeKind::STRUCT) {
             errorUndefinedStruct(method.returnType->structName, {});
         }
     }
 
-    // Bind method body or expression
     if (method.body) {
         bindBlock(*method.body);
     } else if (method.expression) {

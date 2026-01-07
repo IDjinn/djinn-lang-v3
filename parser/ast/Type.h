@@ -177,6 +177,9 @@ struct Type : ASTNode {
         } else if (size > 0) {
             os << ", " << size;
         }
+        if (size > 0) {
+            os << ", " << (sign ? "signed" : "unsigned");
+        }
         os << ")";
     }
 

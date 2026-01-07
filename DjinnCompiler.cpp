@@ -50,6 +50,11 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
+        // Print warnings even if compilation succeeds
+        if (diagnostics.warningCount() > 0) {
+            std::cerr << diagnostics.render();
+        }
+
         auto generator = Generator(options.outputFileName);
         generator.generate(*program);
         if (options.print_ir) std::cout << "=====IR=====\n" << generator.print() << "=====";
@@ -272,6 +277,11 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
         if (const auto bindResult = binder.bind(*program); !bindResult.success) {
             diagnostics.printToStderr({});
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+        }
+
+        // Print warnings even if compilation succeeds
+        if (diagnostics.warningCount() > 0) {
+            std::cerr << diagnostics.render();
         }
 
         auto generator = Generator(options.outputFileName);

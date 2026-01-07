@@ -61,7 +61,6 @@ public:
     }
 
     bool defineInterface(std::shared_ptr<InterfaceSymbol> ifaceSym) {
-        // Interfaces are stored with "interface:" prefix to allow same name as struct
         const std::string key = "interface:" + ifaceSym->name;
         if (_symbols.contains(key))
             return false;
@@ -110,7 +109,6 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<InterfaceSymbol> lookupInterface(const std::string &name) const {
-        // Look up with interface prefix
         const std::string key = "interface:" + name;
         if (const auto it = _symbols.find(key); it != _symbols.end()) {
             if (it->second->isInterface()) {
@@ -125,7 +123,6 @@ public:
         return nullptr;
     }
 
-    // Check if a name refers to an interface (for type resolution)
     [[nodiscard]] bool hasInterface(const std::string &name) const {
         return lookupInterface(name) != nullptr;
     }

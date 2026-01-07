@@ -6,6 +6,7 @@
 #define DJINN_BINDER_H
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include "SymbolTable.h"
@@ -121,6 +122,12 @@ private:
     bool resolveType(const Type &type);
 
     bool isTypeDefined(const Type &type);
+
+    // Type inference for expressions
+    std::optional<Type> inferExpressionType(const Expression &expr) const;
+
+    // Type compatibility checking
+    void checkTypeCompatibility(const Type &expected, const Expression &expr, SourceLocation loc);
 
     // Error reporting helpers
     void errorImmutableVariable(const std::string &name, SourceLocation loc) const;

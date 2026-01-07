@@ -35,12 +35,10 @@ void Binder::bindIdentifier(const Identifier &id) const {
         return;
     }
 
-    // Check for function
     if (_current_scope->lookupFunction(id.name)) {
         return;
     }
 
-    // Check for struct (for static method calls like StructName.method())
     if (_global_scope->lookupStruct(id.name)) {
         return;
     }
@@ -145,6 +143,10 @@ void Binder::bindVariableInit(const VariableInit &init) {
             bindBraceInitializer(*braceInit, &init.type);
         } else {
             bindExpression(*init.value);
+            // Check type compatibility (signed/unsigned, float/int, etc.)
+            if (init.type.kind != TypeKind::AUTO) {
+                checkTypeCompatibility(init.type, *init.value, {});
+            }
         }
     }
 
@@ -164,26 +166,47 @@ void Binder::bindAssignment(const Assignment &assign) {
 
         symbol->isInitialized = true;
         _current_scope->markUsed(assign.name);
+
+        // Check type compatibility with existing variable type
+        if (assign.value) {
+            bindExpression(*assign.value);
+            checkTypeCompatibility(symbol->type, *assign.value, {});
+        }
     } else {
         errorUndefinedVariable(assign.name, {});
-    }
-
-    if (assign.value) {
-        bindExpression(*assign.value);
+        if (assign.value) {
+            bindExpression(*assign.value);
+        }
     }
 }
 
 void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expectedType) {
     if (expectedType && expectedType->kind == TypeKind::STRUCT) {
         if (const auto structSym = _global_scope->lookupStruct(expectedType->structName)) {
+            size_t fieldIndex = 0;
             for (const auto &elem: init.elements) {
+                const Type *fieldType = nullptr;
+
                 if (elem.isDesignated()) {
                     if (!structSym->hasField(elem.fieldName)) {
                         errorUndefinedField(expectedType->structName, elem.fieldName, {});
+                    } else {
+                        fieldType = structSym->getFieldType(elem.fieldName);
                     }
+                } else {
+                    // Positional initializer - get field by index
+                    if (fieldIndex < structSym->fields.size()) {
+                        fieldType = &structSym->fields[fieldIndex].type;
+                    }
+                    fieldIndex++;
                 }
+
                 if (elem.value) {
                     bindExpression(*elem.value);
+                    // Check type compatibility for field initialization
+                    if (fieldType) {
+                        checkTypeCompatibility(*fieldType, *elem.value, {});
+                    }
                 }
             }
             return;

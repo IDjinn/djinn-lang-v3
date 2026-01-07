@@ -119,7 +119,7 @@ struct StructSymbol : Symbol {
     std::vector<FieldSymbol> fields;
     std::vector<std::shared_ptr<MethodSymbol> > methods;
     std::vector<std::string> genericParams;
-    std::vector<std::string> implements; // interface names
+    std::vector<std::string> implements;
     std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
 
     [[nodiscard]] bool isGeneric() const {
