@@ -5,5 +5,8 @@ namespace std;
 
 void main() {
     optional<i32> teste = { .value = 11, .has_value = 1 };
-    printf("test = %d", teste.value());
+    result<i32, bool> resul = {.value = 69, .has_value = 1};
+
+    printf("test = %d\n", teste.value());
+    printf("result = %d\n\n", resul.value);
 }

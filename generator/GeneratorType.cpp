@@ -10,16 +10,16 @@
 
 llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs) {
     // Resolve the base name (handle aliases)
-    const std::string qualifiedName = currentScope->resolve_struct_alias(baseName);
+    const std::string qualifiedName = currentScope->resolve_alias(baseName);
 
     // Check if already monomorphized
-    if (llvm::StructType *existing = currentScope->lookup_monomorphized_struct(qualifiedName, typeArgs)) {
-        return existing;
+    if (StructDef *existing = currentScope->lookup_monomorphized(qualifiedName, typeArgs)) {
+        return existing->llvmType;
     }
 
     // Lookup the generic struct definition
-    const GenericStructDef *genericDef = currentScope->lookup_generic_struct(qualifiedName);
-    if (!genericDef) {
+    StructDef *genericDef = currentScope->lookup_struct(qualifiedName);
+    if (!genericDef || !genericDef->isGeneric) {
         throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
                            "generic struct not found: " + baseName);
     }
@@ -29,7 +29,7 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
     for (const auto &argType: typeArgs) {
         args.add(argType);
     }
-    const GenericContext ctx = GenericContext::create(genericDef->params, args);
+    const GenericContext ctx = GenericContext::create(genericDef->genericParams, args);
 
     // Generate field types with substituted generics
     std::vector<llvm::Type *> fieldTypes;
@@ -46,8 +46,18 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
     const std::string mangledName = Mangler::mangle_generic_struct(qualifiedName, typeArgs);
     llvm::StructType *structType = llvm::StructType::create(*context, fieldTypes, mangledName);
 
-    // Register the monomorphized struct
-    currentScope->define_monomorphized_struct(qualifiedName, typeArgs, structType, std::move(fieldIndices));
+    // Create monomorphized StructDef
+    StructDef monoDef(mangledName, false);
+    monoDef.isMonomorphized = true;
+    monoDef.llvmType = structType;
+    monoDef.fieldIndices = std::move(fieldIndices);
+
+    // Copy substituted fields
+    for (const auto &[fieldName, fieldType]: genericDef->fields) {
+        monoDef.fields.emplace_back(fieldName, ctx.substitute(fieldType));
+    }
+
+    currentScope->define_struct(mangledName, std::move(monoDef));
 
     // Save current builder state before generating methods/properties
     llvm::BasicBlock *savedBlock = builder->GetInsertBlock();
@@ -73,7 +83,7 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
 }
 
 void Generator::monomorphize_method(const StructMethodDeclaration &method,
-                                    const GenericStructDef &genericDef,
+                                    const StructDef &genericDef,
                                     llvm::StructType *monomorphizedType,
                                     const GenericContext &ctx,
                                     const std::string &mangledStructName) {
@@ -109,7 +119,12 @@ void Generator::monomorphize_method(const StructMethodDeclaration &method,
     );
 
     functions[mangledMethodName] = llvmFunc;
-    currentScope->define_method(mangledStructName, method.name, llvmFunc);
+
+    // Store method in the monomorphized struct def
+    if (StructDef *monoDef = currentScope->lookup_struct(mangledStructName)) {
+        monoDef->methodFunctions[method.name] = llvmFunc;
+    }
+
     currentFunction = llvmFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -175,6 +190,9 @@ void Generator::monomorphize_property(const StructProperty &prop,
                                       llvm::StructType *monomorphizedType,
                                       const GenericContext &ctx,
                                       const std::string &mangledStructName) {
+    StructDef *monoDef = currentScope->lookup_struct(mangledStructName);
+    if (!monoDef) return;
+
     // Register property info
     PropertyInfo propInfo;
     propInfo.name = prop.name;
@@ -184,21 +202,19 @@ void Generator::monomorphize_property(const StructProperty &prop,
     // For auto-properties, find the backing field
     if (prop.isAutoProperty()) {
         propInfo.backingFieldName = prop.backingFieldName();
-        const auto *fieldIndices = currentScope->lookup_field_indices(mangledStructName);
-        if (fieldIndices) {
-            if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
-                propInfo.backingFieldIndex = it->second;
-            }
+        if (auto it = monoDef->fieldIndices.find(propInfo.backingFieldName); it != monoDef->fieldIndices.end()) {
+            propInfo.backingFieldIndex = it->second;
         }
     }
 
-    currentScope->define_property(mangledStructName, propInfo);
+    monoDef->propertyInfos[prop.name] = propInfo;
 
     // Substitute generic types in property type
     Type substitutedType = ctx.substitute(*prop.type);
 
-    // Generate getter
-    if (prop.hasGetter) {
+    // Generate getter only for computed properties (with explicit body/expression)
+    // Auto-properties access the field directly
+    if (prop.hasGetter && (prop.getterBody || prop.getterExpr)) {
         push_scope();
 
         const std::string getterName = mangledStructName + "__get_" + prop.name;
@@ -216,7 +232,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
         );
 
         functions[getterName] = llvmFunc;
-        currentScope->define_method(mangledStructName, "get_" + prop.name, llvmFunc);
+        monoDef->methodFunctions["get_" + prop.name] = llvmFunc;
         currentFunction = llvmFunc;
 
         auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -235,18 +251,6 @@ void Generator::monomorphize_property(const StructProperty &prop,
         } else if (prop.getterExpr) {
             llvm::Value *result = generate_expression(*prop.getterExpr);
             builder->CreateRet(result);
-        } else {
-            // Auto-implemented getter
-            llvm::Value *thisPtr = builder->CreateLoad(argIt->getType(), thisAlloca, "this");
-            const auto *fieldIndices = currentScope->lookup_field_indices(mangledStructName);
-            if (fieldIndices) {
-                if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
-                    auto *fieldPtr = builder->CreateStructGEP(monomorphizedType, thisPtr, it->second);
-                    llvm::Type *fieldType = monomorphizedType->getElementType(it->second);
-                    llvm::Value *fieldVal = builder->CreateLoad(fieldType, fieldPtr);
-                    builder->CreateRet(fieldVal);
-                }
-            }
         }
 
         if (!builder->GetInsertBlock()->getTerminator()) {
@@ -256,8 +260,9 @@ void Generator::monomorphize_property(const StructProperty &prop,
         pop_scope();
     }
 
-    // Generate setter
-    if (prop.hasSetter) {
+    // Generate setter only for computed properties (with explicit body/expression)
+    // Auto-properties access the field directly
+    if (prop.hasSetter && (prop.setterBody || prop.setterExpr)) {
         push_scope();
 
         const std::string setterName = mangledStructName + "__set_" + prop.name;
@@ -276,7 +281,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
         );
 
         functions[setterName] = llvmFunc;
-        currentScope->define_method(mangledStructName, "set_" + prop.name, llvmFunc);
+        monoDef->methodFunctions["set_" + prop.name] = llvmFunc;
         currentFunction = llvmFunc;
 
         auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -300,18 +305,6 @@ void Generator::monomorphize_property(const StructProperty &prop,
             }
         } else if (prop.setterExpr) {
             generate_expression(*prop.setterExpr);
-        } else {
-            // Auto-implemented setter
-            llvm::Value *thisPtr = builder->CreateLoad(llvmFunc->arg_begin()->getType(), thisAlloca, "this");
-            llvm::Value *newValue = builder->CreateLoad(valueType, valueAlloca, "value");
-
-            const auto *fieldIndices = currentScope->lookup_field_indices(mangledStructName);
-            if (fieldIndices) {
-                if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
-                    auto *fieldPtr = builder->CreateStructGEP(monomorphizedType, thisPtr, it->second);
-                    builder->CreateStore(newValue, fieldPtr);
-                }
-            }
         }
 
         if (!builder->GetInsertBlock()->getTerminator()) {
@@ -356,7 +349,7 @@ llvm::Type *Generator::generate_type(const Type &type) {
         }
         case TypeKind::STRUCT: {
             // Check for transparent type first
-            if (llvm::Type *transparentType = currentScope->lookup_transparent_type(type.structName)) {
+            if (llvm::Type *transparentType = currentScope->get_transparent_type(type.structName)) {
                 return transparentType;
             }
 
@@ -368,13 +361,13 @@ llvm::Type *Generator::generate_type(const Type &type) {
             // Check if this is a reference to a generic parameter (unresolved T)
             // This should only happen if we're generating code for a generic struct
             // without proper context - which is an error
-            if (currentScope->has_generic_struct(type.structName)) {
+            if (currentScope->is_generic(type.structName)) {
                 throw CompileError(DiagnosticCode::INVALID_TYPE,
                                    "generic struct '" + type.structName + "' requires type arguments");
             }
 
             // Regular non-generic struct lookup
-            llvm::StructType *structType = currentScope->lookup_struct(type.structName);
+            llvm::StructType *structType = currentScope->get_llvm_struct(type.structName);
             if (!structType) {
                 throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct not found: " + type.structName);
             }

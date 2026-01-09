@@ -2,12 +2,10 @@ namespace std::types;
 
 struct size : u32;
 struct size_long : u64;
+
 struct c_result : i32;
 
-[Primitive]
-struct bool : i1{
-
-}
+struct bool : i1;
 
 struct optional<T> {
     T value;
@@ -16,4 +14,10 @@ struct optional<T> {
     T value() {
         return this.value;
     }
+}
+
+struct result<T, E> {
+    T value { get; }
+    E error { get; }
+    bool has_value { get; }
 }

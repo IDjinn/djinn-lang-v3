@@ -12,10 +12,10 @@ llvm::Value *Generator::generate_assignment(const Assignment &expr) {
         if (llvm::AllocaInst *thisAlloca = currentScope->lookup_variable("this")) {
             const std::string structName = currentScope->lookup_variable_struct_type("this");
             if (!structName.empty()) {
-                if (const auto *fieldIndices = currentScope->lookup_field_indices(structName)) {
+                if (const auto *fieldIndices = currentScope->get_field_indices(structName)) {
                     if (const auto it = fieldIndices->find(expr.name); it != fieldIndices->end()) {
                         // Assign to field through 'this'
-                        llvm::StructType *structType = currentScope->lookup_struct(structName);
+                        llvm::StructType *structType = currentScope->get_llvm_struct(structName);
                         if (structType) {
                             llvm::Value *val = generate_expression(*expr.value);
                             if (val) {

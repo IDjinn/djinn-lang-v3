@@ -318,7 +318,7 @@ llvm::Value *Generator::generate_brace_init_for_struct(const BraceInitializer &b
     auto *alloca = builder->CreateAlloca(structType, nullptr, "struct_init");
     builder->CreateStore(llvm::Constant::getNullValue(structType), alloca);
 
-    const auto *fieldIndices = currentScope->lookup_field_indices(structName);
+    const auto *fieldIndices = currentScope->get_field_indices(structName);
     if (!fieldIndices) {
         throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
     }

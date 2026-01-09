@@ -137,9 +137,9 @@ struct StructProperty : ASTNode {
         return isAutoProperty();
     }
 
-    // Get the backing field name (_name)
+    // Get the backing field name (same as property name for auto-properties)
     [[nodiscard]] std::string backingFieldName() const {
-        return "_" + name;
+        return name;
     }
 
     void print(std::ostream &os, const int indent = 0) const override {

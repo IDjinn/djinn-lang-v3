@@ -115,9 +115,21 @@ struct MethodSymbol : Symbol {
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
 };
 
+struct PropertySymbol {
+    std::string name;
+    Type type;
+    bool hasGetter = false;
+    bool hasSetter = false;
+
+    PropertySymbol(std::string n, Type t, bool getter, bool setter)
+        : name(std::move(n)), type(std::move(t)), hasGetter(getter), hasSetter(setter) {
+    }
+};
+
 struct StructSymbol : Symbol {
     std::vector<FieldSymbol> fields;
     std::vector<std::shared_ptr<MethodSymbol> > methods;
+    std::vector<PropertySymbol> properties;
     std::vector<std::string> genericParams;
     std::vector<std::string> implements;
     std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
@@ -160,6 +172,35 @@ struct StructSymbol : Symbol {
             if (field.name == name) return true;
         }
         return false;
+    }
+
+    void addProperty(const std::string &propName, const Type &propType, bool hasGetter, bool hasSetter) {
+        properties.emplace_back(propName, propType, hasGetter, hasSetter);
+    }
+
+    [[nodiscard]] bool hasProperty(const std::string &name) const {
+        for (const auto &prop: properties) {
+            if (prop.name == name) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] const Type *getPropertyType(const std::string &name) const {
+        for (const auto &prop: properties) {
+            if (prop.name == name) return &prop.type;
+        }
+        return nullptr;
+    }
+
+    // Check if struct has field OR property
+    [[nodiscard]] bool hasMember(const std::string &name) const {
+        return hasField(name) || hasProperty(name);
+    }
+
+    // Get type of field or property
+    [[nodiscard]] const Type *getMemberType(const std::string &name) const {
+        if (const Type *t = getFieldType(name)) return t;
+        return getPropertyType(name);
     }
 
     [[nodiscard]] bool hasMethod(const std::string &name) const {

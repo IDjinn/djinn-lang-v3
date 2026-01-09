@@ -16,7 +16,7 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
             }
 
             // Resolve qualified name base for method lookup
-            std::string qualifiedName = currentScope->resolve_struct_alias(expr.type.structName);
+            std::string qualifiedName = currentScope->resolve_alias(expr.type.structName);
 
             // Get the correct name for field indices lookup (mangled for generics)
             std::string fieldIndicesName = expr.type.hasGenericArgs()
@@ -26,7 +26,7 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
             auto *alloca = builder->CreateAlloca(structType, nullptr, expr.name);
             currentScope->define_variable(expr.name, alloca, qualifiedName);
 
-            const auto *fieldIndices = currentScope->lookup_field_indices(fieldIndicesName);
+            const auto *fieldIndices = currentScope->get_field_indices(fieldIndicesName);
             if (!fieldIndices) {
                 throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
                                    "struct não encontrada: " + expr.type.structName);

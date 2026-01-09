@@ -36,25 +36,25 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) {
             if (allocatedType->isPointerTy()) {
                 // 'this' is a pointer to struct, need to load it first
                 basePtr = builder->CreateLoad(allocatedType, alloca, ident->name);
-                structType = currentScope->lookup_struct(structName);
+                structType = currentScope->get_llvm_struct(structName);
             } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
                 structType = llvmStructType;
             } else {
-                structType = currentScope->lookup_struct(structName);
+                structType = currentScope->get_llvm_struct(structName);
             }
         }
 
         // Use the LLVM struct name for field indices lookup (handles mangled generic names)
         std::string fieldIndicesName = structType ? structType->getName().str() : structName;
 
-        // Check if this is a property access - call getter instead
-        if (const PropertyInfo *propInfo = currentScope->lookup_property(fieldIndicesName, expr.fieldName)) {
+        // Check if this is a property access
+        if (const PropertyInfo *propInfo = currentScope->get_property(fieldIndicesName, expr.fieldName)) {
             if (!propInfo->hasGetter) {
                 throw CompileError(DiagnosticCode::INVALID_OPERATION,
-                                   "property '" + expr.fieldName + "' does not have a getter");
+                                   "property '" + expr.fieldName + "' does not have a getter (write-only)");
             }
 
-            // Call the getter: structName__get_propName(this*)
+            // Try to call getter (for computed properties)
             const std::string getterName = fieldIndicesName + "__get_" + expr.fieldName;
             if (const auto it = functions.find(getterName); it != functions.end()) {
                 llvm::Function *getter = it->second;
@@ -62,18 +62,18 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) {
                 // Get pointer to the object for 'this'
                 llvm::Value *thisPtr = basePtr;
                 if (!basePtr->getType()->isPointerTy()) {
-                    // Need to create a pointer to the struct
                     thisPtr = alloca;
                 }
 
                 return builder->CreateCall(getter, {thisPtr}, expr.fieldName);
             }
-            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                               "getter not found for property: " + expr.fieldName);
+
+            // Auto-property: no getter function, access field directly
+            // Fall through to regular field access
         }
 
-        // Regular field access
-        const auto *fieldIndices = currentScope->lookup_field_indices(fieldIndicesName);
+        // Regular field access (including auto-properties)
+        const auto *fieldIndices = currentScope->get_field_indices(fieldIndicesName);
         if (!fieldIndices) {
             throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
         }
@@ -112,7 +112,7 @@ llvm::Value *Generator::generate_field_assignment(const FieldAssignment &expr) {
                 if (structName.empty()) {
                     throw CompileError(DiagnosticCode::NOT_A_STRUCT, "variável não é uma struct: " + ident->name);
                 }
-                structType = currentScope->lookup_struct(structName);
+                structType = currentScope->get_llvm_struct(structName);
             } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
                 structType = llvmStructType;
                 structName = llvmStructType->getName().str();
@@ -124,25 +124,25 @@ llvm::Value *Generator::generate_field_assignment(const FieldAssignment &expr) {
             llvm::Type *allocatedType = alloca->getAllocatedType();
             if (allocatedType->isPointerTy()) {
                 basePtr = builder->CreateLoad(allocatedType, alloca, ident->name);
-                structType = currentScope->lookup_struct(structName);
+                structType = currentScope->get_llvm_struct(structName);
             } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
                 structType = llvmStructType;
             } else {
-                structType = currentScope->lookup_struct(structName);
+                structType = currentScope->get_llvm_struct(structName);
             }
         }
 
         // Use the LLVM struct name for lookups (handles mangled generic names)
         std::string fieldIndicesName = structType ? structType->getName().str() : structName;
 
-        // Check if this is a property assignment - call setter instead
-        if (const PropertyInfo *propInfo = currentScope->lookup_property(fieldIndicesName, expr.fieldName)) {
+        // Check if this is a property assignment
+        if (const PropertyInfo *propInfo = currentScope->get_property(fieldIndicesName, expr.fieldName)) {
             if (!propInfo->hasSetter) {
                 throw CompileError(DiagnosticCode::INVALID_OPERATION,
                                    "property '" + expr.fieldName + "' does not have a setter (read-only)");
             }
 
-            // Call the setter: structName__set_propName(this*, value)
+            // Try to call setter (for computed properties)
             const std::string setterName = fieldIndicesName + "__set_" + expr.fieldName;
             if (const auto it = functions.find(setterName); it != functions.end()) {
                 llvm::Function *setter = it->second;
@@ -163,12 +163,13 @@ llvm::Value *Generator::generate_field_assignment(const FieldAssignment &expr) {
                 builder->CreateCall(setter, {thisPtr, val});
                 return val;
             }
-            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                               "setter not found for property: " + expr.fieldName);
+
+            // Auto-property: no setter function, access field directly
+            // Fall through to regular field assignment
         }
 
-        // Regular field assignment
-        const auto *fieldIndices = currentScope->lookup_field_indices(fieldIndicesName);
+        // Regular field assignment (including auto-properties)
+        const auto *fieldIndices = currentScope->get_field_indices(fieldIndicesName);
         if (!fieldIndices) {
             throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
         }

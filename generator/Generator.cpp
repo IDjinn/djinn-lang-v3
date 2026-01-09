@@ -47,38 +47,13 @@ void Generator::generate(const Program &program) {
     for (const auto &import: program.imports) {
         const std::string nsPath = import->namespacePath.toString();
 
-        // Cria aliases para structs
-        for (const auto &[name, structType]: currentScope->structTypes) {
+        // Cria aliases para todas as structs (regular, transparent, generic)
+        for (const auto &[name, structDef]: currentScope->structs) {
             if (name.starts_with(nsPath + "::")) {
                 const std::string shortName = name.substr(nsPath.length() + 2);
                 if (shortName.find("::") == std::string::npos) {
                     if (!currentScope->has_struct_in_current_scope(shortName)) {
-                        currentScope->define_struct_alias(shortName, name);
-                    }
-                }
-            }
-        }
-
-        // Cria aliases para tipos transparentes
-        for (const auto &[name, type]: currentScope->transparentTypes) {
-            if (name.starts_with(nsPath + "::")) {
-                const std::string shortName = name.substr(nsPath.length() + 2);
-                if (shortName.find("::") == std::string::npos) {
-                    if (!currentScope->is_transparent_type(shortName)) {
-                        currentScope->define_transparent_alias(shortName, name);
-                    }
-                }
-            }
-        }
-
-        // Cria aliases para generic structs
-        for (const auto &[name, genericDef]: currentScope->genericStructs) {
-            if (name.starts_with(nsPath + "::")) {
-                const std::string shortName = name.substr(nsPath.length() + 2);
-                if (shortName.find("::") == std::string::npos) {
-                    if (!currentScope->has_struct_in_current_scope(shortName) &&
-                        !currentScope->has_generic_struct(shortName)) {
-                        currentScope->define_struct_alias(shortName, name);
+                        currentScope->define_alias(shortName, name);
                     }
                 }
             }

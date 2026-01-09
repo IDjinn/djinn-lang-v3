@@ -344,8 +344,8 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
             // Save position to distinguish field from method
             const size_t saved = current;
 
+            const auto isMutable = match(TokenType::MUT);
             auto fieldType = parse_type();
-
             if (!check(TokenType::IDENTIFIER)) {
                 current = saved;
                 methods.push_back(parse_method(true));
@@ -371,6 +371,14 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
         }
 
         expect("Esperado '}'", TokenType::RBRACE);
+    }
+
+    // Auto-properties generate fields with the same name
+    // The property metadata controls access (get/set permissions)
+    for (const auto &prop: structDecl_properties) {
+        if (prop.isAutoProperty()) {
+            fields.emplace_back(std::make_unique<Type>(*prop.type), prop.name);
+        }
     }
 
     auto structDecl = std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));

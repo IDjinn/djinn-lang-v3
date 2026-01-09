@@ -13,10 +13,10 @@ llvm::Value *Generator::generate_identifier(const Identifier &expr) const {
     if (llvm::AllocaInst *thisAlloca = currentScope->lookup_variable("this")) {
         const std::string structName = currentScope->lookup_variable_struct_type("this");
         if (!structName.empty()) {
-            if (const auto *fieldIndices = currentScope->lookup_field_indices(structName)) {
+            if (const auto *fieldIndices = currentScope->get_field_indices(structName)) {
                 if (const auto it = fieldIndices->find(expr.name); it != fieldIndices->end()) {
                     // Access field through 'this'
-                    llvm::StructType *structType = currentScope->lookup_struct(structName);
+                    llvm::StructType *structType = currentScope->get_llvm_struct(structName);
                     if (structType) {
                         llvm::Value *thisPtr = builder->CreateLoad(thisAlloca->getAllocatedType(), thisAlloca, "this");
                         auto *fieldPtr = builder->CreateStructGEP(structType, thisPtr, it->second, expr.name + "_ptr");

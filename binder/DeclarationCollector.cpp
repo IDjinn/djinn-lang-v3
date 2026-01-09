@@ -58,6 +58,16 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
         }
     }
 
+    // Collect properties (access control metadata)
+    // Auto-properties have a field with the same name, so skip duplicate check for them
+    for (const auto &prop: decl.properties) {
+        if (!prop.isAutoProperty() && structSym->hasMember(prop.name)) {
+            errorDuplicateDefinition(prop.name, SymbolKind::Field, {});
+        } else {
+            structSym->addProperty(prop.name, *prop.type, prop.hasGetter, prop.hasSetter);
+        }
+    }
+
     // Collect base type for transparent types (struct Size : i32;)
     if (decl.baseType) {
         structSym->baseType = std::make_unique<Type>(*decl.baseType);
@@ -133,6 +143,16 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
             errorDuplicateDefinition(field.name, SymbolKind::Field, {});
         } else {
             structSym->addField(field.name, *field.type);
+        }
+    }
+
+    // Collect properties (access control metadata)
+    // Auto-properties have a field with the same name, so skip duplicate check for them
+    for (const auto &prop: decl.properties) {
+        if (!prop.isAutoProperty() && structSym->hasMember(prop.name)) {
+            errorDuplicateDefinition(prop.name, SymbolKind::Field, {});
+        } else {
+            structSym->addProperty(prop.name, *prop.type, prop.hasGetter, prop.hasSetter);
         }
     }
 

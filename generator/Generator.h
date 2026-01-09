@@ -83,7 +83,7 @@ private:
     llvm::StructType *monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs);
 
     void monomorphize_method(const StructMethodDeclaration &method,
-                             const GenericStructDef &genericDef,
+                             const StructDef &genericDef,
                              llvm::StructType *monomorphizedType,
                              const GenericContext &ctx,
                              const std::string &mangledStructName);
