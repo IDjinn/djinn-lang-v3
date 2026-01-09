@@ -110,6 +110,58 @@ struct StructField : ASTNode {
     }
 };
 
+// Property with getter/setter (C# style)
+// Syntax: T name { get; set; } or T name { get { ... } set { ... } }
+struct StructProperty : ASTNode {
+    std::unique_ptr<Type> type;
+    std::string name;
+    bool hasGetter = false;
+    bool hasSetter = false;
+    std::unique_ptr<Block> getterBody; // null = auto-implemented
+    std::unique_ptr<Block> setterBody; // null = auto-implemented
+    std::unique_ptr<Expression> getterExpr; // => expr for getter
+    std::unique_ptr<Expression> setterExpr; // => expr for setter
+
+    StructProperty(std::unique_ptr<Type> type, std::string name)
+        : type(std::move(type)), name(std::move(name)) {
+    }
+
+    // Is this an auto-property? (no custom implementation)
+    [[nodiscard]] bool isAutoProperty() const {
+        return (hasGetter && !getterBody && !getterExpr) ||
+               (hasSetter && !setterBody && !setterExpr);
+    }
+
+    // Needs a backing field generated automatically
+    [[nodiscard]] bool needsBackingField() const {
+        return isAutoProperty();
+    }
+
+    // Get the backing field name (_name)
+    [[nodiscard]] std::string backingFieldName() const {
+        return "_" + name;
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "StructProperty(" << name << ": " << *type << " { ";
+        if (hasGetter) {
+            os << "get";
+            if (getterBody) os << " { ... }";
+            else if (getterExpr) os << " => ...";
+            else os << ";";
+            os << " ";
+        }
+        if (hasSetter) {
+            os << "set";
+            if (setterBody) os << " { ... }";
+            else if (setterExpr) os << " => ...";
+            else os << ";";
+        }
+        os << " })";
+    }
+};
+
 struct AttributeUsageDeclaration : ASTNode {
     std::string name;
     // std::vector<Parameter> parameters;
@@ -132,6 +184,7 @@ struct StructDeclaration : ASTNode {
     std::string name;
     GenericParams genericParams;
     std::vector<StructField> fields;
+    std::vector<StructProperty> properties; // C# style properties { get; set; }
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
     std::vector<std::string> implements; // interfaces this struct implements
     std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
@@ -186,6 +239,10 @@ struct StructDeclaration : ASTNode {
         os << ")\n";
         for (const auto &field: fields) {
             field.print(os, indent + 2);
+            os << '\n';
+        }
+        for (const auto &prop: properties) {
+            prop.print(os, indent + 2);
             os << '\n';
         }
         for (const auto &method: methods) {

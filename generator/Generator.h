@@ -63,6 +63,10 @@ private:
     void generate_method(const StructMethodDeclaration &method, const StructDeclaration &struc,
                          llvm::StructType *structType);
 
+    // Property generation (C# style getters/setters)
+    void generate_property(const StructProperty &prop, const StructDeclaration &struc,
+                           llvm::StructType *structType, const std::string &qualifiedName);
+
     void generate_function(const FunctionDeclaration &func, const std::string &prefix = "");
 
     void generate_extern_function(const ExternFunctionDeclaration &decl);
@@ -83,6 +87,11 @@ private:
                              llvm::StructType *monomorphizedType,
                              const GenericContext &ctx,
                              const std::string &mangledStructName);
+
+    void monomorphize_property(const StructProperty &prop,
+                               llvm::StructType *monomorphizedType,
+                               const GenericContext &ctx,
+                               const std::string &mangledStructName);
 
     llvm::Type *generate_type_with_context(const Type &type, const GenericContext *ctx);
 
@@ -124,7 +133,7 @@ private:
 
     llvm::Value *generate_variable_declaration(const VariableDeclaration &expr);
 
-    llvm::Value *generate_field_access(const FieldAccess &expr) const;
+    llvm::Value *generate_field_access(const FieldAccess &expr);
 
     llvm::Value *generate_field_assignment(const FieldAssignment &expr);
 

@@ -277,7 +277,7 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
 }
 
 std::unique_ptr<StructDeclaration> Parser::parse_struct() {
-    std::vector<AttributeUsageDeclaration> attributes =  this->parse_attributes();
+    std::vector<AttributeUsageDeclaration> attributes = this->parse_attributes();
     expect("Esperado 'struct'", TokenType::STRUCT);
     const auto name = match(TokenType::IDENTIFIER) ? previous().value : Type::generate_struct_name();
 
@@ -329,6 +329,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     }
 
     std::vector<StructField> fields;
+    std::vector<StructProperty> structDecl_properties;
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
     if (!match(TokenType::LBRACE)) {
         expect("expected semi colon for no-body struct", TokenType::SEMICOLON);
@@ -353,11 +354,15 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
 
             const auto memberName = expect("Esperado nome", TokenType::IDENTIFIER).value;
 
-            // Check if this is a method (has parenthesis) or field (has semicolon)
+            // Check if this is a method (has parenthesis), property (has brace), or field (has semicolon)
             if (check(TokenType::LPAREN) || check(TokenType::LESS)) {
                 // It's a method - backtrack and parse as method
                 current = saved;
                 methods.push_back(parse_method(true));
+            } else if (check(TokenType::LBRACE)) {
+                // It's a property: T name { get; set; }
+                auto prop = parse_property(std::move(fieldType), memberName);
+                structDecl_properties.push_back(std::move(prop));
             } else {
                 // It's a field
                 expect("Esperado ';' após campo", TokenType::SEMICOLON);
@@ -369,6 +374,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     }
 
     auto structDecl = std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));
+    structDecl->properties = std::move(structDecl_properties);
     structDecl->methods = std::move(methods);
     structDecl->implements = std::move(implements);
     structDecl->baseType = std::move(baseType);
@@ -376,13 +382,69 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     return structDecl;
 }
 
+// Parse property: T name { get; set; } or T name { get { ... } set { ... } }
+StructProperty Parser::parse_property(std::unique_ptr<Type> type, const std::string &name) {
+    StructProperty prop(std::move(type), name);
+
+    expect("Esperado '{' para property", TokenType::LBRACE);
+
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        // Check for 'get' or 'set'
+        if (peek().value == "get") {
+            advance(); // consume 'get'
+            prop.hasGetter = true;
+
+            if (match(TokenType::SEMICOLON)) {
+                // Auto-implemented getter: get;
+                // getterBody stays null
+            } else if (match(TokenType::ARROW)) {
+                // Expression body: get => expr;
+                prop.getterExpr = parse_expression();
+                expect("Esperado ';' após expressão do getter", TokenType::SEMICOLON);
+            } else if (check(TokenType::LBRACE)) {
+                // Block body: get { ... }
+                prop.getterBody = parse_block();
+            } else {
+                throw std::runtime_error("Esperado ';', '=>' ou '{' após 'get'");
+            }
+        } else if (peek().value == "set") {
+            advance(); // consume 'set'
+            prop.hasSetter = true;
+
+            if (match(TokenType::SEMICOLON)) {
+                // Auto-implemented setter: set;
+                // setterBody stays null
+            } else if (match(TokenType::ARROW)) {
+                // Expression body: set => expr;
+                prop.setterExpr = parse_expression();
+                expect("Esperado ';' após expressão do setter", TokenType::SEMICOLON);
+            } else if (check(TokenType::LBRACE)) {
+                // Block body: set { ... }
+                prop.setterBody = parse_block();
+            } else {
+                throw std::runtime_error("Esperado ';', '=>' ou '{' após 'set'");
+            }
+        } else {
+            throw std::runtime_error("Esperado 'get' ou 'set' em property, encontrado: " + peek().value);
+        }
+    }
+
+    expect("Esperado '}' após property", TokenType::RBRACE);
+
+    if (!prop.hasGetter && !prop.hasSetter) {
+        throw std::runtime_error("Property deve ter pelo menos 'get' ou 'set'");
+    }
+
+    return prop;
+}
+
 std::vector<AttributeUsageDeclaration> Parser::parse_attributes() {
     std::vector<AttributeUsageDeclaration> attributes;
     while (check(TokenType::LBRACKET)) {
-        expect("Esperado '[' no uso de Atributos" ,TokenType::LBRACKET);
+        expect("Esperado '[' no uso de Atributos", TokenType::LBRACKET);
         const auto identifier = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
         attributes.emplace_back(identifier.value);
-        expect("Esperado ']' no uso de Atributos" ,TokenType::RBRACKET);
+        expect("Esperado ']' no uso de Atributos", TokenType::RBRACKET);
     }
 
     return attributes;

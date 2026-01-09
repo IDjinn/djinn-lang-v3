@@ -50,6 +50,11 @@ void Generator::forward_declare_struct(const StructDeclaration &struct_declarati
             genericDef.methods.push_back(method.get());
         }
 
+        // Store properties for monomorphization
+        for (const auto &prop: struct_declaration.properties) {
+            genericDef.properties.push_back(&prop);
+        }
+
         currentScope->define_generic_struct(qualifiedName, std::move(genericDef));
     }
 }
@@ -111,8 +116,173 @@ void Generator::generate_struct_methods(const StructDeclaration &struct_declarat
         throw std::runtime_error("Struct not found for method generation: " + qualifiedName);
     }
 
+    // Generate properties (getters/setters)
+    for (const auto &prop: struct_declaration.properties) {
+        generate_property(prop, struct_declaration, structType, qualifiedName);
+    }
+
     for (const auto &method: struct_declaration.methods) {
         generate_method(*method, struct_declaration, structType);
+    }
+}
+
+// Generate a C#-style property with getter and/or setter
+void Generator::generate_property(const StructProperty &prop, const StructDeclaration &struc,
+                                  llvm::StructType *structType, const std::string &qualifiedName) {
+    const std::string &structName = struc.name;
+
+    // Register property info
+    PropertyInfo propInfo;
+    propInfo.name = prop.name;
+    propInfo.hasGetter = prop.hasGetter;
+    propInfo.hasSetter = prop.hasSetter;
+
+    // For auto-properties, we use an existing field or the backing field name
+    // The backing field should be defined as a regular field in the struct
+    // e.g., T _value; T value { get; set; }
+    if (prop.isAutoProperty()) {
+        propInfo.backingFieldName = prop.backingFieldName();
+        // Find the backing field index
+        const auto *fieldIndices = currentScope->lookup_field_indices(qualifiedName);
+        if (fieldIndices) {
+            if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
+                propInfo.backingFieldIndex = it->second;
+            }
+        }
+    }
+
+    currentScope->define_property(qualifiedName, propInfo);
+
+    // Generate getter method: T get_<name>(this*)
+    if (prop.hasGetter) {
+        push_scope();
+
+        const std::string getterName = qualifiedName + "__get_" + prop.name;
+        llvm::Type *returnType = generate_type(*prop.type);
+
+        std::vector<llvm::Type *> paramTypes;
+        paramTypes.push_back(llvm::PointerType::get(structType, 0)); // this pointer
+
+        auto *funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+        auto *llvmFunc = llvm::Function::Create(
+            funcType,
+            llvm::Function::ExternalLinkage,
+            getterName,
+            *module
+        );
+
+        functions[getterName] = llvmFunc;
+        currentScope->define_method(qualifiedName, "get_" + prop.name, llvmFunc);
+        currentFunction = llvmFunc;
+
+        auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+        builder->SetInsertPoint(entry);
+
+        // Define 'this' parameter
+        auto argIt = llvmFunc->arg_begin();
+        argIt->setName("this");
+        auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, qualifiedName);
+
+        if (prop.getterBody) {
+            // Custom getter body
+            for (const auto &stmt: prop.getterBody->statements) {
+                generate_statement(*stmt);
+            }
+        } else if (prop.getterExpr) {
+            // Expression body: get => expr;
+            llvm::Value *result = generate_expression(*prop.getterExpr);
+            builder->CreateRet(result);
+        } else {
+            // Auto-implemented getter: return this._backingField;
+            llvm::Value *thisPtr = builder->CreateLoad(argIt->getType(), thisAlloca, "this");
+            const auto *fieldIndices = currentScope->lookup_field_indices(qualifiedName);
+            if (fieldIndices) {
+                if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
+                    auto *fieldPtr = builder->CreateStructGEP(structType, thisPtr, it->second);
+                    llvm::Type *fieldType = structType->getElementType(it->second);
+                    llvm::Value *fieldVal = builder->CreateLoad(fieldType, fieldPtr);
+                    builder->CreateRet(fieldVal);
+                }
+            }
+        }
+
+        // Add default return if needed
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateRet(llvm::Constant::getNullValue(returnType));
+        }
+
+        pop_scope();
+    }
+
+    // Generate setter method: void set_<name>(this*, T value)
+    if (prop.hasSetter) {
+        push_scope();
+
+        const std::string setterName = qualifiedName + "__set_" + prop.name;
+        llvm::Type *valueType = generate_type(*prop.type);
+
+        std::vector<llvm::Type *> paramTypes;
+        paramTypes.push_back(llvm::PointerType::get(structType, 0)); // this pointer
+        paramTypes.push_back(valueType); // value parameter
+
+        auto *funcType = llvm::FunctionType::get(builder->getVoidTy(), paramTypes, false);
+        auto *llvmFunc = llvm::Function::Create(
+            funcType,
+            llvm::Function::ExternalLinkage,
+            setterName,
+            *module
+        );
+
+        functions[setterName] = llvmFunc;
+        currentScope->define_method(qualifiedName, "set_" + prop.name, llvmFunc);
+        currentFunction = llvmFunc;
+
+        auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+        builder->SetInsertPoint(entry);
+
+        // Define 'this' and 'value' parameters
+        auto argIt = llvmFunc->arg_begin();
+        argIt->setName("this");
+        auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, qualifiedName);
+        ++argIt;
+
+        argIt->setName("value");
+        auto *valueAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "value");
+        builder->CreateStore(&*argIt, valueAlloca);
+        currentScope->define_variable("value", valueAlloca);
+
+        if (prop.setterBody) {
+            // Custom setter body
+            for (const auto &stmt: prop.setterBody->statements) {
+                generate_statement(*stmt);
+            }
+        } else if (prop.setterExpr) {
+            // Expression body: set => expr;
+            generate_expression(*prop.setterExpr);
+        } else {
+            // Auto-implemented setter: this._backingField = value;
+            llvm::Value *thisPtr = builder->CreateLoad(llvmFunc->arg_begin()->getType(), thisAlloca, "this");
+            llvm::Value *newValue = builder->CreateLoad(valueType, valueAlloca, "value");
+
+            const auto *fieldIndices = currentScope->lookup_field_indices(qualifiedName);
+            if (fieldIndices) {
+                if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
+                    auto *fieldPtr = builder->CreateStructGEP(structType, thisPtr, it->second);
+                    builder->CreateStore(newValue, fieldPtr);
+                }
+            }
+        }
+
+        // Add return
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateRetVoid();
+        }
+
+        pop_scope();
     }
 }
 

@@ -49,16 +49,21 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
     // Register the monomorphized struct
     currentScope->define_monomorphized_struct(qualifiedName, typeArgs, structType, std::move(fieldIndices));
 
-    // Save current builder state before generating methods
+    // Save current builder state before generating methods/properties
     llvm::BasicBlock *savedBlock = builder->GetInsertBlock();
     llvm::Function *savedFunction = currentFunction;
+
+    // Generate properties for this monomorphized type
+    for (const auto *prop: genericDef->properties) {
+        monomorphize_property(*prop, structType, ctx, mangledName);
+    }
 
     // Generate methods for this monomorphized type
     for (const auto *method: genericDef->methods) {
         monomorphize_method(*method, *genericDef, structType, ctx, mangledName);
     }
 
-    // Restore builder state after generating methods
+    // Restore builder state after generating methods/properties
     if (savedBlock) {
         builder->SetInsertPoint(savedBlock);
     }
@@ -164,6 +169,157 @@ void Generator::monomorphize_method(const StructMethodDeclaration &method,
     }
 
     pop_scope();
+}
+
+void Generator::monomorphize_property(const StructProperty &prop,
+                                      llvm::StructType *monomorphizedType,
+                                      const GenericContext &ctx,
+                                      const std::string &mangledStructName) {
+    // Register property info
+    PropertyInfo propInfo;
+    propInfo.name = prop.name;
+    propInfo.hasGetter = prop.hasGetter;
+    propInfo.hasSetter = prop.hasSetter;
+
+    // For auto-properties, find the backing field
+    if (prop.isAutoProperty()) {
+        propInfo.backingFieldName = prop.backingFieldName();
+        const auto *fieldIndices = currentScope->lookup_field_indices(mangledStructName);
+        if (fieldIndices) {
+            if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
+                propInfo.backingFieldIndex = it->second;
+            }
+        }
+    }
+
+    currentScope->define_property(mangledStructName, propInfo);
+
+    // Substitute generic types in property type
+    Type substitutedType = ctx.substitute(*prop.type);
+
+    // Generate getter
+    if (prop.hasGetter) {
+        push_scope();
+
+        const std::string getterName = mangledStructName + "__get_" + prop.name;
+        llvm::Type *returnType = generate_type(substitutedType);
+
+        std::vector<llvm::Type *> paramTypes;
+        paramTypes.push_back(llvm::PointerType::get(monomorphizedType, 0));
+
+        auto *funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+        auto *llvmFunc = llvm::Function::Create(
+            funcType,
+            llvm::Function::ExternalLinkage,
+            getterName,
+            *module
+        );
+
+        functions[getterName] = llvmFunc;
+        currentScope->define_method(mangledStructName, "get_" + prop.name, llvmFunc);
+        currentFunction = llvmFunc;
+
+        auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+        builder->SetInsertPoint(entry);
+
+        auto argIt = llvmFunc->arg_begin();
+        argIt->setName("this");
+        auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, mangledStructName);
+
+        if (prop.getterBody) {
+            for (const auto &stmt: prop.getterBody->statements) {
+                generate_statement(*stmt);
+            }
+        } else if (prop.getterExpr) {
+            llvm::Value *result = generate_expression(*prop.getterExpr);
+            builder->CreateRet(result);
+        } else {
+            // Auto-implemented getter
+            llvm::Value *thisPtr = builder->CreateLoad(argIt->getType(), thisAlloca, "this");
+            const auto *fieldIndices = currentScope->lookup_field_indices(mangledStructName);
+            if (fieldIndices) {
+                if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
+                    auto *fieldPtr = builder->CreateStructGEP(monomorphizedType, thisPtr, it->second);
+                    llvm::Type *fieldType = monomorphizedType->getElementType(it->second);
+                    llvm::Value *fieldVal = builder->CreateLoad(fieldType, fieldPtr);
+                    builder->CreateRet(fieldVal);
+                }
+            }
+        }
+
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateRet(llvm::Constant::getNullValue(returnType));
+        }
+
+        pop_scope();
+    }
+
+    // Generate setter
+    if (prop.hasSetter) {
+        push_scope();
+
+        const std::string setterName = mangledStructName + "__set_" + prop.name;
+        llvm::Type *valueType = generate_type(substitutedType);
+
+        std::vector<llvm::Type *> paramTypes;
+        paramTypes.push_back(llvm::PointerType::get(monomorphizedType, 0));
+        paramTypes.push_back(valueType);
+
+        auto *funcType = llvm::FunctionType::get(builder->getVoidTy(), paramTypes, false);
+        auto *llvmFunc = llvm::Function::Create(
+            funcType,
+            llvm::Function::ExternalLinkage,
+            setterName,
+            *module
+        );
+
+        functions[setterName] = llvmFunc;
+        currentScope->define_method(mangledStructName, "set_" + prop.name, llvmFunc);
+        currentFunction = llvmFunc;
+
+        auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+        builder->SetInsertPoint(entry);
+
+        auto argIt = llvmFunc->arg_begin();
+        argIt->setName("this");
+        auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, mangledStructName);
+        ++argIt;
+
+        argIt->setName("value");
+        auto *valueAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "value");
+        builder->CreateStore(&*argIt, valueAlloca);
+        currentScope->define_variable("value", valueAlloca);
+
+        if (prop.setterBody) {
+            for (const auto &stmt: prop.setterBody->statements) {
+                generate_statement(*stmt);
+            }
+        } else if (prop.setterExpr) {
+            generate_expression(*prop.setterExpr);
+        } else {
+            // Auto-implemented setter
+            llvm::Value *thisPtr = builder->CreateLoad(llvmFunc->arg_begin()->getType(), thisAlloca, "this");
+            llvm::Value *newValue = builder->CreateLoad(valueType, valueAlloca, "value");
+
+            const auto *fieldIndices = currentScope->lookup_field_indices(mangledStructName);
+            if (fieldIndices) {
+                if (auto it = fieldIndices->find(propInfo.backingFieldName); it != fieldIndices->end()) {
+                    auto *fieldPtr = builder->CreateStructGEP(monomorphizedType, thisPtr, it->second);
+                    builder->CreateStore(newValue, fieldPtr);
+                }
+            }
+        }
+
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateRetVoid();
+        }
+
+        pop_scope();
+    }
 }
 
 llvm::Type *Generator::generate_type_with_context(const Type &type, const GenericContext *ctx) {

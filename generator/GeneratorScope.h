@@ -17,11 +17,21 @@
 
 struct StructMethodDeclaration;
 
+// Information about a property (C# style getter/setter)
+struct PropertyInfo {
+    std::string name;
+    bool hasGetter = false;
+    bool hasSetter = false;
+    std::string backingFieldName; // For auto-properties (e.g., "_value")
+    unsigned backingFieldIndex = 0;
+};
+
 struct GenericStructDef {
     std::string name;
     GenericParams params;
     std::vector<std::pair<std::string, Type> > fields;
     std::vector<const StructMethodDeclaration *> methods;
+    std::vector<const StructProperty *> properties; // C# style properties
     llvm::StructType *llvmType = nullptr;
     std::unordered_map<std::string, unsigned> fieldIndices;
 
@@ -64,6 +74,9 @@ struct GeneratorScope {
 
     std::unordered_map<std::string, GenericStructDef> genericStructs{};
     std::unordered_map<std::string, GenericFunctionDef> genericFunctions{};
+
+    // Properties: structName -> propertyName -> PropertyInfo
+    std::unordered_map<std::string, std::unordered_map<std::string, PropertyInfo> > structProperties{};
 
     explicit GeneratorScope(std::shared_ptr<GeneratorScope> parent = nullptr)
         : parent(std::move(parent)) {
@@ -326,6 +339,38 @@ struct GeneratorScope {
                                  llvm::Function *func) {
         const std::string mangledName = Mangler::mangle_function(name, paramTypes);
         localFunctions[mangledName] = func;
+    }
+
+    // Property methods
+    void define_property(const std::string &structName, const PropertyInfo &prop) {
+        structProperties[structName][prop.name] = prop;
+    }
+
+    [[nodiscard]] const PropertyInfo *
+    lookup_property(const std::string &structName, const std::string &propName) const {
+        // Try direct lookup
+        if (const auto structIt = structProperties.find(structName); structIt != structProperties.end()) {
+            if (const auto propIt = structIt->second.find(propName); propIt != structIt->second.end()) {
+                return &propIt->second;
+            }
+        }
+        // Try with resolved alias
+        const std::string resolved = resolve_struct_alias(structName);
+        if (resolved != structName) {
+            if (const auto structIt = structProperties.find(resolved); structIt != structProperties.end()) {
+                if (const auto propIt = structIt->second.find(propName); propIt != structIt->second.end()) {
+                    return &propIt->second;
+                }
+            }
+        }
+        if (parent) {
+            return parent->lookup_property(structName, propName);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool has_property(const std::string &structName, const std::string &propName) const {
+        return lookup_property(structName, propName) != nullptr;
     }
 };
 
