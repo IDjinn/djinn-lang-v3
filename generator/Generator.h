@@ -60,7 +60,7 @@ private:
 
     void generate_namespace_struct_methods(const NamespaceDeclaration &ns, const std::string &prefix);
 
-    void generate_method(const StructMethodDeclaration &method, const std::string &structName,
+    void generate_method(const StructMethodDeclaration &method, const StructDeclaration &struc,
                          llvm::StructType *structType);
 
     void generate_function(const FunctionDeclaration &func, const std::string &prefix = "");
@@ -74,6 +74,17 @@ private:
     void generate_namespace_functions(const NamespaceDeclaration &ns, const std::string &prefix);
 
     llvm::Type *generate_type(const Type &type);
+
+    // Monomorphization for generics
+    llvm::StructType *monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs);
+
+    void monomorphize_method(const StructMethodDeclaration &method,
+                             const GenericStructDef &genericDef,
+                             llvm::StructType *monomorphizedType,
+                             const GenericContext &ctx,
+                             const std::string &mangledStructName);
+
+    llvm::Type *generate_type_with_context(const Type &type, const GenericContext *ctx);
 
     void generate_statement(const Statement &stmt);
 

@@ -31,14 +31,22 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) const {
             }
         } else {
             structName = varStructType;
-            structType = currentScope->lookup_struct(structName);
-            // Check if the variable is a pointer to struct (like 'this')
-            if (alloca->getAllocatedType()->isPointerTy()) {
-                basePtr = builder->CreateLoad(alloca->getAllocatedType(), alloca, ident->name);
+            // Get struct type from alloca to handle monomorphized generics correctly
+            llvm::Type *allocatedType = alloca->getAllocatedType();
+            if (allocatedType->isPointerTy()) {
+                // 'this' is a pointer to struct, need to load it first
+                basePtr = builder->CreateLoad(allocatedType, alloca, ident->name);
+                structType = currentScope->lookup_struct(structName);
+            } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                structType = llvmStructType;
+            } else {
+                structType = currentScope->lookup_struct(structName);
             }
         }
 
-        const auto *fieldIndices = currentScope->lookup_field_indices(structName);
+        // Use the LLVM struct name for field indices lookup (handles mangled generic names)
+        std::string fieldIndicesName = structType ? structType->getName().str() : structName;
+        const auto *fieldIndices = currentScope->lookup_field_indices(fieldIndicesName);
         if (!fieldIndices) {
             throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
         }

@@ -89,7 +89,7 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
     _current_scope->defineVariable("this", thisType, false);
 
     for (const auto &param: method.parameters) {
-        if (!isTypeDefined(*param.type)) {
+        if (!isTypeDefined(*param.type) && !is_generic_type(*param.type, struc)) {
             if (param.type->kind == TypeKind::STRUCT) {
                 errorUndefinedStruct(param.type->structName, {});
             }
@@ -99,7 +99,7 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
         }
     }
 
-    if (!isTypeDefined(*method.returnType)) {
+    if (!isTypeDefined(*method.returnType) && !is_generic_type(*method.returnType, struc)) {
         if (method.returnType->kind == TypeKind::STRUCT) {
             errorUndefinedStruct(method.returnType->structName, {});
         }

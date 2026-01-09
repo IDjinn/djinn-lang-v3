@@ -142,31 +142,16 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
 
 llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) {
     std::string structName;
+    std::string llvmStructName;
 
-    // First check if receiver is an Identifier (could be struct name for static method)
     if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
-        // Check if this is a struct type (static method call: StructName.method())
-        if (currentScope->lookup_struct(ident->name)) {
-            structName = ident->name;
-            // Static method call - look up method directly
-            const std::string mangledName = structName + "__" + call.name;
-
-            if (const auto it = functions.find(mangledName); it != functions.end()) {
-                llvm::Function *func = it->second;
-
-                std::vector<llvm::Value *> args;
-                for (const auto &arg: call.arguments) {
-                    args.push_back(generate_expression(*arg));
-                }
-
-                return builder->CreateCall(func, args);
-            }
-            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                               "static method not found: " + structName + "." + call.name);
-        }
-
-        // Otherwise it's a variable - get its struct type
         structName = currentScope->lookup_variable_struct_type(ident->name);
+        // Get the LLVM struct name (mangled for generics) from the alloca
+        if (auto *alloca = currentScope->lookup_variable(ident->name)) {
+            if (auto *structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
+                llvmStructName = structType->getName().str();
+            }
+        }
     }
 
     // For instance methods, generate the object expression
@@ -177,8 +162,11 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
                            "cannot call method on non-struct type");
     }
 
+    // Use LLVM struct name if available (for monomorphized generics), otherwise use base name
+    std::string methodStructName = llvmStructName.empty() ? structName : llvmStructName;
+
     // Instance method call - look up method
-    const std::string mangledName = structName + "__" + call.name;
+    const std::string mangledName = methodStructName + "__" + call.name;
 
     if (const auto it = functions.find(mangledName); it == functions.end()) {
         throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,

@@ -7,6 +7,15 @@
 #include <cctype>
 #include <llvm/IR/Intrinsics.h>
 
+auto isPrimitiveType = [](const std::string &name) {
+    if (name == "void" || name == "string" || name == "auto") return true;
+    if (name.starts_with('f') && string_to_type_kind.contains(name)) return true;
+    if ((name.starts_with('i') || name.starts_with('u')) && name.length() > 1) {
+        return std::ranges::all_of(name.substr(1), [](const unsigned char c) { return std::isdigit(c); });
+    }
+    return false;
+};
+
 Parser::Parser(std::vector<Token> tokens) : tokens(std::move(tokens)) {
 }
 
@@ -810,20 +819,15 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
         std::vector<Type> genericArgs;
         // Check if this is a primitive type (i32, u64, f32, etc.) or a custom struct type
-        auto isPrimitiveType = [](const std::string &name) {
-            if (name == "void" || name == "string" || name == "auto") return true;
-            if (name.starts_with('f') && string_to_type_kind.contains(name)) return true;
-            if ((name.starts_with('i') || name.starts_with('u')) && name.length() > 1) {
-                return std::ranges::all_of(name.substr(1), [](const unsigned char c) { return std::isdigit(c); });
-            }
-            return false;
-        };
 
         const bool isDeclaredStruct = currentScope->has_struct_declared(identifier.value);
 
-        // Only parse generic args if this is a known struct type
-        // This avoids consuming '<' in expressions like 'x < 5'
-        if (isDeclaredStruct && match(TokenType::LESS)) {
+        // Parse generic args if this is a known struct type OR if identifier looks like
+        // a type name (not primitive, not a known variable) followed by '<'
+        // This handles imported structs that aren't in the parser's scope yet
+        const bool couldBeGenericType = !isPrimitiveType(identifier.value) &&
+                                        !currentScope->lookup_variable(identifier.value);
+        if ((isDeclaredStruct || couldBeGenericType) && match(TokenType::LESS)) {
             do {
                 auto argType = parse_type();
                 genericArgs.push_back(std::move(*argType));

@@ -4,6 +4,177 @@
 
 #include "Generator.h"
 
+// ============================================================================
+// Monomorphization - creates specialized versions of generic types
+// ============================================================================
+
+llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs) {
+    // Resolve the base name (handle aliases)
+    const std::string qualifiedName = currentScope->resolve_struct_alias(baseName);
+
+    // Check if already monomorphized
+    if (llvm::StructType *existing = currentScope->lookup_monomorphized_struct(qualifiedName, typeArgs)) {
+        return existing;
+    }
+
+    // Lookup the generic struct definition
+    const GenericStructDef *genericDef = currentScope->lookup_generic_struct(qualifiedName);
+    if (!genericDef) {
+        throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
+                           "generic struct not found: " + baseName);
+    }
+
+    // Create the generic context with type substitutions
+    GenericArgs args;
+    for (const auto &argType: typeArgs) {
+        args.add(argType);
+    }
+    const GenericContext ctx = GenericContext::create(genericDef->params, args);
+
+    // Generate field types with substituted generics
+    std::vector<llvm::Type *> fieldTypes;
+    std::unordered_map<std::string, unsigned> fieldIndices;
+
+    unsigned idx = 0;
+    for (const auto &[fieldName, fieldType]: genericDef->fields) {
+        Type substituted = ctx.substitute(fieldType);
+        fieldTypes.push_back(generate_type(substituted));
+        fieldIndices[fieldName] = idx++;
+    }
+
+    // Create the mangled name and LLVM struct type
+    const std::string mangledName = Mangler::mangle_generic_struct(qualifiedName, typeArgs);
+    llvm::StructType *structType = llvm::StructType::create(*context, fieldTypes, mangledName);
+
+    // Register the monomorphized struct
+    currentScope->define_monomorphized_struct(qualifiedName, typeArgs, structType, std::move(fieldIndices));
+
+    // Save current builder state before generating methods
+    llvm::BasicBlock *savedBlock = builder->GetInsertBlock();
+    llvm::Function *savedFunction = currentFunction;
+
+    // Generate methods for this monomorphized type
+    for (const auto *method: genericDef->methods) {
+        monomorphize_method(*method, *genericDef, structType, ctx, mangledName);
+    }
+
+    // Restore builder state after generating methods
+    if (savedBlock) {
+        builder->SetInsertPoint(savedBlock);
+    }
+    currentFunction = savedFunction;
+
+    return structType;
+}
+
+void Generator::monomorphize_method(const StructMethodDeclaration &method,
+                                    const GenericStructDef &genericDef,
+                                    llvm::StructType *monomorphizedType,
+                                    const GenericContext &ctx,
+                                    const std::string &mangledStructName) {
+    push_scope();
+
+    // Method name: MangledStructName__methodName
+    const std::string mangledMethodName = mangledStructName + "__" + method.name;
+
+    // Substitute generic types in return type
+    Type substitutedReturn = ctx.substitute(*method.returnType);
+    llvm::Type *returnType = generate_type(substitutedReturn);
+
+    std::vector<llvm::Type *> paramTypes;
+
+    // Static methods don't have 'this' parameter
+    const bool isStatic = method.isStatic();
+    if (!isStatic) {
+        paramTypes.push_back(llvm::PointerType::get(monomorphizedType, 0));
+    }
+
+    // Substitute generic types in parameters
+    for (const auto &param: method.parameters) {
+        Type substitutedParam = ctx.substitute(*param.type);
+        paramTypes.push_back(generate_type(substitutedParam));
+    }
+
+    const auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+    const auto llvmFunc = llvm::Function::Create(
+        funcType,
+        llvm::Function::ExternalLinkage,
+        mangledMethodName,
+        *module
+    );
+
+    functions[mangledMethodName] = llvmFunc;
+    currentScope->define_method(mangledStructName, method.name, llvmFunc);
+    currentFunction = llvmFunc;
+
+    const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+    builder->SetInsertPoint(entry);
+
+    auto argIt = llvmFunc->arg_begin();
+
+    // Define 'this' parameter only for non-static methods
+    if (!isStatic) {
+        argIt->setName("this");
+        auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, mangledStructName);
+        ++argIt;
+    }
+
+    // Define other parameters
+    size_t paramIdx = 0;
+    while (argIt != llvmFunc->arg_end()) {
+        const auto &param = method.parameters[paramIdx];
+        argIt->setName(param.name);
+
+        auto *alloca = builder->CreateAlloca(argIt->getType(), nullptr, param.name);
+        builder->CreateStore(&*argIt, alloca);
+
+        Type substitutedParam = ctx.substitute(*param.type);
+        std::string paramStructType = substitutedParam.kind == TypeKind::STRUCT
+                                          ? substitutedParam.structName
+                                          : "";
+        currentScope->define_variable(param.name, alloca, paramStructType);
+
+        ++argIt;
+        ++paramIdx;
+    }
+
+    // Generate method body
+    if (method.body) {
+        for (const auto &stmt: method.body->statements) {
+            generate_statement(*stmt);
+        }
+    } else if (method.expression) {
+        llvm::Value *result = generate_expression(*method.expression);
+        if (!returnType->isVoidTy()) {
+            builder->CreateRet(result);
+        } else {
+            builder->CreateRetVoid();
+        }
+    }
+
+    // Add default return if needed
+    if (!builder->GetInsertBlock()->getTerminator()) {
+        if (returnType->isVoidTy()) {
+            builder->CreateRetVoid();
+        } else {
+            builder->CreateRet(llvm::Constant::getNullValue(returnType));
+        }
+    }
+
+    pop_scope();
+}
+
+llvm::Type *Generator::generate_type_with_context(const Type &type, const GenericContext *ctx) {
+    // If we have a context, try to substitute first
+    if (ctx) {
+        Type substituted = ctx->substitute(type);
+        return generate_type(substituted);
+    }
+    return generate_type(type);
+}
+
 llvm::Type *Generator::generate_type(const Type &type) {
     switch (type.kind) {
         case TypeKind::INTEGER: return builder->getIntNTy(type.size);
@@ -28,51 +199,28 @@ llvm::Type *Generator::generate_type(const Type &type) {
             return llvm::PointerType::get(pointeeType, 0);
         }
         case TypeKind::STRUCT: {
+            // Check for transparent type first
             if (llvm::Type *transparentType = currentScope->lookup_transparent_type(type.structName)) {
                 return transparentType;
             }
 
+            // Handle generic structs with type arguments - trigger monomorphization
             if (type.hasGenericArgs()) {
-                llvm::StructType *existingType = currentScope->lookup_monomorphized_struct(
-                    type.structName, type.genericArgs);
-                if (existingType) {
-                    return existingType;
-                }
-
-                // Lookup generic definition
-                const GenericStructDef *genericDef = currentScope->lookup_generic_struct(type.structName);
-                if (!genericDef) {
-                    throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
-                                       "struct genérica não encontrada: " + type.structName);
-                }
-
-                GenericArgs args;
-                for (const auto &argType: type.genericArgs) {
-                    args.add(argType);
-                }
-                const GenericContext ctx = GenericContext::create(genericDef->params, args);
-
-                std::vector<llvm::Type *> fieldTypes;
-                std::unordered_map<std::string, unsigned> fieldIndices;
-                unsigned idx = 0;
-                for (const auto &[fieldName, fieldType]: genericDef->fields) {
-                    Type substituted = ctx.substitute(fieldType);
-                    fieldTypes.push_back(generate_type(substituted));
-                    fieldIndices[fieldName] = idx++;
-                }
-
-                const std::string mangledName = Mangler::mangle_generic_struct(type.structName, type.genericArgs);
-                llvm::StructType *structType = llvm::StructType::create(*context, fieldTypes, mangledName);
-
-                currentScope->define_monomorphized_struct(type.structName, type.genericArgs,
-                                                          structType, std::move(fieldIndices));
-
-                return structType;
+                return monomorphize_struct(type.structName, type.genericArgs);
             }
 
+            // Check if this is a reference to a generic parameter (unresolved T)
+            // This should only happen if we're generating code for a generic struct
+            // without proper context - which is an error
+            if (currentScope->has_generic_struct(type.structName)) {
+                throw CompileError(DiagnosticCode::INVALID_TYPE,
+                                   "generic struct '" + type.structName + "' requires type arguments");
+            }
+
+            // Regular non-generic struct lookup
             llvm::StructType *structType = currentScope->lookup_struct(type.structName);
             if (!structType) {
-                throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + type.structName);
+                throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct not found: " + type.structName);
             }
             return structType;
         }

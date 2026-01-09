@@ -15,10 +15,15 @@
 #include "../parser/ast/Generic.h"
 #include "Mangler.h"
 
+struct StructMethodDeclaration;
+
 struct GenericStructDef {
     std::string name;
     GenericParams params;
     std::vector<std::pair<std::string, Type> > fields;
+    std::vector<const StructMethodDeclaration *> methods;
+    llvm::StructType *llvmType = nullptr;
+    std::unordered_map<std::string, unsigned> fieldIndices;
 
     GenericStructDef() = default;
 
@@ -110,6 +115,7 @@ struct GeneratorScope {
         if (const auto it = structTypes.find(name); it != structTypes.end()) {
             return it->second;
         }
+
         const std::string resolved = resolve_struct_alias(name);
         if (resolved != name) {
             if (const auto it = structTypes.find(resolved); it != structTypes.end()) {
@@ -126,9 +132,8 @@ struct GeneratorScope {
         if (const auto it = structFieldIndices.find(name); it != structFieldIndices.end()) {
             return &it->second;
         }
-        // Tenta resolver alias
-        const std::string resolved = resolve_struct_alias(name);
-        if (resolved != name) {
+
+        if (const std::string resolved = resolve_struct_alias(name); resolved != name) {
             if (const auto it = structFieldIndices.find(resolved); it != structFieldIndices.end()) {
                 return &it->second;
             }
@@ -271,7 +276,6 @@ struct GeneratorScope {
 
     [[nodiscard]] bool has_generic_struct(const std::string &name) const {
         if (genericStructs.contains(name)) return true;
-        // Tenta resolver alias
         const std::string resolved = resolve_struct_alias(name);
         if (resolved != name && genericStructs.contains(resolved)) return true;
         if (parent) return parent->has_generic_struct(name);

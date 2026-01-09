@@ -3,3 +3,12 @@ namespace std::types;
 struct size : u32;
 struct size_long : u64;
 struct c_result : i32;
+
+struct optional<T> {
+    T value;
+    i1 has_value;
+
+    T value() {
+        return this.value;
+    }
+}

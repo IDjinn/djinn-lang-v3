@@ -8,6 +8,10 @@ bool Binder::resolveType(const Type &type) {
     return isTypeDefined(type);
 }
 
+bool Binder::is_generic_type(const Type &type, const StructDeclaration &struc) {
+    return struc.genericParams.size() > 0 && struc.genericParams.find(type.structName) != nullptr;
+}
+
 bool Binder::isTypeDefined(const Type &type) {
     switch (type.kind) {
         case TypeKind::INTEGER:
@@ -123,15 +127,15 @@ void Binder::checkTypeCompatibility(const Type &expected, const Expression &expr
 
             if (isNegative) {
                 _diagnostics.error(DiagnosticCode::TYPE_MISMATCH,
-                    "cannot assign negative value to unsigned type",
-                    loc);
+                                   "cannot assign negative value to unsigned type",
+                                   loc);
             }
         }
         // Warning for unsigned -> signed (potential overflow for large values)
         else if (expectedResolved->sign && !inferred.sign) {
             _diagnostics.warning(DiagnosticCode::TYPE_MISMATCH,
-                "implicit conversion from unsigned to signed integer",
-                loc);
+                                 "implicit conversion from unsigned to signed integer",
+                                 loc);
         }
     }
 
@@ -140,7 +144,7 @@ void Binder::checkTypeCompatibility(const Type &expected, const Expression &expr
         (inferred.kind == TypeKind::F16 || inferred.kind == TypeKind::F32 ||
          inferred.kind == TypeKind::F64 || inferred.kind == TypeKind::F128)) {
         _diagnostics.warning(DiagnosticCode::TYPE_MISMATCH,
-            "implicit conversion from floating-point to integer may lose precision",
-            loc);
+                             "implicit conversion from floating-point to integer may lose precision",
+                             loc);
     }
 }

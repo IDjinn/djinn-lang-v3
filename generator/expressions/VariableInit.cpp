@@ -7,16 +7,26 @@
 llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
     if (auto *braceInit = dynamic_cast<const BraceInitializer *>(expr.value.get())) {
         if (expr.type.kind == TypeKind::STRUCT) {
-            llvm::StructType *structType = currentScope->lookup_struct(expr.type.structName);
+            // Use generate_type to handle generic structs (monomorphization)
+            llvm::Type *llvmType = generate_type(const_cast<Type &>(expr.type));
+            llvm::StructType *structType = llvm::dyn_cast<llvm::StructType>(llvmType);
             if (!structType) {
                 throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
                                    "struct não encontrada: " + expr.type.structName);
             }
 
-            auto *alloca = builder->CreateAlloca(structType, nullptr, expr.name);
-            currentScope->define_variable(expr.name, alloca, expr.type.structName);
+            // Resolve qualified name base for method lookup
+            std::string qualifiedName = currentScope->resolve_struct_alias(expr.type.structName);
 
-            const auto *fieldIndices = currentScope->lookup_field_indices(expr.type.structName);
+            // Get the correct name for field indices lookup (mangled for generics)
+            std::string fieldIndicesName = expr.type.hasGenericArgs()
+                                               ? Mangler::mangle_generic_struct(qualifiedName, expr.type.genericArgs)
+                                               : qualifiedName;
+
+            auto *alloca = builder->CreateAlloca(structType, nullptr, expr.name);
+            currentScope->define_variable(expr.name, alloca, qualifiedName);
+
+            const auto *fieldIndices = currentScope->lookup_field_indices(fieldIndicesName);
             if (!fieldIndices) {
                 throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
                                    "struct não encontrada: " + expr.type.structName);

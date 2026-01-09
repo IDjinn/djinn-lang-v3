@@ -121,6 +121,8 @@ private:
     // Type resolution
     bool resolveType(const Type &type);
 
+    bool is_generic_type(const Type &type, const StructDeclaration &struc);
+
     bool isTypeDefined(const Type &type);
 
     // Type inference for expressions

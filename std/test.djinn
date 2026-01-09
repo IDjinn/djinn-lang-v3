@@ -4,7 +4,6 @@ import std::sys;
 namespace std;
 
 void main() {
-    size size_test = 10;
-    c_result res = -1;
-    printf("teste output:\n size=%d\nres=%d", size_test, res);
+    optional<i32> teste = { .value = 11, .has_value = 1 };
+    printf("test = %d", teste.value());
 }

@@ -15,21 +15,6 @@ void Generator::forward_declare_struct(const StructDeclaration &struct_declarati
                                           ? struct_declaration.name
                                           : prefix + "::" + struct_declaration.name;
 
-    // Generic structs are handled lazily during monomorphization
-    if (struct_declaration.isGeneric()) {
-        GenericStructDef genericDef;
-        genericDef.name = qualifiedName;
-        genericDef.params = struct_declaration.genericParams;
-
-        for (const auto &field: struct_declaration.fields) {
-            genericDef.fields.push_back({field.name, *field.type});
-        }
-
-        currentScope->define_generic_struct(qualifiedName, std::move(genericDef));
-        return;
-    }
-
-    // For transparent types, we need the base type, but that should always be a primitive
     if (struct_declaration.isTransparent()) {
         llvm::Type *underlyingType = generate_type(*struct_declaration.baseType);
         currentScope->define_transparent_type(qualifiedName, underlyingType);
@@ -41,10 +26,32 @@ void Generator::forward_declare_struct(const StructDeclaration &struct_declarati
         return;
     }
 
-    // Create opaque struct type (no body yet)
-    llvm::StructType *structType = llvm::StructType::create(*context, qualifiedName);
+    unsigned idx = 0;
     std::unordered_map<std::string, unsigned> fieldIndices;
-    currentScope->define_struct(qualifiedName, structType, std::move(fieldIndices));
+    for (const auto &field: struct_declaration.fields) {
+        fieldIndices[field.name] = idx++;
+    }
+
+    llvm::StructType *structType = llvm::StructType::create(*context, qualifiedName);
+    currentScope->define_struct(qualifiedName, structType, fieldIndices);
+
+    if (struct_declaration.isGeneric()) {
+        GenericStructDef genericDef;
+        genericDef.name = qualifiedName;
+        genericDef.params = struct_declaration.genericParams;
+        genericDef.llvmType = structType;
+        genericDef.fieldIndices = fieldIndices;
+
+        for (const auto &field: struct_declaration.fields) {
+            genericDef.fields.push_back({field.name, *field.type});
+        }
+
+        for (const auto &method: struct_declaration.methods) {
+            genericDef.methods.push_back(method.get());
+        }
+
+        currentScope->define_generic_struct(qualifiedName, std::move(genericDef));
+    }
 }
 
 void Generator::resolve_struct_body(const StructDeclaration &struct_declaration, const std::string &prefix) {
@@ -90,14 +97,14 @@ void Generator::resolve_struct_body(const StructDeclaration &struct_declaration,
 }
 
 void Generator::generate_struct_methods(const StructDeclaration &struct_declaration, const std::string &prefix) {
-    const std::string qualifiedName = prefix.empty()
-                                          ? struct_declaration.name
-                                          : prefix + "::" + struct_declaration.name;
-
-    // Generic structs don't have methods generated here
+    // Generic structs: methods are generated during monomorphization
     if (struct_declaration.isGeneric()) {
         return;
     }
+
+    const std::string qualifiedName = prefix.empty()
+                                          ? struct_declaration.name
+                                          : prefix + "::" + struct_declaration.name;
 
     llvm::StructType *structType = currentScope->lookup_struct(qualifiedName);
     if (!structType) {
@@ -105,7 +112,7 @@ void Generator::generate_struct_methods(const StructDeclaration &struct_declarat
     }
 
     for (const auto &method: struct_declaration.methods) {
-        generate_method(*method, qualifiedName, structType);
+        generate_method(*method, struct_declaration, structType);
     }
 }
 
@@ -187,7 +194,7 @@ void Generator::generate_struct(const StructDeclaration &struct_declaration, con
         currentScope->define_struct(qualifiedName, wrapperType, std::move(fieldIndices));
 
         for (const auto &method: struct_declaration.methods) {
-            generate_method(*method, qualifiedName, wrapperType);
+            generate_method(*method, struct_declaration, wrapperType);
         }
         return;
     }
@@ -211,17 +218,19 @@ void Generator::generate_struct(const StructDeclaration &struct_declaration, con
 
     // Generate methods
     for (const auto &method: struct_declaration.methods) {
-        generate_method(*method, qualifiedName, structType);
+        generate_method(*method, struct_declaration, structType);
     }
 }
 
-void Generator::generate_method(const StructMethodDeclaration &method, const std::string &structName,
+void Generator::generate_method(const StructMethodDeclaration &method, const StructDeclaration &struc,
                                 llvm::StructType *structType) {
     push_scope();
 
+    const auto structName = struc.name;
     // Method name: StructName__methodName
     const std::string mangledName = structName + "__" + method.name;
 
+    // For non-generic structs, return type is always concrete
     llvm::Type *returnType = generate_type(*method.returnType);
 
     std::vector<llvm::Type *> paramTypes;
