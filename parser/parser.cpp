@@ -237,6 +237,11 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
 }
 
 std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
+    std::vector<AttributeUsageDeclaration> attributes;
+    if (match(TokenType::LBRACKET)) {
+        attributes = this->parse_attributes();
+    }
+
     expect("Esperado 'interface'", TokenType::INTERFACE);
     const auto name = expect("Esperado nome da interface", TokenType::IDENTIFIER).value;
 
@@ -272,6 +277,7 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
 }
 
 std::unique_ptr<StructDeclaration> Parser::parse_struct() {
+    std::vector<AttributeUsageDeclaration> attributes =  this->parse_attributes();
     expect("Esperado 'struct'", TokenType::STRUCT);
     const auto name = match(TokenType::IDENTIFIER) ? previous().value : Type::generate_struct_name();
 
@@ -366,7 +372,20 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     structDecl->methods = std::move(methods);
     structDecl->implements = std::move(implements);
     structDecl->baseType = std::move(baseType);
+    structDecl->attributes = std::move(attributes);
     return structDecl;
+}
+
+std::vector<AttributeUsageDeclaration> Parser::parse_attributes() {
+    std::vector<AttributeUsageDeclaration> attributes;
+    while (check(TokenType::LBRACKET)) {
+        expect("Esperado '[' no uso de Atributos" ,TokenType::LBRACKET);
+        const auto identifier = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
+        attributes.emplace_back(identifier.value);
+        expect("Esperado ']' no uso de Atributos" ,TokenType::RBRACKET);
+    }
+
+    return attributes;
 }
 
 std::unique_ptr<Program> Parser::parse() {
@@ -395,7 +414,7 @@ std::unique_ptr<Program> Parser::parse() {
             program->namespaces.push_back(parse_namespace());
         } else if (check(TokenType::INTERFACE)) {
             program->interfaces.push_back(parse_interface());
-        } else if (check(TokenType::STRUCT)) {
+        } else if (check(TokenType::LBRACKET) || check(TokenType::STRUCT)) {
             auto structDecl = parse_struct();
 
             // struct { ... } func() { ... }

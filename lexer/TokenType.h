@@ -89,8 +89,9 @@ enum class TokenType {
     COLON, // :
     COLON_COLON, // ::
     DOT, // .
-    DOT_DOT,
-    DOT_DOT_DOT,
+    DOT_DOT, // ..
+    DOT_DOT_DOT, // ...
+    AT, // @
 };
 
 

@@ -56,6 +56,8 @@ private:
 
     std::unique_ptr<StructDeclaration> parse_struct();
 
+    std::vector<AttributeUsageDeclaration> parse_attributes();
+
     std::unique_ptr<InterfaceDeclaration> parse_interface();
 
     std::unique_ptr<StructMethodDeclaration> parse_method(bool allowBody = true);

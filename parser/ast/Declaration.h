@@ -110,6 +110,24 @@ struct StructField : ASTNode {
     }
 };
 
+struct AttributeUsageDeclaration : ASTNode {
+    std::string name;
+    // std::vector<Parameter> parameters;
+    // std::unique_ptr<Statement> statement;
+
+    AttributeUsageDeclaration(std::string name) : name(std::move(name)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "AttributeUsageDeclaration(" << name << ")";
+        // for (size_t i = 0; i < parameters.size(); ++i) {
+        //     if (i > 0) os << ", ";
+        //     os << parameters[i].type << " " << parameters[i].name;
+        // }
+    }
+};
+
 struct StructDeclaration : ASTNode {
     std::string name;
     GenericParams genericParams;
@@ -117,6 +135,7 @@ struct StructDeclaration : ASTNode {
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
     std::vector<std::string> implements; // interfaces this struct implements
     std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
+    std::vector<AttributeUsageDeclaration> attributes;
 
     StructDeclaration(std::string name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields)) {

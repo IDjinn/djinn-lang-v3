@@ -213,6 +213,9 @@ std::vector<Token> Lexer::tokenize() {
                 case '/': tokens.push_back(make_token(TokenType::SLASH, "/"));
                     advance();
                     break;
+                case '@': tokens.push_back(make_token(TokenType::AT, "@"));
+                    advance();
+                    break;
                 case '%': tokens.push_back(make_token(TokenType::PERCENT, "%"));
                     advance();
                     break;
