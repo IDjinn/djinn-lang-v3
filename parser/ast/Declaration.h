@@ -13,6 +13,8 @@
 #include "Statement.h"
 #include "Generic.h"
 
+struct EnumDeclaration;
+
 enum class VisibilityModifier {
     PUBLIC,
     PRIVATE,
@@ -403,7 +405,58 @@ struct ExternFunctionDeclaration : ASTNode {
     }
 };
 
-// Forward declarations
+struct EnumValueDeclaration : ASTNode {
+    std::string name;
+    std::vector<Type> types;
+
+    EnumValueDeclaration(std::string name, std::vector<Type> types) : name(std::move(name)), types(std::move(types)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "EnumValue(" << name << ")";
+        for (size_t i = 0; i < types.size(); ++i) {
+            if (i > 0) os << ", ";
+            types[i].print(os, indent);
+        }
+    }
+};
+
+struct EnumDeclaration : ASTNode {
+    std::string name;
+    GenericParams genericParams;
+    std::vector<EnumValueDeclaration> values;
+
+    explicit EnumDeclaration(std::string name, std::vector<EnumValueDeclaration> values)
+        : name(std::move(name)), values(std::move(values)) {
+    }
+
+    EnumDeclaration(std::string name, GenericParams genericParams, std::vector<EnumValueDeclaration> values)
+        : name(std::move(name)), genericParams(std::move(genericParams)), values(std::move(values)) {
+    }
+
+    [[nodiscard]] bool isGeneric() const { return !genericParams.empty(); }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "Enum(" << name;
+        if (!genericParams.empty()) {
+            os << "<";
+            for (size_t i = 0; i < genericParams.params.size(); ++i) {
+                if (i > 0) os << ", ";
+                os << genericParams.params[i].name;
+            }
+            os << ">";
+        }
+        os << ": ";
+        for (size_t i = 0; i < values.size(); ++i) {
+            if (i > 0) os << ", ";
+            values[i].print(os, indent);
+        }
+        os << ")";
+    }
+};
+
 
 struct Program : ASTNode {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -416,6 +469,7 @@ struct Program : ASTNode {
     std::vector<std::unique_ptr<StructDeclaration> > structs;
     std::vector<std::unique_ptr<FunctionDeclaration> > functions;
     std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces;
+    std::vector<std::unique_ptr<EnumDeclaration>> enums;
 
     [[nodiscard]] bool hasFileNamespace() const { return !fileNamespace.empty(); }
 

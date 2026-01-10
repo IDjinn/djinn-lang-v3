@@ -21,7 +21,8 @@ enum class SymbolKind : uint8_t {
     Method,
     StructField,
     Field,
-    GenericParam
+    GenericParam,
+    Enum
 };
 
 struct Symbol {
@@ -47,6 +48,7 @@ struct Symbol {
     [[nodiscard]] bool isInterface() const { return kind == SymbolKind::Interface; }
     [[nodiscard]] bool isMethod() const { return kind == SymbolKind::Method; }
     [[nodiscard]] bool isField() const { return kind == SymbolKind::Field; }
+    [[nodiscard]] bool isEnum() const { return kind == SymbolKind::Enum; }
 
     [[nodiscard]] static std::string kindToString(const SymbolKind k) {
         switch (k) {
@@ -59,6 +61,7 @@ struct Symbol {
             case SymbolKind::Method: return "method";
             case SymbolKind::Field: return "field";
             case SymbolKind::GenericParam: return "generic parameter";
+            case SymbolKind::Enum: return "enum";
             default: return "unknown";
         }
     }
@@ -264,6 +267,61 @@ struct InterfaceSymbol : Symbol {
             if (method->name == name) return method;
         }
         return nullptr;
+    }
+};
+
+// Represents an enum variant: Ok(T, U) -> name="Ok", associatedTypes=[T, U]
+struct EnumVariant {
+    std::string name;
+    std::vector<Type> associatedTypes;
+    unsigned tag = 0; // discriminant value
+
+    EnumVariant(std::string name, std::vector<Type> types, unsigned tag = 0)
+        : name(std::move(name)), associatedTypes(std::move(types)), tag(tag) {
+    }
+
+    [[nodiscard]] bool hasAssociatedTypes() const { return !associatedTypes.empty(); }
+};
+
+struct EnumSymbol : Symbol {
+    std::vector<EnumVariant> variants;
+    std::vector<std::string> genericParams;
+
+    explicit EnumSymbol(std::string name, const SourceLocation loc = {})
+        : Symbol(SymbolKind::Enum, std::move(name), Type::voided(), loc) {
+    }
+
+    [[nodiscard]] bool isGeneric() const {
+        return !genericParams.empty();
+    }
+
+    void addVariant(const std::string &variantName, const std::vector<Type> &types) {
+        variants.emplace_back(variantName, types, static_cast<unsigned>(variants.size()));
+    }
+
+    void addGenericParam(const std::string &param) {
+        genericParams.push_back(param);
+    }
+
+    [[nodiscard]] bool hasVariant(const std::string &variantName) const {
+        for (const auto &v: variants) {
+            if (v.name == variantName) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] const EnumVariant *getVariant(const std::string &variantName) const {
+        for (const auto &v: variants) {
+            if (v.name == variantName) return &v;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] unsigned getVariantTag(const std::string &variantName) const {
+        for (const auto &v: variants) {
+            if (v.name == variantName) return v.tag;
+        }
+        return UINT_MAX;
     }
 };
 

@@ -21,3 +21,8 @@ struct result<T, E> {
     E error { get; }
     bool has_value { get; }
 }
+
+enum Result<T, E> {
+    Ok(T),
+    Error(E)
+}

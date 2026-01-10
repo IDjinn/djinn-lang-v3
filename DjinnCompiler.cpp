@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <stacktrace>
 
@@ -247,6 +248,10 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
 
     for (auto &iface: source->interfaces) {
         target.interfaces.push_back(std::move(iface));
+    }
+
+    for (auto &enum_declaration: source->enums) {
+        target.enums.push_back(std::move(enum_declaration));
     }
 }
 

@@ -62,6 +62,10 @@ private:
 
     void collectInterfaceWithPrefix(const InterfaceDeclaration &decl, const std::string &prefix) const;
 
+    void collectEnum(const EnumDeclaration &decl) const;
+
+    void collectEnumWithPrefix(const EnumDeclaration &decl, const std::string &prefix) const;
+
     void collectFunction(const FunctionDeclaration &decl) const;
 
     void collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const;

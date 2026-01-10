@@ -174,6 +174,7 @@ struct FunctionCall : Expression {
     std::string name;
     std::vector<std::unique_ptr<Expression> > arguments;
     std::unique_ptr<Expression> receiver; // optional: for method calls (object.method())
+    std::vector<Type> typeArguments; // generic type arguments: Result<i32, string*>::Ok(...)
 
     FunctionCall(std::string n, std::vector<std::unique_ptr<Expression> > args)
         : name(std::move(n)), arguments(std::move(args)) {
@@ -183,7 +184,12 @@ struct FunctionCall : Expression {
         : name(std::move(n)), arguments(std::move(args)), receiver(std::move(recv)) {
     }
 
+    FunctionCall(std::string n, std::vector<Type> typeArgs, std::vector<std::unique_ptr<Expression> > args)
+        : name(std::move(n)), arguments(std::move(args)), typeArguments(std::move(typeArgs)) {
+    }
+
     [[nodiscard]] bool isMethodCall() const { return receiver != nullptr; }
+    [[nodiscard]] bool hasTypeArguments() const { return !typeArguments.empty(); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -192,7 +198,16 @@ struct FunctionCall : Expression {
             receiver->print(os, indent + 2);
             os << '\n';
         } else {
-            os << "FunctionCall(" << name << ")\n";
+            os << "FunctionCall(" << name;
+            if (!typeArguments.empty()) {
+                os << "<";
+                for (size_t i = 0; i < typeArguments.size(); ++i) {
+                    if (i > 0) os << ", ";
+                    typeArguments[i].print(os, 0);
+                }
+                os << ">";
+            }
+            os << ")\n";
         }
         for (const auto &arg: arguments) {
             arg->print(os, indent + 2);

@@ -114,6 +114,8 @@ private:
 
     std::unique_ptr<NamespaceDeclaration> parse_namespace();
 
+    std::unique_ptr<EnumDeclaration> parse_enum();
+
     QualifiedName parse_qualified_name();
 
     std::unique_ptr<ImportDeclaration> parse_import();

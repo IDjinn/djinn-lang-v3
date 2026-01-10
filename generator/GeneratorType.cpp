@@ -82,6 +82,89 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
     return structType;
 }
 
+llvm::StructType *Generator::monomorphize_enum(const std::string &baseName, const std::vector<Type> &typeArgs) {
+    // Resolve the base name (handle aliases)
+    const std::string qualifiedName = currentScope->resolve_alias(baseName);
+
+    // Check if already monomorphized
+    if (EnumDef *existing = currentScope->lookup_monomorphized_enum(qualifiedName, typeArgs)) {
+        return existing->llvmType;
+    }
+
+    // Lookup the generic enum definition
+    EnumDef *genericDef = currentScope->lookup_enum(qualifiedName);
+    if (!genericDef || !genericDef->isGeneric) {
+        throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
+                           "generic enum not found: " + baseName);
+    }
+
+    // Create the generic context with type substitutions
+    GenericArgs args;
+    for (const auto &argType: typeArgs) {
+        args.add(argType);
+    }
+    const GenericContext ctx = GenericContext::create(genericDef->genericParams, args);
+
+    // Calculate max payload size with substituted types
+    size_t maxPayloadSize = 0;
+    for (const auto &variant: genericDef->variants) {
+        size_t variantPayloadSize = 0;
+
+        for (const auto &type: variant.associatedTypes) {
+            Type substituted = ctx.substitute(type);
+            if (llvm::Type *llvmType = generate_type(substituted)) {
+                const auto &dataLayout = module->getDataLayout();
+                variantPayloadSize += dataLayout.getTypeAllocSize(llvmType);
+            }
+        }
+
+        maxPayloadSize = std::max(maxPayloadSize, variantPayloadSize);
+    }
+
+    // Determine tag type based on number of variants
+    const size_t variantCount = genericDef->variants.size();
+    llvm::Type *tagType;
+    if (variantCount <= 256) {
+        tagType = builder->getInt8Ty();
+    } else if (variantCount <= 65536) {
+        tagType = builder->getInt16Ty();
+    } else {
+        tagType = builder->getInt32Ty();
+    }
+
+    // Create LLVM struct type
+    std::vector<llvm::Type *> enumFields;
+    enumFields.push_back(tagType);
+
+    if (maxPayloadSize > 0) {
+        enumFields.push_back(llvm::ArrayType::get(builder->getInt8Ty(), maxPayloadSize));
+    }
+
+    // Create the mangled name and LLVM struct type
+    const std::string mangledName = Mangler::mangle_generic_enum(qualifiedName, typeArgs);
+    llvm::StructType *enumType = llvm::StructType::create(*context, enumFields, mangledName);
+
+    // Create monomorphized EnumDef
+    EnumDef monoDef(mangledName, false);
+    monoDef.isMonomorphized = true;
+    monoDef.llvmType = enumType;
+    monoDef.tagType = tagType;
+    monoDef.maxPayloadSize = maxPayloadSize;
+
+    // Copy variants with substituted types
+    for (const auto &variant: genericDef->variants) {
+        std::vector<Type> substitutedTypes;
+        for (const auto &type: variant.associatedTypes) {
+            substitutedTypes.push_back(ctx.substitute(type));
+        }
+        monoDef.addVariant(variant.name, substitutedTypes);
+    }
+
+    currentScope->define_enum(mangledName, std::move(monoDef));
+
+    return enumType;
+}
+
 void Generator::monomorphize_method(const StructMethodDeclaration &method,
                                     const StructDef &genericDef,
                                     llvm::StructType *monomorphizedType,
@@ -351,6 +434,23 @@ llvm::Type *Generator::generate_type(const Type &type) {
             // Check for transparent type first
             if (llvm::Type *transparentType = currentScope->get_transparent_type(type.structName)) {
                 return transparentType;
+            }
+
+            // Check if this is an enum type
+            if (EnumDef *enumDef = currentScope->lookup_enum(type.structName)) {
+                // Handle generic enums with type arguments - trigger monomorphization
+                if (type.hasGenericArgs()) {
+                    return monomorphize_enum(type.structName, type.genericArgs);
+                }
+                // Non-generic enum or already monomorphized
+                if (enumDef->llvmType) {
+                    return enumDef->llvmType;
+                }
+                // Generic enum without type args is an error
+                if (enumDef->isGeneric) {
+                    throw CompileError(DiagnosticCode::INVALID_TYPE,
+                                       "generic enum '" + type.structName + "' requires type arguments");
+                }
             }
 
             // Handle generic structs with type arguments - trigger monomorphization

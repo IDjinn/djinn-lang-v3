@@ -112,6 +112,30 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
         return generate_method_call_internal(expr);
     }
 
+    // Check for enum construction: Enum::Variant(args) or Enum<T>::Variant(args)
+    if (const size_t colonPos = expr.name.find("::"); colonPos != std::string::npos) {
+        const std::string enumName = expr.name.substr(0, colonPos);
+        const std::string variantName = expr.name.substr(colonPos + 2);
+
+        // Check if this is an enum (not a namespace function)
+        EnumDef *enumDef = currentScope->lookup_enum(enumName);
+
+        // If type arguments are provided, monomorphize the generic enum first
+        if (expr.hasTypeArguments()) {
+            if (enumDef && enumDef->isGeneric) {
+                monomorphize_enum(enumName, expr.typeArguments);
+                // Lookup the monomorphized version
+                enumDef = currentScope->lookup_monomorphized_enum(enumName, expr.typeArguments);
+            }
+        }
+
+        if (enumDef) {
+            if (const EnumVariantDef *variant = enumDef->getVariant(variantName)) {
+                return generate_enum_construction(*enumDef, *variant, expr.arguments);
+            }
+        }
+    }
+
     const auto it = functions.find(expr.name);
     if (it == functions.end()) {
         throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "função não encontrada: " + expr.name);

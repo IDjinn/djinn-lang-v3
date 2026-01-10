@@ -30,6 +30,8 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"private", TokenType::PRIVATE},
     {"static", TokenType::STATIC},
     {"this", TokenType::THIS},
+    {"union", TokenType::UNION},
+    {"enum", TokenType::ENUM},
 };
 
 Lexer::Lexer(std::string source) : source(std::move(source)) {

@@ -5,7 +5,9 @@
 #include "parser.h"
 
 #include <cctype>
+#include <ranges>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/Support/CommandLine.h>
 
 auto isPrimitiveType = [](const std::string &name) {
     if (name == "void" || name == "string" || name == "auto") return true;
@@ -482,6 +484,8 @@ std::unique_ptr<Program> Parser::parse() {
                 current = saved;
             }
             program->namespaces.push_back(parse_namespace());
+        } else if (check(TokenType::ENUM)) {
+            program->enums.push_back(parse_enum());
         } else if (check(TokenType::INTERFACE)) {
             program->interfaces.push_back(parse_interface());
         } else if (check(TokenType::LBRACKET) || check(TokenType::STRUCT)) {
@@ -499,6 +503,8 @@ std::unique_ptr<Program> Parser::parse() {
             program->functions.push_back(parse_function());
         }
     }
+
+    assert(program->enums.size() <= 1);
     return program;
 }
 
@@ -978,6 +984,11 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             }
 
             expect("Esperado ')' após argumentos", TokenType::RPAREN);
+
+            // Pass type arguments if any (for generic enum/struct calls like Result<i32>::Ok(...))
+            if (!genericArgs.empty()) {
+                return std::make_unique<FunctionCall>(name, std::move(genericArgs), std::move(args));
+            }
             return std::make_unique<FunctionCall>(name, std::move(args));
         }
 
@@ -1114,6 +1125,60 @@ std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace() {
     expect("Esperado '}'", TokenType::RBRACE);
 
     return ns;
+}
+
+std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
+    expect("Esperado enum keyword", TokenType::ENUM);
+
+    const auto identifier = expect("Esperado identifier", TokenType::IDENTIFIER);
+
+    // Parse generic params: enum Result<T, E> { ... }
+    GenericParams genericParams;
+    if (match(TokenType::LESS)) {
+        do {
+            const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
+            genericParams.add(GenericParam(paramName.value));
+        } while (match(TokenType::COMMA));
+        expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
+    }
+
+    // Register generic param names as types so they can be used in variant types
+    if (!genericParams.empty()) {
+        for (const auto &param: genericParams.params) {
+            currentScope->define_struct(param.name, Type::struct_type(param.name));
+        }
+    }
+
+    if (check(TokenType::LBRACE)) {
+        expect("Esperado { para declaração de enum", TokenType::LBRACE);
+
+        std::vector<EnumValueDeclaration> values;
+        while (check(TokenType::IDENTIFIER)) {
+            const auto enum_key = expect("Esperado identifier", TokenType::IDENTIFIER);
+            std::vector<Type> associated_types;
+
+            // Parse associated types: Ok(T) or Ok(T, U)
+            if (match(TokenType::LPAREN)) {
+                do {
+                    associated_types.emplace_back(*parse_type());
+                } while (match(TokenType::COMMA));
+
+                expect("Esperado ) após tipos associados", TokenType::RPAREN);
+            }
+
+            values.emplace_back(enum_key.value, associated_types);
+
+            // Optional comma between variants
+            if (!check(TokenType::RBRACE)) {
+                match(TokenType::COMMA);
+            }
+        }
+
+        expect("Esperado } após declaração de enum", TokenType::RBRACE);
+        return std::make_unique<EnumDeclaration>(identifier.value, std::move(genericParams), values);
+    }
+    return std::make_unique<EnumDeclaration>(identifier.value, std::move(genericParams),
+                                             std::vector<EnumValueDeclaration>{});
 }
 
 QualifiedName Parser::parse_qualified_name() {

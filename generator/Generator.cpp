@@ -66,7 +66,12 @@ void Generator::generate(const Program &program) {
         generate_extern_function(*externFunc);
     }
 
-    // PASS 4: Resolve struct bodies (fill in fields)
+    // PASS 4: Generate enums
+    for (const auto &enumDecl: program.enums) {
+        generate_enum(*enumDecl, program.fileNamespace);
+    }
+
+    // PASS 5: Resolve struct bodies (fill in fields)
     // Now all types are known and extern functions declared
     for (const auto &ns: program.namespaces) {
         resolve_namespace_struct_bodies(*ns, "");

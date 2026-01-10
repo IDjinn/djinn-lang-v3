@@ -68,6 +68,10 @@ public:
         return true;
     }
 
+    bool defineEnum(std::shared_ptr<EnumSymbol> enumSym) {
+        return define(std::move(enumSym));
+    }
+
     [[nodiscard]] std::shared_ptr<Symbol> lookup(const std::string &name) const {
         if (const auto it = _symbols.find(name); it != _symbols.end()) {
             return it->second;
@@ -125,6 +129,17 @@ public:
 
     [[nodiscard]] bool hasInterface(const std::string &name) const {
         return lookupInterface(name) != nullptr;
+    }
+
+    [[nodiscard]] std::shared_ptr<EnumSymbol> lookupEnum(const std::string &name) const {
+        if (const auto symbol = lookup(name); symbol && symbol->isEnum()) {
+            return std::dynamic_pointer_cast<EnumSymbol>(symbol);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool hasEnum(const std::string &name) const {
+        return lookupEnum(name) != nullptr;
     }
 
     [[nodiscard]] bool isDefined(const std::string &name) const {

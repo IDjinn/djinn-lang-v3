@@ -101,6 +101,78 @@ struct GenericFunctionDef {
     }
 };
 
+// Enum variant info for code generation
+struct EnumVariantDef {
+    std::string name;
+    std::vector<Type> associatedTypes;
+    unsigned tag = 0;
+
+    EnumVariantDef() = default;
+
+    EnumVariantDef(std::string name, std::vector<Type> types, unsigned tag)
+        : name(std::move(name)), associatedTypes(std::move(types)), tag(tag) {
+    }
+
+    [[nodiscard]] bool hasPayload() const { return !associatedTypes.empty(); }
+};
+
+// Enum definition for LLVM generation
+struct EnumDef {
+    std::string name;
+    std::vector<EnumVariantDef> variants;
+
+    // LLVM representation
+    llvm::StructType *llvmType = nullptr; // The enum struct type { tag, payload }
+    llvm::Type *tagType = nullptr; // Type of the discriminant (i8, i16, etc)
+    size_t maxPayloadSize = 0; // Size of largest variant payload
+
+    // Generic support
+    bool isGeneric = false;
+    bool isMonomorphized = false;
+    GenericParams genericParams;
+
+    EnumDef() = default;
+
+    explicit EnumDef(std::string name) : name(std::move(name)) {
+    }
+
+    EnumDef(std::string name, bool isGeneric) : name(std::move(name)), isGeneric(isGeneric) {
+    }
+
+    void addVariant(const std::string &variantName, const std::vector<Type> &types) {
+        variants.emplace_back(variantName, types, static_cast<unsigned>(variants.size()));
+    }
+
+    [[nodiscard]] bool hasVariant(const std::string &variantName) const {
+        for (const auto &v: variants) {
+            if (v.name == variantName) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] const EnumVariantDef *getVariant(const std::string &variantName) const {
+        for (const auto &v: variants) {
+            if (v.name == variantName) return &v;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] unsigned getVariantTag(const std::string &variantName) const {
+        for (const auto &v: variants) {
+            if (v.name == variantName) return v.tag;
+        }
+        return UINT_MAX;
+    }
+
+    // Check if this enum has any variants with payloads
+    [[nodiscard]] bool hasPayloadVariants() const {
+        for (const auto &v: variants) {
+            if (v.hasPayload()) return true;
+        }
+        return false;
+    }
+};
+
 struct GeneratorScope {
     std::shared_ptr<GeneratorScope> parent = nullptr;
 
@@ -117,6 +189,9 @@ struct GeneratorScope {
     // Functions
     std::unordered_map<std::string, llvm::Function *> localFunctions;
     std::unordered_map<std::string, GenericFunctionDef> genericFunctions;
+
+    // Enums
+    std::unordered_map<std::string, EnumDef> enums;
 
     explicit GeneratorScope(std::shared_ptr<GeneratorScope> parent = nullptr)
         : parent(std::move(parent)) {
@@ -172,6 +247,54 @@ struct GeneratorScope {
     [[nodiscard]] StructDef *lookup_monomorphized(const std::string &baseName, const std::vector<Type> &typeArgs) {
         const std::string mangledName = Mangler::mangle_generic_struct(resolve_alias(baseName), typeArgs);
         return lookup_struct(mangledName);
+    }
+
+    // ========================================================================
+    // Enum operations
+    // ========================================================================
+
+    void define_enum(const std::string &name, EnumDef def) {
+        enums[name] = std::move(def);
+    }
+
+    [[nodiscard]] EnumDef *lookup_enum(const std::string &name) {
+        if (auto it = enums.find(name); it != enums.end()) {
+            return &it->second;
+        }
+        // Try alias
+        if (const std::string resolved = resolve_alias(name); resolved != name) {
+            if (auto it = enums.find(resolved); it != enums.end()) {
+                return &it->second;
+            }
+        }
+        if (parent) {
+            return parent->lookup_enum(name);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const EnumDef *lookup_enum(const std::string &name) const {
+        if (auto it = enums.find(name); it != enums.end()) {
+            return &it->second;
+        }
+        if (const std::string resolved = resolve_alias(name); resolved != name) {
+            if (auto it = enums.find(resolved); it != enums.end()) {
+                return &it->second;
+            }
+        }
+        if (parent) {
+            return parent->lookup_enum(name);
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] bool has_enum(const std::string &name) const {
+        return lookup_enum(name) != nullptr;
+    }
+
+    [[nodiscard]] EnumDef *lookup_monomorphized_enum(const std::string &baseName, const std::vector<Type> &typeArgs) {
+        const std::string mangledName = Mangler::mangle_generic_enum(resolve_alias(baseName), typeArgs);
+        return lookup_enum(mangledName);
     }
 
     // ========================================================================

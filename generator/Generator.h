@@ -46,6 +46,11 @@ private:
 
     void generate_struct(const StructDeclaration &struct_declaration, const std::string &prefix = "");
 
+    void generate_enum(const EnumDeclaration &enum_declaration, const std::string &prefix = "");
+
+    llvm::Value *generate_enum_construction(const EnumDef &enumDef, const EnumVariantDef &variant,
+                                            const std::vector<std::unique_ptr<Expression> > &args);
+
     // Multi-pass struct generation (like C#)
     void forward_declare_struct(const StructDeclaration &struct_declaration, const std::string &prefix = "");
 
@@ -81,6 +86,8 @@ private:
 
     // Monomorphization for generics
     llvm::StructType *monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs);
+
+    llvm::StructType *monomorphize_enum(const std::string &baseName, const std::vector<Type> &typeArgs);
 
     void monomorphize_method(const StructMethodDeclaration &method,
                              const StructDef &genericDef,

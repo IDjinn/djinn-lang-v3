@@ -54,6 +54,16 @@ public:
         return result;
     }
 
+    // Enum genérico: _ZE6ResultIiPcE -> Result<int, char*>
+    static std::string mangle_generic_enum(const std::string &name, const std::vector<Type> &typeArgs) {
+        std::string result = "_ZE" + std::to_string(name.length()) + name + "I";
+        for (const auto &arg: typeArgs) {
+            result += mangle_type(arg);
+        }
+        result += "E";
+        return result;
+    }
+
     // Método de struct genérica: _ZN4ListIiE4pushEi -> List<int>::push(int)
     static std::string mangle_generic_method(const std::string &structName, const std::vector<Type> &typeArgs,
                                              const std::string &methodName, const std::vector<Type> &params) {

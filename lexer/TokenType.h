@@ -92,6 +92,8 @@ enum class TokenType {
     DOT_DOT, // ..
     DOT_DOT_DOT, // ...
     AT, // @
+    UNION,
+    ENUM,
 };
 
 

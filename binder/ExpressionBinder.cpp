@@ -78,6 +78,30 @@ void Binder::bindFunctionCall(const FunctionCall &call) {
         return;
     }
 
+    // Check for enum construction: Enum::Variant(args)
+    const size_t colonPos = call.name.find("::");
+    if (colonPos != std::string::npos) {
+        const std::string enumName = call.name.substr(0, colonPos);
+        const std::string variantName = call.name.substr(colonPos + 2);
+
+        if (const auto enumSym = _global_scope->lookupEnum(enumName)) {
+            if (enumSym->hasVariant(variantName)) {
+                // Valid enum construction - bind arguments
+                const auto *variant = enumSym->getVariant(variantName);
+                if (variant && call.arguments.size() != variant->associatedTypes.size()) {
+                    errorWrongArgumentCount(call.name, variant->associatedTypes.size(), call.arguments.size(), {});
+                }
+                for (const auto &arg: call.arguments) {
+                    bindExpression(*arg);
+                }
+                return;
+            }
+            // Enum exists but variant doesn't
+            errorUndefinedFunction(call.name, {});
+            return;
+        }
+    }
+
     if (const auto funcSym = _global_scope->lookupFunction(call.name); funcSym) {
         if (!funcSym->isVariadic && call.arguments.size() != funcSym->arity()) {
             errorWrongArgumentCount(call.name, funcSym->arity(), call.arguments.size(), {});
