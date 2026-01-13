@@ -29,10 +29,10 @@ void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expe
                 const Type *fieldType = nullptr;
 
                 if (elem.isDesignated()) {
-                    if (!structSym->hasMember(elem.fieldName)) {
-                        errorUndefinedField(expectedType->structName, elem.fieldName, {});
+                    if (!structSym->hasMember(elem.fieldName.token_name)) {
+                        errorUndefinedField(expectedType->structName, elem.fieldName.token_name, {});
                     } else {
-                        fieldType = structSym->getMemberType(elem.fieldName);
+                        fieldType = structSym->getMemberType(elem.fieldName.token_name);
                     }
                 } else {
                     // Positional initializer - get field by index

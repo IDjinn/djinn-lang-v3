@@ -250,7 +250,7 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
 // Helper to check if struct exists in list
 static bool hasStruct(const std::vector<std::unique_ptr<StructDeclaration> > &list, const std::string &name) {
     for (const auto &s: list) {
-        if (s->name == name) return true;
+        if (s->name.token_name == name) return true;
     }
     return false;
 }
@@ -258,7 +258,7 @@ static bool hasStruct(const std::vector<std::unique_ptr<StructDeclaration> > &li
 // Helper to check if function exists in list
 static bool hasFunction(const std::vector<std::unique_ptr<FunctionDeclaration> > &list, const std::string &name) {
     for (const auto &f: list) {
-        if (f->name == name) return true;
+        if (f->name.token_name == name) return true;
     }
     return false;
 }
@@ -268,26 +268,26 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
         NamespaceDeclaration *targetNs = nullptr;
 
         for (auto &ns: target.namespaces) {
-            if (ns->name == source->fileNamespace) {
+            if (ns->name.token_name == source->fileNamespace) {
                 targetNs = ns.get();
                 break;
             }
         }
 
         if (!targetNs) {
-            auto newNs = std::make_unique<NamespaceDeclaration>(source->fileNamespace);
+            auto newNs = std::make_unique<NamespaceDeclaration>(SourceIdentifier(source->fileNamespace));
             targetNs = newNs.get();
             target.namespaces.push_back(std::move(newNs));
         }
 
         for (auto &s: source->structs) {
-            if (!hasStruct(targetNs->structs, s->name)) {
+            if (!hasStruct(targetNs->structs, s->name.token_name)) {
                 targetNs->structs.push_back(std::move(s));
             }
         }
 
         for (auto &f: source->functions) {
-            if (!hasFunction(targetNs->functions, f->name)) {
+            if (!hasFunction(targetNs->functions, f->name.token_name)) {
                 targetNs->functions.push_back(std::move(f));
             }
         }
@@ -297,13 +297,13 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
         }
     } else {
         for (auto &s: source->structs) {
-            if (!hasStruct(target.structs, s->name)) {
+            if (!hasStruct(target.structs, s->name.token_name)) {
                 target.structs.push_back(std::move(s));
             }
         }
 
         for (auto &f: source->functions) {
-            if (!hasFunction(target.functions, f->name)) {
+            if (!hasFunction(target.functions, f->name.token_name)) {
                 target.functions.push_back(std::move(f));
             }
         }
@@ -311,14 +311,14 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
         for (auto &ns: source->namespaces) {
             bool found = false;
             for (auto &existingNs: target.namespaces) {
-                if (existingNs->name == ns->name) {
+                if (existingNs->name.token_name == ns->name.token_name) {
                     for (auto &s: ns->structs) {
-                        if (!hasStruct(existingNs->structs, s->name)) {
+                        if (!hasStruct(existingNs->structs, s->name.token_name)) {
                             existingNs->structs.push_back(std::move(s));
                         }
                     }
                     for (auto &f: ns->functions) {
-                        if (!hasFunction(existingNs->functions, f->name)) {
+                        if (!hasFunction(existingNs->functions, f->name.token_name)) {
                             existingNs->functions.push_back(std::move(f));
                         }
                     }
@@ -342,7 +342,7 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
     for (auto &ext: source->externFunctions) {
         bool isDuplicate = false;
         for (const auto &existing: target.externFunctions) {
-            if (existing->name == ext->name) {
+            if (existing->name.token_name == ext->name.token_name) {
                 isDuplicate = true;
                 break;
             }
@@ -355,7 +355,7 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
     for (auto &iface: source->interfaces) {
         bool isDuplicate = false;
         for (const auto &existing: target.interfaces) {
-            if (existing->name == iface->name) {
+            if (existing->name.token_name == iface->name.token_name) {
                 isDuplicate = true;
                 break;
             }
@@ -368,7 +368,7 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
     for (auto &enumDecl: source->enums) {
         bool isDuplicate = false;
         for (const auto &existing: target.enums) {
-            if (existing->name == enumDecl->name) {
+            if (existing->name.token_name == enumDecl->name.token_name) {
                 isDuplicate = true;
                 break;
             }

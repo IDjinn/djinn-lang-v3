@@ -11,8 +11,8 @@ void Binder::bindVariableDeclaration(const VariableDeclaration &decl) {
         }
     }
 
-    if (!_current_scope->defineVariable(decl.name, decl.type, decl.isMutable)) {
-        errorDuplicateDefinition(decl.name, SymbolKind::Variable, {});
+    if (!_current_scope->defineVariable(decl.name.token_name, decl.type, decl.isMutable)) {
+        errorDuplicateDefinition(decl.name.token_name, SymbolKind::Variable, {});
     }
 }
 
@@ -35,22 +35,23 @@ void Binder::bindVariableInit(const VariableInit &init) {
         }
     }
 
-    const auto symbol = std::make_shared<Symbol>(SymbolKind::Variable, init.name, init.type, SourceLocation{},
+    const auto symbol = std::make_shared<Symbol>(SymbolKind::Variable, init.name.token_name, init.type,
+                                                 SourceLocation{},
                                                  init.isMutable);
     symbol->isInitialized = true;
     if (!_current_scope->define(symbol)) {
-        errorDuplicateDefinition(init.name, SymbolKind::Variable, {});
+        errorDuplicateDefinition(init.name.token_name, SymbolKind::Variable, {});
     }
 }
 
 void Binder::bindAssignment(const Assignment &assign) {
-    if (const auto symbol = _current_scope->lookupVariable(assign.name); symbol) {
+    if (const auto symbol = _current_scope->lookupVariable(assign.name.token_name); symbol) {
         if (!symbol->isMutable) {
-            errorImmutableVariable(assign.name, {});
+            BINDER_ERROR(DiagnosticCode::IMMUTABLE_MODIFICATION, "tried to modify an immutable variable", symbol, SOURCE_LOCATION);
         }
 
         symbol->isInitialized = true;
-        _current_scope->markUsed(assign.name);
+        _current_scope->markUsed(assign.name.token_name);
 
         // Check type compatibility with existing variable type
         if (assign.value) {
@@ -58,7 +59,7 @@ void Binder::bindAssignment(const Assignment &assign) {
             checkTypeCompatibility(symbol->type, *assign.value, {});
         }
     } else {
-        errorUndefinedVariable(assign.name, {});
+        errorUndefinedVariable(assign.name.token_name, {});
         if (assign.value) {
             bindExpression(*assign.value);
         }

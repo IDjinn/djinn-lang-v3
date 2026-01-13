@@ -103,7 +103,7 @@ struct GenericFunctionDef {
 
 // Enum variant info for code generation
 struct EnumVariantDef {
-    std::string name;
+    SourceIdentifier name;
     std::vector<Type> associatedTypes;
     unsigned tag = 0;
 
@@ -145,21 +145,21 @@ struct EnumDef {
 
     [[nodiscard]] bool hasVariant(const std::string &variantName) const {
         for (const auto &v: variants) {
-            if (v.name == variantName) return true;
+            if (v.name.token_name == variantName) return true;
         }
         return false;
     }
 
     [[nodiscard]] const EnumVariantDef *getVariant(const std::string &variantName) const {
         for (const auto &v: variants) {
-            if (v.name == variantName) return &v;
+            if (v.name.token_name == variantName) return &v;
         }
         return nullptr;
     }
 
     [[nodiscard]] unsigned getVariantTag(const std::string &variantName) const {
         for (const auto &v: variants) {
-            if (v.name == variantName) return v.tag;
+            if (v.name.token_name == variantName) return v.tag;
         }
         return UINT_MAX;
     }

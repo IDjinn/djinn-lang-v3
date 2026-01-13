@@ -12,27 +12,29 @@
 #include "Type.h"
 #include "ASTNode.h"
 
-struct GenericParam : ASTNode {
-    std::string name;
+struct GenericParam : Location {
+    SourceIdentifier name;
     std::unique_ptr<Type> constraint;
     std::unique_ptr<Type> defaultType;
 
-    explicit GenericParam(std::string name)
+    explicit GenericParam(SourceIdentifier name)
         : name(std::move(name)) {
     }
 
-    GenericParam(std::string name, std::unique_ptr<Type> defaultType)
+    GenericParam(SourceIdentifier name, std::unique_ptr<Type> defaultType)
         : name(std::move(name)), defaultType(std::move(defaultType)) {
     }
 
     GenericParam(const GenericParam &other)
-        : name(other.name),
+        : Location(other),
+          name(other.name),
           constraint(other.constraint ? std::make_unique<Type>(*other.constraint) : nullptr),
           defaultType(other.defaultType ? std::make_unique<Type>(*other.defaultType) : nullptr) {
     }
 
     GenericParam &operator=(const GenericParam &other) {
         if (this != &other) {
+            Location::operator=(other);
             name = other.name;
             constraint = other.constraint ? std::make_unique<Type>(*other.constraint) : nullptr;
             defaultType = other.defaultType ? std::make_unique<Type>(*other.defaultType) : nullptr;
@@ -55,7 +57,7 @@ struct GenericParam : ASTNode {
     }
 };
 
-struct GenericParams : ASTNode {
+struct GenericParams : Location {
     std::vector<GenericParam> params;
 
     GenericParams() = default;
@@ -69,7 +71,7 @@ struct GenericParams : ASTNode {
 
     [[nodiscard]] const GenericParam *find(const std::string &name) const {
         for (const auto &p: params) {
-            if (p.name == name) return &p;
+            if (p.name.token_name == name) return &p;
         }
         return nullptr;
     }
@@ -85,7 +87,7 @@ struct GenericParams : ASTNode {
     }
 };
 
-struct GenericArgs : ASTNode {
+struct GenericArgs : Location {
     std::vector<Type> args;
 
     GenericArgs() = default;
@@ -140,9 +142,9 @@ struct GenericContext {
         GenericContext ctx;
         for (size_t i = 0; i < params.size(); ++i) {
             if (i < args.size()) {
-                ctx.bind(params.params[i].name, args.args[i]);
+                ctx.bind(params.params[i].name.token_name, args.args[i]);
             } else if (params.params[i].defaultType) {
-                ctx.bind(params.params[i].name, *params.params[i].defaultType);
+                ctx.bind(params.params[i].name.token_name, *params.params[i].defaultType);
             }
         }
         return ctx;

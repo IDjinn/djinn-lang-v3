@@ -62,7 +62,7 @@ private:
 
     std::unique_ptr<StructMethodDeclaration> parse_method(bool allowBody = true);
 
-    StructProperty parse_property(std::unique_ptr<Type> type, const std::string &name);
+    StructProperty parse_property(std::unique_ptr<Type> type, SourceIdentifier name);
 
     std::vector<VisibilityModifier> parse_modifiers();
 

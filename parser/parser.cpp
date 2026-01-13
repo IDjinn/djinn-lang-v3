@@ -9,6 +9,11 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/CommandLine.h>
 
+auto makeSourceIdentifier = [](const Token &token) {
+    return SourceIdentifier(token.value,
+                            SourceLocation(token.position.line, token.position.column, token.value.length()));
+};
+
 auto isPrimitiveType = [](const std::string &name) {
     if (name == "void" || name == "string" || name == "auto") return true;
     if (name.starts_with('f') && string_to_type_kind.contains(name)) return true;
@@ -193,13 +198,14 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     method->returnType = parse_type();
 
     // Parse method name
-    method->name = expect("Esperado nome do método", TokenType::IDENTIFIER).value;
+    const Token &methodNameToken = expect("Esperado nome do método", TokenType::IDENTIFIER);
+    method->name = makeSourceIdentifier(methodNameToken);
 
     // Parse generic parameters: method<T>()
     if (match(TokenType::LESS)) {
         do {
             const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
-            method->genericParams.add(GenericParam(paramName.value));
+            method->genericParams.add(GenericParam(makeSourceIdentifier(paramName)));
         } while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
@@ -209,9 +215,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     if (!check(TokenType::RPAREN)) {
         do {
             auto paramType = parse_type();
-            std::string paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER).value;
+            const Token &paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
             bool isMutable = match(TokenType::MUT);
-            method->parameters.emplace_back(std::move(paramType), std::move(paramName), isMutable);
+            method->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken), isMutable);
         } while (match(TokenType::COMMA));
     }
     expect("Esperado ')'", TokenType::RPAREN);
@@ -245,16 +251,16 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
     }
 
     expect("Esperado 'interface'", TokenType::INTERFACE);
-    const auto name = expect("Esperado nome da interface", TokenType::IDENTIFIER).value;
+    const Token &nameToken = expect("Esperado nome da interface", TokenType::IDENTIFIER);
 
     auto iface = std::make_unique<InterfaceDeclaration>();
-    iface->name = name;
+    iface->name = makeSourceIdentifier(nameToken);
 
     // Parse generic parameters: interface IComparable<T> { ... }
     if (match(TokenType::LESS)) {
         do {
             const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
-            iface->genericParams.add(GenericParam(paramName.value));
+            iface->genericParams.add(GenericParam(makeSourceIdentifier(paramName)));
         } while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
@@ -262,7 +268,7 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
     // Register generic param names as types within interface scope
     if (!iface->genericParams.empty()) {
         for (const auto &param: iface->genericParams.params) {
-            currentScope->define_struct(param.name, Type::struct_type(param.name));
+            currentScope->define_struct(param.name.token_name, Type::struct_type(param.name.token_name));
         }
     }
 
@@ -281,14 +287,16 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface() {
 std::unique_ptr<StructDeclaration> Parser::parse_struct() {
     std::vector<AttributeUsageDeclaration> attributes = this->parse_attributes();
     expect("Esperado 'struct'", TokenType::STRUCT);
-    const auto name = match(TokenType::IDENTIFIER) ? previous().value : Type::generate_struct_name();
+    SourceIdentifier name = match(TokenType::IDENTIFIER)
+                                ? makeSourceIdentifier(previous())
+                                : SourceIdentifier(Type::generate_struct_name());
 
     // Parse generic parameters: struct Array<T, U> { ... }
     GenericParams genericParams;
     if (match(TokenType::LESS)) {
         do {
             const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
-            genericParams.add(GenericParam(paramName.value));
+            genericParams.add(GenericParam(makeSourceIdentifier(paramName)));
         } while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
@@ -321,12 +329,12 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
         }
     }
 
-    currentScope->define_struct(name, Type::struct_type(name));
+    currentScope->define_struct(name.token_name, Type::struct_type(name.token_name));
 
     // Register generic param names as types within struct scope for field parsing
     if (!genericParams.empty()) {
         for (const auto &param: genericParams.params) {
-            currentScope->define_struct(param.name, Type::struct_type(param.name));
+            currentScope->define_struct(param.name.token_name, Type::struct_type(param.name.token_name));
         }
     }
 
@@ -354,7 +362,8 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
                 continue;
             }
 
-            const auto memberName = expect("Esperado nome", TokenType::IDENTIFIER).value;
+            const Token &memberNameToken = expect("Esperado nome", TokenType::IDENTIFIER);
+            SourceIdentifier memberName = makeSourceIdentifier(memberNameToken);
 
             // Check if this is a method (has parenthesis), property (has brace), or field (has semicolon)
             if (check(TokenType::LPAREN) || check(TokenType::LESS)) {
@@ -363,12 +372,12 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
                 methods.push_back(parse_method(true));
             } else if (check(TokenType::LBRACE)) {
                 // It's a property: T name { get; set; }
-                auto prop = parse_property(std::move(fieldType), memberName);
+                auto prop = parse_property(std::move(fieldType), std::move(memberName));
                 structDecl_properties.push_back(std::move(prop));
             } else {
                 // It's a field
                 expect("Esperado ';' após campo", TokenType::SEMICOLON);
-                fields.emplace_back(std::move(fieldType), memberName);
+                fields.emplace_back(std::move(fieldType), std::move(memberName));
             }
         }
 
@@ -383,7 +392,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
         }
     }
 
-    auto structDecl = std::make_unique<StructDeclaration>(name, std::move(genericParams), std::move(fields));
+    auto structDecl = std::make_unique<StructDeclaration>(std::move(name), std::move(genericParams), std::move(fields));
     structDecl->properties = std::move(structDecl_properties);
     structDecl->methods = std::move(methods);
     structDecl->implements = std::move(implements);
@@ -393,8 +402,8 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
 }
 
 // Parse property: T name { get; set; } or T name { get { ... } set { ... } }
-StructProperty Parser::parse_property(std::unique_ptr<Type> type, const std::string &name) {
-    StructProperty prop(std::move(type), name);
+StructProperty Parser::parse_property(std::unique_ptr<Type> type, SourceIdentifier name) {
+    StructProperty prop(std::move(type), std::move(name));
 
     expect("Esperado '{' para property", TokenType::LBRACE);
 
@@ -452,8 +461,8 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes() {
     std::vector<AttributeUsageDeclaration> attributes;
     while (check(TokenType::LBRACKET)) {
         expect("Esperado '[' no uso de Atributos", TokenType::LBRACKET);
-        const auto identifier = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
-        attributes.emplace_back(identifier.value);
+        const Token &identifier = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
+        attributes.emplace_back(makeSourceIdentifier(identifier));
         expect("Esperado ']' no uso de Atributos", TokenType::RBRACKET);
     }
 
@@ -495,7 +504,7 @@ std::unique_ptr<Program> Parser::parse() {
             if (!check(TokenType::IDENTIFIER) || isType()) {
                 program->structs.push_back(std::move(structDecl));
             } else {
-                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name));
+                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name.token_name));
                 program->structs.push_back(std::move(structDecl));
                 program->functions.push_back(parse_function_with_type(std::move(returnType)));
             }
@@ -513,21 +522,21 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function() {
 }
 
 std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::unique_ptr<Type> returnType) {
-    Token &name = expect("Esperado nome da função", TokenType::IDENTIFIER);
+    const Token &nameToken = expect("Esperado nome da função", TokenType::IDENTIFIER);
 
     pushScope();
 
     auto params = parse_parameters();
 
     for (const auto &param: params) {
-        currentScope->define_variable(param.name, *param.type);
+        currentScope->define_variable(param.name.token_name, *param.type);
     }
 
     auto body = parse_block();
 
     popScope();
 
-    return std::make_unique<FunctionDeclaration>(std::move(returnType), name.value, params, std::move(body));
+    return std::make_unique<FunctionDeclaration>(std::move(returnType), makeSourceIdentifier(nameToken), params, std::move(body));
 }
 
 std::vector<Parameter> Parser::parse_parameters() {
@@ -537,8 +546,8 @@ std::vector<Parameter> Parser::parse_parameters() {
     if (!check(TokenType::RPAREN)) {
         do {
             auto type = this->parse_type();
-            Token &paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-            parameters.emplace_back(std::move(type), paramName.value, match(TokenType::MUT));
+            const Token &paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+            parameters.emplace_back(std::move(type), makeSourceIdentifier(paramNameToken), match(TokenType::MUT));
         } while (match(TokenType::COMMA));
     }
 
@@ -837,15 +846,15 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
     while (true) {
         if (match(TokenType::DOT)) {
             // Accept identifier or keywords as field/method names after '.'
-            std::string memberName;
+            SourceIdentifier memberName;
             if (check(TokenType::IDENTIFIER)) {
-                memberName = advance().value;
+                memberName = makeSourceIdentifier(advance());
             } else if (check(TokenType::BREAK) || check(TokenType::CONTINUE) || check(TokenType::RETURN) ||
                        check(TokenType::IF) || check(TokenType::ELSE) || check(TokenType::FOR) ||
                        check(TokenType::WHILE) || check(TokenType::DO) || check(TokenType::SWITCH) ||
                        check(TokenType::CASE) || check(TokenType::DEFAULT) || check(TokenType::STATIC) ||
                        check(TokenType::PUBLIC) || check(TokenType::PRIVATE)) {
-                memberName = advance().value;
+                memberName = makeSourceIdentifier(advance());
             } else {
                 throw std::runtime_error("Esperado nome do campo após '.'");
             }
@@ -859,16 +868,16 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
                     } while (match(TokenType::COMMA));
                 }
                 expect("Esperado ')' após argumentos", TokenType::RPAREN);
-                expr = std::make_unique<FunctionCall>(memberName, std::move(args), std::move(expr));
+                expr = std::make_unique<FunctionCall>(std::move(memberName), std::move(args), std::move(expr));
             }
             // Check if this is a field assignment (this.field = value)
             else if (match(TokenType::EQUAL)) {
                 auto value = parse_expression();
-                return std::make_unique<FieldAssignment>(std::move(expr), memberName, std::move(value));
+                return std::make_unique<FieldAssignment>(std::move(expr), std::move(memberName), std::move(value));
             }
             // Otherwise it's a field access
             else {
-                expr = std::make_unique<FieldAccess>(std::move(expr), memberName);
+                expr = std::make_unique<FieldAccess>(std::move(expr), std::move(memberName));
             }
         } else {
             break;
@@ -903,12 +912,12 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
     // Handle 'this' keyword as a simple identifier
     if (match(TokenType::THIS)) {
-        return std::make_unique<Identifier>("this");
+        return std::make_unique<Identifier>(makeSourceIdentifier(previous()));
     }
 
     if (check(TokenType::STRING) || check(TokenType::AUTO) || check(TokenType::MUT) ||
         check(TokenType::IDENTIFIER)) {
-        const auto identifier = advance();
+        const Token &identifier = advance();
         const auto isMutable = match(TokenType::MUT);
 
         std::vector<Type> genericArgs;
@@ -943,7 +952,8 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
         if (check(TokenType::IDENTIFIER)) {
             // type + identifier, should be variable creation
-            const auto varName = advance().value;
+            const Token &varNameToken = advance();
+            SourceIdentifier varName = makeSourceIdentifier(varNameToken);
             Type varType = isStructType
                                ? Type::struct_type(identifier.value)
                                : Type::fromToken(identifier);
@@ -956,15 +966,17 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                 varType = Type::array(std::move(varType));
             }
 
-            currentScope->define_variable(varName, varType);
+            currentScope->define_variable(varName.token_name, varType);
             if (match(TokenType::EQUAL)) {
                 auto value = parse_expression();
-                return std::make_unique<VariableInit>(std::move(varType), varName, std::move(value), isMutable);
+                return std::make_unique<VariableInit>(std::move(varType), std::move(varName), std::move(value),
+                                                      isMutable);
             }
-            return std::make_unique<VariableDeclaration>(std::move(varType), varName, isMutable);
+            return std::make_unique<VariableDeclaration>(std::move(varType), std::move(varName), isMutable);
         }
 
         // Not a variable declaration - handle as identifier/call/assignment
+        // Build qualified name, keeping the first identifier's location
         std::string name = identifier.value;
 
         // foo::bar::baz
@@ -972,6 +984,9 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             const Token &part = expect("Esperado identificador após '::'", TokenType::IDENTIFIER);
             name += "::" + part.value;
         }
+
+        // Create SourceIdentifier with the first token's location
+        SourceIdentifier nameIdentifier(name, SourceLocation(identifier.position.line, identifier.position.column, name.length()));
 
         if (match(TokenType::LPAREN)) {
             std::vector<std::unique_ptr<Expression> > args;
@@ -986,17 +1001,17 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
             // Pass type arguments if any (for generic enum/struct calls like Result<i32>::Ok(...))
             if (!genericArgs.empty()) {
-                return std::make_unique<FunctionCall>(name, std::move(genericArgs), std::move(args));
+                return std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(genericArgs), std::move(args));
             }
-            return std::make_unique<FunctionCall>(name, std::move(args));
+            return std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(args));
         }
 
         if (match(TokenType::EQUAL)) {
             auto value = parse_expression();
-            return std::make_unique<Assignment>(name, std::move(value));
+            return std::make_unique<Assignment>(std::move(nameIdentifier), std::move(value));
         }
 
-        return std::make_unique<Identifier>(name);
+        return std::make_unique<Identifier>(std::move(nameIdentifier));
     }
 
     if (check(TokenType::LBRACE)) {
@@ -1024,10 +1039,10 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer() {
         do {
             if (match(TokenType::DOT)) {
                 // Designated initializer: .field = value
-                Token &fieldName = expect("Esperado nome do campo", TokenType::IDENTIFIER);
+                const Token &fieldNameToken = expect("Esperado nome do campo", TokenType::IDENTIFIER);
                 expect("Esperado '=' após nome do campo", TokenType::EQUAL);
                 auto value = parse_expression();
-                elements.emplace_back(fieldName.value, std::move(value));
+                elements.emplace_back(makeSourceIdentifier(fieldNameToken), std::move(value));
             } else {
                 // Positional initializer: value
                 auto value = parse_expression();
@@ -1044,7 +1059,7 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer() {
 
 std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const std::string &abi) {
     std::unique_ptr<Type> returnType = parse_type();
-    const Token &name = expect("Esperado nome", TokenType::IDENTIFIER);
+    const Token &nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
 
     expect("Esperado '('", TokenType::LPAREN);
 
@@ -1052,8 +1067,8 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     do {
         if (!check(TokenType::RPAREN) && !check(TokenType::DOT_DOT_DOT)) {
             auto type = parse_type();
-            Token &paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-            parameters.emplace_back(std::move(type), paramName.value, match(TokenType::MUT));
+            const Token &paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+            parameters.emplace_back(std::move(type), makeSourceIdentifier(paramNameToken), match(TokenType::MUT));
         }
     } while (match(TokenType::COMMA));
 
@@ -1064,7 +1079,7 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     expect("Esperado ';'", TokenType::SEMICOLON);
 
     auto decl = std::make_unique<ExternFunctionDeclaration>();
-    decl->name = name.value;
+    decl->name = makeSourceIdentifier(nameToken);
     decl->returnType = std::move(returnType);
     decl->parameters = std::move(parameters);
     decl->isVariadic = isVariadic;
@@ -1093,9 +1108,9 @@ void Parser::parse_extern(Program *program) {
 
 std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace() {
     expect("Esperado 'namespace'", TokenType::NAMESPACE);
-    const Token &name = expect("Esperado nome do namespace", TokenType::IDENTIFIER);
+    const Token &nameToken = expect("Esperado nome do namespace", TokenType::IDENTIFIER);
 
-    auto ns = std::make_unique<NamespaceDeclaration>(name.value);
+    auto ns = std::make_unique<NamespaceDeclaration>(makeSourceIdentifier(nameToken));
 
     expect("Esperado '{'", TokenType::LBRACE);
 
@@ -1110,7 +1125,7 @@ std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace() {
             if (!check(TokenType::IDENTIFIER) || isType()) {
                 ns->structs.push_back(std::move(structDecl));
             } else {
-                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name));
+                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name.token_name));
                 ns->structs.push_back(std::move(structDecl));
                 ns->functions.push_back(parse_function_with_type(std::move(returnType)));
             }
@@ -1129,14 +1144,14 @@ std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace() {
 std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
     expect("Esperado enum keyword", TokenType::ENUM);
 
-    const auto identifier = expect("Esperado identifier", TokenType::IDENTIFIER);
+    const Token &identifierToken = expect("Esperado identifier", TokenType::IDENTIFIER);
 
     // Parse generic params: enum Result<T, E> { ... }
     GenericParams genericParams;
     if (match(TokenType::LESS)) {
         do {
             const Token &paramName = expect("Esperado nome do parâmetro genérico", TokenType::IDENTIFIER);
-            genericParams.add(GenericParam(paramName.value));
+            genericParams.add(GenericParam(makeSourceIdentifier(paramName)));
         } while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
@@ -1144,7 +1159,7 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
     // Register generic param names as types so they can be used in variant types
     if (!genericParams.empty()) {
         for (const auto &param: genericParams.params) {
-            currentScope->define_struct(param.name, Type::struct_type(param.name));
+            currentScope->define_struct(param.name.token_name, Type::struct_type(param.name.token_name));
         }
     }
 
@@ -1153,7 +1168,7 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
 
         std::vector<EnumValueDeclaration> values;
         while (check(TokenType::IDENTIFIER)) {
-            const auto enum_key = expect("Esperado identifier", TokenType::IDENTIFIER);
+            const Token &enum_key = expect("Esperado identifier", TokenType::IDENTIFIER);
             std::vector<Type> associated_types;
 
             // Parse associated types: Ok(T) or Ok(T, U)
@@ -1165,7 +1180,7 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
                 expect("Esperado ) após tipos associados", TokenType::RPAREN);
             }
 
-            values.emplace_back(enum_key.value, associated_types);
+            values.emplace_back(makeSourceIdentifier(enum_key), associated_types);
 
             // Optional comma between variants
             if (!check(TokenType::RBRACE)) {
@@ -1174,9 +1189,10 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
         }
 
         expect("Esperado } após declaração de enum", TokenType::RBRACE);
-        return std::make_unique<EnumDeclaration>(identifier.value, std::move(genericParams), values);
+        return std::make_unique<EnumDeclaration>(makeSourceIdentifier(identifierToken), std::move(genericParams),
+                                                 values);
     }
-    return std::make_unique<EnumDeclaration>(identifier.value, std::move(genericParams),
+    return std::make_unique<EnumDeclaration>(makeSourceIdentifier(identifierToken), std::move(genericParams),
                                              std::vector<EnumValueDeclaration>{});
 }
 

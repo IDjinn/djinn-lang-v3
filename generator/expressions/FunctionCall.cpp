@@ -11,9 +11,9 @@ bool Generator::is_intrinsic(const std::string &name) {
 }
 
 llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
-    const auto intrinsic = get_intrinsic(call.name);
+    const auto intrinsic = get_intrinsic(call.name.token_name);
     if (!intrinsic) {
-        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "unknown intrinsic: " + call.name);
+        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "unknown intrinsic: " + call.name.token_name);
     }
 
     switch (*intrinsic) {
@@ -103,7 +103,7 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
 }
 
 llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
-    if (is_intrinsic(expr.name)) {
+    if (is_intrinsic(expr.name.token_name)) {
         return generate_intrinsic_call(expr);
     }
 
@@ -113,9 +113,9 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
     }
 
     // Check for enum construction: Enum::Variant(args) or Enum<T>::Variant(args)
-    if (const size_t colonPos = expr.name.find("::"); colonPos != std::string::npos) {
-        const std::string enumName = expr.name.substr(0, colonPos);
-        const std::string variantName = expr.name.substr(colonPos + 2);
+    if (const size_t colonPos = expr.name.token_name.find("::"); colonPos != std::string::npos) {
+        const std::string enumName = expr.name.token_name.substr(0, colonPos);
+        const std::string variantName = expr.name.token_name.substr(colonPos + 2);
 
         // Check if this is an enum (not a namespace function)
         EnumDef *enumDef = currentScope->lookup_enum(enumName);
@@ -136,9 +136,9 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
         }
     }
 
-    const auto it = functions.find(expr.name);
+    const auto it = functions.find(expr.name.token_name);
     if (it == functions.end()) {
-        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "função não encontrada: " + expr.name);
+        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "função não encontrada: " + expr.name.token_name);
     }
 
     llvm::Function *func = it->second;
@@ -169,9 +169,9 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
     std::string llvmStructName;
 
     if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
-        structName = currentScope->lookup_variable_struct_type(ident->name);
+        structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
         // Get the LLVM struct name (mangled for generics) from the alloca
-        if (auto *alloca = currentScope->lookup_variable(ident->name)) {
+        if (auto *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
             if (auto *structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
                 llvmStructName = structType->getName().str();
             }
@@ -190,11 +190,11 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
     std::string methodStructName = llvmStructName.empty() ? structName : llvmStructName;
 
     // Instance method call - look up method
-    const std::string mangledName = methodStructName + "__" + call.name;
+    const std::string mangledName = methodStructName + "__" + call.name.token_name;
 
     if (const auto it = functions.find(mangledName); it == functions.end()) {
         throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                           "method not found: " + structName + "." + call.name);
+                           "method not found: " + structName + "." + call.name.token_name);
     }
 
     llvm::Function *func = functions[mangledName];

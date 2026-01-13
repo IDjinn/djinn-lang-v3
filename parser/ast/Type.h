@@ -36,7 +36,7 @@ const std::unordered_map<std::string, TypeKind> string_to_type_kind = {
     {"string", TypeKind::STRING},
 };
 
-struct Type : ASTNode {
+struct Type : Location {
     size_t size = 0;
     TypeKind kind = TypeKind::VOID;
     bool sign = false;
@@ -54,7 +54,8 @@ struct Type : ASTNode {
     }
 
     Type(const Type &other)
-        : size(other.size),
+        : Location(other),
+          size(other.size),
           kind(other.kind),
           sign(other.sign),
           nullable(other.nullable),
@@ -65,6 +66,7 @@ struct Type : ASTNode {
 
     Type &operator=(const Type &other) {
         if (this != &other) {
+            Location::operator=(other);
             kind = other.kind;
             size = other.size;
             sign = other.sign;

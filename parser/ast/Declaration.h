@@ -23,17 +23,17 @@ enum class VisibilityModifier {
 
 struct MethodParameter {
     std::unique_ptr<Type> type;
-    std::string name;
+    SourceIdentifier name;
     bool isMutable = false;
 
-    MethodParameter(std::unique_ptr<Type> type, std::string name, bool isMutable = false)
+    MethodParameter(std::unique_ptr<Type> type, SourceIdentifier name, bool isMutable = false)
         : type(std::move(type)), name(std::move(name)), isMutable(isMutable) {
     }
 };
 
-struct StructMethodDeclaration : ASTNode {
+struct StructMethodDeclaration : Location {
     std::unique_ptr<Type> returnType;
-    std::string name;
+    SourceIdentifier name;
     std::vector<MethodParameter> parameters;
     GenericParams genericParams;
     std::vector<VisibilityModifier> modifiers;
@@ -76,7 +76,7 @@ struct StructMethodDeclaration : ASTNode {
                     break;
             }
         }
-        os << *returnType << " " << name;
+        os << *returnType << " " << name.token_name;
         if (!genericParams.empty()) {
             os << "<";
             for (size_t i = 0; i < genericParams.size(); ++i) {
@@ -98,25 +98,25 @@ struct StructMethodDeclaration : ASTNode {
     }
 };
 
-struct StructField : ASTNode {
+struct StructField : Location {
     std::unique_ptr<Type> type;
-    std::string name;
+    SourceIdentifier name;
 
-    StructField(std::unique_ptr<Type> type, std::string name)
+    StructField(std::unique_ptr<Type> type, SourceIdentifier name)
         : type(std::move(type)), name(std::move(name)) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "StructField(" << name << ": " << *type << ")";
+        os << "StructField(" << name.token_name << ": " << *type << ")";
     }
 };
 
 // Property with getter/setter (C# style)
 // Syntax: T name { get; set; } or T name { get { ... } set { ... } }
-struct StructProperty : ASTNode {
+struct StructProperty : Location {
     std::unique_ptr<Type> type;
-    std::string name;
+    SourceIdentifier name;
     bool hasGetter = false;
     bool hasSetter = false;
     std::unique_ptr<Block> getterBody; // null = auto-implemented
@@ -124,7 +124,7 @@ struct StructProperty : ASTNode {
     std::unique_ptr<Expression> getterExpr; // => expr for getter
     std::unique_ptr<Expression> setterExpr; // => expr for setter
 
-    StructProperty(std::unique_ptr<Type> type, std::string name)
+    StructProperty(std::unique_ptr<Type> type, SourceIdentifier name)
         : type(std::move(type)), name(std::move(name)) {
     }
 
@@ -141,12 +141,12 @@ struct StructProperty : ASTNode {
 
     // Get the backing field name (same as property name for auto-properties)
     [[nodiscard]] std::string backingFieldName() const {
-        return name;
+        return name.token_name;
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "StructProperty(" << name << ": " << *type << " { ";
+        os << "StructProperty(" << name.token_name << ": " << *type << " { ";
         if (hasGetter) {
             os << "get";
             if (getterBody) os << " { ... }";
@@ -164,17 +164,17 @@ struct StructProperty : ASTNode {
     }
 };
 
-struct AttributeUsageDeclaration : ASTNode {
-    std::string name;
+struct AttributeUsageDeclaration : Location {
+    SourceIdentifier name;
     // std::vector<Parameter> parameters;
     // std::unique_ptr<Statement> statement;
 
-    AttributeUsageDeclaration(std::string name) : name(std::move(name)) {
+    AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name)) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "AttributeUsageDeclaration(" << name << ")";
+        os << "AttributeUsageDeclaration(" << name.token_name << ")";
         // for (size_t i = 0; i < parameters.size(); ++i) {
         //     if (i > 0) os << ", ";
         //     os << parameters[i].type << " " << parameters[i].name;
@@ -182,8 +182,8 @@ struct AttributeUsageDeclaration : ASTNode {
     }
 };
 
-struct StructDeclaration : ASTNode {
-    std::string name;
+struct StructDeclaration : Location {
+    SourceIdentifier name;
     GenericParams genericParams;
     std::vector<StructField> fields;
     std::vector<StructProperty> properties; // C# style properties { get; set; }
@@ -192,11 +192,11 @@ struct StructDeclaration : ASTNode {
     std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
     std::vector<AttributeUsageDeclaration> attributes;
 
-    StructDeclaration(std::string name, std::vector<StructField> fields)
+    StructDeclaration(SourceIdentifier name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields)) {
     }
 
-    StructDeclaration(std::string name, GenericParams genericParams, std::vector<StructField> fields)
+    StructDeclaration(SourceIdentifier name, GenericParams genericParams, std::vector<StructField> fields)
         : name(std::move(name)), genericParams(std::move(genericParams)), fields(std::move(fields)) {
     }
 
@@ -215,7 +215,7 @@ struct StructDeclaration : ASTNode {
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "StructDeclaration(" << name;
+        os << "StructDeclaration(" << name.token_name;
         if (!genericParams.empty()) {
             os << "<";
             for (size_t i = 0; i < genericParams.size(); ++i) {
@@ -253,14 +253,14 @@ struct StructDeclaration : ASTNode {
     }
 };
 
-struct InterfaceDeclaration : ASTNode {
-    std::string name;
+struct InterfaceDeclaration : Location {
+    SourceIdentifier name;
     GenericParams genericParams;
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods; // abstract method signatures
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "InterfaceDeclaration(" << name;
+        os << "InterfaceDeclaration(" << name.token_name;
         if (!genericParams.empty()) {
             os << "<";
             for (size_t i = 0; i < genericParams.size(); ++i) {
@@ -276,29 +276,29 @@ struct InterfaceDeclaration : ASTNode {
     }
 };
 
-struct Parameter : ASTNode {
+struct Parameter : Location {
     std::unique_ptr<Type> type;
-    std::string name;
+    SourceIdentifier name;
     bool isMutable;
 
-    Parameter(std::unique_ptr<Type> type, std::string name, const bool isMutable = false) : type(std::move(type)),
+    Parameter(std::unique_ptr<Type> type, SourceIdentifier name, const bool isMutable = false) : type(std::move(type)),
         name(std::move(name)),
         isMutable(isMutable) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "Parameter(" << type << " " << name << ")";
+        os << "Parameter(" << type << " " << name.token_name << ")";
     }
 };
 
-struct FunctionDeclaration : ASTNode {
+struct FunctionDeclaration : Location {
     std::unique_ptr<Type> returnType;
-    std::string name;
+    SourceIdentifier name;
     std::vector<Parameter> parameters;
     std::unique_ptr<Block> body;
 
-    FunctionDeclaration(std::unique_ptr<Type> retType, std::string name, std::vector<Parameter> &parameters,
+    FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter> &parameters,
                         std::unique_ptr<Block> block)
         : returnType(std::move(retType)), name(std::move(name)), parameters(std::move(parameters)),
           body(std::move(block)) {
@@ -306,10 +306,10 @@ struct FunctionDeclaration : ASTNode {
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "Function " << name << "<" << returnType << ">(";
+        os << "Function " << name.token_name << "<" << returnType << ">(";
         for (size_t i = 0; i < parameters.size(); ++i) {
             if (i > 0) os << ", ";
-            os << parameters[i].type << " " << parameters[i].name;
+            os << parameters[i].type << " " << parameters[i].name.token_name;
         }
         os << ")\n";
         if (body) body->print(os, indent + 2);
@@ -317,18 +317,18 @@ struct FunctionDeclaration : ASTNode {
 };
 
 
-struct NamespaceDeclaration : ASTNode {
-    std::string name;
+struct NamespaceDeclaration : Location {
+    SourceIdentifier name;
     std::vector<std::unique_ptr<StructDeclaration> > structs;
     std::vector<std::unique_ptr<FunctionDeclaration> > functions;
     std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces; // Nested namespaces
 
-    explicit NamespaceDeclaration(std::string name) : name(std::move(name)) {
+    explicit NamespaceDeclaration(SourceIdentifier name) : name(std::move(name)) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "Namespace(" << name << ")\n";
+        os << "Namespace(" << name.token_name << ")\n";
         for (const auto &s: structs) {
             s->print(os, indent + 2);
             os << '\n';
@@ -374,7 +374,7 @@ struct QualifiedName {
     }
 };
 
-struct ImportDeclaration : ASTNode {
+struct ImportDeclaration : Location {
     QualifiedName namespacePath;
 
     explicit ImportDeclaration(QualifiedName path) : namespacePath(std::move(path)) {
@@ -386,35 +386,36 @@ struct ImportDeclaration : ASTNode {
     }
 };
 
-struct ExternFunctionDeclaration : ASTNode {
+struct ExternFunctionDeclaration : Location {
     std::unique_ptr<Type> returnType;
-    std::string name;
+    SourceIdentifier name;
     std::vector<Parameter> parameters;
     bool isVariadic = false;
     std::string abi = "C";
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "extern \"" << abi << "\" fn " << name << "(";
+        os << "extern \"" << abi << "\" fn " << name.token_name << "(";
         for (size_t i = 0; i < parameters.size(); ++i) {
             if (i > 0) os << ", ";
-            os << parameters[i].type << " " << parameters[i].name;
+            os << parameters[i].type << " " << parameters[i].name.token_name;
         }
         if (isVariadic) os << ", ...";
         os << ") -> " << *returnType;
     }
 };
 
-struct EnumValueDeclaration : ASTNode {
-    std::string name;
+struct EnumValueDeclaration : Location {
+    SourceIdentifier name;
     std::vector<Type> types;
 
-    EnumValueDeclaration(std::string name, std::vector<Type> types) : name(std::move(name)), types(std::move(types)) {
+    EnumValueDeclaration(SourceIdentifier name, std::vector<Type> types) : name(std::move(name)),
+                                                                           types(std::move(types)) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "EnumValue(" << name << ")";
+        os << "EnumValue(" << name.token_name << ")";
         for (size_t i = 0; i < types.size(); ++i) {
             if (i > 0) os << ", ";
             types[i].print(os, indent);
@@ -422,16 +423,16 @@ struct EnumValueDeclaration : ASTNode {
     }
 };
 
-struct EnumDeclaration : ASTNode {
-    std::string name;
+struct EnumDeclaration : Location {
+    SourceIdentifier name;
     GenericParams genericParams;
     std::vector<EnumValueDeclaration> values;
 
-    explicit EnumDeclaration(std::string name, std::vector<EnumValueDeclaration> values)
+    explicit EnumDeclaration(SourceIdentifier name, std::vector<EnumValueDeclaration> values)
         : name(std::move(name)), values(std::move(values)) {
     }
 
-    EnumDeclaration(std::string name, GenericParams genericParams, std::vector<EnumValueDeclaration> values)
+    EnumDeclaration(SourceIdentifier name, GenericParams genericParams, std::vector<EnumValueDeclaration> values)
         : name(std::move(name)), genericParams(std::move(genericParams)), values(std::move(values)) {
     }
 
@@ -439,7 +440,7 @@ struct EnumDeclaration : ASTNode {
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "Enum(" << name;
+        os << "Enum(" << name.token_name;
         if (!genericParams.empty()) {
             os << "<";
             for (size_t i = 0; i < genericParams.params.size(); ++i) {
@@ -458,7 +459,7 @@ struct EnumDeclaration : ASTNode {
 };
 
 
-struct Program : ASTNode {
+struct Program : Location {
     // File-scoped namespace: "namespace foo;" at top of file
     // Empty string means global namespace
     std::string fileNamespace;

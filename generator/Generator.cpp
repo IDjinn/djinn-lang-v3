@@ -121,7 +121,7 @@ void Generator::generate(const Program &program) {
 }
 
 void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
 
     for (const auto &structDecl: ns.structs) {
         generate_struct(*structDecl, qualifiedPrefix);
@@ -137,7 +137,7 @@ void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::st
 }
 
 void Generator::generate_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
 
     for (const auto &structDecl: ns.structs) {
         generate_struct(*structDecl, qualifiedPrefix);
@@ -149,7 +149,7 @@ void Generator::generate_namespace_structs(const NamespaceDeclaration &ns, const
 }
 
 void Generator::generate_namespace_functions(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
 
     for (const auto &func: ns.functions) {
         generate_function(*func, qualifiedPrefix);

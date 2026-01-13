@@ -8,7 +8,7 @@
 void Generator::generate_function(const FunctionDeclaration &func, const std::string &prefix) {
     push_scope();
 
-    const std::string qualifiedName = prefix.empty() ? func.name : prefix + "::" + func.name;
+    const std::string qualifiedName = prefix.empty() ? func.name.token_name : prefix + "::" + func.name.token_name;
 
     llvm::Type *returnType = this->generate_type(*func.returnType);
 
@@ -21,7 +21,7 @@ void Generator::generate_function(const FunctionDeclaration &func, const std::st
     const auto llvmFunc = llvm::Function::Create(
         funcType,
         llvm::Function::ExternalLinkage,
-        func.name,
+        func.name.token_name,
         *module
     );
     functions[qualifiedName] = llvmFunc;
@@ -33,12 +33,12 @@ void Generator::generate_function(const FunctionDeclaration &func, const std::st
     size_t idx = 0;
     for (auto &arg: llvmFunc->args()) {
         const auto &param = func.parameters[idx];
-        arg.setName(param.name);
+        arg.setName(param.name.token_name);
 
-        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.name);
+        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.name.token_name);
         builder->CreateStore(&arg, alloca);
         std::string structTypeName = param.type->kind == TypeKind::STRUCT ? param.type->structName : "";
-        currentScope->define_variable(param.name, alloca, structTypeName);
+        currentScope->define_variable(param.name.token_name, alloca, structTypeName);
         idx++;
     }
 
@@ -80,11 +80,11 @@ void Generator::generate_extern_function(const ExternFunctionDeclaration &decl) 
     llvm::Function *func = llvm::Function::Create(
         funcType,
         llvm::Function::ExternalLinkage,
-        decl.name,
+        decl.name.token_name,
         *module
     );
 
-    functions[decl.name] = func;
+    functions[decl.name.token_name] = func;
 
     if (decl.abi == "C") {
         func->setCallingConv(llvm::CallingConv::C);

@@ -10,7 +10,7 @@
 #include "ASTNode.h"
 #include "Expression.h"
 
-struct Statement : ASTNode {
+struct Statement : Location {
 };
 
 struct ExpressionStatement : Statement {

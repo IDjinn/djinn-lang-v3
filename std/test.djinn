@@ -4,5 +4,6 @@ import std::sys;
 namespace std;
 
 void main() {
-
+    i32 a = 10;
+    a = 69;
 }

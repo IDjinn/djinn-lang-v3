@@ -34,36 +34,36 @@ inline std::string tokenTypeToString(const TokenType type) {
     }
 }
 
-struct Expression : ASTNode {
+struct Expression : Location {
 };
 
 struct VariableDeclaration : Expression {
     Type type;
-    std::string name;
+    SourceIdentifier name;
     bool isMutable;
 
-    VariableDeclaration(Type type, std::string name, const bool isMutable)
+    VariableDeclaration(Type type, SourceIdentifier name, const bool isMutable)
         : type(std::move(type)),
           name(std::move(name)), isMutable(isMutable) {
     }
 
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
-        os << "VariableDeclaration(" << name << ": " << type << (isMutable ? ": mut" : "") << ")";
+        os << "VariableDeclaration(" << name.token_name << ": " << type << (isMutable ? ": mut" : "") << ")";
     }
 };
 
 struct Assignment : Expression {
-    std::string name;
+    SourceIdentifier name;
     std::unique_ptr<Expression> value;
 
-    Assignment(std::string name, std::unique_ptr<Expression> value)
+    Assignment(SourceIdentifier name, std::unique_ptr<Expression> value)
         : name(std::move(name)), value(std::move(value)) {
     }
 
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
-        os << "Assignment(" << name << " =\n";
+        os << "Assignment(" << name.token_name << " =\n";
         value->print(os, indent + 2);
         os << ")";
     }
@@ -71,17 +71,17 @@ struct Assignment : Expression {
 
 struct VariableInit : Expression {
     Type type;
-    std::string name;
+    SourceIdentifier name;
     std::unique_ptr<Expression> value;
     bool isMutable;
 
-    VariableInit(Type type, std::string name, std::unique_ptr<Expression> value, bool isMutable)
+    VariableInit(Type type, SourceIdentifier name, std::unique_ptr<Expression> value, bool isMutable)
         : type(std::move(type)), name(std::move(name)), value(std::move(value)), isMutable(isMutable) {
     }
 
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
-        os << "VariableInit(" << name << ": " << type << " =\n";
+        os << "VariableInit(" << name.token_name << ": " << type << " =\n";
         value->print(os, indent + 2);
         os << ")";
     }
@@ -125,44 +125,46 @@ struct FloatLiteral : Expression {
 };
 
 struct Identifier : Expression {
-    std::string name;
+    SourceIdentifier identifier;
 
-    explicit Identifier(std::string n) : name(std::move(n)) {
+    explicit Identifier(SourceIdentifier source_identifier) : identifier(std::move(source_identifier)) {
     }
+
+    [[nodiscard]] const std::string &name() const { return identifier.token_name; }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "Identifier(" << name << ")";
+        os << "Identifier(" << identifier.token_name << ")";
     }
 };
 
 struct FieldAccess : Expression {
     std::unique_ptr<Expression> object;
-    std::string fieldName;
+    SourceIdentifier fieldName;
 
-    FieldAccess(std::unique_ptr<Expression> obj, std::string field)
+    FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field)
         : object(std::move(obj)), fieldName(std::move(field)) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "FieldAccess(." << fieldName << ")\n";
+        os << "FieldAccess(." << fieldName.token_name << ")\n";
         object->print(os, indent + 2);
     }
 };
 
 struct FieldAssignment : Expression {
     std::unique_ptr<Expression> object;
-    std::string fieldName;
+    SourceIdentifier fieldName;
     std::unique_ptr<Expression> value;
 
-    FieldAssignment(std::unique_ptr<Expression> obj, std::string field, std::unique_ptr<Expression> val)
+    FieldAssignment(std::unique_ptr<Expression> obj, SourceIdentifier field, std::unique_ptr<Expression> val)
         : object(std::move(obj)), fieldName(std::move(field)), value(std::move(val)) {
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
-        os << "FieldAssignment(." << fieldName << " =\n";
+        os << "FieldAssignment(." << fieldName.token_name << " =\n";
         object->print(os, indent + 2);
         os << "\n";
         value->print(os, indent + 2);
@@ -171,20 +173,20 @@ struct FieldAssignment : Expression {
 };
 
 struct FunctionCall : Expression {
-    std::string name;
+    SourceIdentifier name;
     std::vector<std::unique_ptr<Expression> > arguments;
     std::unique_ptr<Expression> receiver; // optional: for method calls (object.method())
     std::vector<Type> typeArguments; // generic type arguments: Result<i32, string*>::Ok(...)
 
-    FunctionCall(std::string n, std::vector<std::unique_ptr<Expression> > args)
+    FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression> > args)
         : name(std::move(n)), arguments(std::move(args)) {
     }
 
-    FunctionCall(std::string n, std::vector<std::unique_ptr<Expression> > args, std::unique_ptr<Expression> recv)
+    FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression> > args, std::unique_ptr<Expression> recv)
         : name(std::move(n)), arguments(std::move(args)), receiver(std::move(recv)) {
     }
 
-    FunctionCall(std::string n, std::vector<Type> typeArgs, std::vector<std::unique_ptr<Expression> > args)
+    FunctionCall(SourceIdentifier n, std::vector<Type> typeArgs, std::vector<std::unique_ptr<Expression> > args)
         : name(std::move(n)), arguments(std::move(args)), typeArguments(std::move(typeArgs)) {
     }
 
@@ -194,11 +196,11 @@ struct FunctionCall : Expression {
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         if (isMethodCall()) {
-            os << "MethodCall(." << name << ")\n";
+            os << "MethodCall(." << name.token_name << ")\n";
             receiver->print(os, indent + 2);
             os << '\n';
         } else {
-            os << "FunctionCall(" << name;
+            os << "FunctionCall(" << name.token_name;
             if (!typeArguments.empty()) {
                 os << "<";
                 for (size_t i = 0; i < typeArguments.size(); ++i) {
@@ -249,24 +251,24 @@ struct BinaryExpression : Expression {
     }
 };
 
-struct InitializerElement : ASTNode {
-    std::string fieldName;
+struct InitializerElement : Location {
+    SourceIdentifier fieldName;
     std::unique_ptr<Expression> value;
 
-    InitializerElement(std::string fieldName, std::unique_ptr<Expression> value)
+    InitializerElement(SourceIdentifier fieldName, std::unique_ptr<Expression> value)
         : fieldName(std::move(fieldName)), value(std::move(value)) {
     }
 
     explicit InitializerElement(std::unique_ptr<Expression> value)
-        : fieldName(""), value(std::move(value)) {
+        : fieldName(), value(std::move(value)) {
     }
 
-    [[nodiscard]] bool isDesignated() const { return !fieldName.empty(); }
+    [[nodiscard]] bool isDesignated() const { return !fieldName.token_name.empty(); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         if (isDesignated()) {
-            os << "DesignatedInit(." << fieldName << " =\n";
+            os << "DesignatedInit(." << fieldName.token_name << " =\n";
         } else {
             os << "PositionalInit(\n";
         }

@@ -5,16 +5,16 @@
 #include "../Binder.h"
 
 void Binder::collectExternFunction(const ExternFunctionDeclaration &decl) const {
-    const auto funcSym = std::make_shared<FunctionSymbol>(decl.name, *decl.returnType);
+    const auto funcSym = std::make_shared<FunctionSymbol>(decl.name.token_name, *decl.returnType);
     funcSym->kind = SymbolKind::ExternFunction;
     funcSym->isVariadic = decl.isVariadic;
 
     for (const auto &param: decl.parameters) {
-        funcSym->addParameter(param.name, *param.type);
+        funcSym->addParameter(param.name.token_name, *param.type);
     }
 
     if (!_global_scope->defineFunction(funcSym)) {
-        errorDuplicateDefinition(decl.name, SymbolKind::ExternFunction, {});
+        errorDuplicateDefinition(decl.name.token_name, SymbolKind::ExternFunction, {});
     }
 }
 
@@ -24,13 +24,13 @@ void Binder::collectFunction(const FunctionDeclaration &decl) const {
 
 void Binder::collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const {
     // "main" is always in global namespace
-    const std::string qualifiedName = (decl.name == "main" || prefix.empty())
-                                          ? decl.name
-                                          : prefix + "::" + decl.name;
+    const std::string qualifiedName = (decl.name.token_name == "main" || prefix.empty())
+                                          ? decl.name.token_name
+                                          : prefix + "::" + decl.name.token_name;
     const auto funcSym = std::make_shared<FunctionSymbol>(qualifiedName, *decl.returnType);
 
     for (const auto &param: decl.parameters) {
-        funcSym->addParameter(param.name, *param.type);
+        funcSym->addParameter(param.name.token_name, *param.type);
     }
 
     if (!_global_scope->defineFunction(funcSym)) {

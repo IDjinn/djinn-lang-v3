@@ -22,8 +22,8 @@
 
 void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std::string &prefix) {
     const std::string qualifiedName = prefix.empty()
-                                          ? enum_declaration.name
-                                          : prefix + "::" + enum_declaration.name;
+                                          ? enum_declaration.name.token_name
+                                          : prefix + "::" + enum_declaration.name.token_name;
 
     EnumDef def(qualifiedName, enum_declaration.isGeneric());
 
@@ -32,7 +32,7 @@ void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std
 
     // Collect variants (with potentially unresolved generic types)
     for (const auto &variant: enum_declaration.values) {
-        def.addVariant(variant.name, variant.types);
+        def.addVariant(variant.name.token_name, variant.types);
     }
 
     // For generic enums, defer LLVM type generation until monomorphization

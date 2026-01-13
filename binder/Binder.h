@@ -15,6 +15,15 @@
 #include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
 
+#include "cassert"
+
+
+#define SOURCE_LOCATION SourceLocation{}
+#define BINDER_ERROR(code, msg, token, location) do { \
+_diagnostics.error(code,msg, location); \
+assert(false && msg); \
+} while (false);
+
 // Forward declarations
 struct Program;
 struct FunctionDeclaration;
@@ -46,6 +55,16 @@ private:
     std::string currentFunction_;
     int loopDepth_ = 0;
     int switchDepth_ = 0;
+
+    template<typename T>
+    constexpr std::string type_to_string(const T &value) const {
+        if constexpr (std::is_same_v<T, Symbol *>)
+            return value->name;
+        else if constexpr (std::is_same_v<T, Symbol>)
+            return value.name;
+        else
+            return typeid(T).name();
+    }
 
     void pushScope();
 

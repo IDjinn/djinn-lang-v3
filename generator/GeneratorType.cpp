@@ -9,7 +9,7 @@
 // ============================================================================
 
 llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs) {
-    // Resolve the base name (handle aliases)
+    // Resolve the base name.token_name (handle aliases)
     const std::string qualifiedName = currentScope->resolve_alias(baseName);
 
     // Check if already monomorphized
@@ -42,7 +42,7 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
         fieldIndices[fieldName] = idx++;
     }
 
-    // Create the mangled name and LLVM struct type
+    // Create the mangled name.token_name and LLVM struct type
     const std::string mangledName = Mangler::mangle_generic_struct(qualifiedName, typeArgs);
     llvm::StructType *structType = llvm::StructType::create(*context, fieldTypes, mangledName);
 
@@ -83,7 +83,7 @@ llvm::StructType *Generator::monomorphize_struct(const std::string &baseName, co
 }
 
 llvm::StructType *Generator::monomorphize_enum(const std::string &baseName, const std::vector<Type> &typeArgs) {
-    // Resolve the base name (handle aliases)
+    // Resolve the base name.token_name (handle aliases)
     const std::string qualifiedName = currentScope->resolve_alias(baseName);
 
     // Check if already monomorphized
@@ -140,7 +140,7 @@ llvm::StructType *Generator::monomorphize_enum(const std::string &baseName, cons
         enumFields.push_back(llvm::ArrayType::get(builder->getInt8Ty(), maxPayloadSize));
     }
 
-    // Create the mangled name and LLVM struct type
+    // Create the mangled name.token_name and LLVM struct type
     const std::string mangledName = Mangler::mangle_generic_enum(qualifiedName, typeArgs);
     llvm::StructType *enumType = llvm::StructType::create(*context, enumFields, mangledName);
 
@@ -157,7 +157,7 @@ llvm::StructType *Generator::monomorphize_enum(const std::string &baseName, cons
         for (const auto &type: variant.associatedTypes) {
             substitutedTypes.push_back(ctx.substitute(type));
         }
-        monoDef.addVariant(variant.name, substitutedTypes);
+        monoDef.addVariant(variant.name.token_name, substitutedTypes);
     }
 
     currentScope->define_enum(mangledName, std::move(monoDef));
@@ -172,8 +172,8 @@ void Generator::monomorphize_method(const StructMethodDeclaration &method,
                                     const std::string &mangledStructName) {
     push_scope();
 
-    // Method name: MangledStructName__methodName
-    const std::string mangledMethodName = mangledStructName + "__" + method.name;
+    // Method name.token_name: MangledStructName__methodName
+    const std::string mangledMethodName = mangledStructName + "__" + method.name.token_name;
 
     // Substitute generic types in return type
     Type substitutedReturn = ctx.substitute(*method.returnType);
@@ -205,7 +205,7 @@ void Generator::monomorphize_method(const StructMethodDeclaration &method,
 
     // Store method in the monomorphized struct def
     if (StructDef *monoDef = currentScope->lookup_struct(mangledStructName)) {
-        monoDef->methodFunctions[method.name] = llvmFunc;
+        monoDef->methodFunctions[method.name.token_name] = llvmFunc;
     }
 
     currentFunction = llvmFunc;
@@ -228,16 +228,16 @@ void Generator::monomorphize_method(const StructMethodDeclaration &method,
     size_t paramIdx = 0;
     while (argIt != llvmFunc->arg_end()) {
         const auto &param = method.parameters[paramIdx];
-        argIt->setName(param.name);
+        argIt->setName(param.name.token_name);
 
-        auto *alloca = builder->CreateAlloca(argIt->getType(), nullptr, param.name);
+        auto *alloca = builder->CreateAlloca(argIt->getType(), nullptr, param.name.token_name);
         builder->CreateStore(&*argIt, alloca);
 
         Type substitutedParam = ctx.substitute(*param.type);
         std::string paramStructType = substitutedParam.kind == TypeKind::STRUCT
                                           ? substitutedParam.structName
                                           : "";
-        currentScope->define_variable(param.name, alloca, paramStructType);
+        currentScope->define_variable(param.name.token_name, alloca, paramStructType);
 
         ++argIt;
         ++paramIdx;
@@ -278,7 +278,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
 
     // Register property info
     PropertyInfo propInfo;
-    propInfo.name = prop.name;
+    propInfo.name = prop.name.token_name;
     propInfo.hasGetter = prop.hasGetter;
     propInfo.hasSetter = prop.hasSetter;
 
@@ -290,7 +290,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
         }
     }
 
-    monoDef->propertyInfos[prop.name] = propInfo;
+    monoDef->propertyInfos[prop.name.token_name] = propInfo;
 
     // Substitute generic types in property type
     Type substitutedType = ctx.substitute(*prop.type);
@@ -300,7 +300,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
     if (prop.hasGetter && (prop.getterBody || prop.getterExpr)) {
         push_scope();
 
-        const std::string getterName = mangledStructName + "__get_" + prop.name;
+        const std::string getterName = mangledStructName + "__get_" + prop.name.token_name;
         llvm::Type *returnType = generate_type(substitutedType);
 
         std::vector<llvm::Type *> paramTypes;
@@ -315,7 +315,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
         );
 
         functions[getterName] = llvmFunc;
-        monoDef->methodFunctions["get_" + prop.name] = llvmFunc;
+        monoDef->methodFunctions["get_" + prop.name.token_name] = llvmFunc;
         currentFunction = llvmFunc;
 
         auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -348,7 +348,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
     if (prop.hasSetter && (prop.setterBody || prop.setterExpr)) {
         push_scope();
 
-        const std::string setterName = mangledStructName + "__set_" + prop.name;
+        const std::string setterName = mangledStructName + "__set_" + prop.name.token_name;
         llvm::Type *valueType = generate_type(substitutedType);
 
         std::vector<llvm::Type *> paramTypes;
@@ -364,7 +364,7 @@ void Generator::monomorphize_property(const StructProperty &prop,
         );
 
         functions[setterName] = llvmFunc;
-        monoDef->methodFunctions["set_" + prop.name] = llvmFunc;
+        monoDef->methodFunctions["set_" + prop.name.token_name] = llvmFunc;
         currentFunction = llvmFunc;
 
         auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);

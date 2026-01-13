@@ -63,7 +63,7 @@ std::optional<Type> Binder::inferExpressionType(const Expression &expr) const {
 
     // Identifiers - lookup variable type
     if (const auto *ident = dynamic_cast<const Identifier *>(&expr)) {
-        if (const auto sym = _current_scope->lookupVariable(ident->name)) {
+        if (const auto sym = _current_scope->lookupVariable(ident->identifier.token_name)) {
             return sym->type;
         }
     }
@@ -86,7 +86,7 @@ std::optional<Type> Binder::inferExpressionType(const Expression &expr) const {
 
     // Function calls - lookup return type
     if (const auto *call = dynamic_cast<const FunctionCall *>(&expr)) {
-        if (const auto funcSym = _global_scope->lookupFunction(call->name)) {
+        if (const auto funcSym = _global_scope->lookupFunction(call->name.token_name)) {
             return funcSym->type;
         }
     }

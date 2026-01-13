@@ -330,9 +330,10 @@ llvm::Value *Generator::generate_brace_init_for_struct(const BraceInitializer &b
 
         unsigned fieldIdx;
         if (elem.isDesignated()) {
-            auto it = fieldIndices->find(elem.fieldName);
+            auto it = fieldIndices->find(elem.fieldName.token_name);
             if (it == fieldIndices->end()) {
-                throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + elem.fieldName);
+                throw CompileError(DiagnosticCode::UNDEFINED_FIELD,
+                                   "campo não encontrado: " + elem.fieldName.token_name);
             }
             fieldIdx = it->second;
         } else {

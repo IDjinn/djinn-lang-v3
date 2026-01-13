@@ -5,7 +5,7 @@
 #include "../Binder.h"
 
 void Binder::collectNamespace(const NamespaceDeclaration &ns, const std::string &prefix) const {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
 
     // Collect structs in namespace
     for (const auto &struc: ns.structs) {

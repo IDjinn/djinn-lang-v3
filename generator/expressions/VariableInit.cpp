@@ -23,8 +23,8 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
                                                ? Mangler::mangle_generic_struct(qualifiedName, expr.type.genericArgs)
                                                : qualifiedName;
 
-            auto *alloca = builder->CreateAlloca(structType, nullptr, expr.name);
-            currentScope->define_variable(expr.name, alloca, qualifiedName);
+            auto *alloca = builder->CreateAlloca(structType, nullptr, expr.name.token_name);
+            currentScope->define_variable(expr.name.token_name, alloca, qualifiedName);
 
             const auto *fieldIndices = currentScope->get_field_indices(fieldIndicesName);
             if (!fieldIndices) {
@@ -39,10 +39,10 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
 
                 unsigned fieldIdx;
                 if (elem.isDesignated()) {
-                    auto it = fieldIndices->find(elem.fieldName);
+                    auto it = fieldIndices->find(elem.fieldName.token_name);
                     if (it == fieldIndices->end()) {
                         throw CompileError(DiagnosticCode::UNDEFINED_FIELD,
-                                           "campo não encontrado: " + elem.fieldName);
+                                           "campo não encontrado: " + elem.fieldName.token_name);
                     }
                     fieldIdx = it->second;
                 } else {
@@ -63,14 +63,14 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
             llvm::Value *initVal = generate_expression(*braceInit->elements[0].value);
             if (!initVal) {
                 throw CompileError(DiagnosticCode::INVALID_OPERATION,
-                                   "não foi possível gerar valor inicial para: " + expr.name);
+                                   "não foi possível gerar valor inicial para: " + expr.name.token_name);
             }
 
             llvm::Type *type = generate_type(const_cast<Type &>(expr.type));
             initVal = cast_value(initVal, type);
 
-            auto *alloca = builder->CreateAlloca(type, nullptr, expr.name);
-            currentScope->define_variable(expr.name, alloca);
+            auto *alloca = builder->CreateAlloca(type, nullptr, expr.name.token_name);
+            currentScope->define_variable(expr.name.token_name, alloca);
             builder->CreateStore(initVal, alloca);
             return alloca;
         }
@@ -79,7 +79,7 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
     llvm::Value *initVal = generate_expression(*expr.value);
     if (!initVal) {
         throw CompileError(DiagnosticCode::INVALID_OPERATION,
-                           "não foi possível gerar valor inicial para: " + expr.name);
+                           "não foi possível gerar valor inicial para: " + expr.name.token_name);
     }
 
     llvm::Type *type;
@@ -90,8 +90,8 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
         initVal = cast_value(initVal, type);
     }
 
-    auto *alloca = builder->CreateAlloca(type, nullptr, expr.name);
-    currentScope->define_variable(expr.name, alloca);
+    auto *alloca = builder->CreateAlloca(type, nullptr, expr.name.token_name);
+    currentScope->define_variable(expr.name.token_name, alloca);
     builder->CreateStore(initVal, alloca);
     return alloca;
 }

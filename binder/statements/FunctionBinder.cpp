@@ -47,7 +47,7 @@ void Binder::bindProgram(const Program &program) {
 }
 
 void Binder::bindFunction(const FunctionDeclaration &func) {
-    currentFunction_ = func.name;
+    currentFunction_ = func.name.token_name;
 
     pushScope();
 
@@ -56,8 +56,8 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
             errorUndefinedStruct(param.type->structName, {});
         }
 
-        if (!_current_scope->defineParameter(param.name, *param.type, param.isMutable)) {
-            errorDuplicateDefinition(param.name, SymbolKind::Parameter, {});
+        if (!_current_scope->defineParameter(param.name.token_name, *param.type, param.isMutable)) {
+            errorDuplicateDefinition(param.name.token_name, SymbolKind::Parameter, {});
         }
     }
 
@@ -76,7 +76,7 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
 }
 
 void Binder::bindMethod(const StructMethodDeclaration &method, const StructDeclaration &struc) {
-    currentFunction_ = struc.name + "::" + method.name;
+    currentFunction_ = struc.name.token_name + "::" + method.name.token_name;
 
     pushScope();
 
@@ -85,7 +85,7 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
     thisType.kind = TypeKind::POINTER;
     thisType.elementType = std::make_unique<Type>();
     thisType.elementType->kind = TypeKind::STRUCT;
-    thisType.elementType->structName = struc.name;
+    thisType.elementType->structName = struc.name.token_name;
     _current_scope->defineVariable("this", thisType, false);
 
     for (const auto &param: method.parameters) {
@@ -94,8 +94,8 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
                 errorUndefinedStruct(param.type->structName, {});
             }
         }
-        if (!_current_scope->defineParameter(param.name, *param.type, param.isMutable)) {
-            errorDuplicateDefinition(param.name, SymbolKind::Parameter, {});
+        if (!_current_scope->defineParameter(param.name.token_name, *param.type, param.isMutable)) {
+            errorDuplicateDefinition(param.name.token_name, SymbolKind::Parameter, {});
         }
     }
 
@@ -116,7 +116,7 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
 }
 
 void Binder::bindNamespace(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name : prefix + "::" + ns.name;
+    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
 
     for (const auto &struc: ns.structs) {
         for (const auto &field: struc->fields) {
