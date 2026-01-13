@@ -19,10 +19,15 @@
 
 
 #define SOURCE_LOCATION SourceLocation{}
+
 #define BINDER_ERROR(code, msg, token, location) do { \
-_diagnostics.error(code,msg, location); \
-assert(false && msg); \
-} while (false);
+    _diagnostics.error(code, msg, location); \
+    assert(false && "BINDER_ERROR"); \
+} while (false)
+
+#define BINDER_WARNING(code, msg, location) do { \
+    _diagnostics.warning(code, msg, location); \
+} while (false)
 
 // Forward declarations
 struct Program;
@@ -154,20 +159,6 @@ private:
     // Type compatibility checking
     void checkTypeCompatibility(const Type &expected, const Expression &expr, SourceLocation loc);
 
-    // Error reporting helpers
-    void errorImmutableVariable(const std::string &name, SourceLocation loc) const;
-
-    void errorUndefinedVariable(const std::string &name, SourceLocation loc) const;
-
-    void errorUndefinedFunction(const std::string &name, SourceLocation loc) const;
-
-    void errorUndefinedStruct(const std::string &name, SourceLocation loc) const;
-
-    void errorUndefinedField(const std::string &structName, const std::string &fieldName, SourceLocation loc) const;
-
-    void errorDuplicateDefinition(const std::string &name, SymbolKind kind, SourceLocation loc) const;
-
-    void errorWrongArgumentCount(const std::string &funcName, size_t expected, size_t got, SourceLocation loc) const;
 };
 
 #endif //DJINN_BINDER_H

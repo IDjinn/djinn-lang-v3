@@ -14,7 +14,8 @@ void Binder::collectExternFunction(const ExternFunctionDeclaration &decl) const 
     }
 
     if (!_global_scope->defineFunction(funcSym)) {
-        errorDuplicateDefinition(decl.name.token_name, SymbolKind::ExternFunction, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
+                     "extern function '" + decl.name.token_name + "' is already defined", decl, decl.name.location);
     }
 }
 
@@ -34,6 +35,7 @@ void Binder::collectFunctionWithPrefix(const FunctionDeclaration &decl, const st
     }
 
     if (!_global_scope->defineFunction(funcSym)) {
-        errorDuplicateDefinition(qualifiedName, SymbolKind::Function, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "function '" + qualifiedName + "' is already defined", decl,
+                     decl.name.location);
     }
 }

@@ -25,15 +25,15 @@ void Binder::bindStatement(const Statement &stmt) {
         bindDoWhileStatement(*doWhileStmt);
     } else if (const auto *switchStmt = dynamic_cast<const SwitchStatement *>(&stmt)) {
         bindSwitchStatement(*switchStmt);
-    } else if (dynamic_cast<const BreakStatement *>(&stmt)) {
+    } else if (const auto *breakStmt = dynamic_cast<const BreakStatement *>(&stmt)) {
         if (loopDepth_ == 0 && switchDepth_ == 0) {
-            _diagnostics.error(DiagnosticCode::UNEXPECTED_TOKEN,
-                               "'break' outside of loop or switch", {});
+            BINDER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "'break' outside of loop or switch", breakStmt, breakStmt->location);
         }
-    } else if (dynamic_cast<const ContinueStatement *>(&stmt)) {
+    } else if (const auto *contStmt = dynamic_cast<const ContinueStatement *>(&stmt)) {
         if (loopDepth_ == 0) {
-            _diagnostics.error(DiagnosticCode::UNEXPECTED_TOKEN,
-                               "'continue' outside of loop", {});
+            BINDER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "'continue' outside of loop", contStmt, contStmt->location);
         }
     }
 }

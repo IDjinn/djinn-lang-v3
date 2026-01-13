@@ -19,13 +19,16 @@ void Binder::collectEnumWithPrefix(const EnumDeclaration &decl, const std::strin
 
     for (const auto &variant: decl.values) {
         if (enumSym->hasVariant(variant.name.token_name)) {
-            errorDuplicateDefinition(variant.name.token_name, SymbolKind::Enum, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
+                         "enum variant '" + variant.name.token_name + "' is already defined", variant,
+                         variant.name.location);
         } else {
             enumSym->addVariant(variant.name.token_name, variant.types);
         }
     }
 
     if (!_global_scope->defineEnum(enumSym)) {
-        errorDuplicateDefinition(qualifiedName, SymbolKind::Enum, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "enum '" + qualifiedName + "' is already defined", decl,
+                     decl.name.location);
     }
 }

@@ -32,6 +32,7 @@ void Binder::collectInterfaceWithPrefix(const InterfaceDeclaration &decl, const 
     }
 
     if (!_global_scope->defineInterface(ifaceSym)) {
-        errorDuplicateDefinition(qualifiedName, SymbolKind::Interface, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "interface '" + qualifiedName + "' is already defined", decl,
+                     decl.name.location);
     }
 }

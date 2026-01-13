@@ -19,7 +19,8 @@ void Binder::bindIdentifier(const Identifier &id) const {
         return;
     }
 
-    errorUndefinedVariable(id.identifier.token_name, {});
+    BINDER_ERROR(DiagnosticCode::UNDEFINED_VARIABLE, "undefined variable '" + id.identifier.token_name + "'", id,
+                 id.identifier.location);
 }
 
 void Binder::bindFunctionCall(const FunctionCall &call) {
@@ -65,8 +66,11 @@ void Binder::bindFunctionCall(const FunctionCall &call) {
                 // Valid enum construction - bind arguments
                 const auto *variant = enumSym->getVariant(variantName);
                 if (variant && call.arguments.size() != variant->associatedTypes.size()) {
-                    errorWrongArgumentCount(call.name.token_name, variant->associatedTypes.size(),
-                                            call.arguments.size(), {});
+                    BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                                 "function '" + call.name.token_name + "' expects " + std::to_string(variant->
+                                     associatedTypes.size()) +
+                                 " arguments but got " + std::to_string(call.arguments.size()), call,
+                                 call.name.location);
                 }
                 for (const auto &arg: call.arguments) {
                     bindExpression(*arg);
@@ -74,19 +78,23 @@ void Binder::bindFunctionCall(const FunctionCall &call) {
                 return;
             }
             // Enum exists but variant doesn't
-            errorUndefinedFunction(call.name.token_name, {});
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_FUNCTION, "undefined function '" + call.name.token_name + "'", call, call.name.location);
             return;
         }
     }
 
     if (const auto funcSym = _global_scope->lookupFunction(call.name.token_name); funcSym) {
         if (!funcSym->isVariadic && call.arguments.size() != funcSym->arity()) {
-            errorWrongArgumentCount(call.name.token_name, funcSym->arity(), call.arguments.size(), {});
+            BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                         "function '" + call.name.token_name + "' expects " + std::to_string(funcSym->arity()) +
+                         " arguments but got " + std::to_string(call.arguments.size()), call, call.name.location);
         } else if (funcSym->isVariadic && call.arguments.size() < funcSym->arity()) {
-            errorWrongArgumentCount(call.name.token_name, funcSym->arity(), call.arguments.size(), {});
+            BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                         "function '" + call.name.token_name + "' expects " + std::to_string(funcSym->arity()) +
+                         " arguments but got " + std::to_string(call.arguments.size()), call, call.name.location);
         }
     } else {
-        errorUndefinedFunction(call.name.token_name, {});
+        BINDER_ERROR(DiagnosticCode::UNDEFINED_FUNCTION, "undefined function '" + call.name.token_name + "'", call, call.name.location);
     }
 
     for (const auto &arg: call.arguments) {

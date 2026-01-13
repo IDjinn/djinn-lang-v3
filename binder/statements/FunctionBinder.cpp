@@ -9,13 +9,15 @@ void Binder::bindProgram(const Program &program) {
     for (const auto &ext: program.externFunctions) {
         if (!isTypeDefined(*ext->returnType)) {
             if (ext->returnType->kind == TypeKind::STRUCT) {
-                errorUndefinedStruct(ext->returnType->structName, {});
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + ext->returnType->structName + "'",
+                             ext, ext->name.location);
             }
         }
         for (const auto &param: ext->parameters) {
             if (!isTypeDefined(*param.type)) {
                 if (param.type->kind == TypeKind::STRUCT) {
-                    errorUndefinedStruct(param.type->structName, {});
+                    BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + param.type->structName + "'",
+                                 param, param.name.location);
                 }
             }
         }
@@ -26,7 +28,7 @@ void Binder::bindProgram(const Program &program) {
             if (!isTypeDefined(*field.type)) {
                 if (field.type->kind == TypeKind::STRUCT) {
                     if (struc->genericParams.find(field.type->structName) == nullptr) {
-                        errorUndefinedStruct(field.type->structName, {});
+                        BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + field.type->structName + "'", field, field.name.location);
                     }
                 }
             }
@@ -53,17 +55,17 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
 
     for (const auto &param: func.parameters) {
         if (!isTypeDefined(*param.type) && param.type->kind == TypeKind::STRUCT) {
-            errorUndefinedStruct(param.type->structName, {});
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + param.type->structName + "'", param, param.name.location);
         }
 
         if (!_current_scope->defineParameter(param.name.token_name, *param.type, param.isMutable)) {
-            errorDuplicateDefinition(param.name.token_name, SymbolKind::Parameter, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "parameter '" + param.name.token_name + "' is already defined", param, param.name.location);
         }
     }
 
     if (!isTypeDefined(*func.returnType)) {
         if (func.returnType->kind == TypeKind::STRUCT) {
-            errorUndefinedStruct(func.returnType->structName, {});
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + func.returnType->structName + "'", func, func.name.location);
         }
     }
 
@@ -91,17 +93,17 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
     for (const auto &param: method.parameters) {
         if (!isTypeDefined(*param.type) && !is_generic_type(*param.type, struc)) {
             if (param.type->kind == TypeKind::STRUCT) {
-                errorUndefinedStruct(param.type->structName, {});
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + param.type->structName + "'", param, param.name.location);
             }
         }
         if (!_current_scope->defineParameter(param.name.token_name, *param.type, param.isMutable)) {
-            errorDuplicateDefinition(param.name.token_name, SymbolKind::Parameter, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "parameter '" + param.name.token_name + "' is already defined", param, param.name.location);
         }
     }
 
     if (!isTypeDefined(*method.returnType) && !is_generic_type(*method.returnType, struc)) {
         if (method.returnType->kind == TypeKind::STRUCT) {
-            errorUndefinedStruct(method.returnType->structName, {});
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + method.returnType->structName + "'", method, method.name.location);
         }
     }
 
@@ -123,7 +125,7 @@ void Binder::bindNamespace(const NamespaceDeclaration &ns, const std::string &pr
             if (!isTypeDefined(*field.type)) {
                 if (field.type->kind == TypeKind::STRUCT) {
                     if (struc->genericParams.find(field.type->structName) == nullptr) {
-                        errorUndefinedStruct(field.type->structName, {});
+                        BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + field.type->structName + "'", field, field.name.location);
                     }
                 }
             }

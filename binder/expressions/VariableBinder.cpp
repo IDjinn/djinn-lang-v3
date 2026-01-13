@@ -7,19 +7,21 @@
 void Binder::bindVariableDeclaration(const VariableDeclaration &decl) {
     if (!isTypeDefined(decl.type)) {
         if (decl.type.kind == TypeKind::STRUCT) {
-            errorUndefinedStruct(decl.type.structName, {});
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + decl.type.structName + "'", decl,
+                         decl.name.location);
         }
     }
 
     if (!_current_scope->defineVariable(decl.name.token_name, decl.type, decl.isMutable)) {
-        errorDuplicateDefinition(decl.name.token_name, SymbolKind::Variable, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "variable '" + decl.name.token_name + "' is already defined",
+                     decl, decl.name.location);
     }
 }
 
 void Binder::bindVariableInit(const VariableInit &init) {
     if (!isTypeDefined(init.type)) {
         if (init.type.kind == TypeKind::STRUCT) {
-            errorUndefinedStruct(init.type.structName, {});
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + init.type.structName + "'", init, init.name.location);
         }
     }
 
@@ -40,14 +42,15 @@ void Binder::bindVariableInit(const VariableInit &init) {
                                                  init.isMutable);
     symbol->isInitialized = true;
     if (!_current_scope->define(symbol)) {
-        errorDuplicateDefinition(init.name.token_name, SymbolKind::Variable, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "variable '" + init.name.token_name + "' is already defined", init, init.name.location);
     }
 }
 
 void Binder::bindAssignment(const Assignment &assign) {
     if (const auto symbol = _current_scope->lookupVariable(assign.name.token_name); symbol) {
         if (!symbol->isMutable) {
-            BINDER_ERROR(DiagnosticCode::IMMUTABLE_MODIFICATION, "tried to modify an immutable variable", symbol, SOURCE_LOCATION);
+            BINDER_ERROR(DiagnosticCode::IMMUTABLE_MODIFICATION,
+                         "tried to modify an immutable variable '" + assign.name.token_name + "'", symbol, assign.name.location);
         }
 
         symbol->isInitialized = true;
@@ -59,7 +62,7 @@ void Binder::bindAssignment(const Assignment &assign) {
             checkTypeCompatibility(symbol->type, *assign.value, {});
         }
     } else {
-        errorUndefinedVariable(assign.name.token_name, {});
+        BINDER_ERROR(DiagnosticCode::UNDEFINED_VARIABLE, "undefined variable '" + assign.name.token_name + "'", assign, assign.name.location);
         if (assign.value) {
             bindExpression(*assign.value);
         }

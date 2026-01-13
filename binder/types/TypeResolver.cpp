@@ -126,16 +126,16 @@ void Binder::checkTypeCompatibility(const Type &expected, const Expression &expr
             }
 
             if (isNegative) {
-                _diagnostics.error(DiagnosticCode::TYPE_MISMATCH,
-                                   "cannot assign negative value to unsigned type",
-                                   loc);
+                BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                             "cannot assign negative value to unsigned type",
+                             expr, loc);
             }
         }
         // Warning for unsigned -> signed (potential overflow for large values)
         else if (expectedResolved->sign && !inferred.sign) {
-            _diagnostics.warning(DiagnosticCode::TYPE_MISMATCH,
-                                 "implicit conversion from unsigned to signed integer",
-                                 loc);
+            BINDER_WARNING(DiagnosticCode::TYPE_MISMATCH,
+                           "implicit conversion from unsigned to signed integer",
+                           loc);
         }
     }
 
@@ -143,8 +143,8 @@ void Binder::checkTypeCompatibility(const Type &expected, const Expression &expr
     if (expectedResolved->kind == TypeKind::INTEGER &&
         (inferred.kind == TypeKind::F16 || inferred.kind == TypeKind::F32 ||
          inferred.kind == TypeKind::F64 || inferred.kind == TypeKind::F128)) {
-        _diagnostics.warning(DiagnosticCode::TYPE_MISMATCH,
-                             "implicit conversion from floating-point to integer may lose precision",
-                             loc);
+        BINDER_WARNING(DiagnosticCode::TYPE_MISMATCH,
+                       "implicit conversion from floating-point to integer may lose precision",
+                       loc);
     }
 }

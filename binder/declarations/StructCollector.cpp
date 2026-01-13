@@ -13,7 +13,8 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
 
     for (const auto &field: decl.fields) {
         if (structSym->hasField(field.name.token_name)) {
-            errorDuplicateDefinition(field.name.token_name, SymbolKind::Field, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
+                         "field '" + field.name.token_name + "' is already defined", field, field.name.location);
         } else {
             structSym->addField(field.name.token_name, *field.type);
         }
@@ -23,7 +24,8 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
     // Auto-properties have a field with the same name, so skip duplicate check for them
     for (const auto &prop: decl.properties) {
         if (!prop.isAutoProperty() && structSym->hasMember(prop.name.token_name)) {
-            errorDuplicateDefinition(prop.name.token_name, SymbolKind::Field, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
+                         "field '" + prop.name.token_name + "' is already defined", prop, prop.name.location);
         } else {
             structSym->addProperty(prop.name.token_name, *prop.type, prop.hasGetter, prop.hasSetter);
         }
@@ -35,7 +37,8 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
     }
 
     if (!_global_scope->defineStruct(structSym)) {
-        errorDuplicateDefinition(decl.name.token_name, SymbolKind::Struct, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "struct '" + decl.name.token_name + "' is already defined",
+                     decl, decl.name.location);
     }
 }
 
@@ -49,7 +52,8 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
 
     for (const auto &field: decl.fields) {
         if (structSym->hasField(field.name.token_name)) {
-            errorDuplicateDefinition(field.name.token_name, SymbolKind::Field, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
+                         "field '" + field.name.token_name + "' is already defined", field, field.name.location);
         } else {
             structSym->addField(field.name.token_name, *field.type);
         }
@@ -59,7 +63,8 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
     // Auto-properties have a field with the same name, so skip duplicate check for them
     for (const auto &prop: decl.properties) {
         if (!prop.isAutoProperty() && structSym->hasMember(prop.name.token_name)) {
-            errorDuplicateDefinition(prop.name.token_name, SymbolKind::Field, {});
+            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
+                         "field '" + prop.name.token_name + "' is already defined", prop, prop.name.location);
         } else {
             structSym->addProperty(prop.name.token_name, *prop.type, prop.hasGetter, prop.hasSetter);
         }
@@ -92,6 +97,7 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
     }
 
     if (!_global_scope->defineStruct(structSym)) {
-        errorDuplicateDefinition(qualifiedName, SymbolKind::Struct, {});
+        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "struct '" + qualifiedName + "' is already defined", decl,
+                     decl.name.location);
     }
 }

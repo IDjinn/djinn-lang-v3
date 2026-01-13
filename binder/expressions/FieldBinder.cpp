@@ -30,7 +30,10 @@ void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expe
 
                 if (elem.isDesignated()) {
                     if (!structSym->hasMember(elem.fieldName.token_name)) {
-                        errorUndefinedField(expectedType->structName, elem.fieldName.token_name, {});
+                        BINDER_ERROR(DiagnosticCode::UNDEFINED_FIELD,
+                                     "struct '" + expectedType->structName + "' has no field named '" + elem.fieldName.
+                                     token_name + "'",
+                                     elem, elem.fieldName.location);
                     } else {
                         fieldType = structSym->getMemberType(elem.fieldName.token_name);
                     }
