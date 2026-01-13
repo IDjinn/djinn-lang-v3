@@ -2,7 +2,7 @@
 // Created by Claude on 05/01/2026.
 //
 
-#include "Binder.h"
+#include "../Binder.h"
 
 void Binder::errorImmutableVariable(const std::string &name, const SourceLocation loc) const {
     _diagnostics.error(DiagnosticCode::IMMUTABLE_MODIFICATION,

@@ -2,7 +2,7 @@
 // Created by Claude on 05/01/2026.
 //
 
-#include "Binder.h"
+#include "../Binder.h"
 
 bool Binder::resolveType(const Type &type) {
     return isTypeDefined(type);
