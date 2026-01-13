@@ -94,6 +94,7 @@ enum class TokenType {
     AT, // @
     UNION,
     ENUM,
+    NEW,
 };
 
 

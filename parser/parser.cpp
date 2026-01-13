@@ -504,7 +504,6 @@ std::unique_ptr<Program> Parser::parse() {
         }
     }
 
-    assert(program->enums.size() <= 1);
     return program;
 }
 
@@ -1158,7 +1157,7 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum() {
             std::vector<Type> associated_types;
 
             // Parse associated types: Ok(T) or Ok(T, U)
-            if (match(TokenType::LPAREN)) {
+            if (match(TokenType::LPAREN) && !match(TokenType::RPAREN)) {
                 do {
                     associated_types.emplace_back(*parse_type());
                 } while (match(TokenType::COMMA));

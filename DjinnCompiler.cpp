@@ -16,6 +16,53 @@
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 
+std::vector<std::filesystem::path> DjinnCompiler::collectStdFiles(const std::filesystem::path &stdLibPath) {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> files;
+
+    if (!fs::exists(stdLibPath)) {
+        return files;
+    }
+
+    for (const auto &entry: fs::recursive_directory_iterator(stdLibPath)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".djinn") {
+            files.push_back(entry.path());
+        }
+    }
+
+    return files;
+}
+
+std::unique_ptr<Program> DjinnCompiler::loadStdLibrary(const std::filesystem::path &stdLibPath) {
+    namespace fs = std::filesystem;
+
+    auto stdProgram = std::make_unique<Program>();
+    const auto stdFiles = collectStdFiles(stdLibPath);
+
+    for (const auto &filePath: stdFiles) {
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            continue;
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        file.close();
+
+        const std::string source = buffer.str();
+
+        Lexer lexer(source);
+        const auto tokens = lexer.tokenize();
+
+        Parser parser(tokens);
+        auto program = parser.parse();
+
+        mergePrograms(*stdProgram, std::move(program));
+    }
+
+    return stdProgram;
+}
+
 CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions options) {
     namespace fs = std::filesystem;
 
@@ -39,6 +86,16 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
 
         Parser parser(tokens);
         auto program = parser.parse();
+
+        // Include standard library if enabled
+        if (options.includeStd) {
+            auto stdProgram = loadStdLibrary(options.stdLibPath);
+            if (stdProgram) {
+                // Merge std into user program (std comes first)
+                mergePrograms(*stdProgram, std::move(program));
+                program = std::move(stdProgram);
+            }
+        }
         if (options.print_ast) {
             std::cout << "=====AST=====\n";
             program->print(std::cout);
@@ -141,7 +198,16 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
         return {.returnCode = 1};
     }
 
-    auto combinedProgram = std::make_unique<Program>();
+    // Start with std library if enabled
+    std::unique_ptr<Program> combinedProgram;
+    if (options.includeStd) {
+        combinedProgram = loadStdLibrary(options.stdLibPath);
+        if (!combinedProgram) {
+            combinedProgram = std::make_unique<Program>();
+        }
+    } else {
+        combinedProgram = std::make_unique<Program>();
+    }
 
     for (const auto &filePath: filePaths) {
         if (!fs::exists(filePath)) {
@@ -174,8 +240,27 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
         options.outputFileName = filePaths[0].stem().string();
     }
 
+    // Disable includeStd for runFromProgram since we already included it
+    options.includeStd = false;
+
     std::printf("processing %zu files, output: %s\n", filePaths.size(), options.outputFileName.c_str());
     return runFromProgram(std::move(combinedProgram), options);
+}
+
+// Helper to check if struct exists in list
+static bool hasStruct(const std::vector<std::unique_ptr<StructDeclaration> > &list, const std::string &name) {
+    for (const auto &s: list) {
+        if (s->name == name) return true;
+    }
+    return false;
+}
+
+// Helper to check if function exists in list
+static bool hasFunction(const std::vector<std::unique_ptr<FunctionDeclaration> > &list, const std::string &name) {
+    for (const auto &f: list) {
+        if (f->name == name) return true;
+    }
+    return false;
 }
 
 void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> source) {
@@ -196,11 +281,15 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
         }
 
         for (auto &s: source->structs) {
-            targetNs->structs.push_back(std::move(s));
+            if (!hasStruct(targetNs->structs, s->name)) {
+                targetNs->structs.push_back(std::move(s));
+            }
         }
 
         for (auto &f: source->functions) {
-            targetNs->functions.push_back(std::move(f));
+            if (!hasFunction(targetNs->functions, f->name)) {
+                targetNs->functions.push_back(std::move(f));
+            }
         }
 
         for (auto &ns: source->namespaces) {
@@ -208,11 +297,15 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
         }
     } else {
         for (auto &s: source->structs) {
-            target.structs.push_back(std::move(s));
+            if (!hasStruct(target.structs, s->name)) {
+                target.structs.push_back(std::move(s));
+            }
         }
 
         for (auto &f: source->functions) {
-            target.functions.push_back(std::move(f));
+            if (!hasFunction(target.functions, f->name)) {
+                target.functions.push_back(std::move(f));
+            }
         }
 
         for (auto &ns: source->namespaces) {
@@ -220,10 +313,14 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
             for (auto &existingNs: target.namespaces) {
                 if (existingNs->name == ns->name) {
                     for (auto &s: ns->structs) {
-                        existingNs->structs.push_back(std::move(s));
+                        if (!hasStruct(existingNs->structs, s->name)) {
+                            existingNs->structs.push_back(std::move(s));
+                        }
                     }
                     for (auto &f: ns->functions) {
-                        existingNs->functions.push_back(std::move(f));
+                        if (!hasFunction(existingNs->functions, f->name)) {
+                            existingNs->functions.push_back(std::move(f));
+                        }
                     }
                     for (auto &nestedNs: ns->namespaces) {
                         existingNs->namespaces.push_back(std::move(nestedNs));
@@ -243,25 +340,62 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
     }
 
     for (auto &ext: source->externFunctions) {
-        target.externFunctions.push_back(std::move(ext));
+        bool isDuplicate = false;
+        for (const auto &existing: target.externFunctions) {
+            if (existing->name == ext->name) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        if (!isDuplicate) {
+            target.externFunctions.push_back(std::move(ext));
+        }
     }
 
     for (auto &iface: source->interfaces) {
-        target.interfaces.push_back(std::move(iface));
+        bool isDuplicate = false;
+        for (const auto &existing: target.interfaces) {
+            if (existing->name == iface->name) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        if (!isDuplicate) {
+            target.interfaces.push_back(std::move(iface));
+        }
     }
 
-    for (auto &enum_declaration: source->enums) {
-        target.enums.push_back(std::move(enum_declaration));
+    for (auto &enumDecl: source->enums) {
+        bool isDuplicate = false;
+        for (const auto &existing: target.enums) {
+            if (existing->name == enumDecl->name) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        if (!isDuplicate) {
+            target.enums.push_back(std::move(enumDecl));
+        }
     }
 }
 
 CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, CompilerOptions options) {
+    namespace fs = std::filesystem;
+
+    // Include standard library if enabled
+    if (options.includeStd) {
+        auto stdProgram = loadStdLibrary(options.stdLibPath);
+        if (stdProgram) {
+            mergePrograms(*stdProgram, std::move(program));
+            program = std::move(stdProgram);
+        }
+    }
+
     if (options.print_ast) {
         std::cout << "=====AST=====\n";
         program->print(std::cout);
         std::cout << "=====" << std::endl;
     }
-    namespace fs = std::filesystem;
 
     // Ensure output directory exists
     if (!options.outputDirectory.empty()) {

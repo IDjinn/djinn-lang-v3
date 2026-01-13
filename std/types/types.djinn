@@ -7,22 +7,13 @@ struct c_result : i32;
 
 struct bool : i1;
 
-struct optional<T> {
-    T value;
-    i1 has_value;
-
-    T value() {
-        return this.value;
-    }
+enum optional<T> {
+    Empty(),
+    Value(T)
 }
 
-struct result<T, E> {
-    T value { get; }
-    E error { get; }
-    bool has_value { get; }
-}
 
-enum Result<T, E> {
+enum result<T, E> {
     Ok(T),
     Error(E)
 }

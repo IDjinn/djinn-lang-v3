@@ -3,15 +3,6 @@ import std::sys;
 
 namespace std;
 
-
 void main() {
-    optional<i32> teste = { .value = 11, .has_value = 1 };
-    result<i32, bool> resul = {.value = 69, .has_value = 1};
 
-    auto ok = Result<i32, i8>::Ok(42);
-    auto err = Result<i32, i8>::Error("test error");
-
-    printf("test = %d\n", teste.value());
-    printf("result = %d\n\n", resul.value);
-    printf("err = %d\n\n", err);
 }

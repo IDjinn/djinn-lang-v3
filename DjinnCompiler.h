@@ -17,8 +17,10 @@ struct CompilerOptions {
     bool print_ir = false;
     bool optimize = true;
     bool executeAfterCompile = true;
+    bool includeStd = true; // Include standard library by default
     std::string outputFileName{};
     std::string outputDirectory{"build"};
+    std::filesystem::path stdLibPath{"std"}; // Path to standard library
 };
 
 struct CompilerResult {
@@ -41,6 +43,10 @@ struct DjinnCompiler {
 
 private:
     static void mergePrograms(Program &target, std::unique_ptr<Program> source);
+
+    static std::unique_ptr<Program> loadStdLibrary(const std::filesystem::path &stdLibPath);
+
+    static std::vector<std::filesystem::path> collectStdFiles(const std::filesystem::path &stdLibPath);
 };
 
 
