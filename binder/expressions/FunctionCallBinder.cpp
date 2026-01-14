@@ -56,7 +56,8 @@ void Binder::bindFunctionCall(const FunctionCall &call) {
 
         if (const auto enumSym = _global_scope->lookupEnum(enumName)) {
             if (enumSym->hasVariant(variantName)) {
-                if (const auto *variant = enumSym->getVariant(variantName); variant && call.arguments.size() != variant->associatedTypes.size()) {
+                if (const auto *variant = enumSym->getVariant(variantName);
+                    variant && call.arguments.size() != variant->associatedTypes.size()) {
                     BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
                                  "function '" + call.name.token_name + "' expects " + std::to_string(variant->
                                      associatedTypes.size()) +
