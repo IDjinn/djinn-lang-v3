@@ -35,7 +35,8 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"new", TokenType::NEW},
 };
 
-Lexer::Lexer(std::string source) : source(std::move(source)) {
+Lexer::Lexer(std::string source, std::string fileId)
+    : source(std::move(source)), fileId(std::move(fileId)) {
 }
 
 char Lexer::peek() const {
@@ -73,7 +74,7 @@ void Lexer::skip_whitespace() {
 }
 
 Token Lexer::make_token(const TokenType type, const std::string &value) const {
-    return Token{{line, column, static_cast<uint32_t>(pos)}, type, value};
+    return Token{{fileId, line, column, static_cast<uint32_t>(pos)}, type, value};
 }
 
 Token Lexer::read_string() {

@@ -37,8 +37,8 @@ struct StructMethodDeclaration : Location {
     std::vector<MethodParameter> parameters;
     GenericParams genericParams;
     std::vector<VisibilityModifier> modifiers;
-    std::unique_ptr<Block> body; // { ... }
-    std::unique_ptr<Expression> expression; // => expr;
+    std::unique_ptr<Block> body;
+    std::unique_ptr<Expression> expression;
 
     [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
@@ -112,23 +112,21 @@ struct StructField : Location {
     }
 };
 
-// Property with getter/setter (C# style)
-// Syntax: T name { get; set; } or T name { get { ... } set { ... } }
+// T name { get; set; } or T name { get { ... } set { ... } }
 struct StructProperty : Location {
     std::unique_ptr<Type> type;
     SourceIdentifier name;
     bool hasGetter = false;
     bool hasSetter = false;
-    std::unique_ptr<Block> getterBody; // null = auto-implemented
-    std::unique_ptr<Block> setterBody; // null = auto-implemented
-    std::unique_ptr<Expression> getterExpr; // => expr for getter
-    std::unique_ptr<Expression> setterExpr; // => expr for setter
+    std::unique_ptr<Block> getterBody;
+    std::unique_ptr<Block> setterBody;
+    std::unique_ptr<Expression> getterExpr;
+    std::unique_ptr<Expression> setterExpr;
 
     StructProperty(std::unique_ptr<Type> type, SourceIdentifier name)
         : type(std::move(type)), name(std::move(name)) {
     }
 
-    // Is this an auto-property? (no custom implementation)
     [[nodiscard]] bool isAutoProperty() const {
         return (hasGetter && !getterBody && !getterExpr) ||
                (hasSetter && !setterBody && !setterExpr);
@@ -139,7 +137,6 @@ struct StructProperty : Location {
         return isAutoProperty();
     }
 
-    // Get the backing field name (same as property name for auto-properties)
     [[nodiscard]] std::string backingFieldName() const {
         return name.token_name;
     }
@@ -166,8 +163,6 @@ struct StructProperty : Location {
 
 struct AttributeUsageDeclaration : Location {
     SourceIdentifier name;
-    // std::vector<Parameter> parameters;
-    // std::unique_ptr<Statement> statement;
 
     AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name)) {
     }
@@ -175,10 +170,6 @@ struct AttributeUsageDeclaration : Location {
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "AttributeUsageDeclaration(" << name.token_name << ")";
-        // for (size_t i = 0; i < parameters.size(); ++i) {
-        //     if (i > 0) os << ", ";
-        //     os << parameters[i].type << " " << parameters[i].name;
-        // }
     }
 };
 
@@ -186,10 +177,10 @@ struct StructDeclaration : Location {
     SourceIdentifier name;
     GenericParams genericParams;
     std::vector<StructField> fields;
-    std::vector<StructProperty> properties; // C# style properties { get; set; }
+    std::vector<StructProperty> properties;
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
-    std::vector<std::string> implements; // interfaces this struct implements
-    std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
+    std::vector<std::string> implements;
+    std::unique_ptr<Type> baseType;
     std::vector<AttributeUsageDeclaration> attributes;
 
     StructDeclaration(SourceIdentifier name, std::vector<StructField> fields)
@@ -204,7 +195,6 @@ struct StructDeclaration : Location {
         return !genericParams.empty();
     }
 
-    // Transparent type: inherits from primitive and has no fields
     [[nodiscard]] bool isTransparent() const {
         return baseType != nullptr && fields.empty() && baseType->kind != TypeKind::STRUCT;
     }

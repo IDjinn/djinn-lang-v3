@@ -11,12 +11,13 @@
 
 class Lexer {
 public:
-    explicit Lexer(std::string source);
+    explicit Lexer(std::string source, std::string fileId = "main");
 
     std::vector<Token> tokenize();
 
 private:
     std::string source;
+    std::string fileId;
     size_t pos = 0;
     uint32_t line = 1;
     uint32_t column = 1;

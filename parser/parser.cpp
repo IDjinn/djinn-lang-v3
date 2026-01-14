@@ -11,7 +11,8 @@
 
 auto makeSourceIdentifier = [](const Token &token) {
     return SourceIdentifier(token.value,
-                            SourceLocation(token.position.line, token.position.column, token.value.length()));
+                            SourceLocation(token.position.fileId, token.position.line, token.position.column,
+                                           token.value.length()));
 };
 
 auto isPrimitiveType = [](const std::string &name) {
@@ -102,7 +103,7 @@ Token &Parser::expect(const std::string &message, const TokenType type) {
     const auto &token = previous();
     const uint32_t col = token.position.column + token.value.length();
     throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
-                       SourceLocation(token.position.line, col, 1));
+                       SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
 Token &Parser::expect(const std::string &message, const std::vector<TokenType> &types) {
@@ -112,7 +113,7 @@ Token &Parser::expect(const std::string &message, const std::vector<TokenType> &
     const auto &token = previous();
     const uint32_t col = token.position.column + token.value.length();
     throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
-                       SourceLocation(token.position.line, col, 1));
+                       SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
 bool Parser::isAtEnd() {
@@ -731,7 +732,7 @@ std::unique_ptr<SwitchStatement> Parser::parse_switch_statement() {
         } else {
             const auto &tok = peek();
             throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "esperado 'case' ou 'default'",
-                               SourceLocation(tok.position.line, tok.position.column, tok.value.length()));
+                               SourceLocation(tok.position.fileId, tok.position.line, tok.position.column, tok.value.length()));
         }
 
         // Parse case body statements until next case/default/rbrace
@@ -986,7 +987,8 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         }
 
         // Create SourceIdentifier with the first token's location
-        SourceIdentifier nameIdentifier(name, SourceLocation(identifier.position.line, identifier.position.column, name.length()));
+        SourceIdentifier nameIdentifier(name, SourceLocation(identifier.position.fileId, identifier.position.line,
+                                                             identifier.position.column, name.length()));
 
         if (match(TokenType::LPAREN)) {
             std::vector<std::unique_ptr<Expression> > args;
@@ -1026,7 +1028,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
     const auto &tok = peek();
     throw CompileError(DiagnosticCode::EXPECTED_EXPRESSION, "expressão inesperada",
-                       SourceLocation(tok.position.line, tok.position.column,
+                       SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
                                       tok.value.empty() ? 1 : tok.value.length()));
 }
 

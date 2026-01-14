@@ -11,6 +11,7 @@
 
 
 struct Position {
+    std::string fileId;
     uint32_t line, column, index;
 };
 

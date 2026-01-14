@@ -6,6 +6,7 @@
 #define DJINN_DJINNCOMPILER_H
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <filesystem>
 
 #include "diagnostics/Diagnostic.h"
@@ -39,7 +40,8 @@ struct DjinnCompiler {
     static CompilerResult runFromFiles(const std::vector<std::filesystem::path> &filePaths,
                                        CompilerOptions options = {});
 
-    static CompilerResult runFromProgram(std::unique_ptr<Program> program, CompilerOptions options = {});
+    static CompilerResult runFromProgram(std::unique_ptr<Program> program, CompilerOptions options = {},
+                                         std::unordered_map<std::string, std::string> sources = {});
 
 private:
     static void mergePrograms(Program &target, std::unique_ptr<Program> source);

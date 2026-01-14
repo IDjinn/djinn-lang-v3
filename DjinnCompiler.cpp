@@ -50,8 +50,9 @@ std::unique_ptr<Program> DjinnCompiler::loadStdLibrary(const std::filesystem::pa
         file.close();
 
         const std::string source = buffer.str();
+        const std::string fileId = filePath.filename().string();
 
-        Lexer lexer(source);
+        Lexer lexer(source, fileId);
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens);
@@ -104,13 +105,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
 
         Binder binder(diagnostics);
         if (const auto bindResult = binder.bind(*program); !bindResult.success) {
-            diagnostics.printToStderr({});
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
-        }
-
-        // Print warnings even if compilation succeeds
-        if (diagnostics.warningCount() > 0) {
-            std::cerr << diagnostics.render();
         }
 
         auto generator = Generator(options.outputFileName);
@@ -209,6 +204,8 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
         combinedProgram = std::make_unique<Program>();
     }
 
+    std::unordered_map<std::string, std::string> sources;
+
     for (const auto &filePath: filePaths) {
         if (!fs::exists(filePath)) {
             std::cerr << "Error: file not found: " << filePath << std::endl;
@@ -226,8 +223,11 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
         file.close();
 
         const std::string source = buffer.str();
+        const std::string fileId = filePath.filename().string();
 
-        Lexer lexer(source);
+        sources[fileId] = source;
+
+        Lexer lexer(source, fileId);
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens);
@@ -244,7 +244,7 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
     options.includeStd = false;
 
     std::printf("processing %zu files, output: %s\n", filePaths.size(), options.outputFileName.c_str());
-    return runFromProgram(std::move(combinedProgram), options);
+    return runFromProgram(std::move(combinedProgram), options, std::move(sources));
 }
 
 // Helper to check if struct exists in list
@@ -379,7 +379,8 @@ void DjinnCompiler::mergePrograms(Program &target, std::unique_ptr<Program> sour
     }
 }
 
-CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, CompilerOptions options) {
+CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, CompilerOptions options,
+                                             std::unordered_map<std::string, std::string> sources) {
     namespace fs = std::filesystem;
 
     // Include standard library if enabled
@@ -409,18 +410,15 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
         options.outputFileName = (fs::path(options.outputDirectory) / options.outputFileName).string();
     }
 
-    DiagnosticEngine diagnostics("");
+    DiagnosticEngine diagnostics;
+    for (const auto &[fileId, source]: sources) {
+        diagnostics.registerSource(fileId, source);
+    }
 
     try {
         Binder binder(diagnostics);
         if (const auto bindResult = binder.bind(*program); !bindResult.success) {
-            diagnostics.printToStderr({});
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
-        }
-
-        // Print warnings even if compilation succeeds
-        if (diagnostics.warningCount() > 0) {
-            std::cerr << diagnostics.render();
         }
 
         auto generator = Generator(options.outputFileName);

@@ -15,21 +15,14 @@
 #include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
 
-#include "cassert"
-
-
-#define SOURCE_LOCATION SourceLocation{}
-
 #define BINDER_ERROR(code, msg, token, location) do { \
-    _diagnostics.error(code, msg, location); \
-    assert(false && "BINDER_ERROR"); \
+    _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
 } while (false)
 
 #define BINDER_WARNING(code, msg, location) do { \
-    _diagnostics.warning(code, msg, location); \
+    _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
 } while (false)
 
-// Forward declarations
 struct Program;
 struct FunctionDeclaration;
 struct ExternFunctionDeclaration;
@@ -75,7 +68,6 @@ private:
 
     void popScope();
 
-    // Pass 1: Collect all top-level declarations (allows forward references)
     void collectDeclarations(const Program &program);
 
     void collectExternFunction(const ExternFunctionDeclaration &decl) const;
@@ -100,7 +92,6 @@ private:
 
     void processImports(const Program &program) const;
 
-    // Pass 2: Bind all references within function bodies
     void bindProgram(const Program &program);
 
     void bindFunction(const FunctionDeclaration &func);
@@ -125,7 +116,6 @@ private:
 
     void bindExpression(const Expression &expr);
 
-    // Expression binding helpers
     void bindIdentifier(const Identifier &id) const;
 
     void bindFunctionCall(const FunctionCall &call);
@@ -146,14 +136,12 @@ private:
 
     void bindBraceInitializer(const BraceInitializer &init, const Type *expectedType = nullptr);
 
-    // Type resolution
     bool resolveType(const Type &type);
 
-    bool is_generic_type(const Type &type, const StructDeclaration &struc);
+    static bool is_generic_type(const Type &type, const StructDeclaration &struc);
 
     bool isTypeDefined(const Type &type);
 
-    // Type inference for expressions
     std::optional<Type> inferExpressionType(const Expression &expr) const;
 
     // Type compatibility checking

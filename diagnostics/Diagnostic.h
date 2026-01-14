@@ -8,6 +8,7 @@
 #include <complex.h>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <sstream>
 #include <cstdint>
 #include <stacktrace>
@@ -54,6 +55,7 @@ namespace DiagnosticCode {
 }
 
 struct SourceLocation {
+    std::string fileId;
     uint32_t line = 0;
     uint32_t column = 0;
     uint32_t length = 1;
@@ -62,6 +64,10 @@ struct SourceLocation {
 
     SourceLocation(const uint32_t l, const uint32_t c, const uint32_t len = 1)
         : line(l), column(c), length(len) {
+    }
+
+    SourceLocation(std::string file, const uint32_t l, const uint32_t c, const uint32_t len = 1)
+        : fileId(std::move(file)), line(l), column(c), length(len) {
     }
 };
 
@@ -94,17 +100,29 @@ struct Diagnostic {
     }
 };
 
+struct SourceFile {
+    std::string source;
+    std::vector<size_t> lineOffsets;
+};
+
 class DiagnosticEngine {
 public:
-    explicit DiagnosticEngine(std::string source) : source_(std::move(source)) {
-        buildLineIndex();
+    DiagnosticEngine() = default;
+
+    // Legacy constructor for single-file compilation
+    explicit DiagnosticEngine(std::string source) {
+        registerSource("main", std::move(source));
     }
+
+    void registerSource(const std::string &fileId, std::string source);
 
     void emit(const Diagnostic &diag);
 
     void error(uint32_t code, const std::string &msg, SourceLocation loc = {});
 
     void warning(uint32_t code, const std::string &msg, SourceLocation loc = {});
+
+    void emitAndPrint(const Diagnostic &diag);
 
     [[nodiscard]] bool hasErrors() const { return total_errors > 0; }
     [[nodiscard]] size_t errorCount() const { return total_errors; }
@@ -117,15 +135,14 @@ public:
     void printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry> > &stack) const;
 
 private:
-    std::string source_;
-    std::vector<size_t> lineOffsets_;
+    std::unordered_map<std::string, SourceFile> _sources;
     std::vector<Diagnostic> diagnostics;
     size_t total_errors = 0;
     size_t total_warnings = 0;
 
-    void buildLineIndex();
+    static std::vector<size_t> buildLineIndex(const std::string &source);
 
-    [[nodiscard]] std::string getLine(uint32_t lineNum) const;
+    [[nodiscard]] std::string getLine(const std::string &fileId, uint32_t lineNum) const;
 
     [[nodiscard]] std::string renderDiagnostic(const Diagnostic &diag) const;
 

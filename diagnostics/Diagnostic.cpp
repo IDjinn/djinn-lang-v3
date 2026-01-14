@@ -7,31 +7,49 @@
 #include <iomanip>
 #include <algorithm>
 
-void DiagnosticEngine::buildLineIndex() {
-    lineOffsets_.push_back(0);
-    for (size_t i = 0; i < source_.size(); ++i) {
-        if (source_[i] == '\n') {
-            lineOffsets_.push_back(i + 1);
+std::vector<size_t> DiagnosticEngine::buildLineIndex(const std::string &source) {
+    std::vector<size_t> offsets;
+    offsets.push_back(0);
+    for (size_t i = 0; i < source.size(); ++i) {
+        if (source[i] == '\n') {
+            offsets.push_back(i + 1);
         }
     }
+    return offsets;
 }
 
-std::string DiagnosticEngine::getLine(const uint32_t lineNum) const {
-    if (lineNum == 0 || lineNum > lineOffsets_.size()) {
+void DiagnosticEngine::registerSource(const std::string &fileId, std::string source) {
+    SourceFile file;
+    file.lineOffsets = buildLineIndex(source);
+    file.source = std::move(source);
+    _sources[fileId] = std::move(file);
+}
+
+std::string DiagnosticEngine::getLine(const std::string &fileId, const uint32_t lineNum) const {
+    if (auto it = _sources.find(fileId); it == _sources.end()) {
+        if (fileId.empty()) {
+            it = _sources.find("main");
+            if (it == _sources.end()) return "";
+        } else {
+            return "";
+        }
+    }
+
+    const auto &[source, lineOffsets] = it->second;
+    if (lineNum == 0 || lineNum > lineOffsets.size()) {
         return "";
     }
 
-    const size_t start = lineOffsets_[lineNum - 1];
-    size_t end = (lineNum < lineOffsets_.size())
-                     ? lineOffsets_[lineNum] - 1
-                     : source_.size();
+    const size_t start = lineOffsets[lineNum - 1];
+    size_t end = (lineNum < lineOffsets.size())
+                     ? lineOffsets[lineNum] - 1
+                     : source.size();
 
-    // Remove trailing \r if present (Windows line endings)
-    if (end > start && source_[end - 1] == '\r') {
+    if (end > start && source[end - 1] == '\r') {
         end--;
     }
 
-    return source_.substr(start, end - start);
+    return source.substr(start, end - start);
 }
 
 std::string DiagnosticEngine::severityString(const Severity severity_level) {
@@ -86,6 +104,11 @@ void DiagnosticEngine::warning(const uint32_t code, const std::string &msg, cons
     emit(Diagnostic(Severity::Warning, code, msg, loc));
 }
 
+void DiagnosticEngine::emitAndPrint(const Diagnostic &diag) {
+    emit(diag);
+    std::cerr << renderDiagnostic(diag) << std::endl;
+}
+
 std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {
     std::ostringstream out;
 
@@ -100,16 +123,17 @@ std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {
         auto lineNumStr = std::to_string(lineNum);
         std::string padding(lineNumStr.size(), ' ');
 
+        std::string fileInfo = diag.location.fileId.empty() ? "" : diag.location.fileId + ":";
         out << " " << colorize("-->", "1;34") << " "
-                << lineNum << ":" << col << "\n";
+                << fileInfo << lineNum << ":" << col << "\n";
 
         out << " " << padding << " " << colorize("|", "1;34") << "\n";
 
-        auto sourceLine = getLine(lineNum);
+        auto sourceLine = getLine(diag.location.fileId, lineNum);
         out << " " << colorize(lineNumStr, "1;34") << " "
                 << colorize("|", "1;34") << " " << sourceLine << "\n";
 
-        std::string underline(col > 0 ? col - 1 : 0, ' ');
+        std::string underline(col > 0 ? col - 2 : 0, ' ');
         underline += std::string(len, '^');
 
         out << " " << padding << " " << colorize("|", "1;34") << " "
@@ -121,7 +145,7 @@ std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {
         out << "\n";
     }
 
-    // Header: error[E2001]: message
+    // error[E2001]: message
     out << colorize(severity + "[" + code_str + "]", severity_color)
             << ": " << colorize(diag.message, "1") << "\n";
 
