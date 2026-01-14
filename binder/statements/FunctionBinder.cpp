@@ -5,7 +5,6 @@
 #include "../Binder.h"
 
 void Binder::bindProgram(const Program &program) {
-    // Validate extern function types (they may use imported types)
     for (const auto &ext: program.externFunctions) {
         if (!isTypeDefined(*ext->returnType)) {
             if (ext->returnType->kind == TypeKind::STRUCT) {
@@ -130,7 +129,6 @@ void Binder::bindNamespace(const NamespaceDeclaration &ns, const std::string &pr
                 }
             }
         }
-        // Bind struct methods
         for (const auto &method: struc->methods) {
             bindMethod(*method, *struc);
         }

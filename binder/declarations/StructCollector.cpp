@@ -20,8 +20,6 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
         }
     }
 
-    // Collect properties (access control metadata)
-    // Auto-properties have a field with the same name, so skip duplicate check for them
     for (const auto &prop: decl.properties) {
         if (!prop.isAutoProperty() && structSym->hasMember(prop.name.token_name)) {
             BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
@@ -31,7 +29,6 @@ void Binder::collectStruct(const StructDeclaration &decl) const {
         }
     }
 
-    // Collect base type for transparent types (struct Size : i32;)
     if (decl.baseType) {
         structSym->baseType = std::make_unique<Type>(*decl.baseType);
     }
@@ -59,8 +56,6 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
         }
     }
 
-    // Collect properties (access control metadata)
-    // Auto-properties have a field with the same name, so skip duplicate check for them
     for (const auto &prop: decl.properties) {
         if (!prop.isAutoProperty() && structSym->hasMember(prop.name.token_name)) {
             BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
@@ -70,9 +65,8 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
         }
     }
 
-    // Collect methods
     for (const auto &method: decl.methods) {
-        auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, *method->returnType);
+        const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, *method->returnType);
         methodSym->isAbstract = method->isAbstract();
 
         for (const auto &param: method->parameters) {
@@ -86,12 +80,10 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
         structSym->addMethod(methodSym);
     }
 
-    // Collect implements
     for (const auto &ifaceName: decl.implements) {
         structSym->addImplements(ifaceName);
     }
 
-    // Collect base type for transparent types (struct Size : i32;)
     if (decl.baseType) {
         structSym->baseType = std::make_unique<Type>(*decl.baseType);
     }

@@ -11,12 +11,10 @@ void Binder::collectDeclarations(const Program &program) {
         collectExternFunction(*ext);
     }
 
-    // Collect interfaces first (so structs can reference them)
     for (const auto &iface: program.interfaces) {
         collectInterfaceWithPrefix(*iface, filePrefix);
     }
 
-    // Collect enums
     for (const auto &enumDecl: program.enums) {
         collectEnumWithPrefix(*enumDecl, filePrefix);
     }

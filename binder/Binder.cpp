@@ -27,14 +27,6 @@ void Binder::pushScope() {
 }
 
 void Binder::popScope() {
-    // Check for unused variables before leaving scope (optional warning)
-    // auto unused = currentScope_->getUnusedSymbols();
-    // for (const auto& sym : unused) {
-    //     diag_.warning(DiagnosticCode::UNUSED_VARIABLE,
-    //         "unused " + Symbol::kindToString(sym->kind) + " '" + sym->name + "'",
-    //         sym->location);
-    // }
-
     if (const auto parent = _current_scope->parentScope()) {
         _current_scope = parent;
     }

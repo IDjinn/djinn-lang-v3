@@ -30,7 +30,7 @@ void Binder::bindVariableInit(const VariableInit &init) {
             bindBraceInitializer(*braceInit, &init.type);
         } else {
             bindExpression(*init.value);
-            // Check type compatibility (signed/unsigned, float/int, etc.)
+            // type compatibility (signed/unsigned, float/int, etc.)
             if (init.type.kind != TypeKind::AUTO) {
                 checkTypeCompatibility(init.type, *init.value, {});
             }
@@ -56,7 +56,6 @@ void Binder::bindAssignment(const Assignment &assign) {
         symbol->isInitialized = true;
         _current_scope->markUsed(assign.name.token_name);
 
-        // Check type compatibility with existing variable type
         if (assign.value) {
             bindExpression(*assign.value);
             checkTypeCompatibility(symbol->type, *assign.value, {});

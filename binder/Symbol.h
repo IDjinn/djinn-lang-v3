@@ -135,13 +135,12 @@ struct StructSymbol : Symbol {
     std::vector<PropertySymbol> properties;
     std::vector<std::string> genericParams;
     std::vector<std::string> implements;
-    std::unique_ptr<Type> baseType; // for transparent types: struct Size : i32;
+    std::unique_ptr<Type> baseType;
 
     [[nodiscard]] bool isGeneric() const {
         return !this->genericParams.empty();
     }
 
-    // Transparent type: inherits from primitive and has no fields
     [[nodiscard]] bool isTransparent() const {
         return baseType != nullptr && fields.empty() && baseType->kind != TypeKind::STRUCT;
     }
@@ -195,12 +194,10 @@ struct StructSymbol : Symbol {
         return nullptr;
     }
 
-    // Check if struct has field OR property
     [[nodiscard]] bool hasMember(const std::string &name) const {
         return hasField(name) || hasProperty(name);
     }
 
-    // Get type of field or property
     [[nodiscard]] const Type *getMemberType(const std::string &name) const {
         if (const Type *t = getFieldType(name)) return t;
         return getPropertyType(name);
@@ -270,7 +267,7 @@ struct InterfaceSymbol : Symbol {
     }
 };
 
-// Represents an enum variant: Ok(T, U) -> name="Ok", associatedTypes=[T, U]
+// Ok(T, U) -> name="Ok", associatedTypes=[T, U]
 struct EnumVariant {
     std::string name;
     std::vector<Type> associatedTypes;

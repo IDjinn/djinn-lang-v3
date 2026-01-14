@@ -12,7 +12,6 @@ void Binder::collectEnumWithPrefix(const EnumDeclaration &decl, const std::strin
     const std::string qualifiedName = prefix.empty() ? decl.name.token_name : prefix + "::" + decl.name.token_name;
     const auto enumSym = std::make_shared<EnumSymbol>(qualifiedName);
 
-    // Collect generic parameters
     for (const auto &genParam: decl.genericParams.params) {
         enumSym->addGenericParam(genParam.name.token_name);
     }

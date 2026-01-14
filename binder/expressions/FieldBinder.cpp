@@ -47,10 +47,7 @@ void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expe
 
                 if (elem.value) {
                     bindExpression(*elem.value);
-                    // Check type compatibility for field initialization
-                    if (fieldType) {
-                        checkTypeCompatibility(*fieldType, *elem.value, {});
-                    }
+                    if (fieldType) checkTypeCompatibility(*fieldType, *elem.value, {});
                 }
             }
             return;
