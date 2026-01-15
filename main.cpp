@@ -28,7 +28,8 @@ void printUsage(const char *programName) {
             << "  " << programName << " -c -O0 test.djinn\n"
             << "  " << programName << " -r src/\n"
             << "\nLibrary compilation:\n"
-            << "  " << programName << " --lib --no-std -c -r std/            # Per namespace (std.types.ll, std.sys.ll)\n"
+            << "  " << programName <<
+            " --lib --no-std -c -r std/            # Per namespace (std.types.ll, std.sys.ll)\n"
             << "  " << programName << " --lib --no-std -c --bundle -o std -r std/  # Single std.ll\n"
             << "  " << programName << " --std-decl -l build/std.types.ll -l build/std.sys.ll main.djinn\n";
 }

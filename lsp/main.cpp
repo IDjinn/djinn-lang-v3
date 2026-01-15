@@ -6,18 +6,18 @@
 #include <iostream>
 #include <string>
 
-void printUsage(const char* programName) {
+void printUsage(const char *programName) {
     std::cerr << "Usage: " << programName << " [options]\n"
-              << "\n"
-              << "Options:\n"
-              << "  --stdio           Use stdio transport (default)\n"
-              << "  --socket <port>   Listen on TCP port\n"
-              << "  --port <port>     Alias for --socket\n"
-              << "  --help            Show this help message\n"
-              << "\n"
-              << "Examples:\n"
-              << "  " << programName << "                   # Start with stdio\n"
-              << "  " << programName << " --socket 5007     # Listen on port 5007\n";
+            << "\n"
+            << "Options:\n"
+            << "  --stdio           Use stdio transport (default)\n"
+            << "  --socket <port>   Listen on TCP port\n"
+            << "  --port <port>     Alias for --socket\n"
+            << "  --help            Show this help message\n"
+            << "\n"
+            << "Examples:\n"
+            << "  " << programName << "                   # Start with stdio\n"
+            << "  " << programName << " --socket 5007     # Listen on port 5007\n";
 }
 
 int runSocketServer(int port) {
@@ -49,9 +49,9 @@ int runSocketServer(int port) {
     }
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     bool useSocket = false;
-    int port = 5007;  // Default port
+    int port = 5007; // Default port
 
     // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
@@ -60,22 +60,19 @@ int main(int argc, char* argv[]) {
         if (arg == "--help" || arg == "-h") {
             printUsage(argv[0]);
             return 0;
-        }
-        else if (arg == "--stdio") {
+        } else if (arg == "--stdio") {
             useSocket = false;
-        }
-        else if (arg == "--socket" || arg == "--port") {
+        } else if (arg == "--socket" || arg == "--port") {
             useSocket = true;
             if (i + 1 < argc) {
                 try {
                     port = std::stoi(argv[++i]);
-                } catch (const std::exception&) {
+                } catch (const std::exception &) {
                     std::cerr << "Error: Invalid port number\n";
                     return 1;
                 }
             }
-        }
-        else {
+        } else {
             std::cerr << "Unknown option: " << arg << "\n";
             printUsage(argv[0]);
             return 1;
@@ -84,8 +81,7 @@ int main(int argc, char* argv[]) {
 
     if (useSocket) {
         return runSocketServer(port);
-    }
-    else {
+    } else {
         // Stdio mode (default)
         lsp::LspServer server;
         return server.run();
