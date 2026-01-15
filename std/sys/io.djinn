@@ -1,0 +1,76 @@
+import std::types;
+
+// File handle type (opaque pointer to FILE)
+struct FILE : void*;
+
+// Standard streams (need to be linked from C runtime)
+extern "C" {
+    // File operations
+    FILE* fopen(i8* filename, i8* mode);
+    c_result fclose(FILE* stream);
+    c_result fflush(FILE* stream);
+    FILE* freopen(i8* filename, i8* mode, FILE* stream);
+
+    // File positioning
+    c_result fseek(FILE* stream, i64 offset, c_result origin);
+    i64 ftell(FILE* stream);
+    void rewind(FILE* stream);
+    c_result fgetpos(FILE* stream, i64* pos);
+    c_result fsetpos(FILE* stream, i64* pos);
+
+    // Binary read/write
+    size_long fread(void* ptr, size_long size, size_long count, FILE* stream);
+    size_long fwrite(void* ptr, size_long size, size_long count, FILE* stream);
+
+    // Character read/write
+    c_result fgetc(FILE* stream);
+    c_result fputc(c_result ch, FILE* stream);
+    c_result getc(FILE* stream);
+    c_result putc(c_result ch, FILE* stream);
+    c_result getchar();
+    c_result putchar(c_result ch);
+    c_result ungetc(c_result ch, FILE* stream);
+
+    // String read/write
+    i8* fgets(i8* str, c_result count, FILE* stream);
+    c_result fputs(i8* str, FILE* stream);
+    c_result puts(i8* str);
+    i8* gets(i8* str);
+
+    // Formatted read/write
+    c_result fprintf(FILE* stream, i8* format, ...);
+    c_result fscanf(FILE* stream, i8* format, ...);
+    c_result sprintf(i8* str, i8* format, ...);
+    c_result snprintf(i8* str, size_long size, i8* format, ...);
+    c_result sscanf(i8* str, i8* format, ...);
+
+    // Error handling
+    c_result feof(FILE* stream);
+    c_result ferror(FILE* stream);
+    void clearerr(FILE* stream);
+    void perror(i8* str);
+
+    // File management
+    c_result remove(i8* filename);
+    c_result rename(i8* old_filename, i8* new_filename);
+    FILE* tmpfile();
+    i8* tmpnam(i8* str);
+
+    // Direct I/O (POSIX)
+    c_result open(i8* pathname, c_result flags, ...);
+    c_result close(c_result fd);
+    i64 read(c_result fd, void* buf, size_long count);
+    i64 write(c_result fd, void* buf, size_long count);
+    i64 lseek(c_result fd, i64 offset, c_result whence);
+
+    // File descriptors
+    c_result fileno(FILE* stream);
+    FILE* fdopen(c_result fd, i8* mode);
+    c_result dup(c_result oldfd);
+    c_result dup2(c_result oldfd, c_result newfd);
+
+    // Pipes
+    c_result pipe(c_result* pipefd);
+    FILE* popen(i8* command, i8* mode);
+    c_result pclose(FILE* stream);
+}

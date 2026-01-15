@@ -1,0 +1,82 @@
+import std::types;
+
+extern "C" {
+    // Trigonometric functions
+    f64 sin(f64 x);
+    f64 cos(f64 x);
+    f64 tan(f64 x);
+    f64 asin(f64 x);
+    f64 acos(f64 x);
+    f64 atan(f64 x);
+    f64 atan2(f64 y, f64 x);
+
+    // Hyperbolic functions
+    f64 sinh(f64 x);
+    f64 cosh(f64 x);
+    f64 tanh(f64 x);
+    f64 asinh(f64 x);
+    f64 acosh(f64 x);
+    f64 atanh(f64 x);
+
+    // Exponential and logarithmic functions
+    f64 exp(f64 x);
+    f64 exp2(f64 x);
+    f64 expm1(f64 x);
+    f64 log(f64 x);
+    f64 log10(f64 x);
+    f64 log2(f64 x);
+    f64 log1p(f64 x);
+
+    // Power functions
+    f64 pow(f64 base, f64 exponent);
+    f64 sqrt(f64 x);
+    f64 cbrt(f64 x);
+    f64 hypot(f64 x, f64 y);
+
+    // Rounding and remainder functions
+    f64 ceil(f64 x);
+    f64 floor(f64 x);
+    f64 trunc(f64 x);
+    f64 round(f64 x);
+    f64 fmod(f64 x, f64 y);
+    f64 remainder(f64 x, f64 y);
+
+    // Absolute value
+    f64 fabs(f64 x);
+
+    // Min/Max
+    f64 fmax(f64 x, f64 y);
+    f64 fmin(f64 x, f64 y);
+
+    // Error and gamma functions
+    f64 erf(f64 x);
+    f64 erfc(f64 x);
+    f64 tgamma(f64 x);
+    f64 lgamma(f64 x);
+
+    // Float versions (32-bit)
+    f32 sinf(f32 x);
+    f32 cosf(f32 x);
+    f32 tanf(f32 x);
+    f32 asinf(f32 x);
+    f32 acosf(f32 x);
+    f32 atanf(f32 x);
+    f32 atan2f(f32 y, f32 x);
+    f32 sinhf(f32 x);
+    f32 coshf(f32 x);
+    f32 tanhf(f32 x);
+    f32 expf(f32 x);
+    f32 logf(f32 x);
+    f32 log10f(f32 x);
+    f32 powf(f32 base, f32 exponent);
+    f32 sqrtf(f32 x);
+    f32 cbrtf(f32 x);
+    f32 ceilf(f32 x);
+    f32 floorf(f32 x);
+    f32 truncf(f32 x);
+    f32 roundf(f32 x);
+    f32 fmodf(f32 x, f32 y);
+    f32 fabsf(f32 x);
+    f32 fmaxf(f32 x, f32 y);
+    f32 fminf(f32 x, f32 y);
+}

@@ -1,0 +1,10 @@
+/build/
+cmake-build-*/
+.claude/
+.idea/
+*.exe
+*.ll
+*.opt.ll
+tmpclaude-*
+null
+

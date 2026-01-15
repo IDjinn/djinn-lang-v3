@@ -1,0 +1,12 @@
+import std::types;
+namespace std::sys;
+
+struct Console {
+   public static c_result error(i8* message) {
+       return write(2, message, strlen(message));
+   }
+
+   public static c_result printf(i8* message) {
+       return printf(message);
+   }
+}
