@@ -1,8 +1,0 @@
-import std::types;
-
-extern "C" {
-  c_result printf(i8* fmt, ...);
-  void* malloc(size_long size);
-  void free(void* ptr);
-  c_result strlen(i8* s);
-}
