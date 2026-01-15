@@ -80,6 +80,9 @@ void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std
 
     def.llvmType = llvm::StructType::create(*context, enumFields, qualifiedName);
 
+    // Track for forced emission
+    declaredTypes.push_back(def.llvmType);
+
     currentScope->define_enum(qualifiedName, std::move(def));
 }
 

@@ -9,10 +9,15 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Support/SourceMgr.h"
+#include <fstream>
+#include <iostream>
 
 Generator::Generator(const std::string &module_name)
     : context(std::make_unique<llvm::LLVMContext>()),
-      module(std::make_unique<llvm::Module>(module_name, *context)),
+      module(std::make_unique<llvm::Module>(std::filesystem::path(module_name).filename().string(), *context)),
       builder(std::make_unique<llvm::IRBuilder<> >(*context)),
       currentScope(std::make_shared<GeneratorScope>()) {
 }
@@ -27,7 +32,7 @@ void Generator::pop_scope() {
     }
 }
 
-void Generator::generate(const Program &program) {
+void Generator::generate(const Program &program, bool libraryMode, bool stdDeclOnly) {
     // ========================================================================
     // Multi-pass code generation (like C#/Roslyn)
     // This allows cyclic type references and order-independent declarations
@@ -80,9 +85,11 @@ void Generator::generate(const Program &program) {
         resolve_struct_body(*structDecl);
     }
 
-    // PASS 5: Generate struct methods
+    // PASS 5b: Generate struct methods
     // Bodies are complete, methods can use all types
+    // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
     for (const auto &ns: program.namespaces) {
+        if (stdDeclOnly && ns->name.token_name == "std") continue;
         generate_namespace_struct_methods(*ns, "");
     }
     for (const auto &structDecl: program.structs) {
@@ -105,7 +112,9 @@ void Generator::generate(const Program &program) {
     }
 
     // PASS 7: Generate namespace functions
+    // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
     for (const auto &ns: program.namespaces) {
+        if (stdDeclOnly && ns->name.token_name == "std") continue;
         generate_namespace_functions(*ns, "");
     }
 
@@ -114,10 +123,13 @@ void Generator::generate(const Program &program) {
         generate_function(*func);
     }
 
-    // PASS 9: Default main if not defined
-    if (!functions.contains("main")) {
+    // PASS 9: Default main if not defined (skip in library mode)
+    if (!libraryMode && !functions.contains("main")) {
         generate_default_main();
     }
+
+    // PASS 10: Force emission of extern declarations
+    emit_used_declarations();
 }
 
 void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix) {
@@ -248,4 +260,36 @@ std::string Generator::print() const {
     llvm::raw_string_ostream stream(str);
     module->print(stream, nullptr);
     return str;
+}
+
+bool Generator::linkModule(const std::filesystem::path &llPath) {
+    if (!std::filesystem::exists(llPath)) {
+        std::cerr << "Link error: file not found: " << llPath << std::endl;
+        return false;
+    }
+
+    llvm::SMDiagnostic err;
+    auto linkedModule = llvm::parseIRFile(llPath.string(), err, *context);
+
+    if (!linkedModule) {
+        std::cerr << "Link error: failed to parse " << llPath << std::endl;
+        err.print("djinn", llvm::errs());
+        return false;
+    }
+
+    if (llvm::Linker::linkModules(*module, std::move(linkedModule))) {
+        std::cerr << "Link error: failed to link " << llPath << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) {
+    for (const auto &path: llPaths) {
+        if (!linkModule(path)) {
+            return false;
+        }
+    }
+    return true;
 }

@@ -70,6 +70,37 @@ add_executable(djinn main.cpp)
 target_link_libraries(djinn PRIVATE djinn_lib)
 
 # ========================
+# LSP Server
+# ========================
+
+# Fetch nlohmann/json
+include(FetchContent)
+FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.3
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+add_executable(djinn-lsp
+        lsp/main.cpp
+        lsp/LspServer.cpp
+        lsp/JsonRpc.cpp
+)
+
+target_link_libraries(djinn-lsp PRIVATE
+        djinn_lib
+        nlohmann_json::nlohmann_json
+)
+
+# Link Windows socket library
+if (WIN32)
+    target_link_libraries(djinn-lsp PRIVATE ws2_32)
+endif ()
+
+target_compile_features(djinn-lsp PRIVATE cxx_std_23)
+
+# ========================
 
 add_subdirectory(external/googletest)
 

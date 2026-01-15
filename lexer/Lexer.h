@@ -32,6 +32,8 @@ private:
 
     Token make_token(TokenType type, const std::string &value) const;
 
+    Token make_token(TokenType type, const std::string &value, uint32_t startLine, uint32_t startColumn) const;
+
     Token read_string();
 
     Token read_number();

@@ -43,6 +43,11 @@ void Generator::forward_declare_struct(const StructDeclaration &struct_declarati
         def.llvmType = llvm::StructType::create(*context, qualifiedName);
     }
 
+    // Track non-generic types for forced emission
+    if (!def.isGeneric) {
+        declaredTypes.push_back(def.llvmType);
+    }
+
     currentScope->define_struct(qualifiedName, std::move(def));
 }
 

@@ -77,7 +77,14 @@ Token Lexer::make_token(const TokenType type, const std::string &value) const {
     return Token{{fileId, line, column, static_cast<uint32_t>(pos)}, type, value};
 }
 
+Token Lexer::make_token(const TokenType type, const std::string &value, uint32_t startLine,
+                        uint32_t startColumn) const {
+    return Token{{fileId, startLine, startColumn, static_cast<uint32_t>(value.length())}, type, value};
+}
+
 Token Lexer::read_string() {
+    const uint32_t startLine = line;
+    const uint32_t startColumn = column;
     advance();
     std::string value;
     while (peek() != '"' && peek() != '\0') {
@@ -100,10 +107,12 @@ Token Lexer::read_string() {
         }
     }
     if (peek() == '"') advance();
-    return make_token(TokenType::STRING_LITERAL, value);
+    return make_token(TokenType::STRING_LITERAL, value, startLine, startColumn);
 }
 
 Token Lexer::read_number() {
+    const uint32_t startLine = line;
+    const uint32_t startColumn = column;
     std::string value;
     while (isdigit(peek())) {
         value += advance();
@@ -125,22 +134,24 @@ Token Lexer::read_number() {
                 value += advance();
             }
         }
-        return make_token(TokenType::FLOAT_LITERAL, value);
+        return make_token(TokenType::FLOAT_LITERAL, value, startLine, startColumn);
     }
 
-    return make_token(TokenType::INTEGER_LITERAL, value);
+    return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
 }
 
 Token Lexer::read_identifier() {
+    const uint32_t startLine = line;
+    const uint32_t startColumn = column;
     std::string value;
     while (isalnum(peek()) || peek() == '_') {
         value += advance();
     }
 
     if (const auto it = keywords.find(value); it != keywords.end()) {
-        return make_token(it->second, value);
+        return make_token(it->second, value, startLine, startColumn);
     }
-    return make_token(TokenType::IDENTIFIER, value);
+    return make_token(TokenType::IDENTIFIER, value, startLine, startColumn);
 }
 
 std::vector<Token> Lexer::tokenize() {

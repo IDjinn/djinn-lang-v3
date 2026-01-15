@@ -16,12 +16,21 @@ void printUsage(const char *programName) {
             << "  -O0           Disable optimizations\n"
             << "  -c            Compile only, do not execute\n"
             << "  -r            Recursively search directories for .djinn files\n"
+            << "  --lib         Compile as library (no main required)\n"
+            << "  --bundle      Bundle all into single .ll (default: per namespace)\n"
+            << "  -l <file.ll>  Link external .ll module (can be used multiple times)\n"
+            << "  --no-std      Don't include standard library\n"
+            << "  --std-decl    Include std declarations only (use with -l std.ll)\n"
             << "  -h, --help    Show this help message\n"
             << "\nExamples:\n"
             << "  " << programName << " main.djinn\n"
             << "  " << programName << " -o myprogram main.djinn lib.djinn\n"
             << "  " << programName << " -c -O0 test.djinn\n"
-            << "  " << programName << " -r src/\n";
+            << "  " << programName << " -r src/\n"
+            << "\nLibrary compilation:\n"
+            << "  " << programName << " --lib --no-std -c -r std/            # Per namespace (std.types.ll, std.sys.ll)\n"
+            << "  " << programName << " --lib --no-std -c --bundle -o std -r std/  # Single std.ll\n"
+            << "  " << programName << " --std-decl -l build/std.types.ll -l build/std.sys.ll main.djinn\n";
 }
 
 void collectDjinnFiles(const std::filesystem::path &path, std::vector<std::filesystem::path> &files, bool recursive) {
@@ -82,6 +91,16 @@ int main(int argc, char *argv[]) {
             options.executeAfterCompile = false;
         } else if (arg == "-r") {
             recursive = true;
+        } else if (arg == "--lib") {
+            options.libraryMode = true;
+        } else if (arg == "--bundle") {
+            options.bundleModules = true;
+        } else if (arg == "--no-std") {
+            options.includeStd = false;
+        } else if (arg == "--std-decl") {
+            options.stdDeclOnly = true;
+        } else if ((arg == "-l" || arg == "--link") && i + 1 < argc) {
+            options.linkLibraries.emplace_back(argv[++i]);
         } else if (arg[0] == '-') {
             std::cerr << "Unknown option: " << arg << "\n";
             printUsage(argv[0]);
@@ -116,8 +135,12 @@ int main(int argc, char *argv[]) {
     CompilerResult result;
     if (inputFiles.size() == 1) {
         result = DjinnCompiler::runFromFile(inputFiles[0], options);
-    } else {
+    } else if (options.bundleModules) {
+        // Bundle all files into single .ll
         result = DjinnCompiler::runFromFiles(inputFiles, options);
+    } else {
+        // Default: generate per namespace
+        result = DjinnCompiler::runPerNamespace(inputFiles, options);
     }
 
     if (!result.ir.empty() && !options.executeAfterCompile) {

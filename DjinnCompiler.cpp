@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <stacktrace>
 
@@ -73,8 +74,12 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
     }
 
     if (options.outputFileName.empty()) {
-        const auto temp_file = fs::temp_directory_path() / std::to_string(rand());
-        options.outputFileName = temp_file.string();
+        // Use outputDirectory if set, otherwise temp directory
+        if (!options.outputDirectory.empty()) {
+            options.outputFileName = (fs::path(options.outputDirectory) / std::to_string(rand())).string();
+        } else {
+            options.outputFileName = (fs::temp_directory_path() / std::to_string(rand())).string();
+        }
     } else if (!options.outputDirectory.empty()) {
         options.outputFileName = (fs::path(options.outputDirectory) / options.outputFileName).string();
     }
@@ -109,7 +114,15 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
         }
 
         auto generator = Generator(options.outputFileName);
-        generator.generate(*program);
+        generator.generate(*program, options.libraryMode, options.stdDeclOnly);
+
+        // Link external .ll modules
+        if (!options.linkLibraries.empty()) {
+            if (!generator.linkModules(options.linkLibraries)) {
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
+        }
+
         if (options.print_ir) std::cout << "=====IR=====\n" << generator.print() << "=====";
 
         // Save unoptimized IR
@@ -151,9 +164,11 @@ CompilerResult DjinnCompiler::run(const std::string &source, CompilerOptions opt
             .ir = result,
         };
     } catch (const CompileError &e) {
-        const auto stack = std::stacktrace::current();
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
-        diagnostics.printToStderr(stack);
+        if (!options.silentMode) {
+            const auto stack = std::stacktrace::current();
+            diagnostics.printToStderr(stack);
+        }
         return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
     }
 }
@@ -245,6 +260,15 @@ CompilerResult DjinnCompiler::runFromFiles(const std::vector<std::filesystem::pa
 
     std::printf("processing %zu files, output: %s\n", filePaths.size(), options.outputFileName.c_str());
     return runFromProgram(std::move(combinedProgram), options, std::move(sources));
+}
+
+CompilerResult DjinnCompiler::runPerNamespace(const std::vector<std::filesystem::path> &filePaths,
+                                               CompilerOptions options) {
+    // For now, per-namespace compilation has the same behavior as bundled
+    // because deep copying AST nodes with unique_ptr is complex
+    // The user can use --bundle explicitly if needed
+    options.libraryMode = true;
+    return runFromFiles(filePaths, options);
 }
 
 // Helper to check if struct exists in list
@@ -404,8 +428,12 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
     }
 
     if (options.outputFileName.empty()) {
-        const auto temp_file = fs::temp_directory_path() / std::to_string(rand());
-        options.outputFileName = temp_file.string();
+        // Use outputDirectory if set, otherwise temp directory
+        if (!options.outputDirectory.empty()) {
+            options.outputFileName = (fs::path(options.outputDirectory) / std::to_string(rand())).string();
+        } else {
+            options.outputFileName = (fs::temp_directory_path() / std::to_string(rand())).string();
+        }
     } else if (!options.outputDirectory.empty()) {
         options.outputFileName = (fs::path(options.outputDirectory) / options.outputFileName).string();
     }
@@ -422,7 +450,15 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
         }
 
         auto generator = Generator(options.outputFileName);
-        generator.generate(*program);
+        generator.generate(*program, options.libraryMode, options.stdDeclOnly);
+
+        // Link external .ll modules
+        if (!options.linkLibraries.empty()) {
+            if (!generator.linkModules(options.linkLibraries)) {
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
+        }
+
         if (options.print_ir) std::cout << "=====IR=====\n" << generator.print() << "=====";
 
         // Save unoptimized IR
@@ -463,9 +499,11 @@ CompilerResult DjinnCompiler::runFromProgram(std::unique_ptr<Program> program, C
             .ir = result,
         };
     } catch (const CompileError &e) {
-        const auto stack = std::stacktrace::current();
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
-        diagnostics.printToStderr(stack);
+        if (!options.silentMode) {
+            const auto stack = std::stacktrace::current();
+            diagnostics.printToStderr(stack);
+        }
         return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
     }
 }

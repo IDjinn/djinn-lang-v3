@@ -85,8 +85,52 @@ void Generator::generate_extern_function(const ExternFunctionDeclaration &decl) 
     );
 
     functions[decl.name.token_name] = func;
+    externFunctions.push_back(func); // Track for forced emission
 
     if (decl.abi == "C") {
         func->setCallingConv(llvm::CallingConv::C);
     }
+}
+
+void Generator::emit_used_declarations() {
+    auto *i8PtrTy = llvm::PointerType::getUnqual(*context);
+    std::vector<llvm::Constant *> usedItems;
+
+    // Add extern functions
+    for (auto *func: externFunctions) {
+        usedItems.push_back(llvm::ConstantExpr::getBitCast(func, i8PtrTy));
+    }
+
+    // Create dummy globals for struct types to force their emission
+    int typeIdx = 0;
+    for (auto *structType: declaredTypes) {
+        if (structType->isOpaque()) continue; // Skip unresolved types
+
+        auto *dummy = new llvm::GlobalVariable(
+            *module,
+            structType,
+            false,
+            llvm::GlobalValue::ExternalLinkage,
+            llvm::Constant::getNullValue(structType),
+            "__djinn_type_" + std::to_string(typeIdx++)
+        );
+        dummy->setVisibility(llvm::GlobalValue::HiddenVisibility);
+        usedItems.push_back(llvm::ConstantExpr::getBitCast(dummy, i8PtrTy));
+    }
+
+    if (usedItems.empty()) return;
+
+    // Create @llvm.compiler.used
+    auto *arrayTy = llvm::ArrayType::get(i8PtrTy, usedItems.size());
+    auto *usedArray = llvm::ConstantArray::get(arrayTy, usedItems);
+
+    auto *gv = new llvm::GlobalVariable(
+        *module,
+        arrayTy,
+        false,
+        llvm::GlobalValue::AppendingLinkage,
+        usedArray,
+        "llvm.compiler.used"
+    );
+    gv->setSection("llvm.metadata");
 }

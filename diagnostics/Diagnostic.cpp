@@ -26,7 +26,8 @@ void DiagnosticEngine::registerSource(const std::string &fileId, std::string sou
 }
 
 std::string DiagnosticEngine::getLine(const std::string &fileId, const uint32_t lineNum) const {
-    if (auto it = _sources.find(fileId); it == _sources.end()) {
+    auto it = _sources.find(fileId);
+    if (it == _sources.end()) {
         if (fileId.empty()) {
             it = _sources.find("main");
             if (it == _sources.end()) return "";
@@ -121,23 +122,24 @@ std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {
         auto len = std::max(diag.location.length, 1u);
 
         auto lineNumStr = std::to_string(lineNum);
-        std::string padding(lineNumStr.size(), ' ');
+        std::string padding(lineNumStr.size(), ' '); {
+            // --> main:3:11
+            std::string fileInfo = diag.location.fileId.empty() ? "" : diag.location.fileId + ":";
+            out << " " << colorize("-->", "1;34") << " "
+                    << fileInfo << lineNum << ":" << col << "\n";
+        } {
+            out << " " << padding << " " << colorize("|", "1;34") << "\n";
 
-        std::string fileInfo = diag.location.fileId.empty() ? "" : diag.location.fileId + ":";
-        out << " " << colorize("-->", "1;34") << " "
-                << fileInfo << lineNum << ":" << col << "\n";
+            auto sourceLine = getLine(diag.location.fileId, lineNum);
+            out << " " << colorize(lineNumStr, "1;34") << " "
+                    << colorize("|", "1;34") << " " << sourceLine << "\n";
 
-        out << " " << padding << " " << colorize("|", "1;34") << "\n";
+            std::string underline(col > 0 ? col - 1 : 0, ' ');
+            underline += std::string(len, '^'); //  ^^^^^^
 
-        auto sourceLine = getLine(diag.location.fileId, lineNum);
-        out << " " << colorize(lineNumStr, "1;34") << " "
-                << colorize("|", "1;34") << " " << sourceLine << "\n";
-
-        std::string underline(col > 0 ? col - 2 : 0, ' ');
-        underline += std::string(len, '^');
-
-        out << " " << padding << " " << colorize("|", "1;34") << " "
-                << colorize(underline, severity_color);
+            out << " " << padding << " " << colorize("|", "1;34") << " "
+                    << colorize(underline, severity_color);
+        }
 
         if (!diag.label.empty()) {
             out << " " << colorize(diag.label, severity_color);
@@ -148,6 +150,8 @@ std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {
     // error[E2001]: message
     out << colorize(severity + "[" + code_str + "]", severity_color)
             << ": " << colorize(diag.message, "1") << "\n";
+
+    out << colorize(std::format("line: {}\ncolumn: {}\n", diag.location.line, diag.location.column), severity_color);
 
     for (const auto &note: diag.notes) {
         out << " " << colorize("= note", "1;36") << ": " << note << "\n";

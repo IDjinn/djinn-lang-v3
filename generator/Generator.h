@@ -11,6 +11,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
+#include <filesystem>
 #include "../parser/AST.h"
 #include "../diagnostics/Diagnostic.h"
 #include "GeneratorScope.h"
@@ -19,11 +20,16 @@ class Generator {
 public:
     explicit Generator(const std::string &module_name);
 
-    void generate(const Program &program);
+    void generate(const Program &program, bool libraryMode = false, bool stdDeclOnly = false);
 
     void optimize() const;
 
     std::string print() const;
+
+    // Link external .ll modules
+    bool linkModule(const std::filesystem::path &llPath);
+
+    bool linkModules(const std::vector<std::filesystem::path> &llPaths);
 
     llvm::Module &getModule() const { return *module; }
 
@@ -33,6 +39,8 @@ private:
     std::unique_ptr<llvm::IRBuilder<> > builder;
 
     std::unordered_map<std::string, llvm::Function *> functions;
+    std::vector<llvm::Function *> externFunctions; // Track extern declarations
+    std::vector<llvm::StructType *> declaredTypes; // Track struct/enum types for forced emission
     std::shared_ptr<GeneratorScope> currentScope;
 
     void push_scope();
@@ -75,6 +83,9 @@ private:
     void generate_function(const FunctionDeclaration &func, const std::string &prefix = "");
 
     void generate_extern_function(const ExternFunctionDeclaration &decl);
+
+    // Force emission of all extern declarations (even if unused)
+    void emit_used_declarations();
 
     void generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix = "");
 
