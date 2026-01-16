@@ -7,7 +7,6 @@
 #include "../DjinnCompiler.h"
 #include "../generator/GeneratorScope.h"
 #include "../generator/Mangler.h"
-#include "../parser/ast/Generic.h"
 
 
 TEST(FullCompilation, StructGeneric) {

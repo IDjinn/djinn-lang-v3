@@ -134,19 +134,11 @@ int main(int argc, char *argv[]) {
     std::ranges::sort(inputFiles);
 
     CompilerResult result;
-    if (inputFiles.size() == 1) {
-        result = DjinnCompiler::runFromFile(inputFiles[0], options);
-    } else if (options.bundleModules) {
-        // Bundle all files into single .ll
-        result = DjinnCompiler::runFromFiles(inputFiles, options);
-    } else {
-        // Default: generate per namespace
-        result = DjinnCompiler::runPerNamespace(inputFiles, options);
+    fs::path baseDir = inputPaths[0];
+    if (fs::is_regular_file(baseDir)) {
+        baseDir = baseDir.parent_path();
     }
-
-    if (!result.ir.empty() && !options.executeAfterCompile) {
-        std::cout << result.ir;
-    }
+    result = DjinnCompiler::compileFromDirectory(baseDir, options);
 
     return result.returnCode;
 }

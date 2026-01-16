@@ -1,4 +1,5 @@
 import std::types;
+namespace std::libc;
 
 extern "C" {
   c_result printf(i8* fmt, ...);

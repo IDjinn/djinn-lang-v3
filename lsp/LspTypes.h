@@ -6,7 +6,6 @@
 #define DJINN_LSP_TYPES_H
 
 #include <string>
-#include <vector>
 #include <optional>
 #include "../diagnostics/Diagnostic.h"
 

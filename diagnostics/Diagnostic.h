@@ -5,7 +5,6 @@
 #ifndef DJINN_DIAGNOSTIC_H
 #define DJINN_DIAGNOSTIC_H
 
-#include <complex.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -109,7 +108,6 @@ class DiagnosticEngine {
 public:
     DiagnosticEngine() = default;
 
-    // Legacy constructor for single-file compilation
     explicit DiagnosticEngine(std::string source) {
         registerSource("main", std::move(source));
     }

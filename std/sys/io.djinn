@@ -1,4 +1,5 @@
 import std::types;
+namespace std::io;
 
 // File handle type (opaque pointer to FILE)
 struct FILE : void*;

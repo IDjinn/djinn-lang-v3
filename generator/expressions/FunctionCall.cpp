@@ -21,10 +21,11 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             if (call.arguments.empty()) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "sizeof requires 1 argument");
             }
-            llvm::Value *arg = generate_expression(*call.arguments[0]);
-            llvm::Type *type = arg->getType();
-            const llvm::DataLayout &dataLayout = module->getDataLayout();
-            uint64_t size = dataLayout.getTypeAllocSize(type);
+
+            const llvm::Value *arg = generate_expression(*call.arguments[0]);
+            const auto type = arg->getType();
+            const auto &dataLayout = module->getDataLayout();
+            const uint64_t size = dataLayout.getTypeAllocSize(type);
             return builder->getInt64(size);
         }
 
@@ -32,10 +33,10 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             if (call.arguments.empty()) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "alignof requires 1 argument");
             }
-            llvm::Value *arg = generate_expression(*call.arguments[0]);
+            const llvm::Value *arg = generate_expression(*call.arguments[0]);
             llvm::Type *type = arg->getType();
             const llvm::DataLayout &dataLayout = module->getDataLayout();
-            uint64_t align = dataLayout.getABITypeAlign(type).value();
+            const uint64_t align = dataLayout.getABITypeAlign(type).value();
             return builder->getInt64(align);
         }
 
@@ -44,20 +45,21 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT,
                                    "bitcast requires 2 arguments (value, target_type_value)");
             }
-            llvm::Value *value = generate_expression(*call.arguments[0]);
-            llvm::Value *targetTypeValue = generate_expression(*call.arguments[1]);
-            llvm::Type *targetType = targetTypeValue->getType();
+
+            const auto value = generate_expression(*call.arguments[0]);
+            const llvm::Value *targetTypeValue = generate_expression(*call.arguments[1]);
+            const auto targetType = targetTypeValue->getType();
             return builder->CreateBitCast(value, targetType, "bitcast");
         }
 
         case Intrinsic::Trap: {
-            llvm::Function *trapFunc = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::trap);
+            const auto trapFunc = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::trap);
             builder->CreateCall(trapFunc);
             return builder->CreateUnreachable();
         }
 
         case Intrinsic::DebugTrap: {
-            llvm::Function *trapFunc = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::debugtrap);
+            const auto trapFunc = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::debugtrap);
             builder->CreateCall(trapFunc);
             return builder->CreateUnreachable();
         }
@@ -70,10 +72,11 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             if (call.arguments.size() < 2) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "expect requires 2 arguments");
             }
-            llvm::Value *val = generate_expression(*call.arguments[0]);
-            llvm::Value *expected = generate_expression(*call.arguments[1]);
+
+            auto val = generate_expression(*call.arguments[0]);
+            auto expected = generate_expression(*call.arguments[1]);
             expected = cast_value(expected, val->getType());
-            llvm::Function *expectFunc = llvm::Intrinsic::getDeclaration(
+            const auto expectFunc = llvm::Intrinsic::getDeclaration(
                 module.get(), llvm::Intrinsic::expect, {val->getType()});
             return builder->CreateCall(expectFunc, {val, expected}, "expect");
         }
@@ -82,8 +85,9 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             if (call.arguments.empty()) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "likely requires 1 argument");
             }
-            llvm::Value *cond = generate_expression(*call.arguments[0]);
-            llvm::Function *expectFunc = llvm::Intrinsic::getDeclaration(
+
+            auto cond = generate_expression(*call.arguments[0]);
+            const auto expectFunc = llvm::Intrinsic::getDeclaration(
                 module.get(), llvm::Intrinsic::expect, {cond->getType()});
             return builder->CreateCall(expectFunc, {cond, builder->getTrue()}, "likely");
         }
@@ -92,8 +96,9 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             if (call.arguments.empty()) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "unlikely requires 1 argument");
             }
-            llvm::Value *cond = generate_expression(*call.arguments[0]);
-            llvm::Function *expectFunc = llvm::Intrinsic::getDeclaration(
+
+            auto cond = generate_expression(*call.arguments[0]);
+            const auto expectFunc = llvm::Intrinsic::getDeclaration(
                 module.get(), llvm::Intrinsic::expect, {cond->getType()});
             return builder->CreateCall(expectFunc, {cond, builder->getFalse()}, "unlikely");
         }
@@ -107,24 +112,18 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
         return generate_intrinsic_call(expr);
     }
 
-    // Handle method calls (receiver.method())
     if (expr.isMethodCall()) {
         return generate_method_call_internal(expr);
     }
 
-    // Check for enum construction: Enum::Variant(args) or Enum<T>::Variant(args)
     if (const size_t colonPos = expr.name.token_name.find("::"); colonPos != std::string::npos) {
-        const std::string enumName = expr.name.token_name.substr(0, colonPos);
-        const std::string variantName = expr.name.token_name.substr(colonPos + 2);
+        const auto enumName = expr.name.token_name.substr(0, colonPos);
+        const auto variantName = expr.name.token_name.substr(colonPos + 2);
 
-        // Check if this is an enum (not a namespace function)
-        EnumDef *enumDef = currentScope->lookup_enum(enumName);
-
-        // If type arguments are provided, monomorphize the generic enum first
+        const EnumDef *enumDef = currentScope->lookup_enum(enumName);
         if (expr.hasTypeArguments()) {
             if (enumDef && enumDef->isGeneric) {
                 monomorphize_enum(enumName, expr.typeArguments);
-                // Lookup the monomorphized version
                 enumDef = currentScope->lookup_monomorphized_enum(enumName, expr.typeArguments);
             }
         }
@@ -170,27 +169,21 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
 
     if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
         structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
-        // Get the LLVM struct name (mangled for generics) from the alloca
-        if (auto *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
-            if (auto *structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
+        if (const auto *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
+            if (const auto *structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
                 llvmStructName = structType->getName().str();
             }
         }
     }
 
-    // For instance methods, generate the object expression
     llvm::Value *objectValue = generate_expression(*call.receiver);
-
     if (structName.empty()) {
         throw CompileError(DiagnosticCode::TYPE_MISMATCH,
                            "cannot call method on non-struct type");
     }
 
-    // Use LLVM struct name if available (for monomorphized generics), otherwise use base name
-    std::string methodStructName = llvmStructName.empty() ? structName : llvmStructName;
-
-    // Instance method call - look up method
-    const std::string mangledName = methodStructName + "__" + call.name.token_name;
+    const auto methodStructName = llvmStructName.empty() ? structName : llvmStructName;
+    const auto mangledName = methodStructName + "__" + call.name.token_name;
 
     if (const auto it = functions.find(mangledName); it == functions.end()) {
         throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
@@ -198,21 +191,16 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
     }
 
     llvm::Function *func = functions[mangledName];
-
-    // Build arguments: first is 'this' pointer, then other args
     std::vector<llvm::Value *> args;
 
-    // Get pointer to the object for 'this'
     if (objectValue->getType()->isPointerTy()) {
         args.push_back(objectValue);
     } else {
-        // Need to create an alloca and get its address
-        llvm::AllocaInst *alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
+        const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
         builder->CreateStore(objectValue, alloca);
         args.push_back(alloca);
     }
 
-    // Add other arguments
     for (const auto &arg: call.arguments) {
         args.push_back(generate_expression(*arg));
     }

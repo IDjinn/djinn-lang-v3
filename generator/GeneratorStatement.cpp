@@ -18,7 +18,6 @@ void Generator::generate_statement(const Statement &stmt) {
                 }
             }
             auto val = generate_expression(*retStmt->value);
-            // Cast return value to function's return type if needed
             llvm::Type *returnType = currentFunction->getReturnType();
             val = cast_value(val, returnType);
             builder->CreateRet(val);
@@ -54,7 +53,6 @@ void Generator::generate_block(const Block &block) {
     push_scope();
     for (const auto &stmt: block.statements) {
         generate_statement(*stmt);
-        // Check if block is already terminated (by return, break, continue)
         if (builder->GetInsertBlock()->getTerminator()) {
             break;
         }
@@ -65,7 +63,6 @@ void Generator::generate_block(const Block &block) {
 void Generator::generate_if_statement(const IfStatement &stmt) {
     llvm::Value *condValue = generate_expression(*stmt.condition);
 
-    // Convert condition to i1 if necessary
     if (!condValue->getType()->isIntegerTy(1)) {
         condValue = builder->CreateICmpNE(
             condValue,
@@ -86,7 +83,6 @@ void Generator::generate_if_statement(const IfStatement &stmt) {
         builder->CreateCondBr(condValue, thenBB, mergeBB);
     }
 
-    // Emit then block
     builder->SetInsertPoint(thenBB);
     if (stmt.thenBranch) {
         generate_block(*stmt.thenBranch);
@@ -95,7 +91,6 @@ void Generator::generate_if_statement(const IfStatement &stmt) {
         builder->CreateBr(mergeBB);
     }
 
-    // Emit else block
     if (elseBB) {
         builder->SetInsertPoint(elseBB);
         if (stmt.elseBranch) {
@@ -106,14 +101,12 @@ void Generator::generate_if_statement(const IfStatement &stmt) {
         }
     }
 
-    // Continue with merge block
     builder->SetInsertPoint(mergeBB);
 }
 
 void Generator::generate_for_statement(const ForStatement &stmt) {
     push_scope();
 
-    // Initialize
     if (stmt.initializer) {
         generate_expression(*stmt.initializer);
     }
@@ -123,13 +116,11 @@ void Generator::generate_for_statement(const ForStatement &stmt) {
     llvm::BasicBlock *incBB = llvm::BasicBlock::Create(*context, "for.inc", currentFunction);
     llvm::BasicBlock *endBB = llvm::BasicBlock::Create(*context, "for.end", currentFunction);
 
-    // Push break/continue targets
     breakTargets.push_back(endBB);
     continueTargets.push_back(incBB);
 
     builder->CreateBr(condBB);
 
-    // Condition block
     builder->SetInsertPoint(condBB);
     if (stmt.condition) {
         llvm::Value *condValue = generate_expression(*stmt.condition);
@@ -142,11 +133,9 @@ void Generator::generate_for_statement(const ForStatement &stmt) {
         }
         builder->CreateCondBr(condValue, bodyBB, endBB);
     } else {
-        // No condition = infinite loop
         builder->CreateBr(bodyBB);
     }
 
-    // Body block
     builder->SetInsertPoint(bodyBB);
     if (stmt.body) {
         generate_block(*stmt.body);
@@ -155,17 +144,14 @@ void Generator::generate_for_statement(const ForStatement &stmt) {
         builder->CreateBr(incBB);
     }
 
-    // Increment block
     builder->SetInsertPoint(incBB);
     if (stmt.postfix) {
         generate_expression(*stmt.postfix);
     }
     builder->CreateBr(condBB);
 
-    // End block
     builder->SetInsertPoint(endBB);
 
-    // Pop break/continue targets
     breakTargets.pop_back();
     continueTargets.pop_back();
 
@@ -177,13 +163,10 @@ void Generator::generate_while_statement(const WhileStatement &stmt) {
     llvm::BasicBlock *bodyBB = llvm::BasicBlock::Create(*context, "while.body", currentFunction);
     llvm::BasicBlock *endBB = llvm::BasicBlock::Create(*context, "while.end", currentFunction);
 
-    // Push break/continue targets
     breakTargets.push_back(endBB);
     continueTargets.push_back(condBB);
 
     builder->CreateBr(condBB);
-
-    // Condition block
     builder->SetInsertPoint(condBB);
     llvm::Value *condValue = generate_expression(*stmt.condition);
     if (!condValue->getType()->isIntegerTy(1)) {
@@ -194,9 +177,8 @@ void Generator::generate_while_statement(const WhileStatement &stmt) {
         );
     }
     builder->CreateCondBr(condValue, bodyBB, endBB);
-
-    // Body block
     builder->SetInsertPoint(bodyBB);
+
     if (stmt.body) {
         generate_block(*stmt.body);
     }
@@ -204,10 +186,8 @@ void Generator::generate_while_statement(const WhileStatement &stmt) {
         builder->CreateBr(condBB);
     }
 
-    // End block
     builder->SetInsertPoint(endBB);
 
-    // Pop break/continue targets
     breakTargets.pop_back();
     continueTargets.pop_back();
 }
@@ -217,13 +197,10 @@ void Generator::generate_do_while_statement(const DoWhileStatement &stmt) {
     llvm::BasicBlock *condBB = llvm::BasicBlock::Create(*context, "dowhile.cond", currentFunction);
     llvm::BasicBlock *endBB = llvm::BasicBlock::Create(*context, "dowhile.end", currentFunction);
 
-    // Push break/continue targets
     breakTargets.push_back(endBB);
     continueTargets.push_back(condBB);
 
     builder->CreateBr(bodyBB);
-
-    // Body block
     builder->SetInsertPoint(bodyBB);
     if (stmt.body) {
         generate_block(*stmt.body);
@@ -232,7 +209,6 @@ void Generator::generate_do_while_statement(const DoWhileStatement &stmt) {
         builder->CreateBr(condBB);
     }
 
-    // Condition block
     builder->SetInsertPoint(condBB);
     llvm::Value *condValue = generate_expression(*stmt.condition);
     if (!condValue->getType()->isIntegerTy(1)) {
@@ -243,11 +219,8 @@ void Generator::generate_do_while_statement(const DoWhileStatement &stmt) {
         );
     }
     builder->CreateCondBr(condValue, bodyBB, endBB);
-
-    // End block
     builder->SetInsertPoint(endBB);
 
-    // Pop break/continue targets
     breakTargets.pop_back();
     continueTargets.pop_back();
 }
@@ -256,12 +229,9 @@ void Generator::generate_switch_statement(const SwitchStatement &stmt) {
     llvm::Value *switchValue = generate_expression(*stmt.value);
 
     llvm::BasicBlock *endBB = llvm::BasicBlock::Create(*context, "switch.end", currentFunction);
-    llvm::BasicBlock *defaultBB = endBB; // Default falls through to end if no default case
-
-    // Push break target
+    llvm::BasicBlock *defaultBB = endBB;
     breakTargets.push_back(endBB);
 
-    // Find default case and count non-default cases
     size_t numCases = 0;
     for (const auto &caseStmt: stmt.cases) {
         if (caseStmt->expression) {
@@ -273,7 +243,6 @@ void Generator::generate_switch_statement(const SwitchStatement &stmt) {
 
     llvm::SwitchInst *switchInst = builder->CreateSwitch(switchValue, defaultBB, numCases);
 
-    // Generate case blocks
     for (const auto &caseStmt: stmt.cases) {
         llvm::BasicBlock *caseBB;
 
@@ -300,16 +269,12 @@ void Generator::generate_switch_statement(const SwitchStatement &stmt) {
         if (caseStmt->body) {
             generate_block(*caseStmt->body);
         }
-        // Fall through to next case if no terminator (break/return)
         if (!builder->GetInsertBlock()->getTerminator()) {
             builder->CreateBr(endBB);
         }
     }
 
-    // End block
     builder->SetInsertPoint(endBB);
-
-    // Pop break target
     breakTargets.pop_back();
 }
 

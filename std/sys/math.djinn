@@ -1,4 +1,5 @@
 import std::types;
+namespace std::math;
 
 extern "C" {
     // Trigonometric functions

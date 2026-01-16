@@ -12,12 +12,13 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/SourceMgr.h"
-#include <fstream>
 #include <iostream>
 
-Generator::Generator(const std::string &module_name)
-    : context(std::make_unique<llvm::LLVMContext>()),
-      module(std::make_unique<llvm::Module>(std::filesystem::path(module_name).filename().string(), *context)),
+#include "../binder/SymbolTable.h"
+
+Generator::Generator(const std::shared_ptr<ScopedSymbolTable> &symbols)
+    : symbols(symbols),
+      context(std::make_unique<llvm::LLVMContext>()),
       builder(std::make_unique<llvm::IRBuilder<> >(*context)),
       currentScope(std::make_shared<GeneratorScope>()) {
 }
@@ -32,104 +33,102 @@ void Generator::pop_scope() {
     }
 }
 
-void Generator::generate(const Program &program, bool libraryMode, bool stdDeclOnly) {
-    // ========================================================================
-    // Multi-pass code generation (like C#/Roslyn)
-    // This allows cyclic type references and order-independent declarations
-    // ========================================================================
-
-    // PASS 1: Forward declare ALL struct types as opaque
-    // This must happen FIRST so all types are known before any usage
-    for (const auto &ns: program.namespaces) {
-        forward_declare_namespace_structs(*ns, "");
-    }
-    for (const auto &structDecl: program.structs) {
-        forward_declare_struct(*structDecl);
+void Generator::generate() {
+    for (auto programNamespace: symbols->get_all_namespaces()) {
     }
 
-    // PASS 2: Process imports to create aliases for types
-    // Now all types exist (as opaque), so aliases can be created
-    for (const auto &import: program.imports) {
-        const std::string nsPath = import->namespacePath.toString();
-
-        // Cria aliases para todas as structs (regular, transparent, generic)
-        for (const auto &[name, structDef]: currentScope->structs) {
-            if (name.starts_with(nsPath + "::")) {
-                const std::string shortName = name.substr(nsPath.length() + 2);
-                if (shortName.find("::") == std::string::npos) {
-                    if (!currentScope->has_struct_in_current_scope(shortName)) {
-                        currentScope->define_alias(shortName, name);
-                    }
-                }
-            }
-        }
+    for (auto stuc: symbols->get_all_structs()) {
+        forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(stuc));
     }
 
-    // PASS 3: External functions (C ABI)
-    // Now type aliases exist, so extern functions can use types like c_result
-    for (const auto &externFunc: program.externFunctions) {
-        generate_extern_function(*externFunc);
-    }
-
-    // PASS 4: Generate enums
-    for (const auto &enumDecl: program.enums) {
-        generate_enum(*enumDecl, program.fileNamespace);
-    }
-
-    // PASS 5: Resolve struct bodies (fill in fields)
-    // Now all types are known and extern functions declared
-    for (const auto &ns: program.namespaces) {
-        resolve_namespace_struct_bodies(*ns, "");
-    }
-    for (const auto &structDecl: program.structs) {
-        resolve_struct_body(*structDecl);
-    }
-
-    // PASS 5b: Generate struct methods
-    // Bodies are complete, methods can use all types
-    // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
-    for (const auto &ns: program.namespaces) {
-        if (stdDeclOnly && ns->name.token_name == "std") continue;
-        generate_namespace_struct_methods(*ns, "");
-    }
-    for (const auto &structDecl: program.structs) {
-        generate_struct_methods(*structDecl);
-    }
-
-    // PASS 6: Create function aliases from imports
-    // Methods are generated, so function aliases can be created
-    for (const auto &import: program.imports) {
-        const std::string nsPath = import->namespacePath.toString();
-
-        for (const auto &[name, func]: functions) {
-            if (name.starts_with(nsPath + "::")) {
-                const std::string shortName = name.substr(nsPath.length() + 2);
-                if (shortName.find("::") == std::string::npos && !functions.contains(shortName)) {
-                    functions[shortName] = func;
-                }
-            }
-        }
-    }
-
-    // PASS 7: Generate namespace functions
-    // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
-    for (const auto &ns: program.namespaces) {
-        if (stdDeclOnly && ns->name.token_name == "std") continue;
-        generate_namespace_functions(*ns, "");
-    }
-
-    // PASS 8: Generate global functions
-    for (const auto &func: program.functions) {
-        generate_function(*func);
-    }
-
-    // PASS 9: Default main if not defined (skip in library mode)
-    if (!libraryMode && !functions.contains("main")) {
-        generate_default_main();
-    }
-
-    // PASS 10: Force emission of extern declarations
-    emit_used_declarations();
+    // for (const auto &ns: program.namespaces) {
+    //     forward_declare_namespace_structs(*ns, "");
+    // }
+    // for (const auto &structDecl: program.structs) {
+    //     forward_declare_struct(*structDecl);
+    // }
+    //
+    // for (const auto &import: program.imports) {
+    //     const std::string nsPath = import->namespacePath.toString();
+    //
+    //     // Cria aliases para todas as structs (regular, transparent, generic)
+    //     for (const auto &[name, structDef]: currentScope->structs) {
+    //         if (name.starts_with(nsPath + "::")) {
+    //             const std::string shortName = name.substr(nsPath.length() + 2);
+    //             if (shortName.find("::") == std::string::npos) {
+    //                 if (!currentScope->has_struct_in_current_scope(shortName)) {
+    //                     currentScope->define_alias(shortName, name);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    //
+    // // PASS 3: External functions (C ABI)
+    // // Now type aliases exist, so extern functions can use types like c_result
+    // for (const auto &externFunc: program.externFunctions) {
+    //     generate_extern_function(*externFunc);
+    // }
+    //
+    // // PASS 4: Generate enums
+    // for (const auto &enumDecl: program.enums) {
+    //     generate_enum(*enumDecl, program.fileNamespace);
+    // }
+    //
+    // // PASS 5: Resolve struct bodies (fill in fields)
+    // // Now all types are known and extern functions declared
+    // for (const auto &ns: program.namespaces) {
+    //     resolve_namespace_struct_bodies(*ns, "");
+    // }
+    // for (const auto &structDecl: program.structs) {
+    //     resolve_struct_body(*structDecl);
+    // }
+    //
+    // // PASS 5b: Generate struct methods
+    // // Bodies are complete, methods can use all types
+    // // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
+    // // for (const auto &ns: program.namespaces) {
+    // //     if (stdDeclOnly && ns->name.token_name == "std") continue;
+    // //     generate_namespace_struct_methods(*ns, "");
+    // // }
+    // for (const auto &structDecl: program.structs) {
+    //     generate_struct_methods(*structDecl);
+    // }
+    //
+    // // PASS 6: Create function aliases from imports
+    // // Methods are generated, so function aliases can be created
+    // for (const auto &import: program.imports) {
+    //     const std::string nsPath = import->namespacePath.toString();
+    //
+    //     for (const auto &[name, func]: functions) {
+    //         if (name.starts_with(nsPath + "::")) {
+    //             const std::string shortName = name.substr(nsPath.length() + 2);
+    //             if (shortName.find("::") == std::string::npos && !functions.contains(shortName)) {
+    //                 functions[shortName] = func;
+    //             }
+    //         }
+    //     }
+    // }
+    //
+    // // PASS 7: Generate namespace functions
+    // // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
+    // // for (const auto &ns: program.namespaces) {
+    // //     if (stdDeclOnly && ns->name.token_name == "std") continue;
+    // //     generate_namespace_functions(*ns, "");
+    // // }
+    //
+    // // PASS 8: Generate global functions
+    // for (const auto &func: program.functions) {
+    //     generate_function(*func);
+    // }
+    //
+    // // PASS 9: Default main if not defined (skip in library mode)
+    // // if (!libraryMode && !functions.contains("main")) {
+    // //     generate_default_main();
+    // // }
+    //
+    // // PASS 10: Force emission of extern declarations
+    // emit_used_declarations();
 }
 
 void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix) {
@@ -262,32 +261,24 @@ std::string Generator::print() const {
     return str;
 }
 
-bool Generator::linkModule(const std::filesystem::path &llPath) {
-    if (!std::filesystem::exists(llPath)) {
-        std::cerr << "Link error: file not found: " << llPath << std::endl;
-        return false;
-    }
-
-    llvm::SMDiagnostic err;
-    auto linkedModule = llvm::parseIRFile(llPath.string(), err, *context);
-
-    if (!linkedModule) {
-        std::cerr << "Link error: failed to parse " << llPath << std::endl;
-        err.print("djinn", llvm::errs());
-        return false;
-    }
-
-    if (llvm::Linker::linkModules(*module, std::move(linkedModule))) {
-        std::cerr << "Link error: failed to link " << llPath << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) {
+bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) const {
     for (const auto &path: llPaths) {
-        if (!linkModule(path)) {
+        if (!std::filesystem::exists(path)) {
+            std::cerr << "Link error: file not found: " << path << std::endl;
+            return false;
+        }
+
+        llvm::SMDiagnostic err;
+        auto linkedModule = llvm::parseIRFile(path.string(), err, *context);
+
+        if (!linkedModule) {
+            std::cerr << "Link error: failed to parse " << path << std::endl;
+            err.print("djinn", llvm::errs());
+            return false;
+        }
+
+        if (llvm::Linker::linkModules(*module, std::move(linkedModule))) {
+            std::cerr << "Link error: failed to link " << path << std::endl;
             return false;
         }
     }

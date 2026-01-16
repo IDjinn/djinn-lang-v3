@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
-#include <optional>
 #include <ranges>
 
 #include "Symbol.h"
@@ -168,6 +167,65 @@ public:
             }
         }
         return unused;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_interfaces() const {
+        std::vector<std::shared_ptr<Symbol> > all_interfaces;
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->isInterface()) all_interfaces.push_back(symbol);
+        }
+
+        return all_interfaces;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_functions() const {
+        std::vector<std::shared_ptr<Symbol> > all_functions;
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->isFunction()) all_functions.push_back(symbol);
+        }
+
+        return all_functions;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_structs() const {
+        std::vector<std::shared_ptr<Symbol> > all_structs;
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->isStruct()) all_structs.push_back(symbol);
+        }
+
+        return all_structs;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_enums() const {
+        std::vector<std::shared_ptr<Symbol> > all_enums;
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->isEnum()) all_enums.push_back(symbol);
+        }
+
+        return all_enums;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_variables() const {
+        std::vector<std::shared_ptr<Symbol> > all_variables;
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->isVariable()) all_variables.push_back(symbol);
+        }
+
+        return all_variables;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_namespaces() const {
+        std::vector<std::shared_ptr<Symbol> > all_namespaces;
+        for (const auto &symbol: _symbols | std::views::values) {
+            // if (symbol->isInitialized) all_namespaces.push_back(symbol);
+            // TODO THIS SHIT
+        }
+
+        return all_namespaces;
+    }
+
+    std::unordered_map<std::string, std::shared_ptr<Symbol> > get_all_symbols() const {
+        return this->_symbols;
     }
 
 private:

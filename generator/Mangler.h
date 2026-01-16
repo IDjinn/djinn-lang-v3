@@ -7,7 +7,6 @@
 
 #include <string>
 #include <vector>
-#include <sstream>
 #include "../parser/ast/Type.h"
 
 class Mangler {

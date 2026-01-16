@@ -18,7 +18,6 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
-#include <cstring>
 
 #ifdef _WIN32
 #include <io.h>

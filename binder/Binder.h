@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 #include "SymbolTable.h"
@@ -44,6 +45,8 @@ public:
     explicit Binder(DiagnosticEngine &diagnostics);
 
     BindingResult bind(const Program &program);
+
+    BindingResult bindAll(const std::vector<std::shared_ptr<Program> > &programs);
 
 private:
     DiagnosticEngine &_diagnostics;

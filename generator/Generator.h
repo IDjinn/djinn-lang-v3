@@ -13,25 +13,22 @@
 #include "llvm/IR/IRBuilder.h"
 #include <filesystem>
 #include "../parser/AST.h"
-#include "../diagnostics/Diagnostic.h"
 #include "GeneratorScope.h"
+#include "../binder/Symbol.h"
+#include "../binder/SymbolTable.h"
+
 
 class Generator {
 public:
-    explicit Generator(const std::string &module_name);
-
-    void generate(const Program &program, bool libraryMode = false, bool stdDeclOnly = false);
+    explicit Generator(const std::shared_ptr<ScopedSymbolTable> &symbols);
 
     void optimize() const;
 
     std::string print() const;
 
-    // Link external .ll modules
-    bool linkModule(const std::filesystem::path &llPath);
+    void generate();
 
-    bool linkModules(const std::vector<std::filesystem::path> &llPaths);
-
-    llvm::Module &getModule() const { return *module; }
+    bool linkModules(const std::vector<std::filesystem::path> &allPaths) const;
 
 private:
     std::unique_ptr<llvm::LLVMContext> context;
@@ -39,15 +36,18 @@ private:
     std::unique_ptr<llvm::IRBuilder<> > builder;
 
     std::unordered_map<std::string, llvm::Function *> functions;
-    std::vector<llvm::Function *> externFunctions; // Track extern declarations
-    std::vector<llvm::StructType *> declaredTypes; // Track struct/enum types for forced emission
+    std::vector<llvm::Function *> externFunctions;
+    std::vector<llvm::StructType *> declaredTypes;
     std::shared_ptr<GeneratorScope> currentScope;
+    const std::shared_ptr<ScopedSymbolTable> &symbols;
 
     void push_scope();
 
     void pop_scope();
 
     void generate_default_main();
+
+    void forward_declare_struct(const StructSymbol &struct_symbol);
 
     llvm::Function *generate_function(const std::string &name, const Type &returnType,
                                       const std::vector<std::pair<Type, std::string> > &parameters);
@@ -59,14 +59,10 @@ private:
     llvm::Value *generate_enum_construction(const EnumDef &enumDef, const EnumVariantDef &variant,
                                             const std::vector<std::unique_ptr<Expression> > &args);
 
-    // Multi-pass struct generation (like C#)
-    void forward_declare_struct(const StructDeclaration &struct_declaration, const std::string &prefix = "");
-
     void resolve_struct_body(const StructDeclaration &struct_declaration, const std::string &prefix = "");
 
     void generate_struct_methods(const StructDeclaration &struct_declaration, const std::string &prefix = "");
 
-    // Namespace multi-pass helpers
     void forward_declare_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix);
 
     void resolve_namespace_struct_bodies(const NamespaceDeclaration &ns, const std::string &prefix);
@@ -76,7 +72,6 @@ private:
     void generate_method(const StructMethodDeclaration &method, const StructDeclaration &struc,
                          llvm::StructType *structType);
 
-    // Property generation (C# style getters/setters)
     void generate_property(const StructProperty &prop, const StructDeclaration &struc,
                            llvm::StructType *structType, const std::string &qualifiedName);
 
@@ -84,7 +79,6 @@ private:
 
     void generate_extern_function(const ExternFunctionDeclaration &decl);
 
-    // Force emission of all extern declarations (even if unused)
     void emit_used_declarations();
 
     void generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix = "");
@@ -95,7 +89,6 @@ private:
 
     llvm::Type *generate_type(const Type &type);
 
-    // Monomorphization for generics
     llvm::StructType *monomorphize_struct(const std::string &baseName, const std::vector<Type> &typeArgs);
 
     llvm::StructType *monomorphize_enum(const std::string &baseName, const std::vector<Type> &typeArgs);
@@ -168,7 +161,6 @@ private:
 
     llvm::Function *currentFunction = nullptr;
 
-    // Stack for break/continue targets
     std::vector<llvm::BasicBlock *> breakTargets;
     std::vector<llvm::BasicBlock *> continueTargets;
 };

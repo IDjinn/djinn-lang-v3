@@ -10,15 +10,11 @@ llvm::Value *Generator::generate_binary_expression(const BinaryExpression &expr)
 
     if (!left || !right) return nullptr;
 
-    // Ensure both operands have the same type
-    llvm::Type *leftType = left->getType();
-    llvm::Type *rightType = right->getType();
-
-    if (leftType != rightType) {
+    const auto leftType = left->getType();
+    if (const auto rightType = right->getType(); leftType != rightType) {
         if (leftType->isIntegerTy() && rightType->isIntegerTy()) {
-            // Cast to the larger type
-            unsigned leftBits = leftType->getIntegerBitWidth();
-            unsigned rightBits = rightType->getIntegerBitWidth();
+            const unsigned leftBits = leftType->getIntegerBitWidth();
+            const unsigned rightBits = rightType->getIntegerBitWidth();
             if (leftBits > rightBits) {
                 right = builder->CreateSExt(right, leftType, "sext");
             } else {

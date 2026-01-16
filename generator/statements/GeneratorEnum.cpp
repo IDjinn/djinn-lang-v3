@@ -4,7 +4,7 @@
 #include "../Generator.h"
 
 // ============================================================================
-// Enum generation - Tagged unions (Rust-style enums)
+// Enum generation - Tagged unions
 // ============================================================================
 //
 // For an enum like:
@@ -26,23 +26,18 @@ void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std
                                           : prefix + "::" + enum_declaration.name.token_name;
 
     EnumDef def(qualifiedName, enum_declaration.isGeneric());
-
-    // Store generic params for later monomorphization
     def.genericParams = enum_declaration.genericParams;
 
-    // Collect variants (with potentially unresolved generic types)
     for (const auto &variant: enum_declaration.values) {
         def.addVariant(variant.name.token_name, variant.types);
     }
 
-    // For generic enums, defer LLVM type generation until monomorphization
     if (enum_declaration.isGeneric()) {
         currentScope->define_enum(qualifiedName, std::move(def));
         return;
     }
 
-    // Non-generic enum: generate LLVM type now
-    const size_t variantCount = enum_declaration.values.size();
+    const auto variantCount = enum_declaration.values.size();
     llvm::Type *tagType;
     if (variantCount <= 256) {
         tagType = builder->getInt8Ty();
@@ -53,7 +48,6 @@ void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std
     }
     def.tagType = tagType;
 
-    // Calculate max payload size
     size_t maxPayloadSize = 0;
     for (const auto &variant: enum_declaration.values) {
         size_t variantPayloadSize = 0;
@@ -67,22 +61,17 @@ void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std
 
         maxPayloadSize = std::max(maxPayloadSize, variantPayloadSize);
     }
-    def.maxPayloadSize = maxPayloadSize;
 
-    // Create LLVM struct type
+    def.maxPayloadSize = maxPayloadSize;
     std::vector<llvm::Type *> enumFields;
-    enumFields.push_back(tagType); // discriminant/tag
+    enumFields.push_back(tagType);
 
     if (maxPayloadSize > 0) {
-        // Add payload as byte array
         enumFields.push_back(llvm::ArrayType::get(builder->getInt8Ty(), maxPayloadSize));
     }
 
     def.llvmType = llvm::StructType::create(*context, enumFields, qualifiedName);
-
-    // Track for forced emission
     declaredTypes.push_back(def.llvmType);
-
     currentScope->define_enum(qualifiedName, std::move(def));
 }
 
@@ -102,20 +91,13 @@ llvm::Value *Generator::generate_enum_construction(
     const EnumVariantDef &variant,
     const std::vector<std::unique_ptr<Expression> > &args
 ) {
-    // Allocate space for the enum
-    llvm::AllocaInst *enumAlloca = builder->CreateAlloca(enumDef.llvmType, nullptr, "enum_tmp");
-
-    // Store the tag (discriminant)
-    llvm::Value *tagPtr = builder->CreateStructGEP(enumDef.llvmType, enumAlloca, 0, "tag_ptr");
+    const auto enumAlloca = builder->CreateAlloca(enumDef.llvmType, nullptr, "enum_tmp");
+    const auto tagPtr = builder->CreateStructGEP(enumDef.llvmType, enumAlloca, 0, "tag_ptr");
     llvm::Value *tagValue = llvm::ConstantInt::get(enumDef.tagType, variant.tag);
     builder->CreateStore(tagValue, tagPtr);
 
-    // Store payload values if any
     if (!variant.associatedTypes.empty() && enumDef.maxPayloadSize > 0) {
-        // Get pointer to payload area
         llvm::Value *payloadPtr = builder->CreateStructGEP(enumDef.llvmType, enumAlloca, 1, "payload_ptr");
-
-        // Cast payload area to i8* for byte-level access
         llvm::Value *payloadBytes = builder->CreateBitCast(
             payloadPtr,
             llvm::PointerType::get(builder->getInt8Ty(), 0),
@@ -126,8 +108,6 @@ llvm::Value *Generator::generate_enum_construction(
         for (size_t i = 0; i < variant.associatedTypes.size() && i < args.size(); ++i) {
             llvm::Value *argValue = generate_expression(*args[i]);
             llvm::Type *argType = argValue->getType();
-
-            // Calculate pointer to this field in payload
             llvm::Value *fieldPtr = builder->CreateGEP(
                 builder->getInt8Ty(),
                 payloadBytes,
@@ -135,7 +115,6 @@ llvm::Value *Generator::generate_enum_construction(
                 "field_ptr"
             );
 
-            // Cast to correct pointer type and store
             llvm::Value *typedPtr = builder->CreateBitCast(
                 fieldPtr,
                 llvm::PointerType::get(argType, 0),
@@ -143,12 +122,10 @@ llvm::Value *Generator::generate_enum_construction(
             );
             builder->CreateStore(argValue, typedPtr);
 
-            // Update offset for next field
             const auto &dataLayout = module->getDataLayout();
             offset += dataLayout.getTypeAllocSize(argType);
         }
     }
 
-    // Load and return the enum value
     return builder->CreateLoad(enumDef.llvmType, enumAlloca, "enum_val");
 }
