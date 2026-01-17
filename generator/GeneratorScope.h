@@ -13,6 +13,7 @@
 #include "llvm/IR/Function.h"
 #include "../parser/ast/Generic.h"
 #include "Mangler.h"
+#include "../binder/Symbol.h"
 
 struct StructMethodDeclaration;
 struct StructProperty;
@@ -38,9 +39,8 @@ struct StructDef {
     std::vector<std::pair<std::string, Type> > fields;
     std::unordered_map<std::string, unsigned> fieldIndices;
 
-    std::vector<const StructMethodDeclaration *> methods;
-    std::vector<const StructProperty *> properties;
-
+    std::vector<std::shared_ptr<MethodSymbol> > methods;
+    std::vector<std::shared_ptr<PropertySymbol> > properties;
     std::unordered_map<std::string, PropertyInfo> propertyInfos;
 
     llvm::StructType *llvmType = nullptr;

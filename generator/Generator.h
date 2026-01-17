@@ -49,43 +49,26 @@ private:
 
     void forward_declare_struct(const StructSymbol &struct_symbol);
 
-    llvm::Function *generate_function(const std::string &name, const Type &returnType,
-                                      const std::vector<std::pair<Type, std::string> > &parameters);
+    void resolve_struct_body(const StructSymbol &struct_symbol);
 
-    void generate_struct(const StructDeclaration &struct_declaration, const std::string &prefix = "");
+    void generate_struct_methods(const StructSymbol &struct_symbol);
 
-    void generate_enum(const EnumDeclaration &enum_declaration, const std::string &prefix = "");
+    void generate_method(const StructSymbol &struc, const MethodSymbol &method);
+
+    void generate_property(const StructSymbol &struc, const PropertySymbol &prop);
+
+    void generate_function(const FunctionSymbol &func);
+
+    void generate_extern_function(const ExternFunctionSymbol &func);
+
+    void generate_enum(const EnumSymbol &enum_symbol);
+
+    void resolve_enum_body(const EnumSymbol &enum_symbol);
 
     llvm::Value *generate_enum_construction(const EnumDef &enumDef, const EnumVariantDef &variant,
                                             const std::vector<std::unique_ptr<Expression> > &args);
 
-    void resolve_struct_body(const StructDeclaration &struct_declaration, const std::string &prefix = "");
-
-    void generate_struct_methods(const StructDeclaration &struct_declaration, const std::string &prefix = "");
-
-    void forward_declare_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix);
-
-    void resolve_namespace_struct_bodies(const NamespaceDeclaration &ns, const std::string &prefix);
-
-    void generate_namespace_struct_methods(const NamespaceDeclaration &ns, const std::string &prefix);
-
-    void generate_method(const StructMethodDeclaration &method, const StructDeclaration &struc,
-                         llvm::StructType *structType);
-
-    void generate_property(const StructProperty &prop, const StructDeclaration &struc,
-                           llvm::StructType *structType, const std::string &qualifiedName);
-
-    void generate_function(const FunctionDeclaration &func, const std::string &prefix = "");
-
-    void generate_extern_function(const ExternFunctionDeclaration &decl);
-
     void emit_used_declarations();
-
-    void generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix = "");
-
-    void generate_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix);
-
-    void generate_namespace_functions(const NamespaceDeclaration &ns, const std::string &prefix);
 
     llvm::Type *generate_type(const Type &type);
 
@@ -93,13 +76,12 @@ private:
 
     llvm::StructType *monomorphize_enum(const std::string &baseName, const std::vector<Type> &typeArgs);
 
-    void monomorphize_method(const StructMethodDeclaration &method,
-                             const StructDef &genericDef,
+    void monomorphize_method(const MethodSymbol &method,
                              llvm::StructType *monomorphizedType,
                              const GenericContext &ctx,
                              const std::string &mangledStructName);
 
-    void monomorphize_property(const StructProperty &prop,
+    void monomorphize_property(const PropertySymbol &prop,
                                llvm::StructType *monomorphizedType,
                                const GenericContext &ctx,
                                const std::string &mangledStructName);

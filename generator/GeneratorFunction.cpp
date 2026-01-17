@@ -5,26 +5,25 @@
 #include "Generator.h"
 
 
-void Generator::generate_function(const FunctionDeclaration &func, const std::string &prefix) {
+void Generator::generate_function(const FunctionSymbol &func) {
     push_scope();
 
-    const std::string qualifiedName = prefix.empty() ? func.name.token_name : prefix + "::" + func.name.token_name;
+    llvm::Type *returnType = generate_type(func.returnType);
 
-    llvm::Type *returnType = this->generate_type(*func.returnType);
-
-    std::vector<llvm::Type *> paramTypes{};
-    for (const auto &param: func.parameters) {
-        paramTypes.emplace_back(generate_type(*param.type));
+    std::vector<llvm::Type *> paramTypes;
+    for (const auto &paramType: func.paramTypes) {
+        paramTypes.push_back(generate_type(paramType));
     }
 
     const auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
     const auto llvmFunc = llvm::Function::Create(
         funcType,
         llvm::Function::ExternalLinkage,
-        func.name.token_name,
+        func.name,
         *module
     );
-    functions[qualifiedName] = llvmFunc;
+
+    functions[func.name] = llvmFunc;
     currentFunction = llvmFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -32,13 +31,14 @@ void Generator::generate_function(const FunctionDeclaration &func, const std::st
 
     size_t idx = 0;
     for (auto &arg: llvmFunc->args()) {
-        const auto &param = func.parameters[idx];
-        arg.setName(param.name.token_name);
+        const auto &paramName = func.paramNames[idx];
+        const auto &paramType = func.paramTypes[idx];
+        arg.setName(paramName);
 
-        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.name.token_name);
+        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, paramName);
         builder->CreateStore(&arg, alloca);
-        std::string structTypeName = param.type->kind == TypeKind::STRUCT ? param.type->structName : "";
-        currentScope->define_variable(param.name.token_name, alloca, structTypeName);
+        std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        currentScope->define_variable(paramName, alloca, structTypeName);
         idx++;
     }
 
@@ -63,32 +63,32 @@ void Generator::generate_function(const FunctionDeclaration &func, const std::st
     pop_scope();
 }
 
-void Generator::generate_extern_function(const ExternFunctionDeclaration &decl) {
+void Generator::generate_extern_function(const ExternFunctionSymbol &func) {
     std::vector<llvm::Type *> paramTypes;
-    for (const auto &param: decl.parameters) {
-        paramTypes.push_back(generate_type(*param.type));
+    for (const auto &paramType: func.paramTypes) {
+        paramTypes.push_back(generate_type(paramType));
     }
 
-    llvm::Type *returnType = generate_type(*decl.returnType);
+    llvm::Type *returnType = generate_type(func.returnType);
 
     llvm::FunctionType *funcType = llvm::FunctionType::get(
         returnType,
         paramTypes,
-        decl.isVariadic
+        func.isVariadic
     );
 
-    llvm::Function *func = llvm::Function::Create(
+    llvm::Function *llvmFunc = llvm::Function::Create(
         funcType,
         llvm::Function::ExternalLinkage,
-        decl.name.token_name,
+        func.name,
         *module
     );
 
-    functions[decl.name.token_name] = func;
-    externFunctions.push_back(func); // Track for forced emission
+    functions[func.name] = llvmFunc;
+    externFunctions.push_back(llvmFunc);
 
-    if (decl.abi == "C") {
-        func->setCallingConv(llvm::CallingConv::C);
+    if (func.abi == "C") {
+        llvmFunc->setCallingConv(llvm::CallingConv::C);
     }
 }
 
@@ -96,15 +96,13 @@ void Generator::emit_used_declarations() {
     auto *i8PtrTy = llvm::PointerType::getUnqual(*context);
     std::vector<llvm::Constant *> usedItems;
 
-    // Add extern functions
     for (auto *func: externFunctions) {
         usedItems.push_back(llvm::ConstantExpr::getBitCast(func, i8PtrTy));
     }
 
-    // Create dummy globals for struct types to force their emission
     int typeIdx = 0;
     for (auto *structType: declaredTypes) {
-        if (structType->isOpaque()) continue; // Skip unresolved types
+        if (structType->isOpaque()) continue;
 
         auto *dummy = new llvm::GlobalVariable(
             *module,
@@ -120,7 +118,6 @@ void Generator::emit_used_declarations() {
 
     if (usedItems.empty()) return;
 
-    // Create @llvm.compiler.used
     auto *arrayTy = llvm::ArrayType::get(i8PtrTy, usedItems.size());
     auto *usedArray = llvm::ConstantArray::get(arrayTy, usedItems);
 

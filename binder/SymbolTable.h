@@ -55,6 +55,10 @@ public:
         return define(std::move(func));
     }
 
+    bool defineExternFunction(std::shared_ptr<ExternFunctionSymbol> func) {
+        return define(std::move(func));
+    }
+
     bool defineStruct(std::shared_ptr<StructSymbol> structSym) {
         return define(std::move(structSym));
     }
@@ -145,6 +149,13 @@ public:
         return lookup(name) != nullptr;
     }
 
+    [[nodiscard]] std::string getQualifiedName(const std::string &name) const {
+        if (const auto symbol = lookup(name)) {
+            return symbol->name;
+        }
+        return name;
+    }
+
     [[nodiscard]] bool isDefinedLocally(const std::string &name) const {
         return _symbols.contains(name);
     }
@@ -181,10 +192,17 @@ public:
     std::vector<std::shared_ptr<Symbol> > get_all_functions() const {
         std::vector<std::shared_ptr<Symbol> > all_functions;
         for (const auto &symbol: _symbols | std::views::values) {
-            if (symbol->isFunction()) all_functions.push_back(symbol);
+            if (symbol->kind == SymbolKind::Function) all_functions.push_back(symbol);
         }
-
         return all_functions;
+    }
+
+    std::vector<std::shared_ptr<Symbol> > get_all_extern_functions() const {
+        std::vector<std::shared_ptr<Symbol> > all_extern;
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->kind == SymbolKind::ExternFunction) all_extern.push_back(symbol);
+        }
+        return all_extern;
     }
 
     std::vector<std::shared_ptr<Symbol> > get_all_structs() const {

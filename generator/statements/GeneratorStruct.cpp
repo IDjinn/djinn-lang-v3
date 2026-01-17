@@ -5,97 +5,95 @@
 
 
 void Generator::forward_declare_struct(const StructSymbol &struct_symbol) {
-    return;
-    // StructDef def(qualifiedName, struct_symbol.isGeneric());
-    // def.isTransparent = struct_symbol.isTransparent();
-    // def.genericParams = struct_symbol.genericParams;
-    //
-    // unsigned idx = 0;
-    // for (const auto &field: struct_symbol.fields) {
-    //     def.fields.emplace_back(field.name.token_name, *field.type);
-    //     def.fieldIndices[field.name.token_name] = idx++;
-    // }
-    //
-    // for (const auto &method: struct_symbol.methods) {
-    //     def.methods.push_back(method.get());
-    // }
-    // for (const auto &prop: struct_symbol.properties) {
-    //     def.properties.push_back(&prop);
-    // }
-    //
-    // if (struct_symbol.isTransparent()) {
-    //     def.transparentUnderlying = generate_type(*struct_symbol.baseType);
-    //     def.llvmType = llvm::StructType::create(*context, qualifiedName);
-    // } else {
-    //     def.llvmType = llvm::StructType::create(*context, qualifiedName);
-    // }
-    //
-    // if (!def.isGeneric) {
-    //     declaredTypes.push_back(def.llvmType);
-    // }
-    //
-    // currentScope->define_struct(qualifiedName, std::move(def));
+    StructDef def(struct_symbol.name, struct_symbol.isGeneric());
+    def.isTransparent = struct_symbol.isTransparent();
+
+    unsigned idx = 0;
+    for (const auto &field: struct_symbol.fields) {
+        def.fields.emplace_back(field.name, field.type);
+        def.fieldIndices[field.name] = idx++;
+    }
+
+    for (const auto &method: struct_symbol.methods) {
+        def.methods.emplace_back(method);
+    }
+    for (const auto &prop: struct_symbol.properties) {
+        def.properties.push_back(prop);
+    }
+
+    if (struct_symbol.isGeneric()) {
+        def.genericParams = {};
+        for (const auto &param: struct_symbol.genericParams) {
+            def.genericParams.params.emplace_back(SourceIdentifier(param));
+        }
+    }
+
+    if (struct_symbol.isTransparent()) {
+        def.transparentUnderlying = generate_type(*struct_symbol.baseType);
+        def.llvmType = llvm::StructType::create(*context, struct_symbol.name);
+    } else {
+        def.llvmType = llvm::StructType::create(*context, struct_symbol.name);
+    }
+
+    if (!def.isGeneric) {
+        declaredTypes.emplace_back(def.llvmType);
+    }
+
+    currentScope->define_struct(struct_symbol.name, std::move(def));
 }
 
-void Generator::resolve_struct_body(const StructDeclaration &struct_declaration, const std::string &prefix) {
-    // const std::string qualifiedName = prefix.empty()
-    //                                       ? struct_declaration.name.token_name
-    //                                       : prefix + "::" + struct_declaration.name.token_name;
-    //
-    // StructDef *def = currentScope->lookup_struct(qualifiedName);
-    // if (!def) {
-    //     throw std::runtime_error("Struct not forward declared: " + qualifiedName);
-    // }
-    //
-    // if (def->isGeneric) {
-    //     return;
-    // }
-    //
-    // if (def->isTransparent) {
-    //     if (def->llvmType && def->llvmType->isOpaque()) {
-    //         def->llvmType->setBody({def->transparentUnderlying});
-    //     }
-    //     return;
-    // }
-    //
-    // std::vector<llvm::Type *> fieldTypes;
-    // for (const auto &[fieldName, fieldType]: def->fields) {
-    //     fieldTypes.push_back(generate_type(fieldType));
-    // }
-    //
-    // def->llvmType->setBody(fieldTypes);
-}
+void Generator::resolve_struct_body(const StructSymbol &struct_symbol) {
+    StructDef *def = currentScope->lookup_struct(struct_symbol.name);
+    if (!def) {
+        throw std::runtime_error("Struct not forward declared: " + struct_symbol.name);
+    }
 
-void Generator::generate_struct_methods(const StructDeclaration &struct_declaration, const std::string &prefix) {
-    if (struct_declaration.isGeneric()) {
+    if (def->isGeneric) {
         return;
     }
 
-    const std::string qualifiedName = prefix.empty()
-                                          ? struct_declaration.name.token_name
-                                          : prefix + "::" + struct_declaration.name.token_name;
-
-    const StructDef *def = currentScope->lookup_struct(qualifiedName);
-    if (!def || !def->llvmType) {
-        throw std::runtime_error("Struct not found for method generation: " + qualifiedName);
+    if (def->isTransparent) {
+        if (def->llvmType && def->llvmType->isOpaque()) {
+            def->llvmType->setBody({def->transparentUnderlying});
+        }
+        return;
     }
 
-    for (const auto &prop: struct_declaration.properties) {
-        generate_property(prop, struct_declaration, def->llvmType, qualifiedName);
+    std::vector<llvm::Type *> fieldTypes;
+    for (const auto &field: struct_symbol.fields) {
+        fieldTypes.push_back(generate_type(field.type));
     }
 
-    for (const auto &method: struct_declaration.methods) {
-        generate_method(*method, struct_declaration, def->llvmType);
+    if (def->llvmType && def->llvmType->isOpaque()) {
+        def->llvmType->setBody(fieldTypes);
     }
 }
 
-void Generator::generate_property(const StructProperty &prop, const StructDeclaration &struc,
-                                  llvm::StructType *structType, const std::string &qualifiedName) {
-    StructDef *def = currentScope->lookup_struct(qualifiedName);
+void Generator::generate_struct_methods(const StructSymbol &struct_symbol) {
+    if (struct_symbol.isGeneric()) {
+        return;
+    }
+
+    const StructDef *def = currentScope->lookup_struct(struct_symbol.name);
+    if (!def || !def->llvmType) {
+        throw std::runtime_error("Struct not found for method generation: " + struct_symbol.name);
+    }
+
+    for (const auto &prop: struct_symbol.properties) {
+        generate_property(struct_symbol, *prop);
+    }
+
+    for (const auto &method: struct_symbol.methods) {
+        generate_method(struct_symbol, *method);
+    }
+}
+
+void Generator::generate_property(const StructSymbol &struc, const PropertySymbol &prop) {
+    StructDef *def = currentScope->lookup_struct(struc.name);
     if (!def) return;
 
     PropertyInfo propInfo;
-    propInfo.name = prop.name.token_name;
+    propInfo.name = prop.name;
     propInfo.hasGetter = prop.hasGetter;
     propInfo.hasSetter = prop.hasSetter;
 
@@ -106,22 +104,23 @@ void Generator::generate_property(const StructProperty &prop, const StructDeclar
         }
     }
 
-    def->propertyInfos[prop.name.token_name] = propInfo;
+    def->propertyInfos[prop.name] = propInfo;
 
+    // Generate getter
     if (prop.hasGetter && (prop.getterBody || prop.getterExpr)) {
         push_scope();
 
-        const auto getterName = qualifiedName + "__get_" + prop.name.token_name;
-        llvm::Type *returnType = generate_type(*prop.type);
+        const auto getterName = struc.name + "__get_" + prop.name;
+        llvm::Type *returnType = generate_type(prop.type);
 
         std::vector<llvm::Type *> paramTypes;
-        paramTypes.push_back(llvm::PointerType::get(structType, 0));
+        paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
 
         auto *funcType = llvm::FunctionType::get(returnType, paramTypes, false);
         auto *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, getterName, *module);
 
         functions[getterName] = llvmFunc;
-        def->methodFunctions["get_" + prop.name.token_name] = llvmFunc;
+        def->methodFunctions["get_" + prop.name] = llvmFunc;
         currentFunction = llvmFunc;
 
         auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -131,7 +130,7 @@ void Generator::generate_property(const StructProperty &prop, const StructDeclar
         argIt->setName("this");
         auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
         builder->CreateStore(&*argIt, thisAlloca);
-        currentScope->define_variable("this", thisAlloca, qualifiedName);
+        currentScope->define_variable("this", thisAlloca, struc.name);
 
         if (prop.getterBody) {
             for (const auto &stmt: prop.getterBody->statements) {
@@ -149,21 +148,22 @@ void Generator::generate_property(const StructProperty &prop, const StructDeclar
         pop_scope();
     }
 
+    // Generate setter
     if (prop.hasSetter && (prop.setterBody || prop.setterExpr)) {
         push_scope();
 
-        const auto setterName = qualifiedName + "__set_" + prop.name.token_name;
-        llvm::Type *valueType = generate_type(*prop.type);
+        const auto setterName = struc.name + "__set_" + prop.name;
+        llvm::Type *valueType = generate_type(prop.type);
 
         std::vector<llvm::Type *> paramTypes;
-        paramTypes.push_back(llvm::PointerType::get(structType, 0));
+        paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
         paramTypes.push_back(valueType);
 
         auto *funcType = llvm::FunctionType::get(builder->getVoidTy(), paramTypes, false);
         auto *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, setterName, *module);
 
         functions[setterName] = llvmFunc;
-        def->methodFunctions["set_" + prop.name.token_name] = llvmFunc;
+        def->methodFunctions["set_" + prop.name] = llvmFunc;
         currentFunction = llvmFunc;
 
         auto *entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -173,7 +173,7 @@ void Generator::generate_property(const StructProperty &prop, const StructDeclar
         argIt->setName("this");
         auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
         builder->CreateStore(&*argIt, thisAlloca);
-        currentScope->define_variable("this", thisAlloca, qualifiedName);
+        currentScope->define_variable("this", thisAlloca, struc.name);
         ++argIt;
 
         argIt->setName("value");
@@ -197,123 +197,34 @@ void Generator::generate_property(const StructProperty &prop, const StructDeclar
     }
 }
 
-void Generator::forward_declare_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
-
-    for (const auto &structDecl: ns.structs) {
-        // forward_declare_struct(TODO);
-    }
-
-    for (const auto &nestedNs: ns.namespaces) {
-        forward_declare_namespace_structs(*nestedNs, qualifiedPrefix);
-    }
-}
-
-void Generator::resolve_namespace_struct_bodies(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
-
-    for (const auto &structDecl: ns.structs) {
-        resolve_struct_body(*structDecl, qualifiedPrefix);
-    }
-
-    for (const auto &nestedNs: ns.namespaces) {
-        resolve_namespace_struct_bodies(*nestedNs, qualifiedPrefix);
-    }
-}
-
-void Generator::generate_namespace_struct_methods(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
-
-    for (const auto &structDecl: ns.structs) {
-        generate_struct_methods(*structDecl, qualifiedPrefix);
-    }
-
-    for (const auto &nestedNs: ns.namespaces) {
-        generate_namespace_struct_methods(*nestedNs, qualifiedPrefix);
-    }
-}
-
-
-void Generator::generate_struct(const StructDeclaration &struct_declaration, const std::string &prefix) {
-    // const std::string qualifiedName = prefix.empty()
-    //                                       ? struct_declaration.name.token_name
-    //                                       : prefix + "::" + struct_declaration.name.token_name;
-    //
-    // StructDef def(qualifiedName, struct_declaration.isGeneric());
-    //
-    // unsigned idx = 0;
-    // for (const auto &field: struct_declaration.fields) {
-    //     def.fields.emplace_back(field.name.token_name, *field.type);
-    //     def.fieldIndices[field.name.token_name] = idx++;
-    // }
-    //
-    // for (const auto &method: struct_declaration.methods) {
-    //     def.methods.push_back(method.get());
-    // }
-    // for (const auto &prop: struct_declaration.properties) {
-    //     def.properties.push_back(&prop);
-    // }
-    //
-    // if (def.isGeneric) {
-    //     def.genericParams = struct_declaration.genericParams;
-    //     currentScope->define_struct(qualifiedName, std::move(def));
-    //     return;
-    // }
-    //
-    // if (struct_declaration.isTransparent()) {
-    //     def.isTransparent = true;
-    //     def.transparentUnderlying = generate_type(*struct_declaration.baseType);
-    //     def.llvmType = llvm::StructType::create(*context, {def.transparentUnderlying}, qualifiedName);
-    //     currentScope->define_struct(qualifiedName, std::move(def));
-    //
-    //     const StructDef *storedDef = currentScope->lookup_struct(qualifiedName);
-    //     for (const auto &method: struct_declaration.methods) {
-    //         generate_method(*method, struct_declaration, storedDef->llvmType);
-    //     }
-    //     return;
-    // }
-    //
-    // std::vector<llvm::Type *> fieldTypes;
-    // for (const auto &[fieldName, fieldType]: def.fields) {
-    //     fieldTypes.push_back(generate_type(fieldType));
-    // }
-    //
-    // def.llvmType = llvm::StructType::create(*context, fieldTypes, qualifiedName);
-    // currentScope->define_struct(qualifiedName, std::move(def));
-    //
-    // const StructDef *storedDef = currentScope->lookup_struct(qualifiedName);
-    // for (const auto &method: struct_declaration.methods) {
-    //     generate_method(*method, struct_declaration, storedDef->llvmType);
-    // }
-}
-
-void Generator::generate_method(const StructMethodDeclaration &method, const StructDeclaration &struc,
-                                llvm::StructType *structType) {
+void Generator::generate_method(const StructSymbol &struc, const MethodSymbol &method) {
     push_scope();
 
-    const auto structName = struc.name.token_name;
-    const std::string mangledName = structName + "__" + method.name.token_name;
-
-    llvm::Type *returnType = generate_type(*method.returnType);
-
-    std::vector<llvm::Type *> paramTypes;
-    const bool isStatic = method.isStatic();
-    if (!isStatic) {
-        paramTypes.push_back(llvm::PointerType::get(structType, 0));
+    StructDef *def = currentScope->lookup_struct(struc.name);
+    if (!def || !def->llvmType) {
+        pop_scope();
+        throw std::runtime_error("Struct not found for method: " + struc.name);
     }
 
-    for (const auto &param: method.parameters) {
-        paramTypes.push_back(generate_type(*param.type));
+    const std::string mangledName = struc.name + "__" + method.name;
+
+    llvm::Type *returnType = generate_type(method.returnType);
+
+    std::vector<llvm::Type *> paramTypes;
+    const bool isStatic = method.isStatic;
+    if (!isStatic) {
+        paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
+    }
+
+    for (const auto &paramType: method.paramTypes) {
+        paramTypes.push_back(generate_type(paramType));
     }
 
     const auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
     const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
     functions[mangledName] = llvmFunc;
-
-    if (StructDef *def = currentScope->lookup_struct(structName)) {
-        def->methodFunctions[method.name.token_name] = llvmFunc;
-    }
+    def->methodFunctions[method.name] = llvmFunc;
 
     currentFunction = llvmFunc;
 
@@ -326,19 +237,20 @@ void Generator::generate_method(const StructMethodDeclaration &method, const Str
         argIt->setName("this");
         auto *thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
         builder->CreateStore(&*argIt, thisAlloca);
-        currentScope->define_variable("this", thisAlloca, structName);
+        currentScope->define_variable("this", thisAlloca, struc.name);
         ++argIt;
     }
 
     size_t paramIdx = 0;
     while (argIt != llvmFunc->arg_end()) {
-        const auto &param = method.parameters[paramIdx];
-        argIt->setName(param.name.token_name);
+        const auto &paramName = method.paramNames[paramIdx];
+        const auto &paramType = method.paramTypes[paramIdx];
+        argIt->setName(paramName);
 
-        auto *alloca = builder->CreateAlloca(argIt->getType(), nullptr, param.name.token_name);
+        auto *alloca = builder->CreateAlloca(argIt->getType(), nullptr, paramName);
         builder->CreateStore(&*argIt, alloca);
-        std::string paramStructType = param.type->kind == TypeKind::STRUCT ? param.type->structName : "";
-        currentScope->define_variable(param.name.token_name, alloca, paramStructType);
+        std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        currentScope->define_variable(paramName, alloca, paramStructType);
 
         ++argIt;
         ++paramIdx;
@@ -348,8 +260,8 @@ void Generator::generate_method(const StructMethodDeclaration &method, const Str
         for (const auto &stmt: method.body->statements) {
             generate_statement(*stmt);
         }
-    } else if (method.expression) {
-        llvm::Value *result = generate_expression(*method.expression);
+    } else if (method.expressionBody) {
+        llvm::Value *result = generate_expression(*method.expressionBody);
         if (!returnType->isVoidTy()) {
             builder->CreateRet(result);
         } else {

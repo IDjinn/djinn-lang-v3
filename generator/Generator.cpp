@@ -34,142 +34,40 @@ void Generator::pop_scope() {
 }
 
 void Generator::generate() {
-    for (auto programNamespace: symbols->get_all_namespaces()) {
+    // PASS 1: Forward declare all structs (create opaque types)
+    for (const auto &sym: symbols->get_all_structs()) {
+        forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(sym));
     }
 
-    for (auto stuc: symbols->get_all_structs()) {
-        forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(stuc));
+    // PASS 2: Forward declare all enums
+    for (const auto &sym: symbols->get_all_enums()) {
+        // TODO: forward_declare_enum(*std::dynamic_pointer_cast<EnumSymbol>(sym));
     }
 
-    // for (const auto &ns: program.namespaces) {
-    //     forward_declare_namespace_structs(*ns, "");
-    // }
-    // for (const auto &structDecl: program.structs) {
-    //     forward_declare_struct(*structDecl);
-    // }
-    //
-    // for (const auto &import: program.imports) {
-    //     const std::string nsPath = import->namespacePath.toString();
-    //
-    //     // Cria aliases para todas as structs (regular, transparent, generic)
-    //     for (const auto &[name, structDef]: currentScope->structs) {
-    //         if (name.starts_with(nsPath + "::")) {
-    //             const std::string shortName = name.substr(nsPath.length() + 2);
-    //             if (shortName.find("::") == std::string::npos) {
-    //                 if (!currentScope->has_struct_in_current_scope(shortName)) {
-    //                     currentScope->define_alias(shortName, name);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-    //
-    // // PASS 3: External functions (C ABI)
-    // // Now type aliases exist, so extern functions can use types like c_result
-    // for (const auto &externFunc: program.externFunctions) {
-    //     generate_extern_function(*externFunc);
-    // }
-    //
-    // // PASS 4: Generate enums
-    // for (const auto &enumDecl: program.enums) {
-    //     generate_enum(*enumDecl, program.fileNamespace);
-    // }
-    //
-    // // PASS 5: Resolve struct bodies (fill in fields)
-    // // Now all types are known and extern functions declared
-    // for (const auto &ns: program.namespaces) {
-    //     resolve_namespace_struct_bodies(*ns, "");
-    // }
-    // for (const auto &structDecl: program.structs) {
-    //     resolve_struct_body(*structDecl);
-    // }
-    //
-    // // PASS 5b: Generate struct methods
-    // // Bodies are complete, methods can use all types
-    // // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
-    // // for (const auto &ns: program.namespaces) {
-    // //     if (stdDeclOnly && ns->name.token_name == "std") continue;
-    // //     generate_namespace_struct_methods(*ns, "");
-    // // }
-    // for (const auto &structDecl: program.structs) {
-    //     generate_struct_methods(*structDecl);
-    // }
-    //
-    // // PASS 6: Create function aliases from imports
-    // // Methods are generated, so function aliases can be created
-    // for (const auto &import: program.imports) {
-    //     const std::string nsPath = import->namespacePath.toString();
-    //
-    //     for (const auto &[name, func]: functions) {
-    //         if (name.starts_with(nsPath + "::")) {
-    //             const std::string shortName = name.substr(nsPath.length() + 2);
-    //             if (shortName.find("::") == std::string::npos && !functions.contains(shortName)) {
-    //                 functions[shortName] = func;
-    //             }
-    //         }
-    //     }
-    // }
-    //
-    // // PASS 7: Generate namespace functions
-    // // Skip std:: namespaces if stdDeclOnly (will be linked from .ll)
-    // // for (const auto &ns: program.namespaces) {
-    // //     if (stdDeclOnly && ns->name.token_name == "std") continue;
-    // //     generate_namespace_functions(*ns, "");
-    // // }
-    //
-    // // PASS 8: Generate global functions
-    // for (const auto &func: program.functions) {
-    //     generate_function(*func);
-    // }
-    //
-    // // PASS 9: Default main if not defined (skip in library mode)
-    // // if (!libraryMode && !functions.contains("main")) {
-    // //     generate_default_main();
-    // // }
-    //
-    // // PASS 10: Force emission of extern declarations
+    // PASS 3: Generate extern functions
+    for (const auto &sym: symbols->get_all_extern_functions()) {
+        // TODO: generate_extern_function(*std::dynamic_pointer_cast<ExternFunctionSymbol>(sym));
+    }
+
+    // PASS 4: Resolve struct bodies (fill in field types)
+    for (const auto &sym: symbols->get_all_structs()) {
+        resolve_struct_body(*std::dynamic_pointer_cast<StructSymbol>(sym));
+    }
+
+    // PASS 5: Generate struct methods and properties
+    for (const auto &sym: symbols->get_all_structs()) {
+        generate_struct_methods(*std::dynamic_pointer_cast<StructSymbol>(sym));
+    }
+
+    // PASS 6: Generate global functions
+    for (const auto &sym: symbols->get_all_functions()) {
+        // TODO: generate_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
+    }
+
+    // PASS 7: Force emission of used declarations
     // emit_used_declarations();
 }
 
-void Generator::generate_namespace(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
-
-    for (const auto &structDecl: ns.structs) {
-        generate_struct(*structDecl, qualifiedPrefix);
-    }
-
-    for (const auto &func: ns.functions) {
-        generate_function(*func, qualifiedPrefix);
-    }
-
-    for (const auto &nestedNs: ns.namespaces) {
-        generate_namespace(*nestedNs, qualifiedPrefix);
-    }
-}
-
-void Generator::generate_namespace_structs(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
-
-    for (const auto &structDecl: ns.structs) {
-        generate_struct(*structDecl, qualifiedPrefix);
-    }
-
-    for (const auto &nestedNs: ns.namespaces) {
-        generate_namespace_structs(*nestedNs, qualifiedPrefix);
-    }
-}
-
-void Generator::generate_namespace_functions(const NamespaceDeclaration &ns, const std::string &prefix) {
-    const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
-
-    for (const auto &func: ns.functions) {
-        generate_function(*func, qualifiedPrefix);
-    }
-
-    for (const auto &nestedNs: ns.namespaces) {
-        generate_namespace_functions(*nestedNs, qualifiedPrefix);
-    }
-}
 
 void Generator::generate_default_main() {
     const auto mainFunc = llvm::Function::Create(
@@ -185,50 +83,50 @@ void Generator::generate_default_main() {
     builder->CreateRet(builder->getInt32(0));
 }
 
-llvm::Function *Generator::generate_function(
-    const std::string &name,
-    const Type &returnType,
-    const std::vector<std::pair<Type, std::string> > &parameters
-) {
-    const auto return_value = generate_type(returnType);
-    const auto llvmFunc = llvm::Function::Create(
-        llvm::FunctionType::get(return_value, false),
-        llvm::Function::ExternalLinkage,
-        name,
-        *module
-    );
-    functions[name] = llvmFunc;
-
-    const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
-    builder->SetInsertPoint(entry);
-
-    push_scope();
-    size_t idx = 0;
-    for (auto &arg: llvmFunc->args()) {
-        const auto &param = parameters[idx];
-        arg.setName(param.second);
-
-        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.second);
-        builder->CreateStore(&arg, alloca);
-        std::string structTypeName = param.first.kind == TypeKind::STRUCT ? param.first.structName : "";
-        currentScope->define_variable(param.second, alloca, structTypeName);
-        idx++;
-    }
-    if (builder->GetInsertBlock()->getTerminator()) {
-        pop_scope();
-        return llvmFunc;
-    }
-
-    if (return_value->isVoidTy()) {
-        builder->CreateRetVoid();
-        pop_scope();
-        return llvmFunc;
-    }
-
-    builder->CreateRet(llvm::Constant::getNullValue(return_value));
-    pop_scope();
-    return llvmFunc;
-}
+// llvm::Function *Generator::generate_function(
+//     const std::string &name,
+//     const Type &returnType,
+//     const std::vector<std::pair<Type, std::string> > &parameters
+// ) {
+//     const auto return_value = generate_type(returnType);
+//     const auto llvmFunc = llvm::Function::Create(
+//         llvm::FunctionType::get(return_value, false),
+//         llvm::Function::ExternalLinkage,
+//         name,
+//         *module
+//     );
+//     functions[name] = llvmFunc;
+//
+//     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+//     builder->SetInsertPoint(entry);
+//
+//     push_scope();
+//     size_t idx = 0;
+//     for (auto &arg: llvmFunc->args()) {
+//         const auto &param = parameters[idx];
+//         arg.setName(param.second);
+//
+//         auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, param.second);
+//         builder->CreateStore(&arg, alloca);
+//         std::string structTypeName = param.first.kind == TypeKind::STRUCT ? param.first.structName : "";
+//         currentScope->define_variable(param.second, alloca, structTypeName);
+//         idx++;
+//     }
+//     if (builder->GetInsertBlock()->getTerminator()) {
+//         pop_scope();
+//         return llvmFunc;
+//     }
+//
+//     if (return_value->isVoidTy()) {
+//         builder->CreateRetVoid();
+//         pop_scope();
+//         return llvmFunc;
+//     }
+//
+//     builder->CreateRet(llvm::Constant::getNullValue(return_value));
+//     pop_scope();
+//     return llvmFunc;
+// }
 
 void Generator::optimize() const {
     llvm::LoopAnalysisManager LAM;

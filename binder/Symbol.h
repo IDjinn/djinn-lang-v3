@@ -9,6 +9,8 @@
 #include <vector>
 #include <memory>
 #include "../parser/ast/Type.h"
+#include "../parser/ast/Statement.h"
+#include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
 
 enum class SymbolKind : uint8_t {
@@ -72,10 +74,38 @@ struct FunctionSymbol : Symbol {
     Type returnType;
     std::vector<Type> paramTypes;
     std::vector<std::string> paramNames;
+    std::vector<bool> paramMutable;
     bool isVariadic = false;
+    std::unique_ptr<Block> body;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
         : Symbol(SymbolKind::Function, std::move(name), Type::voided(), loc),
+          returnType(std::move(retType)) {
+    }
+
+    void addParameter(const std::string &paramName, const Type &paramType, bool isMutable = false) {
+        paramNames.push_back(paramName);
+        paramTypes.push_back(paramType);
+        paramMutable.push_back(isMutable);
+    }
+
+    void setBody(std::unique_ptr<Block> b) {
+        body = std::move(b);
+    }
+
+    [[nodiscard]] bool hasBody() const { return body != nullptr; }
+    [[nodiscard]] size_t arity() const { return paramTypes.size(); }
+};
+
+struct ExternFunctionSymbol : Symbol {
+    Type returnType;
+    std::vector<Type> paramTypes;
+    std::vector<std::string> paramNames;
+    bool isVariadic = false;
+    std::string abi = "C";
+
+    ExternFunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
+        : Symbol(SymbolKind::ExternFunction, std::move(name), Type::voided(), loc),
           returnType(std::move(retType)) {
     }
 
@@ -100,6 +130,10 @@ struct MethodSymbol : Symbol {
     std::vector<std::string> paramNames;
     std::vector<std::string> genericParams;
     bool isAbstract = false;
+    bool isStatic = false;
+
+    std::unique_ptr<Block> body;
+    std::unique_ptr<Expression> expressionBody;
 
     MethodSymbol(std::string name, Type retType, const SourceLocation loc = {})
         : Symbol(SymbolKind::Method, std::move(name), Type::voided(), loc),
@@ -115,6 +149,11 @@ struct MethodSymbol : Symbol {
         genericParams.push_back(param);
     }
 
+    void setBody(std::unique_ptr<Block> b) { body = std::move(b); }
+    void setExpressionBody(std::unique_ptr<Expression> e) { expressionBody = std::move(e); }
+
+    [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
+    [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
 };
 
@@ -124,15 +163,34 @@ struct PropertySymbol {
     bool hasGetter = false;
     bool hasSetter = false;
 
+    std::unique_ptr<Block> getterBody;
+    std::unique_ptr<Expression> getterExpr;
+
+    std::unique_ptr<Block> setterBody;
+    std::unique_ptr<Expression> setterExpr;
+
     PropertySymbol(std::string n, Type t, bool getter, bool setter)
         : name(std::move(n)), type(std::move(t)), hasGetter(getter), hasSetter(setter) {
+    }
+
+    [[nodiscard]] bool isAutoProperty() const {
+        return (hasGetter && !getterBody && !getterExpr) ||
+               (hasSetter && !setterBody && !setterExpr);
+    }
+
+    [[nodiscard]] bool needsBackingField() const {
+        return isAutoProperty();
+    }
+
+    [[nodiscard]] std::string backingFieldName() const {
+        return "_" + name;
     }
 };
 
 struct StructSymbol : Symbol {
     std::vector<FieldSymbol> fields;
     std::vector<std::shared_ptr<MethodSymbol> > methods;
-    std::vector<PropertySymbol> properties;
+    std::vector<std::shared_ptr<PropertySymbol> > properties;
     std::vector<std::string> genericParams;
     std::vector<std::string> implements;
     std::unique_ptr<Type> baseType;
@@ -177,19 +235,19 @@ struct StructSymbol : Symbol {
     }
 
     void addProperty(const std::string &propName, const Type &propType, bool hasGetter, bool hasSetter) {
-        properties.emplace_back(propName, propType, hasGetter, hasSetter);
+        properties.push_back(std::make_shared<PropertySymbol>(propName, propType, hasGetter, hasSetter));
     }
 
     [[nodiscard]] bool hasProperty(const std::string &name) const {
         for (const auto &prop: properties) {
-            if (prop.name == name) return true;
+            if (prop->name == name) return true;
         }
         return false;
     }
 
     [[nodiscard]] const Type *getPropertyType(const std::string &name) const {
         for (const auto &prop: properties) {
-            if (prop.name == name) return &prop.type;
+            if (prop->name == name) return &prop->type;
         }
         return nullptr;
     }

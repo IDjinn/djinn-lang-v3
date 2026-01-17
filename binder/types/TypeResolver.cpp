@@ -24,11 +24,36 @@ bool Binder::isTypeDefined(const Type &type) {
         case TypeKind::AUTO:
             return true;
 
-        case TypeKind::STRUCT:
+        case TypeKind::STRUCT: {
             if (_global_scope->lookupInterface(type.structName) != nullptr) {
                 return true;
             }
-            return _global_scope->lookupStruct(type.structName) != nullptr;
+            // Check for struct
+            if (const auto structSym = _global_scope->lookupStruct(type.structName)) {
+                // Normalize: update structName to qualified name if it was an alias
+                if (structSym->name != type.structName) {
+                    const_cast<Type &>(type).structName = structSym->name;
+                }
+                // Also normalize generic args
+                for (auto &arg: const_cast<Type &>(type).genericArgs) {
+                    isTypeDefined(arg);
+                }
+                return true;
+            }
+            // Check for enum (enums also use TypeKind::STRUCT)
+            if (const auto enumSym = _global_scope->lookupEnum(type.structName)) {
+                // Normalize: update structName to qualified name if it was an alias
+                if (enumSym->name != type.structName) {
+                    const_cast<Type &>(type).structName = enumSym->name;
+                }
+                // Also normalize generic args
+                for (auto &arg: const_cast<Type &>(type).genericArgs) {
+                    isTypeDefined(arg);
+                }
+                return true;
+            }
+            return false;
+        }
 
         case TypeKind::ARRAY:
         case TypeKind::POINTER:

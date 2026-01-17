@@ -20,71 +20,71 @@
 // Each variant gets a unique tag value (0, 1, 2, ...)
 // ============================================================================
 
-void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std::string &prefix) {
-    const std::string qualifiedName = prefix.empty()
-                                          ? enum_declaration.name.token_name
-                                          : prefix + "::" + enum_declaration.name.token_name;
-
-    EnumDef def(qualifiedName, enum_declaration.isGeneric());
-    def.genericParams = enum_declaration.genericParams;
-
-    for (const auto &variant: enum_declaration.values) {
-        def.addVariant(variant.name.token_name, variant.types);
-    }
-
-    if (enum_declaration.isGeneric()) {
-        currentScope->define_enum(qualifiedName, std::move(def));
-        return;
-    }
-
-    const auto variantCount = enum_declaration.values.size();
-    llvm::Type *tagType;
-    if (variantCount <= 256) {
-        tagType = builder->getInt8Ty();
-    } else if (variantCount <= 65536) {
-        tagType = builder->getInt16Ty();
-    } else {
-        tagType = builder->getInt32Ty();
-    }
-    def.tagType = tagType;
-
-    size_t maxPayloadSize = 0;
-    for (const auto &variant: enum_declaration.values) {
-        size_t variantPayloadSize = 0;
-
-        for (const auto &type: variant.types) {
-            if (llvm::Type *llvmType = generate_type(type)) {
-                const auto &dataLayout = module->getDataLayout();
-                variantPayloadSize += dataLayout.getTypeAllocSize(llvmType);
-            }
-        }
-
-        maxPayloadSize = std::max(maxPayloadSize, variantPayloadSize);
-    }
-
-    def.maxPayloadSize = maxPayloadSize;
-    std::vector<llvm::Type *> enumFields;
-    enumFields.push_back(tagType);
-
-    if (maxPayloadSize > 0) {
-        enumFields.push_back(llvm::ArrayType::get(builder->getInt8Ty(), maxPayloadSize));
-    }
-
-    def.llvmType = llvm::StructType::create(*context, enumFields, qualifiedName);
-    declaredTypes.push_back(def.llvmType);
-    currentScope->define_enum(qualifiedName, std::move(def));
-}
-
-// ============================================================================
-// Enum construction - Create a value of an enum variant
-// ============================================================================
+// void Generator::generate_enum(const EnumDeclaration &enum_declaration, const std::string &prefix) {
+//     const std::string qualifiedName = prefix.empty()
+//                                           ? enum_declaration.name.token_name
+//                                           : prefix + "::" + enum_declaration.name.token_name;
 //
-// For Result::Ok(42):
-//   1. Allocate space for the enum struct
-//   2. Set the tag to the variant's tag value
-//   3. Store the payload value(s) in the payload area
-//   4. Return the enum value
-// ============================================================================
+//     EnumDef def(qualifiedName, enum_declaration.isGeneric());
+//     def.genericParams = enum_declaration.genericParams;
+//
+//     for (const auto &variant: enum_declaration.values) {
+//         def.addVariant(variant.name.token_name, variant.types);
+//     }
+//
+//     if (enum_declaration.isGeneric()) {
+//         currentScope->define_enum(qualifiedName, std::move(def));
+//         return;
+//     }
+//
+//     const auto variantCount = enum_declaration.values.size();
+//     llvm::Type *tagType;
+//     if (variantCount <= 256) {
+//         tagType = builder->getInt8Ty();
+//     } else if (variantCount <= 65536) {
+//         tagType = builder->getInt16Ty();
+//     } else {
+//         tagType = builder->getInt32Ty();
+//     }
+//     def.tagType = tagType;
+//
+//     size_t maxPayloadSize = 0;
+//     for (const auto &variant: enum_declaration.values) {
+//         size_t variantPayloadSize = 0;
+//
+//         for (const auto &type: variant.types) {
+//             if (llvm::Type *llvmType = generate_type(type)) {
+//                 const auto &dataLayout = module->getDataLayout();
+//                 variantPayloadSize += dataLayout.getTypeAllocSize(llvmType);
+//             }
+//         }
+//
+//         maxPayloadSize = std::max(maxPayloadSize, variantPayloadSize);
+//     }
+//
+//     def.maxPayloadSize = maxPayloadSize;
+//     std::vector<llvm::Type *> enumFields;
+//     enumFields.push_back(tagType);
+//
+//     if (maxPayloadSize > 0) {
+//         enumFields.push_back(llvm::ArrayType::get(builder->getInt8Ty(), maxPayloadSize));
+//     }
+//
+//     def.llvmType = llvm::StructType::create(*context, enumFields, qualifiedName);
+//     declaredTypes.push_back(def.llvmType);
+//     currentScope->define_enum(qualifiedName, std::move(def));
+// }
+//
+// // ============================================================================
+// // Enum construction - Create a value of an enum variant
+// // ============================================================================
+// //
+// // For Result::Ok(42):
+// //   1. Allocate space for the enum struct
+// //   2. Set the tag to the variant's tag value
+// //   3. Store the payload value(s) in the payload area
+// //   4. Return the enum value
+// // ============================================================================
 
 llvm::Value *Generator::generate_enum_construction(
     const EnumDef &enumDef,
