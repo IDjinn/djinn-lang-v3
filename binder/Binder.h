@@ -146,6 +146,7 @@ private:
     static bool is_generic_type(const Type &type, const StructDeclaration &struc);
 
     bool isTypeDefined(Type &type) const;
+
     bool isTypeDefined(const Type &type) const;
 
     std::optional<Type> inferExpressionType(const Expression &expr) const;

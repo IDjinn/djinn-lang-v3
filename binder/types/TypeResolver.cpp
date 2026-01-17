@@ -77,7 +77,7 @@ bool Binder::isTypeDefined(Type &type) const {
 }
 
 bool Binder::isTypeDefined(const Type &type) const {
-    return isTypeDefined(const_cast<Type&>(type));
+    return isTypeDefined(const_cast<Type &>(type));
 }
 
 bool Binder::isTypeDefined(Type *type) const {

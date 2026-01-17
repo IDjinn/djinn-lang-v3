@@ -253,7 +253,7 @@ public:
                 const auto struc = dynamic_cast<StructSymbol *>(symbol.get());
                 if (!struc) continue;
 
-                for (auto method_symbol : struc->methods) {
+                for (auto method_symbol: struc->methods) {
                     if (method_symbol->name == name) return method_symbol;
                 }
             }

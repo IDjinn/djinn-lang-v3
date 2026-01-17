@@ -35,15 +35,15 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
         }
     }
 
-    for (const auto& program: programs) {
+    for (const auto &program: programs) {
         collectDeclarations(*program);
     }
 
-    for (const auto& program: programs) {
+    for (const auto &program: programs) {
         processImports(*program);
     }
 
-    for (const auto& program: programs) {
+    for (const auto &program: programs) {
         bindProgram(*program);
     }
 
