@@ -109,14 +109,17 @@ void Binder::bindMethod(StructMethodDeclaration &method, const StructDeclaration
     }
 
     auto returnType = resolveType(*method.returnType);
-    if (!returnType && !is_generic_type(*method.returnType, struc)) {
-        if (method.returnType->kind == TypeKind::STRUCT) {
-            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + method.returnType->structName + "'",
-                         method, method.name.location);
+    if (!returnType) {
+        if (!is_generic_type(*method.returnType, struc)) {
+            if (method.returnType->kind == TypeKind::STRUCT) {
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + method.returnType->structName + "'",
+                             method, method.name.location);
+            }
         }
+        // Keep original method.returnType for generic types or error recovery
+    } else {
+        method.returnType = std::move(returnType);
     }
-
-    method.returnType = std::move(returnType);
     if (method.body) {
         bindBlock(*method.body);
     } else if (method.expression) {

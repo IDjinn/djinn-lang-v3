@@ -19,6 +19,7 @@
 Generator::Generator(const std::shared_ptr<ScopedSymbolTable> &symbols)
     : symbols(symbols),
       context(std::make_unique<llvm::LLVMContext>()),
+      module(std::make_unique<llvm::Module>("djinn_module", *context)),
       builder(std::make_unique<llvm::IRBuilder<> >(*context)),
       currentScope(std::make_shared<GeneratorScope>()) {
 }

@@ -13,7 +13,9 @@ std::unique_ptr<Type> Binder::resolveType(const Type &type) const {
 
     // type name maybe is aliased
     const auto symbol = _current_scope->lookup(type.structName);
-    assert(symbol);
+    if (!symbol) {
+        return nullptr;  // Type not found, let caller handle it
+    }
     return std::make_unique<Type>(symbol->type);
 }
 
