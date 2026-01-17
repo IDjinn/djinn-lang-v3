@@ -26,10 +26,6 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
     BindingResult result;
     result.globalScope = _global_scope;
 
-    for (auto program: programs) {
-        collectDeclarations(*program);
-    }
-
     for (const auto &[name, symbol]: _global_scope->symbols()) {
         if (const auto pos = name.rfind("::"); pos != std::string::npos) {
             const std::string shortName = name.substr(pos + 2);
@@ -39,11 +35,15 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
         }
     }
 
-    for (auto program: programs) {
+    for (const auto& program: programs) {
+        collectDeclarations(*program);
+    }
+
+    for (const auto& program: programs) {
         processImports(*program);
     }
 
-    for (auto program: programs) {
+    for (const auto& program: programs) {
         bindProgram(*program);
     }
 

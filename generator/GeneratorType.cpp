@@ -2,6 +2,8 @@
 // Created by Luke on 06/12/2025.
 //
 
+#include <llvm/Pass.h>
+
 #include "Generator.h"
 
 

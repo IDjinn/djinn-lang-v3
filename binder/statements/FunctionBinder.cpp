@@ -2,6 +2,8 @@
 // Function, method and namespace binding
 //
 
+#include <assert.h>
+
 #include "../Binder.h"
 
 void Binder::bindProgram(const Program &program) {
@@ -80,7 +82,7 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
     currentFunction_.clear();
 }
 
-void Binder::bindMethod(const StructMethodDeclaration &method, const StructDeclaration &struc) {
+void Binder::bindMethod(StructMethodDeclaration &method, const StructDeclaration &struc) {
     currentFunction_ = struc.name.token_name + "::" + method.name.token_name;
 
     pushScope();
@@ -106,18 +108,24 @@ void Binder::bindMethod(const StructMethodDeclaration &method, const StructDecla
         }
     }
 
-    if (!isTypeDefined(*method.returnType) && !is_generic_type(*method.returnType, struc)) {
+    auto returnType = resolveType(*method.returnType);
+    if (!returnType && !is_generic_type(*method.returnType, struc)) {
         if (method.returnType->kind == TypeKind::STRUCT) {
             BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + method.returnType->structName + "'",
                          method, method.name.location);
         }
     }
 
+    method.returnType = std::move(returnType);
     if (method.body) {
         bindBlock(*method.body);
     } else if (method.expression) {
         bindExpression(*method.expression);
     }
+
+    const auto methodSymbol = _current_scope->lookupMethod(method.name.token_name);
+    assert(methodSymbol && "Method symbol not found in scope table");
+    methodSymbol->returnType = *method.returnType.get();
 
     popScope();
     currentFunction_.clear();

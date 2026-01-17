@@ -232,7 +232,7 @@ public:
         return all_variables;
     }
 
-    std::vector<std::shared_ptr<Symbol> > get_all_namespaces() const {
+    [[nodiscard]] std::vector<std::shared_ptr<Symbol> > get_all_namespaces() const {
         std::vector<std::shared_ptr<Symbol> > all_namespaces;
         for (const auto &symbol: _symbols | std::views::values) {
             // if (symbol->isInitialized) all_namespaces.push_back(symbol);
@@ -242,8 +242,26 @@ public:
         return all_namespaces;
     }
 
-    std::unordered_map<std::string, std::shared_ptr<Symbol> > get_all_symbols() const {
+    [[nodiscard]] std::unordered_map<std::string, std::shared_ptr<Symbol> > get_all_symbols() const {
         return this->_symbols;
+    }
+
+    std::shared_ptr<MethodSymbol> lookupMethod(const std::string &name) {
+        for (const auto &symbol: _symbols | std::views::values) {
+            if (symbol->isMethod()) return std::shared_ptr<MethodSymbol>(dynamic_cast<MethodSymbol *>(symbol.get()));
+            if (symbol->isStruct()) {
+                const auto struc = dynamic_cast<StructSymbol *>(symbol.get());
+                if (!struc) continue;
+
+                for (auto method_symbol : struc->methods) {
+                    if (method_symbol->name == name) return method_symbol;
+                }
+            }
+        }
+
+        if (_parent) return _parent->lookupMethod(name);
+
+        return nullptr;
     }
 
 private:
@@ -263,7 +281,6 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<ScopedSymbolTable> parentScope() const { return parentScoped_; }
-
 private:
     std::shared_ptr<ScopedSymbolTable> parentScoped_;
 };

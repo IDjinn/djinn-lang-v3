@@ -2,17 +2,26 @@
 // Created by Claude on 05/01/2026.
 //
 
+#include <assert.h>
+
 #include "../Binder.h"
 
-bool Binder::resolveType(const Type &type) {
-    return isTypeDefined(type);
+std::unique_ptr<Type> Binder::resolveType(const Type &type) const {
+    if (isTypeDefined(type)) {
+        return std::make_unique<Type>(type);
+    }
+
+    // type name maybe is aliased
+    const auto symbol = _current_scope->lookup(type.structName);
+    assert(symbol);
+    return std::make_unique<Type>(symbol->type);
 }
 
 bool Binder::is_generic_type(const Type &type, const StructDeclaration &struc) {
     return !struc.genericParams.empty() && struc.genericParams.find(type.structName) != nullptr;
 }
 
-bool Binder::isTypeDefined(const Type &type) {
+bool Binder::isTypeDefined(Type &type) const {
     switch (type.kind) {
         case TypeKind::INTEGER:
         case TypeKind::STRING:
@@ -65,6 +74,15 @@ bool Binder::isTypeDefined(const Type &type) {
         default:
             return false;
     }
+}
+
+bool Binder::isTypeDefined(const Type &type) const {
+    return isTypeDefined(const_cast<Type&>(type));
+}
+
+bool Binder::isTypeDefined(Type *type) const {
+    assert(type != nullptr);
+    return isTypeDefined(*type);
 }
 
 std::optional<Type> Binder::inferExpressionType(const Expression &expr) const {

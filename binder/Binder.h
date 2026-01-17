@@ -89,6 +89,8 @@ private:
 
     void collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const;
 
+    bool isTypeDefined(Type *type) const;
+
     void collectStructWithPrefix(const StructDeclaration &decl, const std::string &prefix) const;
 
     void collectNamespace(const NamespaceDeclaration &ns, const std::string &prefix) const;
@@ -99,7 +101,7 @@ private:
 
     void bindFunction(const FunctionDeclaration &func);
 
-    void bindMethod(const StructMethodDeclaration &method, const StructDeclaration &struc);
+    void bindMethod(StructMethodDeclaration &method, const StructDeclaration &struc);
 
     void bindBlock(const Block &block);
 
@@ -139,11 +141,12 @@ private:
 
     void bindBraceInitializer(const BraceInitializer &init, const Type *expectedType = nullptr);
 
-    bool resolveType(const Type &type);
+    std::unique_ptr<Type> resolveType(const Type &type) const;
 
     static bool is_generic_type(const Type &type, const StructDeclaration &struc);
 
-    bool isTypeDefined(const Type &type);
+    bool isTypeDefined(Type &type) const;
+    bool isTypeDefined(const Type &type) const;
 
     std::optional<Type> inferExpressionType(const Expression &expr) const;
 
