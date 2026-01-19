@@ -119,27 +119,27 @@ private:
 
     void bindSwitchStatement(const SwitchStatement &stmt);
 
-    void bindExpression(const Expression &expr);
+    std::shared_ptr<Symbol> bindExpression(const Expression &expr);
 
-    void bindIdentifier(const Identifier &id) const;
+    std::shared_ptr<Symbol> bindIdentifier(const Identifier &id) const;
 
-    void bindFunctionCall(const FunctionCall &call);
+    std::shared_ptr<Symbol> bindFunctionCall(const FunctionCall &call);
 
-    void bindFieldAccess(const FieldAccess &access);
+    std::shared_ptr<Symbol> bindFieldAccess(const FieldAccess &access);
 
-    void bindFieldAssignment(const FieldAssignment &assign);
+    std::shared_ptr<Symbol> bindFieldAssignment(const FieldAssignment &assign);
 
-    void bindBinaryExpression(const BinaryExpression &expr);
+    std::shared_ptr<Symbol> bindBinaryExpression(const BinaryExpression &expr);
 
-    void bindUnaryExpression(const UnaryExpression &expr);
+    std::shared_ptr<Symbol> bindUnaryExpression(const UnaryExpression &expr);
 
-    void bindVariableDeclaration(const VariableDeclaration &decl);
+    std::shared_ptr<Symbol> bindVariableDeclaration(const VariableDeclaration &decl);
 
-    void bindVariableInit(const VariableInit &init);
+    std::shared_ptr<Symbol> bindVariableInit(const VariableInit &init);
 
-    void bindAssignment(const Assignment &assign);
+    std::shared_ptr<Symbol> bindAssignment(const Assignment &assign);
 
-    void bindBraceInitializer(const BraceInitializer &init, const Type *expectedType = nullptr);
+    std::shared_ptr<Symbol> bindBraceInitializer(const BraceInitializer &init, const Type *expectedType = nullptr);
 
     std::unique_ptr<Type> resolveType(const Type &type) const;
 

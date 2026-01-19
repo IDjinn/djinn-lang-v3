@@ -145,6 +145,14 @@ private:
 
     std::vector<llvm::BasicBlock *> breakTargets;
     std::vector<llvm::BasicBlock *> continueTargets;
+
+    // Generation verification
+    void verify_all_symbols_generated() const;
+
+    size_t generatedFunctions = 0;
+    size_t generatedExternFunctions = 0;
+    size_t generatedStructs = 0;
+    size_t generatedMethods = 0;
 };
 
 #endif //DJINN_GENERATOR_H

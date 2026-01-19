@@ -129,7 +129,7 @@ std::unique_ptr<Type> Parser::parse_type() {
 
     if (identifier.value.starts_with('f') && string_to_type_kind.contains(identifier.value)) {
         const size_t bits = std::stol(identifier.value.substr(1));
-        baseType = std::make_unique<Type>(Type::floated(bits));
+        baseType = std::make_unique<Type>(Type::floating(bits));
     } else if (identifier.value.starts_with('i') && identifier.value.length() > 1 &&
                std::ranges::all_of(identifier.value.substr(1), [](const unsigned char c) { return std::isdigit(c); })) {
         const auto bits = std::stol(identifier.value.substr(1));
@@ -141,7 +141,7 @@ std::unique_ptr<Type> Parser::parse_type() {
     } else if (identifier.value == "void" || identifier.type == TokenType::VOID) {
         baseType = std::make_unique<Type>(Type::voided());
     } else if (identifier.value == "string" || identifier.type == TokenType::STRING) {
-        baseType = std::make_unique<Type>(Type::stringed());
+        baseType = std::make_unique<Type>(Type::string());
     } else if (identifier.value == "auto" || identifier.type == TokenType::AUTO) {
         baseType = std::make_unique<Type>(Type::autod());
     } else {

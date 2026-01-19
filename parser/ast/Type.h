@@ -107,7 +107,7 @@ struct Type : Location {
         return Type(TypeKind::AUTO, 0, false);
     }
 
-    static Type floated(const size_t size) {
+    static Type floating(const size_t size) {
         switch (size) {
             case static_cast<size_t>(16): return Type{TypeKind::F16, 16, true};
             case static_cast<size_t>(32): return Type{TypeKind::F32, 32, true};
@@ -121,7 +121,7 @@ struct Type : Location {
         return Type(TypeKind::VOID, 0, false);
     }
 
-    static Type stringed() {
+    static Type string() {
         return Type(TypeKind::STRING, 0, false);
     }
 

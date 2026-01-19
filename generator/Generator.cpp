@@ -4,6 +4,7 @@
 
 #include "Generator.h"
 
+#include <cassert>
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -38,6 +39,7 @@ void Generator::generate() {
     // PASS 1: Forward declare all structs (create opaque types)
     for (const auto &sym: symbols->get_all_structs()) {
         forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(sym));
+        generatedStructs++;
     }
 
     // PASS 2: Forward declare all enums
@@ -47,7 +49,8 @@ void Generator::generate() {
 
     // PASS 3: Generate extern functions
     for (const auto &sym: symbols->get_all_extern_functions()) {
-        // TODO: generate_extern_function(*std::dynamic_pointer_cast<ExternFunctionSymbol>(sym));
+        generate_extern_function(*std::dynamic_pointer_cast<ExternFunctionSymbol>(sym));
+        generatedExternFunctions++;
     }
 
     // PASS 4: Resolve struct bodies (fill in field types)
@@ -62,11 +65,46 @@ void Generator::generate() {
 
     // PASS 6: Generate global functions
     for (const auto &sym: symbols->get_all_functions()) {
-        // TODO: generate_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
+        generate_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
+        generatedFunctions++;
     }
 
-    // PASS 7: Force emission of used declarations
+    // PASS 7: Verify all symbols were generated
+    verify_all_symbols_generated();
+
+    // PASS 8: Force emission of used declarations
     // emit_used_declarations();
+}
+
+void Generator::verify_all_symbols_generated() const {
+    const size_t expectedFunctions = symbols->get_all_functions().size();
+    const size_t expectedExternFunctions = symbols->get_all_extern_functions().size();
+    const size_t expectedStructs = symbols->get_all_structs().size();
+
+    assert(generatedFunctions == expectedFunctions &&
+        "Not all functions were generated!");
+    assert(generatedExternFunctions == expectedExternFunctions &&
+        "Not all extern functions were generated!");
+    assert(generatedStructs == expectedStructs &&
+        "Not all structs were generated!");
+
+    // Verify all generated functions exist in the LLVM module
+    for (const auto &sym: symbols->get_all_functions()) {
+        const auto funcSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
+        assert(functions.count(funcSym->name) > 0 &&
+            ("Function not found in LLVM module: " + funcSym->name).c_str());
+    }
+
+    for (const auto &sym: symbols->get_all_extern_functions()) {
+        const auto externSym = std::dynamic_pointer_cast<ExternFunctionSymbol>(sym);
+        assert(functions.count(externSym->name) > 0 &&
+            ("Extern function not found in LLVM module: " + externSym->name).c_str());
+    }
+
+    std::cout << "[Generator] Verification passed: "
+            << generatedFunctions << " functions, "
+            << generatedExternFunctions << " extern functions, "
+            << generatedStructs << " structs generated." << std::endl;
 }
 
 

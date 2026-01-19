@@ -14,7 +14,7 @@ std::unique_ptr<Type> Binder::resolveType(const Type &type) const {
     // type name maybe is aliased
     const auto symbol = _current_scope->lookup(type.structName);
     if (!symbol) {
-        return nullptr;  // Type not found, let caller handle it
+        return nullptr; // Type not found, let caller handle it
     }
     return std::make_unique<Type>(symbol->type);
 }
@@ -94,7 +94,7 @@ std::optional<Type> Binder::inferExpressionType(const Expression &expr) const {
     }
 
     if (dynamic_cast<const FloatLiteral *>(&expr)) {
-        return Type::floated(64); // Default to f64
+        return Type::floating(64); // Default to f64
     }
 
     if (dynamic_cast<const StringLiteral *>(&expr)) {

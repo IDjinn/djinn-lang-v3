@@ -5,48 +5,49 @@
 #include "../Binder.h"
 #include "../../generator/Intrinsics.h"
 
-void Binder::bindIdentifier(const Identifier &id) const {
-    if (const auto sym = _current_scope->lookupVariable(id.identifier.token_name); sym) {
+std::shared_ptr<Symbol> Binder::bindIdentifier(const Identifier &id) const {
+    if (const auto variableSymbol = _current_scope->lookupVariable(id.identifier.token_name); variableSymbol) {
         _current_scope->markUsed(id.identifier.token_name);
-        return;
+        return variableSymbol;
     }
 
-    if (_current_scope->lookupFunction(id.identifier.token_name)) {
-        return;
+    if (const auto functionSymbol = _current_scope->lookupFunction(id.identifier.token_name); functionSymbol) {
+        return functionSymbol;
     }
 
-    if (_global_scope->lookupStruct(id.identifier.token_name)) {
-        return;
+    if (const auto structSymbol = _global_scope->lookupStruct(id.identifier.token_name); structSymbol) {
+        return structSymbol;
     }
 
     BINDER_ERROR(DiagnosticCode::UNDEFINED_VARIABLE, "undefined variable '" + id.identifier.token_name + "'", id,
                  id.identifier.location);
+    return nullptr;
 }
 
-void Binder::bindFunctionCall(const FunctionCall &call) {
+std::shared_ptr<Symbol> Binder::bindFunctionCall(const FunctionCall &call) {
     if (call.isMethodCall()) {
-        if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
-            if (!_global_scope->lookupStruct(ident->identifier.token_name)) {
-                // Not a struct name.token_name, bind as regular expression (instance method)
-                bindExpression(*call.receiver);
-            }
-        } else {
-            bindExpression(*call.receiver);
-        }
+        const auto receiver = bindExpression(*call.receiver);
+        if (!receiver) return nullptr;
 
+        std::vector<std::shared_ptr<Symbol> > parameters;
         for (const auto &arg: call.arguments) {
-            bindExpression(*arg);
+            parameters.emplace_back(bindExpression(*arg));
         }
 
         // TODO: Validate method exists on the struct type
-        return;
+        return std::make_shared<FunctionCallSymbol>(
+            call.name.token_name, receiver, nullptr,
+            std::move(parameters), call.name.location
+        );
     }
 
     if (is_intrinsic(call.name.token_name)) {
+        std::vector<std::shared_ptr<Symbol> > parameters;
         for (const auto &arg: call.arguments) {
-            bindExpression(*arg);
+            parameters.emplace_back(bindExpression(*arg));
         }
-        return;
+
+        return _current_scope->defineIntrisicCall(call.name.token_name, parameters);
     }
 
     // Enum::Variant(args)
@@ -54,7 +55,7 @@ void Binder::bindFunctionCall(const FunctionCall &call) {
         const std::string enumName = call.name.token_name.substr(0, colonPos);
         const std::string variantName = call.name.token_name.substr(colonPos + 2);
 
-        if (const auto enumSym = _global_scope->lookupEnum(enumName)) {
+        if (const auto enumSym = _current_scope->lookupEnum(enumName)) {
             if (enumSym->hasVariant(variantName)) {
                 if (const auto *variant = enumSym->getVariant(variantName);
                     variant && call.arguments.size() != variant->associatedTypes.size()) {
@@ -64,34 +65,45 @@ void Binder::bindFunctionCall(const FunctionCall &call) {
                                  " arguments but got " + std::to_string(call.arguments.size()), call,
                                  call.name.location);
                 }
+
+                std::vector<std::shared_ptr<Symbol> > parameters;
                 for (const auto &arg: call.arguments) {
-                    bindExpression(*arg);
+                    parameters.emplace_back(bindExpression(*arg));
                 }
-                return;
+                return std::make_shared<EnumConstructionSymbol>(
+                    enumName, variantName, enumSym->getVariantTag(variantName),
+                    std::move(parameters), call.name.location
+                );
             }
 
             BINDER_ERROR(DiagnosticCode::UNDEFINED_FUNCTION, "undefined function '" + call.name.token_name + "'", call,
                          call.name.location);
-            return;
+            return nullptr;
         }
     }
 
-    if (const auto funcSym = _global_scope->lookupFunction(call.name.token_name); funcSym) {
-        if (!funcSym->isVariadic && call.arguments.size() != funcSym->arity()) {
-            BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
-                         "function '" + call.name.token_name + "' expects " + std::to_string(funcSym->arity()) +
-                         " arguments but got " + std::to_string(call.arguments.size()), call, call.name.location);
-        } else if (funcSym->isVariadic && call.arguments.size() < funcSym->arity()) {
-            BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
-                         "function '" + call.name.token_name + "' expects " + std::to_string(funcSym->arity()) +
-                         " arguments but got " + std::to_string(call.arguments.size()), call, call.name.location);
-        }
-    } else {
+    const auto funcSym = _current_scope->lookupFunction(call.name.token_name);
+    if (!funcSym) {
         BINDER_ERROR(DiagnosticCode::UNDEFINED_FUNCTION, "undefined function '" + call.name.token_name + "'", call,
                      call.name.location);
+        return nullptr;
     }
 
-    for (const auto &arg: call.arguments) {
-        bindExpression(*arg);
+    if (!funcSym->isVariadic && call.arguments.size() != funcSym->arity()) {
+        BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                     "function '" + call.name.token_name + "' expects " + std::to_string(funcSym->arity()) +
+                     " arguments but got " + std::to_string(call.arguments.size()), call, call.name.location);
+    } else if (funcSym->isVariadic && call.arguments.size() < funcSym->arity()) {
+        BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                     "function '" + call.name.token_name + "' expects " + std::to_string(funcSym->arity()) +
+                     " arguments but got " + std::to_string(call.arguments.size()), call, call.name.location);
     }
+
+    std::vector<std::shared_ptr<Symbol> > parameters;
+    for (const auto &arg: call.arguments) {
+        parameters.emplace_back(bindExpression(*arg));
+    }
+    return std::make_shared<FunctionCallSymbol>(
+        call.name.token_name, funcSym, std::move(parameters), call.name.location
+    );
 }

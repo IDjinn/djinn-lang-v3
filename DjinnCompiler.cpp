@@ -72,6 +72,17 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
 
         auto generator = Generator(bindResult.globalScope);
         generator.generate();
+        std::cout << "RESULT\n\n" << generator.print() << std::endl;
+
+        std::ofstream outFile("./build/output.ll");
+        outFile << generator.print();
+        outFile.close();
+
+        std::ofstream outFileOptimized("./build/output.opt.ll");
+        generator.optimize();
+        outFileOptimized << generator.print();
+        outFileOptimized.close();
+
         return {.returnCode = 0, .diagnostics = diagnostics.get_diagnostics()};
     } catch (const CompileError &e) {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));

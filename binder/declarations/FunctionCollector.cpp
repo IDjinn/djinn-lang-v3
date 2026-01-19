@@ -5,15 +5,15 @@
 #include "../Binder.h"
 
 void Binder::collectExternFunction(const ExternFunctionDeclaration &decl) const {
-    const auto funcSym = std::make_shared<FunctionSymbol>(decl.name.token_name, *decl.returnType);
-    funcSym->kind = SymbolKind::ExternFunction;
+    const auto funcSym = std::make_shared<ExternFunctionSymbol>(decl.name.token_name, *decl.returnType);
     funcSym->isVariadic = decl.isVariadic;
+    funcSym->abi = decl.abi;
 
     for (const auto &param: decl.parameters) {
         funcSym->addParameter(param.name.token_name, *param.type);
     }
 
-    if (!_global_scope->defineFunction(funcSym)) {
+    if (!_global_scope->defineExternFunction(funcSym)) {
         BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
                      "extern function '" + decl.name.token_name + "' is already defined", decl, decl.name.location);
     }

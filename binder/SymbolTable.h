@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 #include <ranges>
+#include <set>
 
 #include "Symbol.h"
 
@@ -43,8 +44,13 @@ public:
         return true;
     }
 
-    bool defineVariable(const std::string &name, const Type &type, const bool isMutable, SourceLocation loc = {}) {
-        return define(std::make_shared<Symbol>(SymbolKind::Variable, name, type, loc, isMutable));
+    std::shared_ptr<Symbol> defineVariable(const std::string &name, const Type &type, const bool isMutable,
+                                           SourceLocation loc = {}) {
+        if (_symbols.contains(name))
+            return nullptr;
+
+        _symbols[name] = std::make_shared<Symbol>(SymbolKind::Variable, name, type, loc, isMutable);
+        return _symbols[name];
     }
 
     bool defineParameter(const std::string &name, const Type &type, const bool isMutable, SourceLocation loc = {}) {
@@ -206,12 +212,11 @@ public:
     }
 
     std::vector<std::shared_ptr<Symbol> > get_all_structs() const {
-        std::vector<std::shared_ptr<Symbol> > all_structs;
+        std::set<std::shared_ptr<Symbol>> unique_structs;
         for (const auto &symbol: _symbols | std::views::values) {
-            if (symbol->isStruct()) all_structs.push_back(symbol);
+            if (symbol->isStruct()) unique_structs.insert(symbol);
         }
-
-        return all_structs;
+        return {unique_structs.begin(), unique_structs.end()};
     }
 
     std::vector<std::shared_ptr<Symbol> > get_all_enums() const {
@@ -264,6 +269,16 @@ public:
         return nullptr;
     }
 
+    std::shared_ptr<Symbol> defineFunctionCall(const std::shared_ptr<Symbol> &shared,
+                                               const std::vector<std::shared_ptr<Symbol> > &vector) {
+        return nullptr;
+    }
+
+    std::shared_ptr<Symbol> defineIntrisicCall(const std::string &string, const std::vector<std::shared_ptr<Symbol>> & vector) {
+    return nullptr;
+
+    }
+
 private:
     std::shared_ptr<SymbolTable> _parent;
     std::unordered_map<std::string, std::shared_ptr<Symbol> > _symbols;
@@ -281,6 +296,8 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<ScopedSymbolTable> parentScope() const { return parentScoped_; }
+
+
 private:
     std::shared_ptr<ScopedSymbolTable> parentScoped_;
 };

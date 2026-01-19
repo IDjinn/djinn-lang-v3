@@ -43,17 +43,17 @@ TEST(ManglerType, Void) {
 }
 
 TEST(ManglerType, Float32) {
-    const Type t = Type::floated(32);
+    const Type t = Type::floating(32);
     EXPECT_EQ(Mangler::mangle_type(t), "f");
 }
 
 TEST(ManglerType, Float64) {
-    const Type t = Type::floated(64);
+    const Type t = Type::floating(64);
     EXPECT_EQ(Mangler::mangle_type(t), "d");
 }
 
 TEST(ManglerType, String) {
-    const Type t = Type::stringed();
+    const Type t = Type::string();
     EXPECT_EQ(Mangler::mangle_type(t), "Pc");
 }
 
@@ -103,7 +103,7 @@ TEST(ManglerFunction, WithMultipleParams) {
     const std::vector<Type> params = {
         Type::integer(32, true),
         Type::integer(64, true),
-        Type::floated(64)
+        Type::floating(64)
     };
     EXPECT_EQ(Mangler::mangle_function("bar", params), "_Z3barild");
 }
@@ -130,7 +130,7 @@ TEST(ManglerMethod, MethodWithParams) {
 TEST(ManglerMethod, MethodWithMultipleParams) {
     const std::vector<Type> params = {
         Type::integer(32, true),
-        Type::stringed()
+        Type::string()
     };
     EXPECT_EQ(Mangler::mangle_method("Map", "insert", params), "_ZN3Map6insertEiPc");
 }
@@ -147,7 +147,7 @@ TEST(ManglerGeneric, StructSingleTypeArg) {
 TEST(ManglerGeneric, StructMultipleTypeArgs) {
     const std::vector<Type> typeArgs = {
         Type::integer(32, true),
-        Type::stringed()
+        Type::string()
     };
     EXPECT_EQ(Mangler::mangle_generic_struct("Map", typeArgs), "_ZN3MapIiPcE");
 }

@@ -24,7 +24,15 @@ enum class SymbolKind : uint8_t {
     StructField,
     Field,
     GenericParam,
-    Enum
+    Enum,
+    EnumConstruction,
+    InstrisicCall,
+    FunctionCall,
+    IntegerLiteral,
+    FloatLiteral,
+    StringLiteral,
+    BinaryExpression,
+    UnaryExpression
 };
 
 struct Symbol {
@@ -377,6 +385,105 @@ struct EnumSymbol : Symbol {
             if (v.name == variantName) return v.tag;
         }
         return UINT_MAX;
+    }
+};
+
+struct IntrinsicCallSymbol : Symbol {
+    std::shared_ptr<Symbol> returnType;
+    std::shared_ptr<Symbol> intrinsic;
+    std::vector<std::shared_ptr<Symbol> > arguments;
+
+    explicit IntrinsicCallSymbol(std::string name, const std::shared_ptr<Symbol> &returnType,
+                                 const SourceLocation loc = {})
+        : Symbol(SymbolKind::InstrisicCall, std::move(name), Type::voided(), loc), returnType(returnType) {
+    }
+};
+
+struct EnumConstructionSymbol : Symbol {
+    std::string enumName;
+    std::string variantName;
+    unsigned variantTag;
+    std::vector<std::shared_ptr<Symbol> > arguments;
+
+    EnumConstructionSymbol(std::string enumName, std::string variantName, unsigned tag,
+                           std::vector<std::shared_ptr<Symbol> > args, const SourceLocation loc = {})
+        : Symbol(SymbolKind::EnumConstruction, enumName + "::" + variantName, Type::voided(), loc),
+          enumName(std::move(enumName)), variantName(std::move(variantName)),
+          variantTag(tag), arguments(std::move(args)) {
+    }
+};
+
+struct FunctionCallSymbol : Symbol {
+    std::shared_ptr<Symbol> function;
+    std::shared_ptr<Symbol> receiver; // for method calls
+    std::vector<std::shared_ptr<Symbol> > arguments;
+    bool isMethodCall = false;
+
+    FunctionCallSymbol(std::string name, std::shared_ptr<Symbol> func,
+                       std::vector<std::shared_ptr<Symbol> > args, const SourceLocation loc = {})
+        : Symbol(SymbolKind::FunctionCall, std::move(name), Type::voided(), loc),
+          function(std::move(func)), arguments(std::move(args)) {
+    }
+
+    FunctionCallSymbol(std::string name, std::shared_ptr<Symbol> recv, std::shared_ptr<Symbol> func,
+                       std::vector<std::shared_ptr<Symbol> > args, const SourceLocation loc = {})
+        : Symbol(SymbolKind::FunctionCall, std::move(name), Type::voided(), loc),
+          function(std::move(func)), receiver(std::move(recv)), arguments(std::move(args)), isMethodCall(true) {
+    }
+};
+
+struct IntegerLiteralSymbol : Symbol {
+    std::string value;
+    bool isSigned;
+
+    IntegerLiteralSymbol(std::string val, bool sign = true, const SourceLocation loc = {})
+        : Symbol(SymbolKind::IntegerLiteral, val, Type::integer(64, sign), loc),
+          value(std::move(val)), isSigned(sign) {
+    }
+
+    [[nodiscard]] int64_t asInt64() const { return std::stoll(value); }
+};
+
+struct FloatLiteralSymbol : Symbol {
+    std::string value;
+
+    explicit FloatLiteralSymbol(std::string val, size_t size, const SourceLocation loc = {})
+        : Symbol(SymbolKind::FloatLiteral, val, Type::floating(size), loc),
+          value(std::move(val)) {
+    }
+
+    [[nodiscard]] double asDouble() const { return std::stod(value); }
+};
+
+struct StringLiteralSymbol : Symbol {
+    std::string value;
+
+    explicit StringLiteralSymbol(std::string val, const SourceLocation loc = {})
+        : Symbol(SymbolKind::StringLiteral, val, Type::string(), loc),
+          value(std::move(val)) {
+    }
+};
+
+struct BinaryExpressionSymbol : Symbol {
+    std::string op;
+    std::shared_ptr<Symbol> left;
+    std::shared_ptr<Symbol> right;
+
+    BinaryExpressionSymbol(std::string operation, std::shared_ptr<Symbol> lhs,
+                           std::shared_ptr<Symbol> rhs, Type resultType, const SourceLocation loc = {})
+        : Symbol(SymbolKind::BinaryExpression, operation, std::move(resultType), loc),
+          op(std::move(operation)), left(std::move(lhs)), right(std::move(rhs)) {
+    }
+};
+
+struct UnaryExpressionSymbol : Symbol {
+    std::string op;
+    std::shared_ptr<Symbol> operand;
+
+    UnaryExpressionSymbol(std::string operation, std::shared_ptr<Symbol> expr,
+                          Type resultType, const SourceLocation loc = {})
+        : Symbol(SymbolKind::UnaryExpression, operation, std::move(resultType), loc),
+          op(std::move(operation)), operand(std::move(expr)) {
     }
 };
 

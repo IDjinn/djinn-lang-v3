@@ -4,26 +4,28 @@
 
 #include "../Binder.h"
 
-void Binder::bindFieldAccess(const FieldAccess &access) {
-    bindExpression(*access.object);
+std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess &access) {
+    return bindExpression(*access.object);
 
     // TODO: Type checking would validate the field exists on the struct type
     // For now, we just bind the expression - field validation happens in type checking
 }
 
-void Binder::bindFieldAssignment(const FieldAssignment &assign) {
+std::shared_ptr<Symbol> Binder::bindFieldAssignment(const FieldAssignment &assign) {
     bindExpression(*assign.object);
 
     if (assign.value) {
         bindExpression(*assign.value);
     }
 
+    return nullptr;
     // TODO: Type checking would validate the field exists and is mutable
 }
 
-void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expectedType) {
+std::shared_ptr<Symbol> Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expectedType) {
     if (expectedType && expectedType->kind == TypeKind::STRUCT) {
-        if (const auto structSym = _global_scope->lookupStruct(expectedType->structName)) {
+        const auto structSym = _global_scope->lookupStruct(expectedType->structName);
+        if (structSym) {
             size_t fieldIndex = 0;
             for (const auto &elem: init.elements) {
                 const Type *fieldType = nullptr;
@@ -50,7 +52,7 @@ void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expe
                     if (fieldType) checkTypeCompatibility(*fieldType, *elem.value, {});
                 }
             }
-            return;
+            return nullptr;
         }
     }
 
@@ -59,4 +61,6 @@ void Binder::bindBraceInitializer(const BraceInitializer &init, const Type *expe
             bindExpression(*elem.value);
         }
     }
+
+    return nullptr;
 }

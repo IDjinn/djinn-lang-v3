@@ -105,8 +105,8 @@ TEST(GenericArgs, AddSingleArg) {
 TEST(GenericArgs, AddMultipleArgs) {
     GenericArgs args;
     args.add(Type::integer(32, true));
-    args.add(Type::stringed());
-    args.add(Type::floated(64));
+    args.add(Type::string());
+    args.add(Type::floating(64));
 
     EXPECT_EQ(args.size(), 3);
     EXPECT_EQ(args.args[0].kind, TypeKind::INTEGER);
@@ -147,7 +147,7 @@ TEST(GenericContext, SubstituteNonGenericType) {
     GenericContext ctx;
     ctx.bind("T", Type::integer(32, true));
 
-    const Type concreteType = Type::floated(64);
+    const Type concreteType = Type::floating(64);
     const Type substituted = ctx.substitute(concreteType);
     EXPECT_EQ(substituted.kind, TypeKind::F64);
 }
@@ -167,7 +167,7 @@ TEST(GenericContext, SubstitutePointerType) {
 
 TEST(GenericContext, SubstituteArrayType) {
     GenericContext ctx;
-    ctx.bind("T", Type::stringed());
+    ctx.bind("T", Type::string());
 
     // Array<T> -> Array<string>
     const Type arrayOfT = Type::array(Type::struct_type("T"));
@@ -197,7 +197,7 @@ TEST(GenericContext, CreateFromParamsAndArgs) {
 
     GenericArgs args;
     args.add(Type::integer(32, true));
-    args.add(Type::stringed());
+    args.add(Type::string());
 
     const GenericContext ctx = GenericContext::create(params, args);
 
@@ -271,7 +271,7 @@ TEST(GenericIntegration, MonomorphizeMapOfStringToInt) {
     params.add(GenericParam("V"));
 
     GenericArgs args;
-    args.add(Type::stringed());
+    args.add(Type::string());
     args.add(Type::integer(32, true));
 
     const GenericContext ctx = GenericContext::create(params, args);

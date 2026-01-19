@@ -112,7 +112,8 @@ void Binder::bindMethod(StructMethodDeclaration &method, const StructDeclaration
     if (!returnType) {
         if (!is_generic_type(*method.returnType, struc)) {
             if (method.returnType->kind == TypeKind::STRUCT) {
-                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + method.returnType->structName + "'",
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT,
+                             "undefined struct '" + method.returnType->structName + "'",
                              method, method.name.location);
             }
         }
