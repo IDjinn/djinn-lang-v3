@@ -130,8 +130,9 @@ struct MethodSymbol : Symbol {
     bool isAbstract = false;
     bool isStatic = false;
 
-    std::unique_ptr<Block> body;
-    std::unique_ptr<Expression> expressionBody;
+    // Raw pointers to AST nodes (AST owns the memory)
+    Block *body = nullptr;
+    Expression *expressionBody = nullptr;
 
     MethodSymbol(std::string name, Type retType, const SourceLocation loc = {})
         : Symbol(SymbolKind::Method, std::move(name), Type::voided(), loc),
@@ -146,9 +147,6 @@ struct MethodSymbol : Symbol {
     void addGenericParam(const std::string &param) {
         genericParams.push_back(param);
     }
-
-    void setBody(std::unique_ptr<Block> b) { body = std::move(b); }
-    void setExpressionBody(std::unique_ptr<Expression> e) { expressionBody = std::move(e); }
 
     [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
     [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }

@@ -414,7 +414,8 @@ llvm::Type *Generator::generate_type(const Type &type) {
 
             llvm::StructType *structType = currentScope->get_llvm_struct(type.structName);
             if (!structType) {
-                GENERATOR_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "struct not found: " + type.structName, type.location);
+                GENERATOR_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "struct not found: " + type.structName,
+                                type.location);
             }
             return structType;
         }

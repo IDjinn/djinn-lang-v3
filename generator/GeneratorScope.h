@@ -188,6 +188,13 @@ struct GeneratorScope {
                 return &it->second;
             }
         }
+        // Fallback: try to find a struct whose qualified name ends with ::name
+        const std::string suffix = "::" + name;
+        for (auto &[symName, def]: structs) {
+            if (symName.ends_with(suffix)) {
+                return &def;
+            }
+        }
         if (parent) {
             return parent->lookup_struct(name);
         }
@@ -201,6 +208,13 @@ struct GeneratorScope {
         if (const std::string resolved = resolve_alias(name); resolved != name) {
             if (const auto it = structs.find(resolved); it != structs.end()) {
                 return &it->second;
+            }
+        }
+        // Fallback: try to find a struct whose qualified name ends with ::name
+        const std::string suffix = "::" + name;
+        for (const auto &[symName, def]: structs) {
+            if (symName.ends_with(suffix)) {
+                return &def;
             }
         }
         if (parent) {
@@ -235,6 +249,13 @@ struct GeneratorScope {
                 return &it->second;
             }
         }
+        // Fallback: try to find an enum whose qualified name ends with ::name
+        const std::string suffix = "::" + name;
+        for (auto &[symName, def]: enums) {
+            if (symName.ends_with(suffix)) {
+                return &def;
+            }
+        }
         if (parent) {
             return parent->lookup_enum(name);
         }
@@ -248,6 +269,13 @@ struct GeneratorScope {
         if (const std::string resolved = resolve_alias(name); resolved != name) {
             if (const auto it = enums.find(resolved); it != enums.end()) {
                 return &it->second;
+            }
+        }
+        // Fallback: try to find an enum whose qualified name ends with ::name
+        const std::string suffix = "::" + name;
+        for (const auto &[symName, def]: enums) {
+            if (symName.ends_with(suffix)) {
+                return &def;
             }
         }
         if (parent) {

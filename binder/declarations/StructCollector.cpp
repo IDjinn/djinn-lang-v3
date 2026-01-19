@@ -68,6 +68,11 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
     for (const auto &method: decl.methods) {
         const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, *method->returnType);
         methodSym->isAbstract = method->isAbstract();
+        methodSym->isStatic = method->isStatic();
+
+        // Store pointers to AST body (AST owns the memory)
+        methodSym->body = method->body.get();
+        methodSym->expressionBody = method->expression.get();
 
         for (const auto &param: method->parameters) {
             methodSym->addParameter(param.name.token_name, *param.type);
