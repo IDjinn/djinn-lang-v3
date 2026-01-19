@@ -17,8 +17,9 @@
 
 #include "../binder/SymbolTable.h"
 
-Generator::Generator(const std::shared_ptr<ScopedSymbolTable> &symbols)
-    : symbols(symbols),
+Generator::Generator(DiagnosticEngine &diagnostics, const std::shared_ptr<ScopedSymbolTable> &symbols)
+    : _diagnostics(diagnostics),
+      symbols(symbols),
       context(std::make_unique<llvm::LLVMContext>()),
       module(std::make_unique<llvm::Module>("djinn_module", *context)),
       builder(std::make_unique<llvm::IRBuilder<> >(*context)),

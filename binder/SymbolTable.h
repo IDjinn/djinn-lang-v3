@@ -109,6 +109,9 @@ public:
 
     [[nodiscard]] std::shared_ptr<FunctionSymbol> lookupFunction(const std::string &name) const {
         if (const auto symbol = lookup(name); symbol && symbol->isFunction()) {
+            if (symbol->kind == SymbolKind::ExternFunction)
+                return std::dynamic_pointer_cast<ExternFunctionSymbol>(symbol);
+
             return std::dynamic_pointer_cast<FunctionSymbol>(symbol);
         }
         return nullptr;
@@ -212,7 +215,7 @@ public:
     }
 
     std::vector<std::shared_ptr<Symbol> > get_all_structs() const {
-        std::set<std::shared_ptr<Symbol>> unique_structs;
+        std::set<std::shared_ptr<Symbol> > unique_structs;
         for (const auto &symbol: _symbols | std::views::values) {
             if (symbol->isStruct()) unique_structs.insert(symbol);
         }
@@ -274,9 +277,9 @@ public:
         return nullptr;
     }
 
-    std::shared_ptr<Symbol> defineIntrisicCall(const std::string &string, const std::vector<std::shared_ptr<Symbol>> & vector) {
-    return nullptr;
-
+    std::shared_ptr<Symbol> defineIntrisicCall(const std::string &string,
+                                               const std::vector<std::shared_ptr<Symbol> > &vector) {
+        return nullptr;
     }
 
 private:
@@ -296,7 +299,6 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<ScopedSymbolTable> parentScope() const { return parentScoped_; }
-
 
 private:
     std::shared_ptr<ScopedSymbolTable> parentScoped_;

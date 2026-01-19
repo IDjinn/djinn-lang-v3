@@ -6,6 +6,7 @@
 #define DJINN_SYMBOL_H
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <memory>
 #include "../parser/ast/Type.h"
@@ -105,24 +106,13 @@ struct FunctionSymbol : Symbol {
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
 };
 
-struct ExternFunctionSymbol : Symbol {
-    Type returnType;
-    std::vector<Type> paramTypes;
-    std::vector<std::string> paramNames;
-    bool isVariadic = false;
+struct ExternFunctionSymbol : FunctionSymbol {
     std::string abi = "C";
 
     ExternFunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
-        : Symbol(SymbolKind::ExternFunction, std::move(name), Type::voided(), loc),
-          returnType(std::move(retType)) {
+        : FunctionSymbol(std::move(name), retType, loc) {
+        kind = SymbolKind::ExternFunction;
     }
-
-    void addParameter(const std::string &paramName, const Type &paramType) {
-        paramNames.push_back(paramName);
-        paramTypes.push_back(paramType);
-    }
-
-    [[nodiscard]] size_t arity() const { return paramTypes.size(); }
 };
 
 struct FieldSymbol : Symbol {

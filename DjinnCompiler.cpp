@@ -70,7 +70,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
-        auto generator = Generator(bindResult.globalScope);
+        auto generator = Generator(diagnostics, bindResult.globalScope);
         generator.generate();
         std::cout << "RESULT\n\n" << generator.print() << std::endl;
 

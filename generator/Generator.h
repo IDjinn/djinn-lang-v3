@@ -16,11 +16,20 @@
 #include "GeneratorScope.h"
 #include "../binder/Symbol.h"
 #include "../binder/SymbolTable.h"
+#include "../diagnostics/Diagnostic.h"
 
+#define GENERATOR_ERROR(code, msg, location) do { \
+    _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+    throw CompileError(code, msg, location); \
+} while (false)
+
+#define GENERATOR_WARN(code, msg, location) do { \
+    _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+} while (false)
 
 class Generator {
 public:
-    explicit Generator(const std::shared_ptr<ScopedSymbolTable> &symbols);
+    Generator(DiagnosticEngine &diagnostics, const std::shared_ptr<ScopedSymbolTable> &symbols);
 
     void optimize() const;
 
@@ -31,6 +40,7 @@ public:
     bool linkModules(const std::vector<std::filesystem::path> &allPaths) const;
 
 private:
+    DiagnosticEngine &_diagnostics;
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<> > builder;
