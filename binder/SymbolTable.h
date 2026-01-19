@@ -157,13 +157,14 @@ public:
         if (const auto symbol = lookup(name); symbol && symbol->isEnum()) {
             return std::dynamic_pointer_cast<EnumSymbol>(symbol);
         }
-        // Fallback: try to find an enum whose qualified name ends with ::name
+
         const std::string suffix = "::" + name;
         for (const auto &[symName, symbol]: _symbols) {
             if (symbol->isEnum() && symName.ends_with(suffix)) {
                 return std::dynamic_pointer_cast<EnumSymbol>(symbol);
             }
         }
+
         if (_parent) {
             return std::dynamic_pointer_cast<SymbolTable>(_parent)->lookupEnum(name);
         }
