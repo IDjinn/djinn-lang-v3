@@ -18,7 +18,7 @@ struct CompilerOptions {
     bool print_ast = false;
     bool print_ir = false;
     bool optimize = true;
-    bool executeAfterCompile = true;
+    bool generateBinary = true;
     bool includeStd = true;
     bool stdDeclOnly = false;
     bool silentMode = false;

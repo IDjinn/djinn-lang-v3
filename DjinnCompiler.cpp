@@ -178,6 +178,16 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
             generator.optimize();
         }
 
+        std::ofstream optOutput(options.outputDirectory + "\\" + options.outputFileName + ".ll");
+        optOutput << generator.print();
+        optOutput.close();
+
+        if (options.generateBinary) {
+            system(
+                ("clang " + options.outputDirectory + "\\" + options.outputFileName + ".ll -o " + options.
+                 outputDirectory + "\\" + options.outputFileName + ".exe").c_str());
+        }
+
         return {
             .returnCode = 0,
             .ir = generator.print(),

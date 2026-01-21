@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
         } else if (arg == "-O0") {
             options.optimize = false;
         } else if (arg == "-c") {
-            options.executeAfterCompile = false;
+            options.generateBinary = false;
         } else if (arg == "-r") {
             recursive = true;
         } else if (arg == "--lib") {

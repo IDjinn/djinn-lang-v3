@@ -175,9 +175,8 @@ namespace lsp {
         try {
             // Compile with diagnostics only (no codegen)
             CompilerOptions options;
-            options.executeAfterCompile = false;
-            options.print_ast = false;
-            options.print_ir = false;
+            options.print_ast = true;
+            options.print_ir = true;
             options.silentMode = true; // Don't print to stderr in LSP mode
 
             // Use options from client initializationOptions
