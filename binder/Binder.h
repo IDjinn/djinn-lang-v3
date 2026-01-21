@@ -15,7 +15,21 @@
 #include "../parser/ast/Statement.h"
 #include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
+#include <cassert>
 
+#define BINDER_DEBUG
+
+#ifdef BINDER_DEBUG
+#define BINDER_ERROR(code, msg, token, location) do { \
+    _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+    assert(false, msg); \
+} while (false)
+
+#define BINDER_WARNING(code, msg, location) do { \
+    _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+    assert(false, msg); \
+} while (false)
+#else
 #define BINDER_ERROR(code, msg, token, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
 } while (false)
@@ -23,6 +37,7 @@
 #define BINDER_WARNING(code, msg, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
 } while (false)
+#endif
 
 struct Program;
 struct FunctionDeclaration;

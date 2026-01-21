@@ -26,7 +26,7 @@ struct CompilerOptions {
     bool bundleModules = false;
     std::string outputFileName{};
     std::string outputDirectory{"build"};
-    std::filesystem::path stdLibPath{"std"};
+    std::filesystem::path stdLibPath{"../std"};
     std::vector<std::filesystem::path> linkLibraries{};
 };
 
@@ -41,6 +41,8 @@ struct CompilerResult {
 
 struct DjinnCompiler {
     static CompilerResult compileFromDirectory(const std::filesystem::path &path, const CompilerOptions &options = {});
+
+    static CompilerResult run(const std::string &source, const CompilerOptions &options = {});
 };
 
 

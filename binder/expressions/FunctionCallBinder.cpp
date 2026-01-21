@@ -15,7 +15,7 @@ std::shared_ptr<Symbol> Binder::bindIdentifier(const Identifier &id) const {
         return functionSymbol;
     }
 
-    if (const auto structSymbol = _global_scope->lookupStruct(id.identifier.token_name); structSymbol) {
+    if (const auto structSymbol = _current_scope->lookupStruct(id.identifier.token_name); structSymbol) {
         return structSymbol;
     }
 
