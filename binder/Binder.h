@@ -100,9 +100,9 @@ private:
 
     void collectEnumWithPrefix(const EnumDeclaration &decl, const std::string &prefix) const;
 
-    void collectFunction(const FunctionDeclaration &decl) const;
+    void collectFunction(FunctionDeclaration &decl) const;
 
-    void collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const;
+    void collectFunctionWithPrefix(FunctionDeclaration &decl, const std::string &prefix) const;
 
     bool isTypeDefined(Type *type) const;
 

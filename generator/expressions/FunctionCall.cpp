@@ -166,17 +166,27 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
 llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) {
     std::string structName;
     std::string llvmStructName;
+    bool isStaticCall = false;
+    const StructDef *structDef = nullptr;
 
     if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
-        structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
-        if (const auto *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
-            if (const auto *structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
-                llvmStructName = structType->getName().str();
+        structDef = currentScope->lookup_struct(ident->identifier.token_name);
+        if (structDef) {
+            // Receiver is a struct name (e.g., Console.printf) - this is a static call
+            structName = structDef->name;
+            isStaticCall = true;
+        }
+        else {
+            // Receiver is a variable - instance method call
+            structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
+            if (const auto *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
+                if (const auto *structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
+                    llvmStructName = structType->getName().str();
+                }
             }
         }
     }
 
-    llvm::Value *objectValue = generate_expression(*call.receiver);
     if (structName.empty()) {
         throw CompileError(DiagnosticCode::TYPE_MISMATCH,
                            "cannot call method on non-struct type");
@@ -193,12 +203,33 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
     llvm::Function *func = functions[mangledName];
     std::vector<llvm::Value *> args;
 
-    if (objectValue->getType()->isPointerTy()) {
-        args.push_back(objectValue);
+    if (isStaticCall) {
+        // Static method call - verify the method is actually static
+        if (structDef) {
+            bool methodIsStatic = false;
+            for (const auto &method : structDef->methods) {
+                if (method->name == call.name.token_name) {
+                    methodIsStatic = method->isStatic;
+                    break;
+                }
+            }
+            if (!methodIsStatic) {
+                throw CompileError(DiagnosticCode::TYPE_MISMATCH,
+                                   "cannot call instance method '" + call.name.token_name +
+                                   "' without an instance of " + structName);
+            }
+        }
+        // No self argument for static methods
     } else {
-        const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
-        builder->CreateStore(objectValue, alloca);
-        args.push_back(alloca);
+        // Instance method call - generate receiver and pass as self
+        llvm::Value *objectValue = generate_expression(*call.receiver);
+        if (objectValue->getType()->isPointerTy()) {
+            args.push_back(objectValue);
+        } else {
+            const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
+            builder->CreateStore(objectValue, alloca);
+            args.push_back(alloca);
+        }
     }
 
     for (const auto &arg: call.arguments) {

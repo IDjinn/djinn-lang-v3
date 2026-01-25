@@ -19,11 +19,11 @@ void Binder::collectExternFunction(const ExternFunctionDeclaration &decl) const 
     }
 }
 
-void Binder::collectFunction(const FunctionDeclaration &decl) const {
+void Binder::collectFunction(FunctionDeclaration &decl) const {
     collectFunctionWithPrefix(decl, "");
 }
 
-void Binder::collectFunctionWithPrefix(const FunctionDeclaration &decl, const std::string &prefix) const {
+void Binder::collectFunctionWithPrefix(FunctionDeclaration &decl, const std::string &prefix) const {
     // "main" is always in global namespace
     const std::string qualifiedName = (decl.name.token_name == "main" || prefix.empty())
                                           ? decl.name.token_name
@@ -38,4 +38,6 @@ void Binder::collectFunctionWithPrefix(const FunctionDeclaration &decl, const st
         BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "function '" + qualifiedName + "' is already defined", decl,
                      decl.name.location);
     }
+
+    funcSym->setBody(std::move(decl.body));
 }
