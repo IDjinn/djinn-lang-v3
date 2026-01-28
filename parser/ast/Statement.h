@@ -9,8 +9,10 @@
 #include <memory>
 #include "ASTNode.h"
 #include "Expression.h"
+#include "../../visitor/StatementVisitor.h"
 
 struct Statement : Location {
+    virtual void accept(djinn::IStatementVisitor &visitor) const = 0;
 };
 
 struct ExpressionStatement : Statement {
@@ -19,6 +21,8 @@ struct ExpressionStatement : Statement {
     explicit ExpressionStatement(std::unique_ptr<Expression> expr)
         : expression(std::move(expr)) {
     }
+
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -34,6 +38,8 @@ struct ReturnStatement : Statement {
         : value(std::move(val)) {
     }
 
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "ReturnStatement\n";
@@ -43,6 +49,8 @@ struct ReturnStatement : Statement {
 
 struct Block : Statement {
     std::vector<std::unique_ptr<Statement> > statements;
+
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -59,6 +67,8 @@ struct IfStatement : Statement {
     std::unique_ptr<Block> thenBranch;
     std::unique_ptr<Block> elseBranch;
 
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "IfStatement\n";
@@ -74,6 +84,8 @@ struct ForStatement : Statement {
     std::unique_ptr<Expression> postfix;
     std::unique_ptr<Block> body;
 
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "ForStatement\n";
@@ -88,6 +100,8 @@ struct WhileStatement : Statement {
     std::unique_ptr<Expression> condition;
     std::unique_ptr<Block> body;
 
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "WhileStatement\n";
@@ -100,6 +114,8 @@ struct DoWhileStatement : Statement {
     std::unique_ptr<Block> body;
     std::unique_ptr<Expression> condition;
 
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "DoWhileStatement\n";
@@ -109,6 +125,8 @@ struct DoWhileStatement : Statement {
 };
 
 struct BreakStatement : Statement {
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "BreakStatement\n";
@@ -116,6 +134,8 @@ struct BreakStatement : Statement {
 };
 
 struct ContinueStatement : Statement {
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "ContinueStatement\n";
@@ -125,6 +145,11 @@ struct ContinueStatement : Statement {
 struct SwitchCaseStatement : Statement {
     std::unique_ptr<Expression> expression;
     std::unique_ptr<Block> body;
+
+    // SwitchCaseStatement is not directly visited - it's part of SwitchStatement
+    void accept(djinn::IStatementVisitor &visitor) const override {
+        // Not directly visited - handled by SwitchStatement visitor
+    }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -137,6 +162,8 @@ struct SwitchCaseStatement : Statement {
 struct SwitchStatement : Statement {
     std::unique_ptr<Expression> value;
     std::vector<std::unique_ptr<SwitchCaseStatement> > cases;
+
+    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);

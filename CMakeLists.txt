@@ -17,17 +17,22 @@ file(GLOB_RECURSE DJINN_SOURCES
         generator/*.cpp
         generator/expressions/*.cpp
         generator/statements/*.cpp
+        generator/visitors/*.cpp
         diagnostics/*.cpp
         binder/*.cpp
+        binder/visitors/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
         lexer/*.h
         parser/*.h
         generator/*.h
+        generator/visitors/*.h
         diagnostics/*.h
         parser/ast/*.h
         binder/*.h
+        binder/visitors/*.h
+        visitor/*.h
 )
 
 include_directories(${CMAKE_SOURCE_DIR}/include)

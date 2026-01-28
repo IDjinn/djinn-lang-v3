@@ -55,7 +55,15 @@ struct BindingResult {
     [[nodiscard]] bool hasErrors() const { return !success; }
 };
 
+namespace djinn {
+    class BinderExpressionVisitor;
+    class BinderStatementVisitor;
+}
+
 class Binder {
+    friend class djinn::BinderExpressionVisitor;
+    friend class djinn::BinderStatementVisitor;
+
 public:
     explicit Binder(DiagnosticEngine &diagnostics);
 
@@ -168,6 +176,11 @@ private:
 
     // Type compatibility checking
     void checkTypeCompatibility(const Type &expected, const Expression &expr, SourceLocation loc);
+
+    // Validation helpers for visitor
+    void validateBreakStatement(const BreakStatement &stmt);
+
+    void validateContinueStatement(const ContinueStatement &stmt);
 };
 
 #endif //DJINN_BINDER_H

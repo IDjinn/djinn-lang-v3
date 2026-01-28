@@ -13,6 +13,7 @@
 #include "Type.h"
 #include "../../utils/string_utils.h"
 #include "../../lexer/TokenType.h"
+#include "../../visitor/ExpressionVisitor.h"
 
 inline std::string tokenTypeToString(const TokenType type) {
     switch (type) {
@@ -36,6 +37,7 @@ inline std::string tokenTypeToString(const TokenType type) {
 }
 
 struct Expression : Location {
+    virtual void accept(djinn::IExpressionVisitor &visitor) const = 0;
 };
 
 struct VariableDeclaration : Expression {
@@ -47,6 +49,8 @@ struct VariableDeclaration : Expression {
         : type(std::move(type)),
           name(std::move(name)), isMutable(isMutable) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
@@ -61,6 +65,8 @@ struct Assignment : Expression {
     Assignment(SourceIdentifier name, std::unique_ptr<Expression> value)
         : name(std::move(name)), value(std::move(value)) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
@@ -80,6 +86,8 @@ struct VariableInit : Expression {
         : type(std::move(type)), name(std::move(name)), value(std::move(value)), isMutable(isMutable) {
     }
 
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent) const override {
         writeIndent(os, indent);
         os << "VariableInit(" << name.token_name << ": " << type << " =\n";
@@ -94,6 +102,8 @@ struct StringLiteral : Expression {
     explicit StringLiteral(std::string val) : value(std::move(val)) {
     }
 
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "StringLiteral(\"" << string_utils::escape_visible(value) << "\")";
@@ -107,6 +117,8 @@ struct IntegerLiteral : Expression {
     IntegerLiteral(const std::string &val, const bool sign) : value(val), sign(sign) {
     }
 
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "IntegerLiteral(" << value << ")";
@@ -118,6 +130,8 @@ struct FloatLiteral : Expression {
 
     explicit FloatLiteral(const std::string &val) : value(val) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -133,6 +147,8 @@ struct Identifier : Expression {
 
     [[nodiscard]] const std::string &name() const { return identifier.token_name; }
 
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "Identifier(" << identifier.token_name << ")";
@@ -146,6 +162,8 @@ struct FieldAccess : Expression {
     FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field)
         : object(std::move(obj)), fieldName(std::move(field)) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -162,6 +180,8 @@ struct FieldAssignment : Expression {
     FieldAssignment(std::unique_ptr<Expression> obj, SourceIdentifier field, std::unique_ptr<Expression> val)
         : object(std::move(obj)), fieldName(std::move(field)), value(std::move(val)) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -194,6 +214,8 @@ struct FunctionCall : Expression {
 
     [[nodiscard]] bool isMethodCall() const { return receiver != nullptr; }
     [[nodiscard]] bool hasTypeArguments() const { return !typeArguments.empty(); }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -228,6 +250,8 @@ struct UnaryExpression : Expression {
         : op(op), operand(std::move(operand)) {
     }
 
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "UnaryExpression(" << tokenTypeToString(op) << ")\n";
@@ -243,6 +267,8 @@ struct BinaryExpression : Expression {
     BinaryExpression(std::unique_ptr<Expression> left, const TokenType op, std::unique_ptr<Expression> right)
         : left(std::move(left)), op(op), right(std::move(right)) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -285,6 +311,8 @@ struct BraceInitializer : Expression {
     explicit BraceInitializer(std::vector<InitializerElement> elements)
         : elements(std::move(elements)) {
     }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -329,6 +357,8 @@ struct SwitchExpression : Expression {
         : value(std::move(val)), arms(std::move(a)) {
     }
 
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "SwitchExpression\n";
@@ -344,6 +374,8 @@ struct SwitchExpression : Expression {
 // Variadic forwarding: ... (forwards variadic arguments to another variadic function)
 struct VariadicForward : Expression {
     VariadicForward() = default;
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);

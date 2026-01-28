@@ -165,6 +165,7 @@ namespace lsp {
     }
 
     void LspServer::validateDocument(const std::string &uri) {
+        std::system("cls");
         auto it = _documents.find(uri);
         if (it == _documents.end()) return;
 

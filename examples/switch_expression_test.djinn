@@ -1,0 +1,15 @@
+import std::types;
+import std::sys;
+
+namespace test;
+
+void main() {
+    auto opt = optional<i32>::Value(69);
+
+    i32 result = switch opt {
+        Value val -> val,
+        Empty -> -1
+    };
+
+    Console.printf("result = %d\n", result);
+}

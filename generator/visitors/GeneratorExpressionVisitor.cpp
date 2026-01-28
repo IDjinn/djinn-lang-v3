@@ -1,0 +1,71 @@
+//
+// Generator Expression Visitor Implementation
+//
+
+#include "GeneratorExpressionVisitor.h"
+#include "../Generator.h"
+#include "../../parser/ast/Expression.h"
+
+namespace djinn {
+    void GeneratorExpressionVisitor::visit(const IntegerLiteral &expr) {
+        _result = _generator.generate_integer_literal(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const FloatLiteral &expr) {
+        _result = _generator.generate_float_literal(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const StringLiteral &expr) {
+        _result = _generator.generate_string_literal(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const Identifier &expr) {
+        _result = _generator.generate_identifier(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const FunctionCall &expr) {
+        _result = _generator.generate_function_call(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const FieldAccess &expr) {
+        _result = _generator.generate_field_access(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const FieldAssignment &expr) {
+        _result = _generator.generate_field_assignment(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const BinaryExpression &expr) {
+        _result = _generator.generate_binary_expression(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const UnaryExpression &expr) {
+        _result = _generator.generate_unary_expression(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const VariableDeclaration &expr) {
+        _result = _generator.generate_variable_declaration(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const VariableInit &expr) {
+        _result = _generator.generate_variable_init(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const Assignment &expr) {
+        _result = _generator.generate_assignment(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const BraceInitializer &expr) {
+        _result = _generator.generate_brace_initializer(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const SwitchExpression &expr) {
+        _result = _generator.generate_switch_expression(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const VariadicForward &expr) {
+        // VariadicForward should not be evaluated directly - it's handled by FunctionCall
+        throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN,
+                           "variadic forwarding '...' can only be used as function argument");
+    }
+} // namespace djinn

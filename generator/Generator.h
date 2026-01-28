@@ -27,7 +27,15 @@
     _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
 } while (false)
 
+namespace djinn {
+    class GeneratorExpressionVisitor;
+    class GeneratorStatementVisitor;
+}
+
 class Generator {
+    friend class djinn::GeneratorExpressionVisitor;
+    friend class djinn::GeneratorStatementVisitor;
+
 public:
     Generator(DiagnosticEngine &diagnostics, const std::shared_ptr<ScopedSymbolTable> &symbols);
 
@@ -164,6 +172,13 @@ private:
 
     // Generation verification
     void verify_all_symbols_generated() const;
+
+    // Helper methods for visitor pattern
+    void generate_return_statement(const ReturnStatement &stmt);
+
+    void generate_break_statement();
+
+    void generate_continue_statement();
 
     size_t generatedFunctions = 0;
     size_t generatedExternFunctions = 0;

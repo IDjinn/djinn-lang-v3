@@ -6,47 +6,7 @@ struct Console {
         return write(2, message, strlen(message));
     }
 
-    // Overloads para printf - similar ao C# Console.WriteLine
     public static c_result printf(i8* format) {
         return printf(format);
-    }
-
-    public static c_result printf1(i8* format, i64 arg0) {
-        return printf(format, arg0);
-    }
-
-    public static c_result printf2(i8* format, i64 arg0, i64 arg1) {
-        return printf(format, arg0, arg1);
-    }
-
-    public static c_result printf3(i8* format, i64 arg0, i64 arg1, i64 arg2) {
-        return printf(format, arg0, arg1, arg2);
-    }
-
-    public static c_result printf4(i8* format, i64 arg0, i64 arg1, i64 arg2, i64 arg3) {
-        return printf(format, arg0, arg1, arg2, arg3);
-    }
-
-    // Overloads com strings
-    public static c_result printfs(i8* format, i8* arg0) {
-        return printf(format, arg0);
-    }
-
-    public static c_result printfs2(i8* format, i8* arg0, i8* arg1) {
-        return printf(format, arg0, arg1);
-    }
-
-    // Overloads mistos comuns
-    public static c_result printfsi(i8* format, i8* arg0, i64 arg1) {
-        return printf(format, arg0, arg1);
-    }
-
-    public static c_result printfis(i8* format, i64 arg0, i8* arg1) {
-        return printf(format, arg0, arg1);
-    }
-
-    // Log simples (com newline via puts)
-    public static c_result log(i8* message) {
-        return puts(message);
     }
 }

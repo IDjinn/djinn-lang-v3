@@ -3,49 +3,43 @@
 //
 
 #include "Generator.h"
+#include "visitors/GeneratorStatementVisitor.h"
 
 void Generator::generate_statement(const Statement &stmt) {
-    if (auto *retStmt = dynamic_cast<const ReturnStatement *>(&stmt)) {
-        if (retStmt->value) {
-            if (auto *braceInit = dynamic_cast<const BraceInitializer *>(retStmt->value.get())) {
-                const auto returnType = currentFunction->getReturnType();
-                if (auto *structType = llvm::dyn_cast<llvm::StructType>(returnType)) {
-                    const auto structName = structType->getName().str();
-                    if (const auto structVal = generate_brace_init_for_struct(*braceInit, structType, structName)) {
-                        builder->CreateRet(structVal);
-                        return;
-                    }
+    djinn::GeneratorStatementVisitor visitor(*this);
+    stmt.accept(visitor);
+}
+
+void Generator::generate_return_statement(const ReturnStatement &stmt) {
+    if (stmt.value) {
+        if (auto *braceInit = dynamic_cast<const BraceInitializer *>(stmt.value.get())) {
+            const auto returnType = currentFunction->getReturnType();
+            if (auto *structType = llvm::dyn_cast<llvm::StructType>(returnType)) {
+                const auto structName = structType->getName().str();
+                if (const auto structVal = generate_brace_init_for_struct(*braceInit, structType, structName)) {
+                    builder->CreateRet(structVal);
+                    return;
                 }
             }
-            auto val = generate_expression(*retStmt->value);
-            llvm::Type *returnType = currentFunction->getReturnType();
-            val = cast_value(val, returnType);
-            builder->CreateRet(val);
-        } else {
-            builder->CreateRetVoid();
         }
-    } else if (auto *exprStmt = dynamic_cast<const ExpressionStatement *>(&stmt)) {
-        generate_expression(*exprStmt->expression);
-    } else if (auto *ifStmt = dynamic_cast<const IfStatement *>(&stmt)) {
-        generate_if_statement(*ifStmt);
-    } else if (auto *forStmt = dynamic_cast<const ForStatement *>(&stmt)) {
-        generate_for_statement(*forStmt);
-    } else if (auto *whileStmt = dynamic_cast<const WhileStatement *>(&stmt)) {
-        generate_while_statement(*whileStmt);
-    } else if (auto *doWhileStmt = dynamic_cast<const DoWhileStatement *>(&stmt)) {
-        generate_do_while_statement(*doWhileStmt);
-    } else if (auto *switchStmt = dynamic_cast<const SwitchStatement *>(&stmt)) {
-        generate_switch_statement(*switchStmt);
-    } else if (auto *blockStmt = dynamic_cast<const Block *>(&stmt)) {
-        generate_block(*blockStmt);
-    } else if (dynamic_cast<const BreakStatement *>(&stmt)) {
-        if (!breakTargets.empty()) {
-            builder->CreateBr(breakTargets.back());
-        }
-    } else if (dynamic_cast<const ContinueStatement *>(&stmt)) {
-        if (!continueTargets.empty()) {
-            builder->CreateBr(continueTargets.back());
-        }
+        auto val = generate_expression(*stmt.value);
+        llvm::Type *returnType = currentFunction->getReturnType();
+        val = cast_value(val, returnType);
+        builder->CreateRet(val);
+    } else {
+        builder->CreateRetVoid();
+    }
+}
+
+void Generator::generate_break_statement() {
+    if (!breakTargets.empty()) {
+        builder->CreateBr(breakTargets.back());
+    }
+}
+
+void Generator::generate_continue_statement() {
+    if (!continueTargets.empty()) {
+        builder->CreateBr(continueTargets.back());
     }
 }
 
