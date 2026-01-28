@@ -220,7 +220,7 @@ void Generator::generate_method(const StructSymbol &struc, const MethodSymbol &m
         paramTypes.push_back(generate_type(paramType));
     }
 
-    const auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+    const auto funcType = llvm::FunctionType::get(returnType, paramTypes, method.isVariadic);
     const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
     functions[mangledName] = llvmFunc;
@@ -270,7 +270,17 @@ void Generator::generate_method(const StructSymbol &struc, const MethodSymbol &m
     }
 
     if (!builder->GetInsertBlock()->getTerminator()) {
-        if (returnType->isVoidTy()) {
+        if (method.isConstructor) {
+            // Constructor: return *this (the initialized struct value)
+            llvm::AllocaInst *thisAlloca = currentScope->lookup_variable("this");
+            if (thisAlloca) {
+                llvm::Value *thisPtr = builder->CreateLoad(thisAlloca->getAllocatedType(), thisAlloca, "this_ptr");
+                llvm::Value *thisVal = builder->CreateLoad(def->llvmType, thisPtr, "this_val");
+                builder->CreateRet(thisVal);
+            } else {
+                builder->CreateRet(llvm::Constant::getNullValue(returnType));
+            }
+        } else if (returnType->isVoidTy()) {
             builder->CreateRetVoid();
         } else {
             builder->CreateRet(llvm::Constant::getNullValue(returnType));

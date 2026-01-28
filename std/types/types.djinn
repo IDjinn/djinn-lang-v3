@@ -17,3 +17,19 @@ enum result<T, E> {
     Ok(T),
     Error(E)
 }
+
+struct string {
+    i8* data;
+    size size;
+    i32 flags; // contains metadata like static str, expandable etc.
+}
+
+struct vector<T> {
+    T[] value;
+    size size;
+}
+
+struct dynamic_vector<T> {
+    vector<T> vector;
+    size capacity;
+}

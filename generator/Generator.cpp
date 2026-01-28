@@ -43,9 +43,9 @@ void Generator::generate() {
         generatedStructs++;
     }
 
-    // PASS 2: Forward declare all enums
+    // PASS 2: Generate all enums (generic ones are just registered for monomorphization)
     for (const auto &sym: symbols->get_all_enums()) {
-        // TODO: forward_declare_enum(*std::dynamic_pointer_cast<EnumSymbol>(sym));
+        generate_enum(*std::dynamic_pointer_cast<EnumSymbol>(sym));
     }
 
     // PASS 3: Generate extern functions
@@ -83,23 +83,23 @@ void Generator::verify_all_symbols_generated() const {
     const size_t expectedStructs = symbols->get_all_structs().size();
 
     assert(generatedFunctions == expectedFunctions &&
-        "Not all functions were generated!");
+           "Not all functions were generated!");
     assert(generatedExternFunctions == expectedExternFunctions &&
-        "Not all extern functions were generated!");
+           "Not all extern functions were generated!");
     assert(generatedStructs == expectedStructs &&
-        "Not all structs were generated!");
+           "Not all structs were generated!");
 
     // Verify all generated functions exist in the LLVM module
     for (const auto &sym: symbols->get_all_functions()) {
         const auto funcSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
         assert(functions.count(funcSym->name) > 0 &&
-            ("Function not found in LLVM module: " + funcSym->name).c_str());
+               ("Function not found in LLVM module: " + funcSym->name).c_str());
     }
 
     for (const auto &sym: symbols->get_all_extern_functions()) {
         const auto externSym = std::dynamic_pointer_cast<ExternFunctionSymbol>(sym);
         assert(functions.count(externSym->name) > 0 &&
-            ("Extern function not found in LLVM module: " + externSym->name).c_str());
+               ("Extern function not found in LLVM module: " + externSym->name).c_str());
     }
 
     std::cout << "[Generator] Verification passed: "

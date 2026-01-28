@@ -129,6 +129,13 @@ struct MethodSymbol : Symbol {
     std::vector<std::string> genericParams;
     bool isAbstract = false;
     bool isStatic = false;
+    bool isVariadic = false; // True if method has variadic parameters (...)
+    bool isConstructor = false; // True if this is a constructor (name == struct name)
+    std::string structName; // Name of the struct this constructor belongs to (for constructors only)
+
+    // Variadic forwarding: if this method forwards variadic args to another function
+    // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
+    std::string variadicForwardTarget;
 
     // Raw pointers to AST nodes (AST owns the memory)
     Block *body = nullptr;

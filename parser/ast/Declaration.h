@@ -39,9 +39,18 @@ struct StructMethodDeclaration : Location {
     std::vector<VisibilityModifier> modifiers;
     std::unique_ptr<Block> body;
     std::unique_ptr<Expression> expression;
+    bool isConstructorMethod = false; // True if this is a constructor (name == struct name)
+    bool isVariadic = false; // True if method has variadic parameters (...)
+
+    // Variadic forwarding: if this method forwards its variadic args to another function
+    // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
+    std::string variadicForwardTarget;
+
+    [[nodiscard]] bool isVariadicForwarder() const { return !variadicForwardTarget.empty(); }
 
     [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
+    [[nodiscard]] bool isConstructor() const { return isConstructorMethod; }
 
     [[nodiscard]] bool isStatic() const {
         for (const auto &mod: modifiers) {
@@ -90,6 +99,7 @@ struct StructMethodDeclaration : Location {
             if (i > 0) os << ", ";
             os << *parameters[i].type << " " << parameters[i].name;
         }
+        if (isVariadic) os << ", ...";
         os << ")";
         if (isExpressionBody()) {
             os << " => ...";

@@ -46,7 +46,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
                 Lexer lexer(source);
                 const auto tokens = lexer.tokenize();
 
-                Parser parser(tokens);
+                Parser parser(tokens, diagnostics);
                 auto program = parser.parse();
 
                 if (options.print_ast && !isStdLib) {
@@ -131,7 +131,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
                     Lexer lexer(stdSource);
                     const auto tokens = lexer.tokenize();
 
-                    Parser parser(tokens);
+                    Parser parser(tokens, diagnostics);
                     auto program = parser.parse();
 
                     programs.emplace_back(std::move(program));
@@ -150,7 +150,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         Lexer lexer(source);
         const auto tokens = lexer.tokenize();
 
-        Parser parser(tokens);
+        Parser parser(tokens, diagnostics);
         auto program = parser.parse();
 
         if (options.print_ast) {

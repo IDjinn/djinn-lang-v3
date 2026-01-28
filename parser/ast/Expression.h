@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <optional>
 #include "ASTNode.h"
 #include "Type.h"
 #include "../../utils/string_utils.h"
@@ -177,6 +178,7 @@ struct FunctionCall : Expression {
     std::vector<std::unique_ptr<Expression> > arguments;
     std::unique_ptr<Expression> receiver; // optional: for method calls (object.method())
     std::vector<Type> typeArguments; // generic type arguments: Result<i32, string*>::Ok(...)
+    bool hasVariadicForward = false; // true if call includes ... to forward variadic args
 
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression> > args)
         : name(std::move(n)), arguments(std::move(args)) {
@@ -293,6 +295,59 @@ struct BraceInitializer : Expression {
         }
         writeIndent(os, indent);
         os << "}";
+    }
+};
+
+// Pattern matching switch arm: VariantName binding -> result_expr
+struct SwitchArm : Location {
+    SourceIdentifier variantName; // The variant to match (e.g., "Value", "Empty")
+    std::optional<SourceIdentifier> binding; // Optional binding name (e.g., "val" in "Value val")
+    std::unique_ptr<Expression> result; // The result expression
+
+    SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Expression> res)
+        : variantName(std::move(variant)), binding(std::move(bind)), result(std::move(res)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "SwitchArm(" << variantName.token_name;
+        if (binding) {
+            os << " " << binding->token_name;
+        }
+        os << " ->\n";
+        result->print(os, indent + 2);
+        os << ")";
+    }
+};
+
+// Pattern matching switch expression: switch expr { arms... }
+struct SwitchExpression : Expression {
+    std::unique_ptr<Expression> value; // The enum value being matched
+    std::vector<SwitchArm> arms; // The match arms
+
+    SwitchExpression(std::unique_ptr<Expression> val, std::vector<SwitchArm> a)
+        : value(std::move(val)), arms(std::move(a)) {
+    }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "SwitchExpression\n";
+        value->print(os, indent + 2);
+        os << "\n";
+        for (const auto &arm: arms) {
+            arm.print(os, indent + 2);
+            os << "\n";
+        }
+    }
+};
+
+// Variadic forwarding: ... (forwards variadic arguments to another variadic function)
+struct VariadicForward : Expression {
+    VariadicForward() = default;
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "VariadicForward(...)";
     }
 };
 

@@ -8,7 +8,28 @@
 #include <ranges>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/CommandLine.h>
+#include <cassert>
 
+#define PARSER_DEBUG
+
+#ifdef PARSER_DEBUG
+#define PARSER_ERROR(code, msg, location) do { \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+throw CompileError(code, msg); \
+} while (false)
+
+#define PARSER_WARNING(code, msg, location) do { \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+} while (false)
+#else
+#define PARSER_ERROR(code, msg, location) do { \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+} while (false)
+
+#define PARSER_WARNING(code, msg, location) do { \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+} while (false)
+#endif
 auto makeSourceIdentifier = [](const Token &token) {
     return SourceIdentifier(token.value,
                             SourceLocation(token.position.fileId, token.position.line, token.position.column,
@@ -24,7 +45,8 @@ auto isPrimitiveType = [](const std::string &name) {
     return false;
 };
 
-Parser::Parser(std::vector<Token> tokens) : tokens(std::move(tokens)) {
+Parser::Parser(std::vector<Token> tokens, DiagnosticEngine &diagnostics) : tokens(std::move(tokens)),
+                                                                           _diagnostics(diagnostics) {
 }
 
 void Parser::pushScope() {
@@ -33,7 +55,7 @@ void Parser::pushScope() {
 
 void Parser::popScope() {
     if (!currentScope->parent) {
-        throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "tentativa de sair do escopo global");
+        PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "tentativa de sair do escopo global", SourceLocation{});
     }
     currentScope = currentScope->parent;
 }
@@ -102,7 +124,7 @@ Token &Parser::expect(const std::string &message, const TokenType type) {
     if (check(type)) return advance();
     const auto &token = previous();
     const uint32_t col = token.position.column + token.value.length();
-    throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
+    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message,
                        SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
@@ -112,7 +134,7 @@ Token &Parser::expect(const std::string &message, const std::vector<TokenType> &
     }
     const auto &token = previous();
     const uint32_t col = token.position.column + token.value.length();
-    throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, message,
+    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message,
                        SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
@@ -215,6 +237,10 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     expect("Esperado '('", TokenType::LPAREN);
     if (!check(TokenType::RPAREN)) {
         do {
+            if (match(TokenType::DOT_DOT_DOT)) {
+                method->isVariadic = true;
+                break;  // variadic marker comes after parameters
+            }
             auto paramType = parse_type();
             const Token &paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
             bool isMutable = match(TokenType::MUT);
@@ -234,9 +260,29 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         // Expression body: => expr;
         method->expression = parse_expression();
         expect("Esperado ';' após expressão", TokenType::SEMICOLON);
+
+        // Check if expression is variadic forwarding: => funcCall(args, ...)
+        if (auto *call = dynamic_cast<FunctionCall *>(method->expression.get())) {
+            if (call->hasVariadicForward && method->isVariadic) {
+                method->variadicForwardTarget = call->name.token_name;
+            }
+        }
     } else if (check(TokenType::LBRACE)) {
         // Block body: { ... }
         method->body = parse_block();
+
+        // Check if body is single return with variadic forwarding: { return funcCall(args, ...); }
+        if (method->body && method->body->statements.size() == 1) {
+            if (auto *retStmt = dynamic_cast<ReturnStatement *>(method->body->statements[0].get())) {
+                if (retStmt->value) {
+                    if (auto *call = dynamic_cast<FunctionCall *>(retStmt->value.get())) {
+                        if (call->hasVariadicForward && method->isVariadic) {
+                            method->variadicForwardTarget = call->name.token_name;
+                        }
+                    }
+                }
+            }
+        }
     } else {
         // Abstract method in struct (just declaration)
         expect("Esperado ';' após declaração do método", TokenType::SEMICOLON);
@@ -357,6 +403,41 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct() {
 
             const auto isMutable = match(TokenType::MUT);
             auto fieldType = parse_type();
+
+            // Check for constructor: StructName(args) - type matches struct name followed by (
+            if (fieldType->kind == TypeKind::STRUCT &&
+                fieldType->structName == name.token_name &&
+                check(TokenType::LPAREN)) {
+                // This is a constructor!
+                auto ctor = std::make_unique<StructMethodDeclaration>();
+                ctor->returnType = std::make_unique<Type>(Type::voided()); // void return type placeholder
+                ctor->name = SourceIdentifier(fieldType->structName, fieldType->location);
+                ctor->isConstructorMethod = true;
+
+                // Parse parameters
+                expect("Esperado '('", TokenType::LPAREN);
+                if (!check(TokenType::RPAREN)) {
+                    do {
+                        auto paramType = parse_type();
+                        const Token &paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+                        bool paramMutable = match(TokenType::MUT);
+                        ctor->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken),
+                                                      paramMutable);
+                    } while (match(TokenType::COMMA));
+                }
+                expect("Esperado ')'", TokenType::RPAREN);
+
+                // Parse body
+                if (check(TokenType::LBRACE)) {
+                    ctor->body = parse_block();
+                } else {
+                    expect("Esperado '{' para corpo do constructor", TokenType::LBRACE);
+                }
+
+                methods.push_back(std::move(ctor));
+                continue;
+            }
+
             if (!check(TokenType::IDENTIFIER)) {
                 current = saved;
                 methods.push_back(parse_method(true));
@@ -600,7 +681,19 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     }
 
     if (check(TokenType::SWITCH)) {
-        return parse_switch_statement();
+        // Look ahead to distinguish between switch statement and switch expression
+        // Switch statement: switch (expr) { case ... }
+        // Switch expression: switch expr { Variant -> ... }
+        const size_t saved = current;
+        advance(); // consume 'switch'
+        if (check(TokenType::LPAREN)) {
+            // It's a switch statement: switch (expr)
+            current = saved;
+            return parse_switch_statement();
+        }
+        // It's a switch expression used as statement
+        current = saved;
+        // Fall through to expression statement handling
     }
 
     if (match(TokenType::BREAK)) {
@@ -732,7 +825,7 @@ std::unique_ptr<SwitchStatement> Parser::parse_switch_statement() {
             expect("Esperado ':' após default", TokenType::COLON);
         } else {
             const auto &tok = peek();
-            throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "esperado 'case' ou 'default'",
+            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "esperado 'case' ou 'default'",
                                SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
                                               tok.value.length()));
         }
@@ -865,13 +958,21 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
             // Check if this is a method call: object.method(args)
             if (match(TokenType::LPAREN)) {
                 std::vector<std::unique_ptr<Expression> > args;
+                bool hasVariadicForward = false;
                 if (!check(TokenType::RPAREN)) {
                     do {
-                        args.push_back(parse_expression());
+                        auto arg = parse_expression();
+                        if (dynamic_cast<VariadicForward *>(arg.get())) {
+                            hasVariadicForward = true;
+                        } else {
+                            args.push_back(std::move(arg));
+                        }
                     } while (match(TokenType::COMMA));
                 }
                 expect("Esperado ')' após argumentos", TokenType::RPAREN);
-                expr = std::make_unique<FunctionCall>(std::move(memberName), std::move(args), std::move(expr));
+                auto call = std::make_unique<FunctionCall>(std::move(memberName), std::move(args), std::move(expr));
+                call->hasVariadicForward = hasVariadicForward;
+                expr = std::move(call);
             }
             // Check if this is a field assignment (this.field = value)
             else if (match(TokenType::EQUAL)) {
@@ -891,6 +992,16 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
 }
 
 std::unique_ptr<Expression> Parser::parse_primary() {
+    // Switch expression: switch expr { Variant -> result, ... }
+    if (check(TokenType::SWITCH)) {
+        return parse_switch_expression();
+    }
+
+    // Variadic forwarding: ... (forwards variadic arguments)
+    if (match(TokenType::DOT_DOT_DOT)) {
+        return std::make_unique<VariadicForward>();
+    }
+
     if (match(TokenType::INTEGER_LITERAL)) {
         const auto value = previous().value;
         if (value.ends_with("i")) {
@@ -994,21 +1105,32 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
         if (match(TokenType::LPAREN)) {
             std::vector<std::unique_ptr<Expression> > args;
+            bool hasVariadicForward = false;
 
             if (!check(TokenType::RPAREN)) {
                 do {
-                    args.push_back(parse_expression());
+                    auto arg = parse_expression();
+                    // Check if this is variadic forwarding
+                    if (dynamic_cast<VariadicForward *>(arg.get())) {
+                        hasVariadicForward = true;
+                    } else {
+                        args.push_back(std::move(arg));
+                    }
                 } while (match(TokenType::COMMA));
             }
 
             expect("Esperado ')' após argumentos", TokenType::RPAREN);
 
             // Pass type arguments if any (for generic enum/struct calls like Result<i32>::Ok(...))
+            std::unique_ptr<FunctionCall> call;
             if (!genericArgs.empty()) {
-                return std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(genericArgs),
+                call = std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(genericArgs),
                                                       std::move(args));
+            } else {
+                call = std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(args));
             }
-            return std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(args));
+            call->hasVariadicForward = hasVariadicForward;
+            return call;
         }
 
         if (match(TokenType::EQUAL)) {
@@ -1030,7 +1152,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     }
 
     const auto &tok = peek();
-    throw CompileError(DiagnosticCode::EXPECTED_EXPRESSION, "expressão inesperada",
+    PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION, "expressão inesperada",
                        SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
                                       tok.value.empty() ? 1 : tok.value.length()));
 }
@@ -1061,6 +1183,46 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer() {
     return std::make_unique<BraceInitializer>(std::move(elements));
 }
 
+std::unique_ptr<Expression> Parser::parse_switch_expression() {
+    expect("Esperado 'switch'", TokenType::SWITCH);
+
+    // Parse the value expression (without parentheses, unlike switch statement)
+    auto value = parse_expression();
+
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    std::vector<SwitchArm> arms;
+
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        // Parse variant name
+        const Token &variantToken = expect("Esperado nome da variante", TokenType::IDENTIFIER);
+        SourceIdentifier variantName = makeSourceIdentifier(variantToken);
+
+        // Check for optional binding (e.g., "Value val" or just "Empty")
+        std::optional<SourceIdentifier> binding;
+        if (check(TokenType::IDENTIFIER)) {
+            const Token &bindingToken = advance();
+            binding = makeSourceIdentifier(bindingToken);
+        }
+
+        // Expect ->
+        expect("Esperado '->' após padrão", TokenType::THIN_ARROW);
+
+        // Parse result expression
+        auto result = parse_expression();
+
+        arms.emplace_back(std::move(variantName), std::move(binding), std::move(result));
+
+        // Optional comma between arms
+        if (!check(TokenType::RBRACE)) {
+            match(TokenType::COMMA);
+        }
+    }
+
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    return std::make_unique<SwitchExpression>(std::move(value), std::move(arms));
+}
 
 std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const std::string &abi) {
     std::unique_ptr<Type> returnType = parse_type();

@@ -5,6 +5,7 @@
 #include "../Generator.h"
 #include "../Intrinsics.h"
 #include "llvm/IR/Intrinsics.h"
+#include <unordered_map>
 
 bool Generator::is_intrinsic(const std::string &name) {
     return ::is_intrinsic(name);
@@ -120,11 +121,14 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
         const auto enumName = expr.name.token_name.substr(0, colonPos);
         const auto variantName = expr.name.token_name.substr(colonPos + 2);
 
-        const EnumDef *enumDef = currentScope->lookup_enum(enumName);
+        // Resolve alias first (e.g., "optional" -> "std::types::optional")
+        const auto resolvedEnumName = currentScope->resolve_alias(enumName);
+        const EnumDef *enumDef = currentScope->lookup_enum(resolvedEnumName);
+
         if (expr.hasTypeArguments()) {
             if (enumDef && enumDef->isGeneric) {
-                monomorphize_enum(enumName, expr.typeArguments);
-                enumDef = currentScope->lookup_monomorphized_enum(enumName, expr.typeArguments);
+                monomorphize_enum(resolvedEnumName, expr.typeArguments);
+                enumDef = currentScope->lookup_monomorphized_enum(resolvedEnumName, expr.typeArguments);
             }
         }
 
@@ -134,6 +138,51 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
             }
         }
     }
+
+    // Check if this is a constructor call: Type(args)
+    // Resolve alias first (e.g., "Point" -> "mymodule::Point")
+    const std::string resolvedTypeName = currentScope->resolve_alias(expr.name.token_name);
+    if (const StructDef *structDef = currentScope->lookup_struct(resolvedTypeName)) {
+        // Extract simple name for constructor lookup (e.g., "Point" from "mymodule::Point")
+        std::string simpleTypeName = expr.name.token_name;
+        if (const size_t lastColon = simpleTypeName.rfind("::"); lastColon != std::string::npos) {
+            simpleTypeName = simpleTypeName.substr(lastColon + 2);
+        }
+        // Constructor is mangled as StructName__StructName
+        const std::string ctorName = resolvedTypeName + "__" + simpleTypeName;
+        if (const auto ctorIt = functions.find(ctorName); ctorIt != functions.end()) {
+            // This is a constructor call!
+            llvm::Function *ctorFunc = ctorIt->second;
+
+            // Allocate space for the struct
+            llvm::AllocaInst *structAlloca = builder->CreateAlloca(structDef->llvmType, nullptr, "ctor_tmp");
+
+            // Prepare arguments: first arg is 'this' pointer
+            std::vector<llvm::Value *> ctorArgs;
+            ctorArgs.push_back(structAlloca);
+
+            // Add the rest of the arguments
+            const llvm::FunctionType *ctorType = ctorFunc->getFunctionType();
+            size_t argIdx = 1; // Start from 1 because 0 is 'this'
+            for (const auto &arg: expr.arguments) {
+                llvm::Value *argVal = generate_expression(*arg);
+                if (argIdx < ctorType->getNumParams()) {
+                    argVal = cast_value(argVal, ctorType->getParamType(argIdx));
+                }
+                ctorArgs.push_back(argVal);
+                argIdx++;
+            }
+
+            // Call the constructor - it returns the struct value
+            return builder->CreateCall(ctorFunc, ctorArgs, "ctor_result");
+        }
+    }
+
+    // Handle variadic forwarding: func(args, ...)
+    // This requires using va_list and redirecting to v* functions (e.g., printf -> vprintf)
+    // if (expr.hasVariadicForward) {
+    //     return generate_variadic_forward_call(expr);
+    // }
 
     const auto it = functions.find(expr.name.token_name);
     if (it == functions.end()) {
@@ -169,14 +218,46 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
     bool isStaticCall = false;
     const StructDef *structDef = nullptr;
 
+    // Check if this is an enum method call first
+    if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
+        // Check if the variable holds an enum value
+        if (llvm::AllocaInst *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
+            if (auto *enumStructType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())) {
+                std::string enumTypeName = enumStructType->getName().str();
+                if (EnumDef *enumDef = currentScope->lookup_enum(enumTypeName)) {
+                    // This is an enum method call
+                    llvm::Value *enumValue = builder->CreateLoad(enumStructType, alloca, "enum_load");
+
+                    // Handle built-in enum methods
+                    if (call.name.token_name == "value") {
+                        // .value() extracts the payload from the first variant with payload
+                        // Find the first variant with a payload
+                        for (size_t i = 0; i < enumDef->variants.size(); ++i) {
+                            if (!enumDef->variants[i].associatedTypes.empty()) {
+                                return extract_enum_payload(enumValue, *enumDef, i);
+                            }
+                        }
+                        throw CompileError(DiagnosticCode::TYPE_MISMATCH,
+                                           "enum has no variant with payload");
+                    }
+                    if (call.name.token_name == "tag") {
+                        // .tag() returns the discriminant
+                        return extract_enum_tag(enumValue, *enumDef);
+                    }
+                    throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
+                                       "unknown enum method: " + call.name.token_name);
+                }
+            }
+        }
+    }
+
     if (const auto *ident = dynamic_cast<const Identifier *>(call.receiver.get())) {
         structDef = currentScope->lookup_struct(ident->identifier.token_name);
         if (structDef) {
             // Receiver is a struct name (e.g., Console.printf) - this is a static call
             structName = structDef->name;
             isStaticCall = true;
-        }
-        else {
+        } else {
             // Receiver is a variable - instance method call
             structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
             if (const auto *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
@@ -207,16 +288,54 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
         // Static method call - verify the method is actually static
         if (structDef) {
             bool methodIsStatic = false;
-            for (const auto &method : structDef->methods) {
+            std::string variadicForwardTarget;
+
+            for (const auto &method: structDef->methods) {
                 if (method->name == call.name.token_name) {
                     methodIsStatic = method->isStatic;
+                    variadicForwardTarget = method->variadicForwardTarget;
                     break;
                 }
             }
+
             if (!methodIsStatic) {
                 throw CompileError(DiagnosticCode::TYPE_MISMATCH,
                                    "cannot call instance method '" + call.name.token_name +
                                    "' without an instance of " + structName);
+            }
+
+            // Handle variadic forwarding: Console.printf(fmt, a, b) -> printf(fmt, a, b)
+            if (!variadicForwardTarget.empty()) {
+                // Find the target function
+                auto targetIt = functions.find(variadicForwardTarget);
+                if (targetIt == functions.end()) {
+                    throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
+                                       "variadic forward target not found: " + variadicForwardTarget);
+                }
+
+                llvm::Function *targetFunc = targetIt->second;
+                const llvm::FunctionType *targetFuncType = targetFunc->getFunctionType();
+
+                // Generate all arguments and call target function directly
+                std::vector<llvm::Value *> targetArgs;
+                size_t targetArgIdx = 0;
+                for (const auto &arg: call.arguments) {
+                    llvm::Value *argVal = generate_expression(*arg);
+
+                    if (targetArgIdx < targetFuncType->getNumParams()) {
+                        argVal = cast_value(argVal, targetFuncType->getParamType(targetArgIdx));
+                    } else if (targetFuncType->isVarArg()) {
+                        // Promote small integers for variadic functions (C ABI requirement)
+                        if (argVal->getType()->isIntegerTy() &&
+                            argVal->getType()->getIntegerBitWidth() < 32) {
+                            argVal = builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                        }
+                    }
+                    targetArgs.push_back(argVal);
+                    targetArgIdx++;
+                }
+
+                return builder->CreateCall(targetFunc, targetArgs);
             }
         }
         // No self argument for static methods
@@ -232,8 +351,22 @@ llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) 
         }
     }
 
+    const llvm::FunctionType *funcType = func->getFunctionType();
+    size_t argIdx = isStaticCall ? 0 : 1; // Account for 'this' parameter in instance methods
     for (const auto &arg: call.arguments) {
-        args.push_back(generate_expression(*arg));
+        llvm::Value *argVal = generate_expression(*arg);
+
+        if (argIdx < funcType->getNumParams()) {
+            argVal = cast_value(argVal, funcType->getParamType(argIdx));
+        } else if (funcType->isVarArg()) {
+            // Promote small integers for variadic functions (C ABI requirement)
+            if (argVal->getType()->isIntegerTy() &&
+                argVal->getType()->getIntegerBitWidth() < 32) {
+                argVal = builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+            }
+        }
+        args.push_back(argVal);
+        argIdx++;
     }
 
     return builder->CreateCall(func, args);

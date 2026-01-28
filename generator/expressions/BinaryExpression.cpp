@@ -16,9 +16,19 @@ llvm::Value *Generator::generate_binary_expression(const BinaryExpression &expr)
             const unsigned leftBits = leftType->getIntegerBitWidth();
             const unsigned rightBits = rightType->getIntegerBitWidth();
             if (leftBits > rightBits) {
-                right = builder->CreateSExt(right, leftType, "sext");
+                // Use ZExt for i1 (bool) to avoid sign extension issues (1 in i1 sign-extends to -1)
+                if (rightBits == 1) {
+                    right = builder->CreateZExt(right, leftType, "zext");
+                } else {
+                    right = builder->CreateSExt(right, leftType, "sext");
+                }
             } else {
-                left = builder->CreateSExt(left, rightType, "sext");
+                // Use ZExt for i1 (bool) to avoid sign extension issues
+                if (leftBits == 1) {
+                    left = builder->CreateZExt(left, rightType, "zext");
+                } else {
+                    left = builder->CreateSExt(left, rightType, "sext");
+                }
             }
         } else if (leftType->isFloatingPointTy() && rightType->isFloatingPointTy()) {
             if (leftType->getPrimitiveSizeInBits() > rightType->getPrimitiveSizeInBits()) {

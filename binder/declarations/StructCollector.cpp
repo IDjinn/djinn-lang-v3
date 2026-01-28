@@ -66,9 +66,24 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
     }
 
     for (const auto &method: decl.methods) {
-        const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, *method->returnType);
+        // Check if this is a constructor (marked by parser or method name == struct name)
+        const bool isCtorMethod = method->isConstructor() ||
+                                  (method->name.token_name == decl.name.token_name);
+
+        // For constructors, return type is implicitly the struct type
+        Type methodReturnType = isCtorMethod
+                                    ? Type::struct_type(qualifiedName)
+                                    : *method->returnType;
+
+        const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, methodReturnType);
         methodSym->isAbstract = method->isAbstract();
         methodSym->isStatic = method->isStatic();
+        methodSym->isVariadic = method->isVariadic;
+        methodSym->variadicForwardTarget = method->variadicForwardTarget;
+        methodSym->isConstructor = isCtorMethod;
+        if (isCtorMethod) {
+            methodSym->structName = qualifiedName;
+        }
 
         // Store pointers to AST body (AST owns the memory)
         methodSym->body = method->body.get();

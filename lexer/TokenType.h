@@ -85,6 +85,7 @@ enum class TokenType {
     // ATRIBUIÇÃO //
     EQUAL, // =
     ARROW, // =>
+    THIN_ARROW, // ->
     // -------- //
     COLON, // :
     COLON_COLON, // ::

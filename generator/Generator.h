@@ -78,6 +78,12 @@ private:
     llvm::Value *generate_enum_construction(const EnumDef &enumDef, const EnumVariantDef &variant,
                                             const std::vector<std::unique_ptr<Expression> > &args);
 
+    llvm::Value *extract_enum_tag(llvm::Value *enumValue, const EnumDef &enumDef);
+
+    llvm::Value *extract_enum_payload(llvm::Value *enumValue, const EnumDef &enumDef, size_t variantIdx);
+
+    llvm::Value *generate_switch_expression(const SwitchExpression &expr);
+
     void emit_used_declarations();
 
     llvm::Type *generate_type(const Type &type);

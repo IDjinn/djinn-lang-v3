@@ -219,8 +219,15 @@ std::vector<Token> Lexer::tokenize() {
                 case '+': tokens.push_back(make_token(TokenType::PLUS, "+"));
                     advance();
                     break;
-                case '-': tokens.push_back(make_token(TokenType::MINUS, "-"));
-                    advance();
+                case '-':
+                    if (peekNext() == '>') {
+                        tokens.push_back(make_token(TokenType::THIN_ARROW, "->"));
+                        advance();
+                        advance();
+                    } else {
+                        tokens.push_back(make_token(TokenType::MINUS, "-"));
+                        advance();
+                    }
                     break;
                 case '*': tokens.push_back(make_token(TokenType::STAR, "*"));
                     advance();

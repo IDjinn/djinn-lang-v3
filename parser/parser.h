@@ -15,7 +15,7 @@
 
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens);
+    explicit Parser(std::vector<Token> tokens, DiagnosticEngine &diagnostics);
 
     std::unique_ptr<Program> parse();
 
@@ -24,6 +24,7 @@ private:
     size_t current = 0;
 
     std::shared_ptr<Scope> currentScope = std::make_shared<Scope>();
+    DiagnosticEngine &_diagnostics;
 
     void pushScope();
 
@@ -106,6 +107,8 @@ private:
     std::unique_ptr<Expression> parse_primary();
 
     std::unique_ptr<Expression> parse_brace_initializer();
+
+    std::unique_ptr<Expression> parse_switch_expression();
 
     std::unique_ptr<ExternFunctionDeclaration> parse_extern_function(const std::string &abi);
 
