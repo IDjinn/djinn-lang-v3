@@ -7,15 +7,16 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <stacktrace>
 
 #include "binder/Binder.h"
 #include "generator/Generator.h"
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
+#include "utils/Logger.h"
 
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &path, const CompilerOptions &options) {
     namespace fs = std::filesystem;
@@ -50,15 +51,16 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
                 auto program = parser.parse();
 
                 if (options.print_ast && !isStdLib) {
-                    std::cout << "=====AST [" << entry.path().string() << "]=====\n";
-                    program->print(std::cout);
-                    std::cout << "=====" << std::endl;
+                    std::ostringstream oss;
+                    oss << "=====AST [" << entry.path().string() << "]=====\n";
+                    program->print(oss);
+                    oss << "=====";
+                    logger::debug("%s", oss.str().c_str());
                 }
 
                 programs.emplace_back(std::move(program));
             } catch (const CompileError &compile_error) {
-                std::cerr << "Error parsing " << entry.path().string() << ": "
-                        << compile_error.message() << std::endl;
+                logger::error("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
             }
         }
     };
@@ -73,7 +75,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
         parseDirectory(path, false);
 
         if (programs.empty()) {
-            std::cerr << "No .djinn files found in " << path << std::endl;
+            logger::error("No .djinn files found in %s", path.string().c_str());
             return {.returnCode = 1};
         }
 
@@ -85,7 +87,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
         generator.generate();
-        std::cout << "RESULT\n\n" << generator.print() << std::endl;
+        logger::info("RESULT\n\n%s", generator.print().c_str());
 
         std::ofstream outFile("./build/output.ll");
         outFile << generator.print();
@@ -137,8 +139,8 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
                     programs.emplace_back(std::move(program));
                 } catch (const CompileError &compile_error) {
                     if (!options.silentMode) {
-                        std::cerr << "Error parsing std: " << entry.path().string() << ": "
-                                << compile_error.message() << std::endl;
+                        logger::error("Error parsing std: %s: %s", entry.path().string().c_str(),
+                                      compile_error.message().c_str());
                     }
                 }
             }
@@ -154,9 +156,11 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         auto program = parser.parse();
 
         if (options.print_ast) {
-            std::cout << "=====AST=====\n";
-            program->print(std::cout);
-            std::cout << "=====" << std::endl;
+            std::ostringstream oss;
+            oss << "=====AST=====\n";
+            program->print(oss);
+            oss << "=====";
+            logger::debug("%s", oss.str().c_str());
         }
 
         programs.emplace_back(std::move(program));
@@ -171,7 +175,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         generator.generate();
 
         if (options.print_ir) {
-            std::cout << "RESULT\n\n" << generator.print() << std::endl;
+            logger::info("RESULT\n\n%s", generator.print().c_str());
         }
 
         if (options.optimize) {

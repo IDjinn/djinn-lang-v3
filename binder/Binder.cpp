@@ -4,6 +4,8 @@
 
 #include "Binder.h"
 
+#include "../utils/Logger.h"
+
 Binder::Binder(DiagnosticEngine &diagnostics)
     : _diagnostics(diagnostics) {
     _global_scope = std::make_shared<ScopedSymbolTable>();
@@ -25,6 +27,8 @@ BindingResult Binder::bind(const Program &program) {
 BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &programs) {
     BindingResult result;
     result.globalScope = _global_scope;
+
+    logger::debug("[BINDER] starting binding programs");
 
     for (const auto &[name, symbol]: _global_scope->symbols()) {
         if (const auto pos = name.rfind("::"); pos != std::string::npos) {

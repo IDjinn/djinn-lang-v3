@@ -4,6 +4,7 @@
 
 #include "LspServer.h"
 #include <filesystem>
+#include <iostream>
 
 namespace lsp {
     LspServer::LspServer() = default;
@@ -127,9 +128,9 @@ namespace lsp {
         if (!params.contains("textDocument")) return;
 
         auto &doc = params["textDocument"];
-        std::string uri = doc["uri"].get<std::string>();
-        std::string text = doc["text"].get<std::string>();
-        int version = doc.value("version", 0);
+        const std::string uri = doc["uri"].get<std::string>();
+        const std::string text = doc["text"].get<std::string>();
+        const int version = doc.value("version", 0);
 
         _documents[uri] = text;
         _documentVersions[uri] = version;
@@ -140,8 +141,8 @@ namespace lsp {
     void LspServer::handleDidChange(const json &params) {
         if (!params.contains("textDocument") || !params.contains("contentChanges")) return;
 
-        std::string uri = params["textDocument"]["uri"].get<std::string>();
-        int version = params["textDocument"].value("version", 0);
+        const std::string uri = params["textDocument"]["uri"].get<std::string>();
+        const int version = params["textDocument"].value("version", 0);
 
         // With full sync (change = 1), contentChanges has one element with full text
         auto &changes = params["contentChanges"];
@@ -156,7 +157,7 @@ namespace lsp {
     void LspServer::handleDidClose(const json &params) {
         if (!params.contains("textDocument")) return;
 
-        std::string uri = params["textDocument"]["uri"].get<std::string>();
+        const std::string uri = params["textDocument"]["uri"].get<std::string>();
         _documents.erase(uri);
         _documentVersions.erase(uri);
 
@@ -164,8 +165,10 @@ namespace lsp {
         publishDiagnostics(uri, {});
     }
 
+    const std::string CLEAR_SCREEN = "\x1B[2J\x1B[1;1H";
+
     void LspServer::validateDocument(const std::string &uri) {
-        std::system("cls");
+        std::cout << CLEAR_SCREEN << std::flush;
         auto it = _documents.find(uri);
         if (it == _documents.end()) return;
 

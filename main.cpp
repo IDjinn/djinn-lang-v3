@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "DjinnCompiler.h"
+#include "utils/Logger.h"
 
 void printUsage(const char *programName) {
     std::cout << "Usage: " << programName << " [options] <file.djinn|directory> [more files/dirs...]\n"
@@ -103,7 +104,7 @@ int main(int argc, char *argv[]) {
         } else if ((arg == "-l" || arg == "--link") && i + 1 < argc) {
             options.linkLibraries.emplace_back(argv[++i]);
         } else if (arg[0] == '-') {
-            std::cerr << "Unknown option: " << arg << "\n";
+            logger::error("Unknown option: %s", arg.c_str());
             printUsage(argv[0]);
             return 1;
         } else {
@@ -112,7 +113,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (inputPaths.empty()) {
-        std::cerr << "Error: no input files specified\n";
+        logger::error("No input files specified");
         printUsage(argv[0]);
         return 1;
     }
@@ -120,14 +121,14 @@ int main(int argc, char *argv[]) {
     std::vector<fs::path> inputFiles;
     for (const auto &path: inputPaths) {
         if (!fs::exists(path)) {
-            std::cerr << "Error: path does not exist: " << path << "\n";
+            logger::error("Path does not exist: %s", path.string().c_str());
             return 1;
         }
         collectDjinnFiles(path, inputFiles, recursive);
     }
 
     if (inputFiles.empty()) {
-        std::cerr << "Error: no .djinn files found\n";
+        logger::error("No .djinn files found");
         return 1;
     }
 
