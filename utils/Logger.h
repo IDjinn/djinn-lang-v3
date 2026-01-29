@@ -16,6 +16,7 @@
 #else
 #include <unistd.h>
 #endif
+#define ENABLE_COLOR 0
 
 namespace logger {
     enum class Level { TRACE, DEBUG, INFO, WARN, ERROR };
@@ -29,66 +30,47 @@ namespace logger {
     inline const char *levelStr[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
     inline const char *levelColor[] = {"\033[90m", "\033[36m", "\033[32m", "\033[33m", "\033[31m"};
 
+    constexpr const char *filename(const char *path) {
+        const char *file = path;
+        for (const char *p = path; *p; ++p)
+            if (*p == '/' || *p == '\\') file = p + 1;
+        return file;
+    }
 
-    inline void vlog(Level level, const char *formatter, va_list args) {
+    inline void log(Level level, const char *filePath, int line, const char *fmt, ...) {
         if (level < LOGGING_LEVEL) return;
 
         auto *out = level >= Level::ERROR ? stderr : stdout;
         const auto idx = static_cast<int>(level);
+        const char *fileName = filename(filePath);
 
         const auto now = std::chrono::system_clock::now();
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         const auto time = std::chrono::system_clock::to_time_t(now);
         const auto *tm = std::localtime(&time);
 
-        std::fprintf(out, "%s[%02d:%02d:%02d.%03d] [%s]\033[0m ",
-                     levelColor[idx], tm->tm_hour, tm->tm_min, tm->tm_sec, static_cast<int>(ms.count()), levelStr[idx]);
-        std::vfprintf(out, formatter, args);
+#if ENABLE_COLOR
+        std::fprintf(out, "%s[%02d:%02d:%02d.%03d] [%s:%d] [%s]\033[0m ",
+                     levelColor[idx], tm->tm_hour, tm->tm_min, tm->tm_sec, static_cast<int>(ms.count()),
+                     fileName, line, levelStr[idx]);
+#else
+        std::fprintf(out, "[%02d:%02d:%02d.%03d] [%s:%d] [%s] ",
+                     tm->tm_hour, tm->tm_min, tm->tm_sec, static_cast<int>(ms.count()),
+                     fileName, line, levelStr[idx]);
+#endif
+        va_list args;
+        va_start(args, fmt);
+        std::vfprintf(out, fmt, args);
+        va_end(args);
         std::fprintf(out, "\n");
         std::fflush(out);
     }
-
-    inline void log(const Level level, const char *formatter, ...) {
-        va_list args;
-        va_start(args, formatter);
-        vlog(level, formatter, args);
-        va_end(args);
-    }
-
-    inline void trace(const char *formatter, ...) {
-        va_list arguments;
-        va_start(arguments, formatter);
-        vlog(Level::TRACE, formatter, arguments);
-        va_end(arguments);
-    }
-
-    inline void debug(const char *formatter, ...) {
-        va_list arguments;
-        va_start(arguments, formatter);
-        vlog(Level::DEBUG, formatter, arguments);
-        va_end(arguments);
-    }
-
-    inline void info(const char *formatter, ...) {
-        va_list arguments;
-        va_start(arguments, formatter);
-        vlog(Level::INFO, formatter, arguments);
-        va_end(arguments);
-    }
-
-    inline void warn(const char *formatter, ...) {
-        va_list arguments;
-        va_start(arguments, formatter);
-        vlog(Level::WARN, formatter, arguments);
-        va_end(arguments);
-    }
-
-    inline void error(const char *formatter, ...) {
-        va_list arguments;
-        va_start(arguments, formatter);
-        vlog(Level::ERROR, formatter, arguments);
-        va_end(arguments);
-    }
 } // namespace logger
+
+#define LOG_TRACE(...) logger::log(logger::Level::TRACE, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_DEBUG(...) logger::log(logger::Level::DEBUG, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_INFO(...)  logger::log(logger::Level::INFO,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_WARN(...)  logger::log(logger::Level::WARN,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_ERROR(...) logger::log(logger::Level::ERROR, __FILE__, __LINE__, __VA_ARGS__)
 
 #endif //DJINN_LOGGER_H

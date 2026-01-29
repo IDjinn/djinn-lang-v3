@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
         } else if ((arg == "-l" || arg == "--link") && i + 1 < argc) {
             options.linkLibraries.emplace_back(argv[++i]);
         } else if (arg[0] == '-') {
-            logger::error("Unknown option: %s", arg.c_str());
+            LOG_ERROR("Unknown option: %s", arg.c_str());
             printUsage(argv[0]);
             return 1;
         } else {
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (inputPaths.empty()) {
-        logger::error("No input files specified");
+        LOG_ERROR("No input files specified");
         printUsage(argv[0]);
         return 1;
     }
@@ -121,14 +121,14 @@ int main(int argc, char *argv[]) {
     std::vector<fs::path> inputFiles;
     for (const auto &path: inputPaths) {
         if (!fs::exists(path)) {
-            logger::error("Path does not exist: %s", path.string().c_str());
+            LOG_ERROR("Path does not exist: %s", path.string().c_str());
             return 1;
         }
         collectDjinnFiles(path, inputFiles, recursive);
     }
 
     if (inputFiles.empty()) {
-        logger::error("No .djinn files found");
+        LOG_ERROR("No .djinn files found");
         return 1;
     }
 

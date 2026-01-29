@@ -102,8 +102,8 @@ void Generator::verify_all_symbols_generated() const {
                ("Extern function not found in LLVM module: " + externSym->name).c_str());
     }
 
-    logger::info("[Generator] Verification passed: %zu functions, %zu extern functions, %zu structs generated.",
-                 generatedFunctions, generatedExternFunctions, generatedStructs);
+    LOG_INFO("[Generator] Verification passed: %zu functions, %zu extern functions, %zu structs generated.",
+             generatedFunctions, generatedExternFunctions, generatedStructs);
 }
 
 
@@ -200,7 +200,7 @@ std::string Generator::print() const {
 bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) const {
     for (const auto &path: llPaths) {
         if (!std::filesystem::exists(path)) {
-            logger::error("Link error: file not found: %s", path.string().c_str());
+            LOG_ERROR("Link error: file not found: %s", path.string().c_str());
             return false;
         }
 
@@ -208,13 +208,13 @@ bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) c
         auto linkedModule = llvm::parseIRFile(path.string(), err, *context);
 
         if (!linkedModule) {
-            logger::error("Link error: failed to parse %s", path.string().c_str());
+            LOG_ERROR("Link error: failed to parse %s", path.string().c_str());
             err.print("djinn", llvm::errs());
             return false;
         }
 
         if (llvm::Linker::linkModules(*module, std::move(linkedModule))) {
-            logger::error("Link error: failed to link %s", path.string().c_str());
+            LOG_ERROR("Link error: failed to link %s", path.string().c_str());
             return false;
         }
     }

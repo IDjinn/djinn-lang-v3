@@ -28,7 +28,7 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
     BindingResult result;
     result.globalScope = _global_scope;
 
-    logger::debug("[BINDER] starting binding programs");
+    LOG_DEBUG("starting binding programs");
 
     for (const auto &[name, symbol]: _global_scope->symbols()) {
         if (const auto pos = name.rfind("::"); pos != std::string::npos) {

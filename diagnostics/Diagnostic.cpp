@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <algorithm>
 
+#include "../utils/Logger.h"
+
 std::vector<size_t> DiagnosticEngine::buildLineIndex(const std::string &source) {
     std::vector<size_t> offsets;
     offsets.push_back(0);
@@ -23,6 +25,7 @@ void DiagnosticEngine::registerSource(const std::string &fileId, std::string sou
     file.lineOffsets = buildLineIndex(source);
     file.source = std::move(source);
     _sources[fileId] = std::move(file);
+    LOG_DEBUG("registering file %s", fileId.c_str());
 }
 
 std::string DiagnosticEngine::getLine(const std::string &fileId, const uint32_t lineNum) const {
