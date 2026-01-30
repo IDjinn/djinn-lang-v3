@@ -8,7 +8,7 @@
 
 namespace djinn {
     void DeclarationCollectorVisitor::visit(const StructDeclaration &decl, const std::string &prefix) {
-        _binder.collectStructWithPrefix(decl, prefix);
+        _binder.collectStruct(decl, prefix);
     }
 
     void DeclarationCollectorVisitor::visit(const FunctionDeclaration &decl, const std::string &prefix) {

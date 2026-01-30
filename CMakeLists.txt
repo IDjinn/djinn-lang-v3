@@ -21,6 +21,9 @@ file(GLOB_RECURSE DJINN_SOURCES
         diagnostics/*.cpp
         binder/*.cpp
         binder/visitors/*.cpp
+        binder/handlers/*.cpp
+        binder/validation/*.cpp
+        binder/scope/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -32,6 +35,9 @@ file(GLOB_RECURSE DJINN_HEADERS
         parser/ast/*.h
         binder/*.h
         binder/visitors/*.h
+        binder/handlers/*.h
+        binder/validation/*.h
+        binder/scope/*.h
         visitor/*.h
 )
 

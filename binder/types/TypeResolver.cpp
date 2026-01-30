@@ -2,7 +2,7 @@
 // Created by Claude on 05/01/2026.
 //
 
-#include <assert.h>
+#include <cassert>
 
 #include "../Binder.h"
 
@@ -23,8 +23,11 @@ bool Binder::is_generic_type(const Type &type, const StructDeclaration &struc) {
     return !struc.genericParams.empty() && struc.genericParams.find(type.structName) != nullptr;
 }
 
-bool Binder::isTypeDefined(Type &type) const {
-    switch (type.kind) {
+bool Binder::isTypeDefined(const Type &type) const {
+    // Use mutable reference internally for normalization
+    Type &mutableType = const_cast<Type &>(type);
+
+    switch (mutableType.kind) {
         case TypeKind::INTEGER:
         case TypeKind::STRING:
         case TypeKind::VOID:
@@ -36,29 +39,29 @@ bool Binder::isTypeDefined(Type &type) const {
             return true;
 
         case TypeKind::STRUCT: {
-            if (_global_scope->lookupInterface(type.structName) != nullptr) {
+            if (_global_scope->lookupInterface(mutableType.structName) != nullptr) {
                 return true;
             }
             // Check for struct
-            if (const auto structSym = _global_scope->lookupStruct(type.structName)) {
+            if (const auto structSym = _global_scope->lookupStruct(mutableType.structName)) {
                 // Normalize: update structName to qualified name if it was an alias
-                if (structSym->name != type.structName) {
-                    const_cast<Type &>(type).structName = structSym->name;
+                if (structSym->name != mutableType.structName) {
+                    mutableType.structName = structSym->name;
                 }
                 // Also normalize generic args
-                for (auto &arg: const_cast<Type &>(type).genericArgs) {
+                for (auto &arg: mutableType.genericArgs) {
                     isTypeDefined(arg);
                 }
                 return true;
             }
             // Check for enum (enums also use TypeKind::STRUCT)
-            if (const auto enumSym = _global_scope->lookupEnum(type.structName)) {
+            if (const auto enumSym = _global_scope->lookupEnum(mutableType.structName)) {
                 // Normalize: update structName to qualified name if it was an alias
-                if (enumSym->name != type.structName) {
-                    const_cast<Type &>(type).structName = enumSym->name;
+                if (enumSym->name != mutableType.structName) {
+                    mutableType.structName = enumSym->name;
                 }
                 // Also normalize generic args
-                for (auto &arg: const_cast<Type &>(type).genericArgs) {
+                for (auto &arg: mutableType.genericArgs) {
                     isTypeDefined(arg);
                 }
                 return true;
@@ -68,23 +71,14 @@ bool Binder::isTypeDefined(Type &type) const {
 
         case TypeKind::ARRAY:
         case TypeKind::POINTER:
-            if (type.elementType) {
-                return isTypeDefined(*type.elementType);
+            if (mutableType.elementType) {
+                return isTypeDefined(*mutableType.elementType);
             }
             return false;
 
         default:
             return false;
     }
-}
-
-bool Binder::isTypeDefined(const Type &type) const {
-    return isTypeDefined(const_cast<Type &>(type));
-}
-
-bool Binder::isTypeDefined(Type *type) const {
-    assert(type != nullptr);
-    return isTypeDefined(*type);
 }
 
 std::optional<Type> Binder::inferExpressionType(const Expression &expr) const {

@@ -4,49 +4,16 @@
 
 #include "../Binder.h"
 
-void Binder::collectStruct(const StructDeclaration &decl) const {
-    const auto structSym = std::make_shared<StructSymbol>(decl.name.token_name);
-
-    for (const auto &genParam: decl.genericParams.params) {
-        structSym->addGenericParam(genParam.name.token_name);
-    }
-
-    for (const auto &field: decl.fields) {
-        if (structSym->hasField(field.name.token_name)) {
-            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
-                         "field '" + field.name.token_name + "' is already defined", field, field.name.location);
-        } else {
-            structSym->addField(field.name.token_name, *field.type);
-        }
-    }
-
-    for (const auto &prop: decl.properties) {
-        if (!prop.isAutoProperty() && structSym->hasMember(prop.name.token_name)) {
-            BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
-                         "field '" + prop.name.token_name + "' is already defined", prop, prop.name.location);
-        } else {
-            structSym->addProperty(prop.name.token_name, *prop.type, prop.hasGetter, prop.hasSetter);
-        }
-    }
-
-    if (decl.baseType) {
-        structSym->baseType = std::make_unique<Type>(*decl.baseType);
-    }
-
-    if (!_global_scope->defineStruct(structSym)) {
-        BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "struct '" + decl.name.token_name + "' is already defined",
-                     decl, decl.name.location);
-    }
-}
-
-void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::string &prefix) const {
+void Binder::collectStruct(const StructDeclaration &decl, const std::string &prefix) const {
     const std::string qualifiedName = prefix.empty() ? decl.name.token_name : prefix + "::" + decl.name.token_name;
     const auto structSym = std::make_shared<StructSymbol>(qualifiedName);
 
+    // Generic parameters
     for (const auto &genParam: decl.genericParams.params) {
         structSym->addGenericParam(genParam.name.token_name);
     }
 
+    // Fields
     for (const auto &field: decl.fields) {
         if (structSym->hasField(field.name.token_name)) {
             BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
@@ -56,6 +23,7 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
         }
     }
 
+    // Properties
     for (const auto &prop: decl.properties) {
         if (!prop.isAutoProperty() && structSym->hasMember(prop.name.token_name)) {
             BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
@@ -65,6 +33,7 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
         }
     }
 
+    // Methods
     for (const auto &method: decl.methods) {
         // Check if this is a constructor (marked by parser or method name == struct name)
         const bool isCtorMethod = method->isConstructor() ||
@@ -100,14 +69,17 @@ void Binder::collectStructWithPrefix(const StructDeclaration &decl, const std::s
         structSym->addMethod(methodSym);
     }
 
+    // Implements
     for (const auto &ifaceName: decl.implements) {
         structSym->addImplements(ifaceName);
     }
 
+    // Base type
     if (decl.baseType) {
         structSym->baseType = std::make_unique<Type>(*decl.baseType);
     }
 
+    // Define in global scope
     if (!_global_scope->defineStruct(structSym)) {
         BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "struct '" + qualifiedName + "' is already defined", decl,
                      decl.name.location);

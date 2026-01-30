@@ -3,26 +3,28 @@
 //
 
 #include "../Binder.h"
+#include "../scope/ScopeGuard.h"
+
+using djinn::binder::ScopeGuard;
+using djinn::binder::ControlFlowContext;
 
 void Binder::bindIfStatement(const IfStatement &stmt) {
-    bindExpression(*stmt.condition);
-
-    pushScope();
-    if (stmt.thenBranch) {
-        bindBlock(*stmt.thenBranch);
+    bindExpression(*stmt.condition); {
+        ScopeGuard guard(*this);
+        if (stmt.thenBranch) {
+            bindBlock(*stmt.thenBranch);
+        }
     }
-    popScope();
 
     if (stmt.elseBranch) {
-        pushScope();
+        ScopeGuard guard(*this);
         bindBlock(*stmt.elseBranch);
-        popScope();
     }
 }
 
 void Binder::bindForStatement(const ForStatement &stmt) {
-    pushScope();
-    loopDepth_++;
+    ScopeGuard scopeGuard(*this);
+    ControlFlowContext::LoopGuard loopGuard(_controlFlow);
 
     if (stmt.initializer) {
         bindExpression(*stmt.initializer);
@@ -36,35 +38,28 @@ void Binder::bindForStatement(const ForStatement &stmt) {
     if (stmt.body) {
         bindBlock(*stmt.body);
     }
-
-    loopDepth_--;
-    popScope();
 }
 
 void Binder::bindWhileStatement(const WhileStatement &stmt) {
     bindExpression(*stmt.condition);
 
-    pushScope();
-    loopDepth_++;
+    ScopeGuard scopeGuard(*this);
+    ControlFlowContext::LoopGuard loopGuard(_controlFlow);
 
     if (stmt.body) {
         bindBlock(*stmt.body);
     }
-
-    loopDepth_--;
-    popScope();
 }
 
 void Binder::bindDoWhileStatement(const DoWhileStatement &stmt) {
-    pushScope();
-    loopDepth_++;
+    {
+        ScopeGuard scopeGuard(*this);
+        ControlFlowContext::LoopGuard loopGuard(_controlFlow);
 
-    if (stmt.body) {
-        bindBlock(*stmt.body);
+        if (stmt.body) {
+            bindBlock(*stmt.body);
+        }
     }
-
-    loopDepth_--;
-    popScope();
 
     bindExpression(*stmt.condition);
 }
@@ -72,18 +67,15 @@ void Binder::bindDoWhileStatement(const DoWhileStatement &stmt) {
 void Binder::bindSwitchStatement(const SwitchStatement &stmt) {
     bindExpression(*stmt.value);
 
-    switchDepth_++;
+    ControlFlowContext::SwitchGuard switchGuard(_controlFlow);
 
     for (const auto &caseStmt: stmt.cases) {
         if (caseStmt->expression) {
             bindExpression(*caseStmt->expression);
         }
         if (caseStmt->body) {
-            pushScope();
+            ScopeGuard guard(*this);
             bindBlock(*caseStmt->body);
-            popScope();
         }
     }
-
-    switchDepth_--;
 }

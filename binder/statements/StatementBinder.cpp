@@ -11,14 +11,14 @@ void Binder::bindStatement(const Statement &stmt) {
 }
 
 void Binder::validateBreakStatement(const BreakStatement &stmt) {
-    if (loopDepth_ == 0 && switchDepth_ == 0) {
+    if (!_controlFlow.canBreak()) {
         BINDER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
                      "'break' outside of loop or switch", &stmt, stmt.location);
     }
 }
 
 void Binder::validateContinueStatement(const ContinueStatement &stmt) {
-    if (loopDepth_ == 0) {
+    if (!_controlFlow.canContinue()) {
         BINDER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
                      "'continue' outside of loop", &stmt, stmt.location);
     }

@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include "SymbolTable.h"
+#include "scope/ControlFlowContext.h"
 #include "../parser/ast/Declaration.h"
 #include "../parser/ast/Statement.h"
 #include "../parser/ast/Expression.h"
@@ -63,12 +64,27 @@ namespace djinn {
     class ImportProcessorVisitor;
 }
 
+namespace djinn::binder {
+    class ScopeGuard;
+    class CallHandler;
+    class MethodCallHandler;
+    class IntrinsicCallHandler;
+    class EnumConstructionHandler;
+    class RegularFunctionCallHandler;
+}
+
 class Binder {
     friend class djinn::BinderExpressionVisitor;
     friend class djinn::BinderStatementVisitor;
     friend class djinn::DeclarationCollectorVisitor;
     friend class djinn::ProgramBinderVisitor;
     friend class djinn::ImportProcessorVisitor;
+    friend class djinn::binder::ScopeGuard;
+    friend class djinn::binder::CallHandler;
+    friend class djinn::binder::MethodCallHandler;
+    friend class djinn::binder::IntrinsicCallHandler;
+    friend class djinn::binder::EnumConstructionHandler;
+    friend class djinn::binder::RegularFunctionCallHandler;
 
 public:
     explicit Binder(DiagnosticEngine &diagnostics);
@@ -83,8 +99,7 @@ private:
     std::shared_ptr<ScopedSymbolTable> _global_scope;
 
     std::string currentFunction_;
-    int loopDepth_ = 0;
-    int switchDepth_ = 0;
+    djinn::binder::ControlFlowContext _controlFlow;
 
     template<typename T>
     constexpr std::string type_to_string(const T &value) const {
@@ -104,7 +119,7 @@ private:
 
     void collectExternFunction(const ExternFunctionDeclaration &decl) const;
 
-    void collectStruct(const StructDeclaration &decl) const;
+    void collectStruct(const StructDeclaration &decl, const std::string &prefix = "") const;
 
     void collectInterface(const InterfaceDeclaration &decl) const;
 
@@ -118,9 +133,6 @@ private:
 
     void collectFunctionWithPrefix(FunctionDeclaration &decl, const std::string &prefix) const;
 
-    bool isTypeDefined(Type *type) const;
-
-    void collectStructWithPrefix(const StructDeclaration &decl, const std::string &prefix) const;
 
     void collectNamespace(const NamespaceDeclaration &ns, const std::string &prefix) const;
 
@@ -173,8 +185,6 @@ private:
     std::unique_ptr<Type> resolveType(const Type &type) const;
 
     static bool is_generic_type(const Type &type, const StructDeclaration &struc);
-
-    bool isTypeDefined(Type &type) const;
 
     bool isTypeDefined(const Type &type) const;
 
