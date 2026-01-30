@@ -102,7 +102,7 @@ void Generator::verify_all_symbols_generated() const {
                ("Extern function not found in LLVM module: " + externSym->name).c_str());
     }
 
-    LOG_INFO("[Generator] Verification passed: %zu functions, %zu extern functions, %zu structs generated.",
+    LOG_INFO("verification passed: %zu functions, %zu extern functions, %zu structs generated.",
              generatedFunctions, generatedExternFunctions, generatedStructs);
 }
 

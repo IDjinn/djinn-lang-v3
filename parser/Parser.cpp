@@ -49,6 +49,7 @@ Parser::Parser(std::vector<Token> tokens, DiagnosticEngine &diagnostics) : token
                                                                            _diagnostics(diagnostics) {
 }
 
+
 void Parser::pushScope() {
     currentScope = std::make_shared<Scope>(currentScope);
 }
@@ -125,7 +126,7 @@ Token &Parser::expect(const std::string &message, const TokenType type) {
     const auto &token = previous();
     const uint32_t col = token.position.column + token.value.length();
     PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message,
-                       SourceLocation(token.position.fileId, token.position.line, col, 1));
+                 SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
 Token &Parser::expect(const std::string &message, const std::vector<TokenType> &types) {
@@ -135,7 +136,7 @@ Token &Parser::expect(const std::string &message, const std::vector<TokenType> &
     const auto &token = previous();
     const uint32_t col = token.position.column + token.value.length();
     PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message,
-                       SourceLocation(token.position.fileId, token.position.line, col, 1));
+                 SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
 bool Parser::isAtEnd() {
@@ -239,7 +240,7 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         do {
             if (match(TokenType::DOT_DOT_DOT)) {
                 method->isVariadic = true;
-                break;  // variadic marker comes after parameters
+                break; // variadic marker comes after parameters
             }
             auto paramType = parse_type();
             const Token &paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
@@ -551,8 +552,8 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes() {
     return attributes;
 }
 
-std::unique_ptr<Program> Parser::parse() {
-    auto program = std::make_unique<Program>();
+std::unique_ptr<Program> Parser::parse(const std::string &program_name) {
+    auto program = std::make_unique<Program>(program_name);
 
     while (!isAtEnd()) {
         if (check(TokenType::IMPORT)) {
@@ -826,8 +827,8 @@ std::unique_ptr<SwitchStatement> Parser::parse_switch_statement() {
         } else {
             const auto &tok = peek();
             PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "esperado 'case' ou 'default'",
-                               SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
-                                              tok.value.length()));
+                         SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
+                             tok.value.length()));
         }
 
         // Parse case body statements until next case/default/rbrace
@@ -1153,8 +1154,8 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
     const auto &tok = peek();
     PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION, "expressão inesperada",
-                       SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
-                                      tok.value.empty() ? 1 : tok.value.length()));
+                 SourceLocation(tok.position.fileId, tok.position.line, tok.position.column,
+                     tok.value.empty() ? 1 : tok.value.length()));
 }
 
 std::unique_ptr<Expression> Parser::parse_brace_initializer() {

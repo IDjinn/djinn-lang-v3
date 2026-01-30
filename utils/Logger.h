@@ -16,13 +16,15 @@
 #else
 #include <unistd.h>
 #endif
+
+#define LOGGER_LEVEL Level::TRACE
 #define ENABLE_COLOR 0
 
 namespace logger {
     enum class Level { TRACE, DEBUG, INFO, WARN, ERROR };
 
 #ifndef LOGGER_LEVEL
-    constexpr auto LOGGING_LEVEL = Level::DEBUG;
+    constexpr auto LOGGING_LEVEL = Level::INFO;
 #else
     constexpr auto LOGGING_LEVEL = LOGGER_LEVEL;
 #endif
@@ -30,11 +32,21 @@ namespace logger {
     inline const char *levelStr[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
     inline const char *levelColor[] = {"\033[90m", "\033[36m", "\033[32m", "\033[33m", "\033[31m"};
 
-    constexpr const char *filename(const char *path) {
-        const char *file = path;
-        for (const char *p = path; *p; ++p)
-            if (*p == '/' || *p == '\\') file = p + 1;
-        return file;
+    inline const char *relativePath(const char *path) {
+#ifdef SOURCE_ROOT
+        constexpr const char *root = SOURCE_ROOT;
+        const char *p = path;
+        const char *r = root;
+        while (*r && *p) {
+            char pc = (*p == '\\') ? '/' : *p;
+            char rc = (*r == '\\') ? '/' : *r;
+            if (pc != rc) break;
+            ++p;
+            ++r;
+        }
+        if (*r == '\0') return p;
+#endif
+        return path;
     }
 
     inline void log(Level level, const char *filePath, int line, const char *fmt, ...) {
@@ -42,7 +54,7 @@ namespace logger {
 
         auto *out = level >= Level::ERROR ? stderr : stdout;
         const auto idx = static_cast<int>(level);
-        const char *fileName = filename(filePath);
+        const char *relPath = relativePath(filePath);
 
         const auto now = std::chrono::system_clock::now();
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -50,13 +62,13 @@ namespace logger {
         const auto *tm = std::localtime(&time);
 
 #if ENABLE_COLOR
-        std::fprintf(out, "%s[%02d:%02d:%02d.%03d] [%s:%d] [%s]\033[0m ",
+        std::fprintf(out, "%s[%02d:%02d:%02d %03d] [%s:%d] [%s]\033[0m ",
                      levelColor[idx], tm->tm_hour, tm->tm_min, tm->tm_sec, static_cast<int>(ms.count()),
-                     fileName, line, levelStr[idx]);
+                     relPath, line, levelStr[idx]);
 #else
-        std::fprintf(out, "[%02d:%02d:%02d.%03d] [%s:%d] [%s] ",
+        std::fprintf(out, "[%02d:%02d:%02d %03d] [%s:%d] [%s] ",
                      tm->tm_hour, tm->tm_min, tm->tm_sec, static_cast<int>(ms.count()),
-                     fileName, line, levelStr[idx]);
+                     relPath, line, levelStr[idx]);
 #endif
         va_list args;
         va_start(args, fmt);

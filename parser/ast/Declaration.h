@@ -12,6 +12,7 @@
 #include "Type.h"
 #include "Statement.h"
 #include "Generic.h"
+#include "../../visitor/DeclarationVisitor.h"
 
 struct EnumDeclaration;
 
@@ -213,6 +214,10 @@ struct StructDeclaration : Location {
         return baseType != nullptr;
     }
 
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "StructDeclaration(" << name.token_name;
@@ -257,6 +262,10 @@ struct InterfaceDeclaration : Location {
     SourceIdentifier name;
     GenericParams genericParams;
     std::vector<std::unique_ptr<StructMethodDeclaration> > methods; // abstract method signatures
+
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
+    }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -304,6 +313,10 @@ struct FunctionDeclaration : Location {
           body(std::move(block)) {
     }
 
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "Function " << name.token_name << "<" << returnType << ">(";
@@ -324,6 +337,10 @@ struct NamespaceDeclaration : Location {
     std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces; // Nested namespaces
 
     explicit NamespaceDeclaration(SourceIdentifier name) : name(std::move(name)) {
+    }
+
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
     }
 
     void print(std::ostream &os, const int indent = 0) const override {
@@ -380,6 +397,10 @@ struct ImportDeclaration : Location {
     explicit ImportDeclaration(QualifiedName path) : namespacePath(std::move(path)) {
     }
 
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "Import(" << namespacePath.toString() << ")";
@@ -392,6 +413,10 @@ struct ExternFunctionDeclaration : Location {
     std::vector<Parameter> parameters;
     bool isVariadic = false;
     std::string abi = "C";
+
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
+    }
 
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
@@ -438,6 +463,10 @@ struct EnumDeclaration : Location {
 
     [[nodiscard]] bool isGeneric() const { return !genericParams.empty(); }
 
+    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+        visitor.visit(*this, prefix);
+    }
+
     void print(std::ostream &os, const int indent = 0) const override {
         writeIndent(os, indent);
         os << "Enum(" << name.token_name;
@@ -462,6 +491,7 @@ struct EnumDeclaration : Location {
 struct Program : Location {
     // File-scoped namespace: "namespace foo;" at top of file
     // Empty string means global namespace
+    std::string name;
     std::string fileNamespace;
 
     std::vector<std::unique_ptr<ImportDeclaration> > imports;
@@ -472,10 +502,25 @@ struct Program : Location {
     std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces;
     std::vector<std::unique_ptr<EnumDeclaration> > enums;
 
+    explicit Program(const std::string &name) {
+        this->name = name;
+    }
+
     [[nodiscard]] bool hasFileNamespace() const { return !fileNamespace.empty(); }
 
     [[nodiscard]] std::string getNamespacePrefix() const {
         return fileNamespace.empty() ? "" : fileNamespace + "::";
+    }
+
+    void acceptAll(djinn::IDeclarationVisitor &visitor) const {
+        const std::string prefix = fileNamespace;
+        for (const auto &decl: imports) decl->accept(visitor, prefix);
+        for (const auto &decl: externFunctions) decl->accept(visitor, "");
+        for (const auto &decl: interfaces) decl->accept(visitor, prefix);
+        for (const auto &decl: enums) decl->accept(visitor, prefix);
+        for (const auto &decl: structs) decl->accept(visitor, prefix);
+        for (const auto &decl: functions) decl->accept(visitor, prefix);
+        for (const auto &decl: namespaces) decl->accept(visitor, "");
     }
 
     void print(std::ostream &os, const int indent = 0) const override {

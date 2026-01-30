@@ -17,8 +17,10 @@
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 #include "utils/Logger.h"
+#include "utils/StopWatch.h"
 
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &path, const CompilerOptions &options) {
+    utils::StopWatch global_watch("build time");
     namespace fs = std::filesystem;
     assert(!options.outputDirectory.empty() && "You need give output directory!");
 
@@ -42,17 +44,18 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
                     std::istreambuf_iterator<char>()
                 );
 
-                diagnostics.registerSource(entry.path().string(), source);
+                auto file_name = entry.path().string();
+                diagnostics.registerSource(file_name, source);
 
                 Lexer lexer(source);
                 const auto tokens = lexer.tokenize();
 
                 Parser parser(tokens, diagnostics);
-                auto program = parser.parse();
+                auto program = parser.parse(file_name);
 
                 if (options.print_ast && !isStdLib) {
                     std::ostringstream oss;
-                    oss << "=====AST [" << entry.path().string() << "]=====\n";
+                    oss << "=====AST [" << file_name << "]=====\n";
                     program->print(oss);
                     oss << "=====";
                     LOG_DEBUG("%s", oss.str().c_str());
@@ -89,6 +92,11 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
         generator.generate();
         if (options.print_ir) {
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
+        }
+
+        if (options.optimize) {
+            utils::StopWatch opt_stop_watch("optimize ir");
+            generator.optimize();
         }
 
         std::ofstream outFile("./build/output.ll");
@@ -130,13 +138,14 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
                         std::istreambuf_iterator<char>()
                     );
 
-                    diagnostics.registerSource(entry.path().string(), stdSource);
+                    auto file_id = entry.path().string();
+                    diagnostics.registerSource(file_id, stdSource);
 
                     Lexer lexer(stdSource);
                     const auto tokens = lexer.tokenize();
 
                     Parser parser(tokens, diagnostics);
-                    auto program = parser.parse();
+                    auto program = parser.parse(file_id);
 
                     programs.emplace_back(std::move(program));
                 } catch (const CompileError &compile_error) {
@@ -155,7 +164,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens, diagnostics);
-        auto program = parser.parse();
+        auto program = parser.parse("main");
 
         if (options.print_ast) {
             std::ostringstream oss;
@@ -181,6 +190,7 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         }
 
         if (options.optimize) {
+            utils::StopWatch opt_stop_watch("optimize ir");
             generator.optimize();
         }
 

@@ -1,52 +1,29 @@
 //
-// Function, method and namespace binding
+// Function, method and namespace binding - uses visitor pattern
 //
 
 #include <assert.h>
 
 #include "../Binder.h"
+#include "../visitors/ProgramBinderVisitor.h"
 
 void Binder::bindProgram(const Program &program) {
+    djinn::ProgramBinderVisitor visitor(*this);
+
     for (const auto &ext: program.externFunctions) {
-        if (!isTypeDefined(*ext->returnType)) {
-            if (ext->returnType->kind == TypeKind::STRUCT) {
-                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + ext->returnType->structName + "'",
-                             ext, ext->name.location);
-            }
-        }
-        for (const auto &param: ext->parameters) {
-            if (!isTypeDefined(*param.type)) {
-                if (param.type->kind == TypeKind::STRUCT) {
-                    BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "undefined struct '" + param.type->structName + "'",
-                                 param, param.name.location);
-                }
-            }
-        }
+        ext->accept(visitor, "");
     }
 
     for (const auto &struc: program.structs) {
-        for (const auto &field: struc->fields) {
-            if (!isTypeDefined(*field.type)) {
-                if (field.type->kind == TypeKind::STRUCT) {
-                    if (struc->genericParams.find(field.type->structName) == nullptr) {
-                        BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT,
-                                     "undefined struct '" + field.type->structName + "'", field, field.name.location);
-                    }
-                }
-            }
-        }
-        // Bind struct methods
-        for (const auto &method: struc->methods) {
-            bindMethod(*method, *struc);
-        }
+        struc->accept(visitor, program.fileNamespace);
     }
 
     for (const auto &func: program.functions) {
-        bindFunction(*func);
+        func->accept(visitor, program.fileNamespace);
     }
 
     for (const auto &ns: program.namespaces) {
-        bindNamespace(*ns, "");
+        ns->accept(visitor, "");
     }
 }
 
@@ -138,27 +115,50 @@ void Binder::bindMethod(StructMethodDeclaration &method, const StructDeclaration
 void Binder::bindNamespace(const NamespaceDeclaration &ns, const std::string &prefix) {
     const std::string qualifiedPrefix = prefix.empty() ? ns.name.token_name : prefix + "::" + ns.name.token_name;
 
+    djinn::ProgramBinderVisitor visitor(*this);
+
     for (const auto &struc: ns.structs) {
-        for (const auto &field: struc->fields) {
-            if (!isTypeDefined(*field.type)) {
-                if (field.type->kind == TypeKind::STRUCT) {
-                    if (struc->genericParams.find(field.type->structName) == nullptr) {
-                        BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT,
-                                     "undefined struct '" + field.type->structName + "'", field, field.name.location);
-                    }
-                }
-            }
-        }
-        for (const auto &method: struc->methods) {
-            bindMethod(*method, *struc);
-        }
+        struc->accept(visitor, qualifiedPrefix);
     }
 
     for (const auto &func: ns.functions) {
-        bindFunction(*func);
+        func->accept(visitor, qualifiedPrefix);
     }
 
     for (const auto &nestedNs: ns.namespaces) {
-        bindNamespace(*nestedNs, qualifiedPrefix);
+        nestedNs->accept(visitor, qualifiedPrefix);
+    }
+}
+
+void Binder::validateExternFunctionTypes(const ExternFunctionDeclaration &decl) {
+    if (!isTypeDefined(*decl.returnType)) {
+        if (decl.returnType->kind == TypeKind::STRUCT) {
+            BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT,
+                         "undefined struct '" + decl.returnType->structName + "'",
+                         &decl, decl.name.location);
+        }
+    }
+    for (const auto &param: decl.parameters) {
+        if (!isTypeDefined(*param.type)) {
+            if (param.type->kind == TypeKind::STRUCT) {
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT,
+                             "undefined struct '" + param.type->structName + "'",
+                             param, param.name.location);
+            }
+        }
+    }
+}
+
+void Binder::validateStructFieldTypes(const StructDeclaration &decl) {
+    for (const auto &field: decl.fields) {
+        if (!isTypeDefined(*field.type)) {
+            if (field.type->kind == TypeKind::STRUCT) {
+                if (decl.genericParams.find(field.type->structName) == nullptr) {
+                    BINDER_ERROR(DiagnosticCode::UNDEFINED_STRUCT,
+                                 "undefined struct '" + field.type->structName + "'",
+                                 field, field.name.location);
+                }
+            }
+        }
     }
 }

@@ -37,6 +37,9 @@ file(GLOB_RECURSE DJINN_HEADERS
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+# Define source root for logger relative paths
+add_compile_definitions(SOURCE_ROOT="${CMAKE_SOURCE_DIR}/")
+
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")

@@ -58,11 +58,17 @@ struct BindingResult {
 namespace djinn {
     class BinderExpressionVisitor;
     class BinderStatementVisitor;
+    class DeclarationCollectorVisitor;
+    class ProgramBinderVisitor;
+    class ImportProcessorVisitor;
 }
 
 class Binder {
     friend class djinn::BinderExpressionVisitor;
     friend class djinn::BinderStatementVisitor;
+    friend class djinn::DeclarationCollectorVisitor;
+    friend class djinn::ProgramBinderVisitor;
+    friend class djinn::ImportProcessorVisitor;
 
 public:
     explicit Binder(DiagnosticEngine &diagnostics);
@@ -94,7 +100,7 @@ private:
 
     void popScope();
 
-    void collectDeclarations(const Program &program);
+    void collectDeclarations(const Program &program) const;
 
     void collectExternFunction(const ExternFunctionDeclaration &decl) const;
 
@@ -181,6 +187,11 @@ private:
     void validateBreakStatement(const BreakStatement &stmt);
 
     void validateContinueStatement(const ContinueStatement &stmt);
+
+    // Type validation helpers for visitors
+    void validateExternFunctionTypes(const ExternFunctionDeclaration &decl);
+
+    void validateStructFieldTypes(const StructDeclaration &decl);
 };
 
 #endif //DJINN_BINDER_H

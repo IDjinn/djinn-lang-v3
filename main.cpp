@@ -13,7 +13,7 @@ void printUsage(const char *programName) {
             << "  -out <dir>    Output file directory (default=build)\n"
             << "  -ir           print ir (default=false)\n"
             << "  -ast          print ast (default=false)\n"
-            << "  -O            Enable optimizations (default)\n"
+            << "  -o3            Enable optimizations (default)\n"
             << "  -O0           Disable optimizations\n"
             << "  -c            Compile only, do not execute\n"
             << "  -r            Recursively search directories for .djinn files\n"
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
             options.outputFileName = argv[++i];
         } else if (arg == "-out" && i + 1 < argc) {
             options.outputDirectory = argv[++i];
-        } else if (arg == "-O") {
+        } else if (arg == "-o3") {
             options.optimize = true;
         } else if (arg == "-ir") {
             options.print_ir = true;

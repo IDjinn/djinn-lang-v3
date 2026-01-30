@@ -17,7 +17,7 @@ class Parser {
 public:
     explicit Parser(std::vector<Token> tokens, DiagnosticEngine &diagnostics);
 
-    std::unique_ptr<Program> parse();
+    std::unique_ptr<Program> parse(const std::string &program_name);
 
 private:
     std::vector<Token> tokens;
