@@ -24,6 +24,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         binder/handlers/*.cpp
         binder/validation/*.cpp
         binder/scope/*.cpp
+        binder/ownership/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -38,6 +39,7 @@ file(GLOB_RECURSE DJINN_HEADERS
         binder/handlers/*.h
         binder/validation/*.h
         binder/scope/*.h
+        binder/ownership/*.h
         visitor/*.h
 )
 
@@ -70,12 +72,20 @@ llvm_map_components_to_libnames(LLVM_LIBS
         Passes
 )
 
+# Option to disable binder assertions (needed for testing error cases)
+# ON by default so tests work; set to OFF for strict development checks
+option(DJINN_DISABLE_BINDER_ASSERTS "Disable binder debug assertions" ON)
+
 add_library(djinn_lib STATIC
         ${DJINN_SOURCES}
         ${DJINN_HEADERS}
         DjinnCompiler.cpp
         DjinnCompiler.h
 )
+
+if (DJINN_DISABLE_BINDER_ASSERTS)
+    target_compile_definitions(djinn_lib PUBLIC DJINN_TESTING)
+endif ()
 
 target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
@@ -115,8 +125,27 @@ endif ()
 target_compile_features(djinn-lsp PRIVATE cxx_std_23)
 
 # ========================
+# Google Test
+# ========================
 
-add_subdirectory(external/googletest)
+# Force gtest to use shared CRT to match our runtime library setting
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+# Try submodule first, fallback to FetchContent download
+if (EXISTS "${CMAKE_SOURCE_DIR}/external/googletest/CMakeLists.txt")
+    message(STATUS "Using GoogleTest from submodule")
+    add_subdirectory(external/googletest)
+else ()
+    message(STATUS "Downloading GoogleTest via FetchContent")
+    FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.14.0
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif ()
 
 enable_testing()
 
@@ -125,6 +154,7 @@ file(GLOB_RECURSE TEST_SOURCES
 )
 
 add_executable(tests ${TEST_SOURCES})
+
 
 target_link_libraries(tests PRIVATE
         gtest_main

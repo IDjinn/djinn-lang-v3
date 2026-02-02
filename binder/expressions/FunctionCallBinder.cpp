@@ -5,8 +5,10 @@
 #include "../Binder.h"
 #include "../handlers/CallHandler.h"
 
-std::shared_ptr<Symbol> Binder::bindIdentifier(const Identifier &id) const {
+std::shared_ptr<Symbol> Binder::bindIdentifier(const Identifier &id) {
     if (const auto variableSymbol = _current_scope->lookupVariable(id.identifier.token_name); variableSymbol) {
+        // Check ownership: cannot use a moved value
+        checkVariableUse(id.identifier.token_name, id.identifier.location);
         _current_scope->markUsed(id.identifier.token_name);
         return variableSymbol;
     }

@@ -18,6 +18,9 @@ std::shared_ptr<Symbol> Binder::bindVariableDeclaration(const VariableDeclaratio
                      decl, decl.name.location);
     }
 
+    // Track ownership for the new variable
+    trackVariableDefinition(decl.name.token_name, decl.type, decl.name.location);
+
     return variableSymbol;
 }
 
@@ -33,6 +36,12 @@ std::shared_ptr<Symbol> Binder::bindVariableInit(const VariableInit &init) {
         if (const auto *braceInit = dynamic_cast<const BraceInitializer *>(init.value.get())) {
             bindBraceInitializer(*braceInit, &init.type);
         } else {
+            // Check if the value is a move from another variable
+            if (const auto *idExpr = dynamic_cast<const Identifier *>(init.value.get())) {
+                // Moving value from another variable
+                checkVariableMove(idExpr->identifier.token_name, idExpr->identifier.location);
+                performMove(idExpr->identifier.token_name, idExpr->identifier.location);
+            }
             bindExpression(*init.value);
             // type compatibility (signed/unsigned, float/int, etc.)
             if (init.type.kind != TypeKind::AUTO) {
@@ -50,6 +59,9 @@ std::shared_ptr<Symbol> Binder::bindVariableInit(const VariableInit &init) {
                      init, init.name.location);
     }
 
+    // Track ownership for the new variable
+    trackVariableDefinition(init.name.token_name, init.type, init.name.location);
+
     return symbol;
 }
 
@@ -62,13 +74,24 @@ std::shared_ptr<Symbol> Binder::bindAssignment(const Assignment &assign) {
                          assign.name.location);
         }
 
+        // Check ownership: cannot assign while borrowed
+        checkVariableAssignment(assign.name.token_name, assign.name.location);
+
         variableSymbol->isInitialized = true;
         _current_scope->markUsed(assign.name.token_name);
 
         if (assign.value) {
+            // Check if the value is a move from another variable
+            if (const auto *idExpr = dynamic_cast<const Identifier *>(assign.value.get())) {
+                checkVariableMove(idExpr->identifier.token_name, idExpr->identifier.location);
+                performMove(idExpr->identifier.token_name, idExpr->identifier.location);
+            }
             bindExpression(*assign.value);
             checkTypeCompatibility(variableSymbol->type, *assign.value, {});
         }
+
+        // Re-initialize ownership if the variable was previously moved
+        reinitializeVariable(assign.name.token_name);
     } else {
         BINDER_ERROR(DiagnosticCode::UNDEFINED_VARIABLE, "undefined variable '" + assign.name.token_name + "'", assign,
                      assign.name.location);

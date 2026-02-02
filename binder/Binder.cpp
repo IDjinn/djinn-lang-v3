@@ -65,9 +65,11 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
 
 void Binder::pushScope() {
     _current_scope = _current_scope->createChildScope();
+    _ownership.pushScope();
 }
 
 void Binder::popScope() {
+    _ownership.popScope();
     if (const auto parent = _current_scope->parentScope()) {
         _current_scope = parent;
     }

@@ -51,6 +51,15 @@ namespace DiagnosticCode {
     constexpr uint32_t UNSUPPORTED_OPERATOR = 4003;
     constexpr uint32_t IMMUTABLE_MODIFICATION = 4004;
     constexpr uint32_t INVALID_ARGUMENT_COUNT = 4005;
+
+    // Ownership errors (5xxx)
+    constexpr uint32_t USE_AFTER_MOVE = 5001;
+    constexpr uint32_t MOVE_ERROR = 5002;
+    constexpr uint32_t BORROW_CONFLICT = 5003;
+    constexpr uint32_t MUTABLE_BORROW_CONFLICT = 5004;
+    constexpr uint32_t ASSIGN_TO_BORROWED = 5005;
+    constexpr uint32_t BORROW_OUTLIVES_VALUE = 5006;
+    constexpr uint32_t DOUBLE_MOVE = 5007;
 }
 
 struct SourceLocation {

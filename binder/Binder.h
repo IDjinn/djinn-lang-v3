@@ -12,13 +12,16 @@
 #include <vector>
 #include "SymbolTable.h"
 #include "scope/ControlFlowContext.h"
+#include "ownership/OwnershipTracker.h"
 #include "../parser/ast/Declaration.h"
 #include "../parser/ast/Statement.h"
 #include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
 #include <cassert>
 
-#define BINDER_DEBUG
+// #if !defined(DJINN_TESTING)
+// #define BINDER_DEBUG
+// #endif
 
 #ifdef BINDER_DEBUG
 #define BINDER_ERROR(code, msg, token, location) do { \
@@ -100,6 +103,7 @@ private:
 
     std::string currentFunction_;
     djinn::binder::ControlFlowContext _controlFlow;
+    djinn::ownership::OwnershipTracker _ownership;
 
     template<typename T>
     constexpr std::string type_to_string(const T &value) const {
@@ -162,7 +166,7 @@ private:
 
     std::shared_ptr<Symbol> bindExpression(const Expression &expr);
 
-    std::shared_ptr<Symbol> bindIdentifier(const Identifier &id) const;
+    std::shared_ptr<Symbol> bindIdentifier(const Identifier &id);
 
     std::shared_ptr<Symbol> bindFunctionCall(const FunctionCall &call);
 
@@ -202,6 +206,25 @@ private:
     void validateExternFunctionTypes(const ExternFunctionDeclaration &decl);
 
     void validateStructFieldTypes(const StructDeclaration &decl);
+
+    // Ownership and borrow checking
+    void trackVariableDefinition(const std::string &name, const Type &type, SourceLocation loc);
+
+    void checkVariableUse(const std::string &name, SourceLocation loc);
+
+    void checkVariableMove(const std::string &name, SourceLocation loc);
+
+    void checkVariableBorrow(const std::string &name, djinn::ownership::BorrowKind kind,
+                             const std::string &borrower, SourceLocation loc);
+
+    void checkVariableAssignment(const std::string &name, SourceLocation loc);
+
+    void performMove(const std::string &name, SourceLocation loc);
+
+    void performBorrow(const std::string &name, djinn::ownership::BorrowKind kind,
+                       const std::string &borrower, SourceLocation loc);
+
+    void reinitializeVariable(const std::string &name);
 };
 
 #endif //DJINN_BINDER_H
