@@ -44,6 +44,7 @@ namespace DiagnosticCode {
     constexpr uint32_t NOT_A_STRUCT = 3006;
     constexpr uint32_t DUPLICATE_DEFINITION = 3007;
     constexpr uint32_t MIXED_INITIALIZERS = 3008;
+    constexpr uint32_t INVALID_OPERAND = 3009;
 
     // CodeGen errors (4xxx)
     constexpr uint32_t INVALID_TYPE = 4001;

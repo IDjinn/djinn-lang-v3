@@ -80,6 +80,7 @@ enum class TokenType {
     BANG, // !
     AND_AND, // &&
     OR_OR, // ||
+    AMPERSAND, // & (address-of)
     // -------- //
 
     // ATRIBUIÇÃO //

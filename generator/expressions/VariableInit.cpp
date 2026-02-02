@@ -79,15 +79,22 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
     }
 
     llvm::Type *type;
+    llvm::Type *pointeeType = nullptr;
+
     if (expr.type.kind == TypeKind::AUTO) {
         type = initVal->getType();
     } else {
         type = generate_type(expr.type);
         initVal = cast_value(initVal, type);
+
+        // Track pointee type for pointer variables
+        if (expr.type.kind == TypeKind::POINTER && expr.type.elementType) {
+            pointeeType = generate_type(*expr.type.elementType);
+        }
     }
 
     auto *alloca = builder->CreateAlloca(type, nullptr, expr.name.token_name);
-    currentScope->define_variable(expr.name.token_name, alloca);
+    currentScope->define_variable(expr.name.token_name, alloca, "", pointeeType);
     builder->CreateStore(initVal, alloca);
     return alloca;
 }

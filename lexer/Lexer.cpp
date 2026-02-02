@@ -291,7 +291,7 @@ std::vector<Token> Lexer::tokenize() {
                         advance();
                         advance();
                     } else {
-                        tokens.push_back(make_token(TokenType::UNKNOWN, std::string(1, c)));
+                        tokens.push_back(make_token(TokenType::AMPERSAND, "&"));
                         advance();
                     }
                     break;

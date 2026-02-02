@@ -5,14 +5,74 @@
 #include "../Generator.h"
 
 llvm::Value *Generator::generate_unary_expression(const UnaryExpression &expr) {
-    auto *operand = generate_expression(*expr.operand);
-    if (!operand) return nullptr;
-
     switch (expr.op) {
-        case TokenType::MINUS:
+        case TokenType::AMPERSAND: {
+            // Address-of operator: return the pointer to the variable without loading
+            if (const auto *ident = dynamic_cast<const Identifier *>(expr.operand.get())) {
+                if (llvm::AllocaInst *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
+                    return alloca;
+                }
+                throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE,
+                                   "variável não encontrada: " + ident->identifier.token_name);
+            }
+            throw CompileError(DiagnosticCode::INVALID_OPERAND,
+                               "operador '&' requer uma variável como operando");
+        }
+
+        case TokenType::STAR: {
+            // Dereference operator: load the value from the pointer
+            // For a variable like `i32* p`, the alloca stores a pointer (i32*)
+            // We first load the pointer value, then dereference it
+
+            if (const auto *ident = dynamic_cast<const Identifier *>(expr.operand.get())) {
+                if (llvm::AllocaInst *alloca = currentScope->lookup_variable(ident->identifier.token_name)) {
+                    llvm::Type *allocatedType = alloca->getAllocatedType();
+
+                    // The variable is a pointer type (e.g., i32*)
+                    // Load the pointer value first
+                    llvm::Value *ptrValue = builder->CreateLoad(allocatedType, alloca, ident->identifier.token_name);
+
+                    if (!ptrValue->getType()->isPointerTy()) {
+                        throw CompileError(DiagnosticCode::INVALID_OPERAND,
+                                           "operador '*' requer um ponteiro como operando");
+                    }
+
+                    // Look up the tracked pointee type for this pointer variable
+                    llvm::Type *elementType = currentScope->lookup_variable_pointee_type(ident->identifier.token_name);
+                    if (!elementType) {
+                        // Fallback to i32 if not tracked
+                        elementType = builder->getInt32Ty();
+                    }
+
+                    return builder->CreateLoad(elementType, ptrValue, "deref");
+                }
+            }
+
+            // For other expressions (not simple identifiers), generate normally
+            auto *operand = generate_expression(*expr.operand);
+            if (!operand) return nullptr;
+
+            if (!operand->getType()->isPointerTy()) {
+                throw CompileError(DiagnosticCode::INVALID_OPERAND,
+                                   "operador '*' requer um ponteiro como operando");
+            }
+
+            // Default to i32 for element type
+            return builder->CreateLoad(builder->getInt32Ty(), operand, "deref");
+        }
+
+        case TokenType::MINUS: {
+            auto *operand = generate_expression(*expr.operand);
+            if (!operand) return nullptr;
             return builder->CreateNeg(operand, "negtmp");
-        case TokenType::BANG:
+        }
+
+        case TokenType::BANG: {
+            auto *operand = generate_expression(*expr.operand);
+            if (!operand) return nullptr;
             return builder->CreateNot(operand, "nottmp");
+        }
+
         default:
             throw CompileError(DiagnosticCode::UNSUPPORTED_OPERATOR, "operador unário não suportado");
     }

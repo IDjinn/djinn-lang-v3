@@ -164,6 +164,8 @@ struct GeneratorScope {
 
     std::unordered_map<std::string, llvm::AllocaInst *> namedValues;
     std::unordered_map<std::string, std::string> variableStructTypes;
+    std::unordered_map<std::string, llvm::Type *> variablePointeeTypes;
+    // For pointer variables, stores the element type
 
     std::unordered_map<std::string, llvm::Function *> localFunctions;
     std::unordered_map<std::string, GenericFunctionDef> genericFunctions;
@@ -308,10 +310,14 @@ struct GeneratorScope {
     }
 
     void define_variable(const std::string &name, llvm::AllocaInst *alloca,
-                         const std::string &structTypeName = "") {
+                         const std::string &structTypeName = "",
+                         llvm::Type *pointeeType = nullptr) {
         namedValues[name] = alloca;
         if (!structTypeName.empty()) {
             variableStructTypes[name] = structTypeName;
+        }
+        if (pointeeType) {
+            variablePointeeTypes[name] = pointeeType;
         }
     }
 
@@ -333,6 +339,16 @@ struct GeneratorScope {
             return parent->lookup_variable_struct_type(name);
         }
         return "";
+    }
+
+    [[nodiscard]] llvm::Type *lookup_variable_pointee_type(const std::string &name) const {
+        if (const auto it = variablePointeeTypes.find(name); it != variablePointeeTypes.end()) {
+            return it->second;
+        }
+        if (parent) {
+            return parent->lookup_variable_pointee_type(name);
+        }
+        return nullptr;
     }
 
     [[nodiscard]] bool has_variable_in_current_scope(const std::string &name) const {

@@ -36,14 +36,16 @@ std::shared_ptr<Symbol> Binder::bindVariableInit(const VariableInit &init) {
         if (const auto *braceInit = dynamic_cast<const BraceInitializer *>(init.value.get())) {
             bindBraceInitializer(*braceInit, &init.type);
         } else {
-            // Check if the value is a move from another variable
+            // Bind expression first (validates the value exists and is usable)
+            bindExpression(*init.value);
+
+            // If initializing from another variable, check and perform move AFTER binding
             if (const auto *idExpr = dynamic_cast<const Identifier *>(init.value.get())) {
-                // Moving value from another variable
                 checkVariableMove(idExpr->identifier.token_name, idExpr->identifier.location);
                 performMove(idExpr->identifier.token_name, idExpr->identifier.location);
             }
-            bindExpression(*init.value);
-            // type compatibility (signed/unsigned, float/int, etc.)
+
+            // Type compatibility check
             if (init.type.kind != TypeKind::AUTO) {
                 checkTypeCompatibility(init.type, *init.value, {});
             }

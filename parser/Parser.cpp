@@ -935,7 +935,8 @@ std::unique_ptr<Expression> Parser::parse_factor() {
 }
 
 std::unique_ptr<Expression> Parser::parse_unary() {
-    if (match(TokenType::BANG) || match(TokenType::MINUS)) {
+    if (match(TokenType::BANG) || match(TokenType::MINUS) ||
+        match(TokenType::AMPERSAND) || match(TokenType::STAR)) {
         TokenType op = previous().type;
         auto operand = parse_unary();
         return std::make_unique<UnaryExpression>(op, std::move(operand));
@@ -1080,12 +1081,14 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
         if (isTypeInference || isExplicitType) {
             SourceIdentifier varName = isTypeInference
-                ? makeSourceIdentifier(firstToken)
-                : makeSourceIdentifier(advance());
+                                           ? makeSourceIdentifier(firstToken)
+                                           : makeSourceIdentifier(advance());
 
             Type varType = isTypeInference
-                ? Type::auto_type()
-                : (isDeclaredStruct || !isPrimitive ? Type::struct_type(firstToken.value) : Type::fromToken(firstToken));
+                               ? Type::auto_type()
+                               : (isDeclaredStruct || !isPrimitive
+                                      ? Type::struct_type(firstToken.value)
+                                      : Type::fromToken(firstToken));
 
             if (!genericArgs.empty()) varType.genericArgs = std::move(genericArgs);
             if (isArray) varType = Type::array(std::move(varType));
