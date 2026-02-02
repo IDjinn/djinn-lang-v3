@@ -16,7 +16,7 @@ namespace djinn {
     }
 
     void ProgramBinderVisitor::visit(const FunctionDeclaration &decl, const std::string &prefix) {
-        _binder.bindFunction(decl);
+        _binder.bindFunction(decl, prefix);
     }
 
     void ProgramBinderVisitor::visit(const EnumDeclaration &decl, const std::string &prefix) {

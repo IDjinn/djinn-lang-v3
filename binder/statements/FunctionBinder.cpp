@@ -27,8 +27,12 @@ void Binder::bindProgram(const Program &program) {
     }
 }
 
-void Binder::bindFunction(const FunctionDeclaration &func) {
-    currentFunction_ = func.name.token_name;
+void Binder::bindFunction(const FunctionDeclaration &func, const std::string &prefix) {
+    // Build qualified name same as in collectFunctionWithPrefix
+    const std::string qualifiedName = (func.name.token_name == "main" || prefix.empty())
+                                          ? func.name.token_name
+                                          : prefix + "::" + func.name.token_name;
+    currentFunction_ = qualifiedName;
 
     pushScope();
 
@@ -51,8 +55,10 @@ void Binder::bindFunction(const FunctionDeclaration &func) {
         }
     }
 
-    if (func.body) {
-        bindBlock(*func.body);
+    // Get the body from the FunctionSymbol (ownership was transferred during collection)
+    const auto funcSym = _global_scope->lookupFunction(qualifiedName);
+    if (funcSym && funcSym->body) {
+        bindBlock(*funcSym->body);
     }
 
     popScope();

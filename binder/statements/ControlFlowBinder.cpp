@@ -10,20 +10,20 @@ using djinn::binder::ControlFlowContext;
 
 void Binder::bindIfStatement(const IfStatement &stmt) {
     bindExpression(*stmt.condition); {
-        ScopeGuard guard(*this);
+        ScopeGuard guard(*this, djinn::binder::ScopeType::IF);
         if (stmt.thenBranch) {
             bindBlock(*stmt.thenBranch);
         }
     }
 
     if (stmt.elseBranch) {
-        ScopeGuard guard(*this);
+        ScopeGuard guard(*this, djinn::binder::ScopeType::ELSE);
         bindBlock(*stmt.elseBranch);
     }
 }
 
 void Binder::bindForStatement(const ForStatement &stmt) {
-    ScopeGuard scopeGuard(*this);
+    ScopeGuard scopeGuard(*this, djinn::binder::ScopeType::FOR);
     ControlFlowContext::LoopGuard loopGuard(_controlFlow);
 
     if (stmt.initializer) {
@@ -43,7 +43,7 @@ void Binder::bindForStatement(const ForStatement &stmt) {
 void Binder::bindWhileStatement(const WhileStatement &stmt) {
     bindExpression(*stmt.condition);
 
-    ScopeGuard scopeGuard(*this);
+    ScopeGuard scopeGuard(*this, djinn::binder::ScopeType::WHILE);
     ControlFlowContext::LoopGuard loopGuard(_controlFlow);
 
     if (stmt.body) {
@@ -53,7 +53,7 @@ void Binder::bindWhileStatement(const WhileStatement &stmt) {
 
 void Binder::bindDoWhileStatement(const DoWhileStatement &stmt) {
     {
-        ScopeGuard scopeGuard(*this);
+        ScopeGuard scopeGuard(*this, djinn::binder::ScopeType::DO_WHILE);
         ControlFlowContext::LoopGuard loopGuard(_controlFlow);
 
         if (stmt.body) {
@@ -74,7 +74,7 @@ void Binder::bindSwitchStatement(const SwitchStatement &stmt) {
             bindExpression(*caseStmt->expression);
         }
         if (caseStmt->body) {
-            ScopeGuard guard(*this);
+            ScopeGuard guard(*this, djinn::binder::ScopeType::CASE);
             bindBlock(*caseStmt->body);
         }
     }

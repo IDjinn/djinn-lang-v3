@@ -140,7 +140,7 @@ private:
 
     void bindProgram(const Program &program);
 
-    void bindFunction(const FunctionDeclaration &func);
+    void bindFunction(const FunctionDeclaration &func, const std::string &prefix = "");
 
     void bindMethod(StructMethodDeclaration &method, const StructDeclaration &struc);
 

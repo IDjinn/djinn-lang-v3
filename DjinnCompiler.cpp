@@ -108,6 +108,13 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
         outFileOptimized << generator.print();
         outFileOptimized.close();
 
+        if (options.generateBinary) {
+            system(
+                ("clang " + options.outputDirectory + "\\" + options.outputFileName + ".ll -o " + options.
+                 outputDirectory + "\\" + options.outputFileName + ".exe").c_str());
+        }
+
+
         return {.returnCode = 0, .diagnostics = diagnostics.get_diagnostics()};
     } catch (const CompileError &e) {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));

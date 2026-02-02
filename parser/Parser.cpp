@@ -1032,8 +1032,8 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
     if (check(TokenType::STRING) || check(TokenType::AUTO) || check(TokenType::MUT) ||
         check(TokenType::IDENTIFIER)) {
-        const Token &identifier = advance();
         const auto isMutable = match(TokenType::MUT);
+        const Token &identifier = advance();
 
         std::vector<Type> genericArgs;
         // Check if this is a primitive type (i32, u64, f32, etc.) or a custom struct type
