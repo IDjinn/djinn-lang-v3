@@ -166,7 +166,7 @@ std::unique_ptr<Type> Parser::parse_type() {
     } else if (identifier.value == "string" || identifier.type == TokenType::STRING) {
         baseType = std::make_unique<Type>(Type::string());
     } else if (identifier.value == "auto" || identifier.type == TokenType::AUTO) {
-        baseType = std::make_unique<Type>(Type::autod());
+        baseType = std::make_unique<Type>(Type::auto_type());
     } else {
         // Accept any identifier as a potential custom type
         // The Binder will validate that the type actually exists
@@ -256,6 +256,12 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         return method;
     }
 
+    // Add parameters to scope before parsing body
+    pushScope();
+    for (const auto &param: method->parameters) {
+        currentScope->define_variable(param.name.token_name, *param.type);
+    }
+
     // Parse body: { ... } or => expr;
     if (match(TokenType::ARROW)) {
         // Expression body: => expr;
@@ -289,6 +295,7 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         expect("Esperado ';' após declaração do método", TokenType::SEMICOLON);
     }
 
+    popScope();
     return method;
 }
 
@@ -1030,79 +1037,81 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<Identifier>(makeSourceIdentifier(previous()));
     }
 
-    if (check(TokenType::STRING) || check(TokenType::AUTO) || check(TokenType::MUT) ||
-        check(TokenType::IDENTIFIER)) {
-        const auto isMutable = match(TokenType::MUT);
-        const Token &identifier = advance();
+    if (check(TokenType::AUTO) || check(TokenType::IDENTIFIER)) {
+        const auto isAuto = match(TokenType::AUTO);
+        auto isMutable = match(TokenType::MUT); // mut before type: "auto mut x" or "mut Type x"
 
+        const Token &firstToken = advance();
+        const bool isPrimitive = isPrimitiveType(firstToken.value);
+        const bool isDeclaredStruct = currentScope->has_struct_declared(firstToken.value);
+        const bool isKnownType = isPrimitive || isDeclaredStruct;
+        const auto existingVar = currentScope->lookup_variable(firstToken.value);
+
+        // Parse generic args if applicable: Type<T, U>
         std::vector<Type> genericArgs;
-        // Check if this is a primitive type (i32, u64, f32, etc.) or a custom struct type
-
-        const bool isDeclaredStruct = currentScope->has_struct_declared(identifier.value);
-
-        // Parse generic args if this is a known struct type OR if identifier looks like
-        // a type name (not primitive, not a known variable) followed by '<'
-        // This handles imported structs that aren't in the parser's scope yet
-        const bool couldBeGenericType = !isPrimitiveType(identifier.value) &&
-                                        !currentScope->lookup_variable(identifier.value);
-        if ((isDeclaredStruct || couldBeGenericType) && match(TokenType::LESS)) {
+        if ((isDeclaredStruct || (!isPrimitive && !existingVar)) && match(TokenType::LESS)) {
             do {
-                auto argType = parse_type();
-                genericArgs.push_back(std::move(*argType));
+                genericArgs.push_back(std::move(*parse_type()));
             } while (match(TokenType::COMMA));
             expect("Esperado '>' após argumentos genéricos", TokenType::GREATER);
         }
 
-        // Determine if this is a struct type (declared or undeclared custom type)
-        // but only if followed by an identifier (indicating variable declaration)
-        const bool isStructType = isDeclaredStruct ||
-                                  (identifier.type == TokenType::IDENTIFIER && !isPrimitiveType(identifier.value) &&
-                                   check(TokenType::IDENTIFIER));
-
+        // Parse array suffix: Type[]
         bool isArray = false;
         if (match(TokenType::LBRACKET)) {
             expect("Expected ']' after '['", TokenType::RBRACKET);
             isArray = true;
         }
 
-        if (check(TokenType::IDENTIFIER)) {
-            // type + identifier, should be variable creation
-            const Token &varNameToken = advance();
-            SourceIdentifier varName = makeSourceIdentifier(varNameToken);
-            Type varType = isStructType
-                               ? Type::struct_type(identifier.value)
-                               : Type::fromToken(identifier);
+        // Check for mut after type: "i32 mut x" or "Type mut x"
+        if (!isMutable && match(TokenType::MUT)) {
+            isMutable = true;
+        }
 
-            if (!genericArgs.empty()) {
-                varType.genericArgs = std::move(genericArgs);
-            }
+        // Determine if this is a variable declaration:
+        // - "auto varName = ..." (type inference)
+        // - "Type varName [= ...]" (explicit type, where Type can be primitive, struct, or unknown)
+        // - "auto Type varName [= ...]" (explicit type with auto)
+        const bool isTypeInference = isAuto && !isKnownType && !existingVar &&
+                                     (check(TokenType::EQUAL) || check(TokenType::SEMICOLON));
+        // isExplicitType: next token must be IDENTIFIER (variable name)
+        // This handles: i32 x, Point p, CustomType obj, auto Point p
+        const bool isExplicitType = !existingVar && check(TokenType::IDENTIFIER);
 
-            if (isArray) {
-                varType = Type::array(std::move(varType));
-            }
+        if (isTypeInference || isExplicitType) {
+            SourceIdentifier varName = isTypeInference
+                ? makeSourceIdentifier(firstToken)
+                : makeSourceIdentifier(advance());
+
+            Type varType = isTypeInference
+                ? Type::auto_type()
+                : (isDeclaredStruct || !isPrimitive ? Type::struct_type(firstToken.value) : Type::fromToken(firstToken));
+
+            if (!genericArgs.empty()) varType.genericArgs = std::move(genericArgs);
+            if (isArray) varType = Type::array(std::move(varType));
 
             currentScope->define_variable(varName.token_name, varType);
+
             if (match(TokenType::EQUAL)) {
-                auto value = parse_expression();
-                return std::make_unique<VariableInit>(std::move(varType), std::move(varName), std::move(value),
-                                                      isMutable);
+                return std::make_unique<VariableInit>(std::move(varType), std::move(varName),
+                                                      parse_expression(), isMutable);
             }
             return std::make_unique<VariableDeclaration>(std::move(varType), std::move(varName), isMutable);
         }
 
-        // Not a variable declaration - handle as identifier/call/assignment
-        // Build qualified name, keeping the first identifier's location
-        std::string name = identifier.value;
-
-        // foo::bar::baz
+        std::string qualified_name = firstToken.value;
         while (match(TokenType::COLON_COLON)) {
-            const Token &part = expect("Esperado identificador após '::'", TokenType::IDENTIFIER);
-            name += "::" + part.value;
+            const Token &part = expect("Esperado identifier após '::'", TokenType::IDENTIFIER);
+            qualified_name += "::" + part.value;
         }
 
-        // Create SourceIdentifier with the first token's location
-        SourceIdentifier nameIdentifier(name, SourceLocation(identifier.position.fileId, identifier.position.line,
-                                                             identifier.position.column, name.length()));
+        const auto location = SourceLocation(
+            firstToken.position.fileId,
+            firstToken.position.line,
+            firstToken.position.column,
+            qualified_name.length()
+        );
+        SourceIdentifier nameIdentifier(qualified_name, location);
 
         if (match(TokenType::LPAREN)) {
             std::vector<std::unique_ptr<Expression> > args;
@@ -1111,7 +1120,6 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             if (!check(TokenType::RPAREN)) {
                 do {
                     auto arg = parse_expression();
-                    // Check if this is variadic forwarding
                     if (dynamic_cast<VariadicForward *>(arg.get())) {
                         hasVariadicForward = true;
                     } else {
@@ -1122,7 +1130,6 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
             expect("Esperado ')' após argumentos", TokenType::RPAREN);
 
-            // Pass type arguments if any (for generic enum/struct calls like Result<i32>::Ok(...))
             std::unique_ptr<FunctionCall> call;
             if (!genericArgs.empty()) {
                 call = std::make_unique<FunctionCall>(std::move(nameIdentifier), std::move(genericArgs),

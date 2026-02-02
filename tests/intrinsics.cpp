@@ -4,10 +4,6 @@
 
 TEST(Intrinsics, SizeofI32) {
     const auto source = R"(
-        extern "C" {
-            i32 printf(i8* format, ...);
-        }
-
         i32 main() {
             i32 x = 42;
             i64 size = sizeof(x);

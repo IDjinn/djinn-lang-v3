@@ -11,9 +11,6 @@ TEST(Method, BasicMethodWithBlock) {
                 return this.value;
             }
         }
-
-        void main() {
-        }
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
@@ -30,9 +27,6 @@ TEST(Method, ExpressionBodyArrow) {
 
             i32 getX() => this.x;
             i32 getY() => this.y;
-        }
-
-        void main() {
         }
     )";
 
@@ -54,9 +48,6 @@ TEST(Method, MethodWithParameters) {
 
             i32 multiply(i32 a, i32 b) => a * b;
         }
-
-        void main() {
-        }
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
@@ -76,9 +67,6 @@ TEST(Method, PublicPrivateModifiers) {
                 this.age = newAge;
             }
         }
-
-        void main() {
-        }
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
@@ -96,9 +84,6 @@ TEST(Method, StaticMethod) {
                 return x;
             }
         }
-
-        void main() {
-        }
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
@@ -114,9 +99,6 @@ TEST(Method, VoidMethodWithBlock) {
             void log() {
                 this.count = this.count + 1;
             }
-        }
-
-        void main() {
         }
     )";
 
@@ -139,9 +121,6 @@ TEST(Method, MixedFieldsAndMethods) {
             i32 getAge() {
                 return this.age;
             }
-        }
-
-        void main() {
         }
     )";
 

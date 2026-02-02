@@ -5,9 +5,7 @@
 #include "Generator.h"
 
 
-void Generator::generate_function(const FunctionSymbol &func) {
-    push_scope();
-
+void Generator::forward_declare_function(const FunctionSymbol &func) {
     llvm::Type *returnType = generate_type(func.returnType);
 
     std::vector<llvm::Type *> paramTypes;
@@ -24,6 +22,12 @@ void Generator::generate_function(const FunctionSymbol &func) {
     );
 
     functions[func.name] = llvmFunc;
+}
+
+void Generator::generate_function_body(const FunctionSymbol &func) {
+    push_scope();
+
+    llvm::Function *llvmFunc = functions[func.name];
     currentFunction = llvmFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
@@ -53,6 +57,7 @@ void Generator::generate_function(const FunctionSymbol &func) {
         return;
     }
 
+    llvm::Type *returnType = llvmFunc->getReturnType();
     if (returnType->isVoidTy()) {
         builder->CreateRetVoid();
         pop_scope();

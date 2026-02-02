@@ -201,18 +201,43 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
             generator.optimize();
         }
 
-        std::ofstream optOutput(options.outputDirectory + "\\" + options.outputFileName + ".ll");
+        // Determine output directory and filename
+        std::string outputDir = options.outputDirectory;
+        std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
+        if (options.useTempDirectory) {
+            outputDir = (fs::temp_directory_path() / "djinn_build").string();
+            fs::create_directories(outputDir);
+        }
+
+        const std::string llPath = outputDir + "\\" + outputFileName + ".ll";
+        const std::string exePath = outputDir + "\\" + outputFileName + ".exe";
+
+        std::ofstream optOutput(llPath);
         optOutput << generator.print();
         optOutput.close();
 
+        int programReturnCode = 0;
         if (options.generateBinary) {
-            system(
-                ("clang " + options.outputDirectory + "\\" + options.outputFileName + ".ll -o " + options.
-                 outputDirectory + "\\" + options.outputFileName + ".exe").c_str());
+            const int clangResult = system(("clang " + llPath + " -o " + exePath).c_str());
+            if (clangResult != 0) {
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
+
+            if (options.runAfterCompile) {
+                programReturnCode = system(exePath.c_str());
+#ifdef _WIN32
+                // On Windows, system() returns the exit code directly
+#else
+                // On Unix, need to extract exit code with WEXITSTATUS
+                if (WIFEXITED(programReturnCode)) {
+                    programReturnCode = WEXITSTATUS(programReturnCode);
+                }
+#endif
+            }
         }
 
         return {
-            .returnCode = 0,
+            .returnCode = programReturnCode,
             .ir = generator.print(),
             .diagnostics = diagnostics.get_diagnostics()
         };

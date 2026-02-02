@@ -64,9 +64,14 @@ void Generator::generate() {
         generate_struct_methods(*std::dynamic_pointer_cast<StructSymbol>(sym));
     }
 
-    // PASS 6: Generate global functions
+    // PASS 6a: Forward declare all global functions
     for (const auto &sym: symbols->get_all_functions()) {
-        generate_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
+        forward_declare_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
+    }
+
+    // PASS 6b: Generate global function bodies
+    for (const auto &sym: symbols->get_all_functions()) {
+        generate_function_body(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
         generatedFunctions++;
     }
 
@@ -77,7 +82,11 @@ void Generator::generate() {
     // emit_used_declarations();
 }
 
-void Generator::verify_all_symbols_generated() const {
+void Generator::verify_all_symbols_generated() {
+    if (!functions.contains("main")) {
+        generate_default_main();
+    }
+
     const size_t expectedFunctions = symbols->get_all_functions().size();
     const size_t expectedExternFunctions = symbols->get_all_extern_functions().size();
     const size_t expectedStructs = symbols->get_all_structs().size();

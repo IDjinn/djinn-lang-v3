@@ -75,7 +75,9 @@ private:
 
     void generate_property(const StructSymbol &struc, const PropertySymbol &prop);
 
-    void generate_function(const FunctionSymbol &func);
+    void forward_declare_function(const FunctionSymbol &func);
+
+    void generate_function_body(const FunctionSymbol &func);
 
     void generate_extern_function(const ExternFunctionSymbol &func);
 
@@ -170,8 +172,8 @@ private:
     std::vector<llvm::BasicBlock *> breakTargets;
     std::vector<llvm::BasicBlock *> continueTargets;
 
-    // Generation verification
-    void verify_all_symbols_generated() const;
+    // Generation verification (generates default main if missing)
+    void verify_all_symbols_generated();
 
     // Helper methods for visitor pattern
     void generate_return_statement(const ReturnStatement &stmt);

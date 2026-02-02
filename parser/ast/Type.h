@@ -103,7 +103,7 @@ struct Type : Location {
         return !genericArgs.empty();
     }
 
-    static Type autod() {
+    static Type auto_type() {
         return Type(TypeKind::AUTO, 0, false);
     }
 

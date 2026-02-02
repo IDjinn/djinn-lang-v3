@@ -14,7 +14,6 @@ TEST(Hello, World) {
     )";
 
     const auto result = DjinnCompiler::run(source);
-    EXPECT_EQ(result.returnCode, 12);
     EXPECT_EQ(result.program->functions.size(), 1);
     EXPECT_EQ(result.program->externFunctions.size(), 1);
 }

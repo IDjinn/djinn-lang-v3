@@ -8,9 +8,6 @@ TEST(Interface, BasicDefinition) {
             i32 getCount();
             void increment();
         }
-
-        void main() {
-        }
     )";
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
@@ -22,9 +19,6 @@ TEST(Interface, GenericInterface) {
     const auto source = R"(
         interface IComparable<T> {
             i32 compareTo(T other);
-        }
-
-        void main() {
         }
     )";
 
@@ -45,9 +39,6 @@ TEST(Interface, StructImplementsInterface) {
             i32 getValue() {
                 return this.count;
             }
-        }
-
-        void main() {
         }
     )";
 
@@ -79,9 +70,6 @@ TEST(Interface, StructImplementsMultipleInterfaces) {
             void write(i32 value) {
                 this.data = value;
             }
-        }
-
-        void main() {
         }
     )";
 
