@@ -19,20 +19,24 @@
 #include "utils/Logger.h"
 #include "utils/StopWatch.h"
 
-CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &path, const CompilerOptions &options) {
+CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
+{
     utils::StopWatch global_watch("build time");
     namespace fs = std::filesystem;
     assert(!options.outputDirectory.empty() && "You need give output directory!");
 
     fs::create_directories(options.outputDirectory);
     DiagnosticEngine diagnostics;
-    std::vector<std::shared_ptr<Program> > programs;
+    std::vector<std::shared_ptr<Program>> programs;
 
-    const auto parseDirectory = [&](const fs::path &dir, const bool isStdLib) {
+    const auto parseDirectory = [&](const fs::path& dir, const bool isStdLib)
+    {
         if (!fs::exists(dir)) return;
 
-        for (const auto &entry: fs::recursive_directory_iterator(dir)) {
-            try {
+        for (const auto& entry : fs::recursive_directory_iterator(dir))
+        {
+            try
+            {
                 if (!entry.is_regular_file()) continue;
                 if (entry.path().extension() != ".djinn") continue;
 
@@ -53,7 +57,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
                 Parser parser(tokens, diagnostics);
                 auto program = parser.parse(file_name);
 
-                if (options.print_ast && !isStdLib) {
+                if (options.print_ast && !isStdLib)
+                {
                     std::ostringstream oss;
                     oss << "=====AST [" << file_name << "]=====\n";
                     program->print(oss);
@@ -62,78 +67,90 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path &
                 }
 
                 programs.emplace_back(std::move(program));
-            } catch (const CompileError &compile_error) {
+            }
+            catch (const CompileError& compile_error)
+            {
                 LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
             }
         }
     };
 
-    try {
+    try
+    {
         // Load standard library first if enabled
-        if (options.includeStd && fs::exists(options.stdLibPath)) {
+        if (options.includeStd && fs::exists(options.stdLibPath))
+        {
             parseDirectory(options.stdLibPath, true);
         }
 
         // Load user code
         parseDirectory(path, false);
 
-        if (programs.empty()) {
+        if (programs.empty())
+        {
             LOG_ERROR("No .djinn files found in %s", path.string().c_str());
             return {.returnCode = 1};
         }
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);
-        if (!bindResult.success) {
+        if (!bindResult.success)
+        {
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
         generator.generate();
-        if (options.print_ir) {
+        if (options.print_ir)
+        {
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
         }
 
-        if (options.optimize) {
+        const auto out_file_path = options.outputDirectory + "\\" + options.outputFileName;
+        std::ofstream outFile(out_file_path + ".ll");
+        outFile << generator.print();
+        outFile.close();
+
+        if (options.optimize)
+        {
             utils::StopWatch opt_stop_watch("optimize ir");
             generator.optimize();
         }
 
-        std::ofstream outFile("./build/output.ll");
-        outFile << generator.print();
-        outFile.close();
-
-        std::ofstream outFileOptimized("./build/output.opt.ll");
-        generator.optimize();
+        std::ofstream outFileOptimized(out_file_path + ".opt.ll");
         outFileOptimized << generator.print();
         outFileOptimized.close();
 
-        if (options.generateBinary) {
-            system(
-                ("clang " + options.outputDirectory + "\\" + options.outputFileName + ".ll -o " + options.
-                 outputDirectory + "\\" + options.outputFileName + ".exe").c_str());
-        }
+        if (options.generateBinary)
+            system(("clang " + out_file_path + ".ll -o " + out_file_path + ".exe").c_str());
 
 
         return {.returnCode = 0, .diagnostics = diagnostics.get_diagnostics()};
-    } catch (const CompileError &e) {
+    }
+    catch (const CompileError& e)
+    {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
         diagnostics.printToStderr(std::stacktrace::current());
         return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
     }
 }
 
-CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptions &options) {
+CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptions& options)
+{
     namespace fs = std::filesystem;
 
     DiagnosticEngine diagnostics;
-    std::vector<std::shared_ptr<Program> > programs;
+    std::vector<std::shared_ptr<Program>> programs;
 
-    try {
+    try
+    {
         // Load standard library first if enabled
-        if (options.includeStd && fs::exists(options.stdLibPath)) {
-            for (const auto &entry: fs::recursive_directory_iterator("../std")) {
-                try {
+        if (options.includeStd && fs::exists(options.stdLibPath))
+        {
+            for (const auto& entry : fs::recursive_directory_iterator("../std"))
+            {
+                try
+                {
                     if (!entry.is_regular_file()) continue;
                     if (entry.path().extension() != ".djinn") continue;
 
@@ -155,8 +172,11 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
                     auto program = parser.parse(file_id);
 
                     programs.emplace_back(std::move(program));
-                } catch (const CompileError &compile_error) {
-                    if (!options.silentMode) {
+                }
+                catch (const CompileError& compile_error)
+                {
+                    if (!options.silentMode)
+                    {
                         LOG_ERROR("Error parsing std: %s: %s", entry.path().string().c_str(),
                                   compile_error.message().c_str());
                     }
@@ -173,7 +193,8 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         Parser parser(tokens, diagnostics);
         auto program = parser.parse("main");
 
-        if (options.print_ast) {
+        if (options.print_ast)
+        {
             std::ostringstream oss;
             oss << "=====AST=====\n";
             program->print(oss);
@@ -185,18 +206,21 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);
-        if (!bindResult.success) {
+        if (!bindResult.success)
+        {
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
         generator.generate();
 
-        if (options.print_ir) {
+        if (options.print_ir)
+        {
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
         }
 
-        if (options.optimize) {
+        if (options.optimize)
+        {
             utils::StopWatch opt_stop_watch("optimize ir");
             generator.optimize();
         }
@@ -204,7 +228,8 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         // Determine output directory and filename
         std::string outputDir = options.outputDirectory;
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
-        if (options.useTempDirectory) {
+        if (options.useTempDirectory)
+        {
             outputDir = (fs::temp_directory_path() / "djinn_build").string();
             fs::create_directories(outputDir);
         }
@@ -217,19 +242,23 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
         optOutput.close();
 
         int programReturnCode = 0;
-        if (options.generateBinary) {
+        if (options.generateBinary)
+        {
             const int clangResult = system(("clang " + llPath + " -o " + exePath).c_str());
-            if (clangResult != 0) {
+            if (clangResult != 0)
+            {
                 return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
             }
 
-            if (options.runAfterCompile) {
+            if (options.runAfterCompile)
+            {
                 programReturnCode = system(exePath.c_str());
 #ifdef _WIN32
                 // On Windows, system() returns the exit code directly
 #else
                 // On Unix, need to extract exit code with WEXITSTATUS
-                if (WIFEXITED(programReturnCode)) {
+                if (WIFEXITED(programReturnCode))
+                {
                     programReturnCode = WEXITSTATUS(programReturnCode);
                 }
 #endif
@@ -241,9 +270,12 @@ CompilerResult DjinnCompiler::run(const std::string &source, const CompilerOptio
             .ir = generator.print(),
             .diagnostics = diagnostics.get_diagnostics()
         };
-    } catch (const CompileError &e) {
+    }
+    catch (const CompileError& e)
+    {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
-        if (!options.silentMode) {
+        if (!options.silentMode)
+        {
             diagnostics.printToStderr(std::stacktrace::current());
         }
         return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};

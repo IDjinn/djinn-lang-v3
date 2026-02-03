@@ -54,13 +54,13 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
         }
 
         case Intrinsic::Trap: {
-            const auto trapFunc = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::trap);
+            const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
             builder->CreateCall(trapFunc);
             return builder->CreateUnreachable();
         }
 
         case Intrinsic::DebugTrap: {
-            const auto trapFunc = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::debugtrap);
+            const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::debugtrap);
             builder->CreateCall(trapFunc);
             return builder->CreateUnreachable();
         }
@@ -77,7 +77,7 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             auto val = generate_expression(*call.arguments[0]);
             auto expected = generate_expression(*call.arguments[1]);
             expected = cast_value(expected, val->getType());
-            const auto expectFunc = llvm::Intrinsic::getDeclaration(
+            const auto expectFunc = llvm::Intrinsic::getOrInsertDeclaration(
                 module.get(), llvm::Intrinsic::expect, {val->getType()});
             return builder->CreateCall(expectFunc, {val, expected}, "expect");
         }
@@ -88,7 +88,7 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             }
 
             auto cond = generate_expression(*call.arguments[0]);
-            const auto expectFunc = llvm::Intrinsic::getDeclaration(
+            const auto expectFunc = llvm::Intrinsic::getOrInsertDeclaration(
                 module.get(), llvm::Intrinsic::expect, {cond->getType()});
             return builder->CreateCall(expectFunc, {cond, builder->getTrue()}, "likely");
         }
@@ -99,7 +99,7 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
             }
 
             auto cond = generate_expression(*call.arguments[0]);
-            const auto expectFunc = llvm::Intrinsic::getDeclaration(
+            const auto expectFunc = llvm::Intrinsic::getOrInsertDeclaration(
                 module.get(), llvm::Intrinsic::expect, {cond->getType()});
             return builder->CreateCall(expectFunc, {cond, builder->getFalse()}, "unlikely");
         }

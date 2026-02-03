@@ -41,6 +41,7 @@ struct Type : Location {
     TypeKind kind = TypeKind::VOID;
     bool sign = false;
     bool nullable = false;
+    bool readOnly = false;
     std::unique_ptr<Type> elementType;
     std::string structName;
     std::vector<Type> genericArgs;

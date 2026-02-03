@@ -28,7 +28,7 @@ struct CompilerOptions {
     bool runAfterCompile = true; // Run the compiled binary and capture exit code
     std::string outputFileName{};
     std::string outputDirectory{"build"};
-    std::filesystem::path stdLibPath{"../std"};
+    std::filesystem::path stdLibPath{"./std"};
     std::vector<std::filesystem::path> linkLibraries{};
 };
 

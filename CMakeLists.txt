@@ -48,6 +48,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 # Define source root for logger relative paths
 add_compile_definitions(SOURCE_ROOT="${CMAKE_SOURCE_DIR}/")
 
+message(STATUS "LIBXML2_INCLUDE_DIR = ${LIBXML2_INCLUDE_DIR}")
+message(STATUS "LIBXML2_LIBRARY = ${LIBXML2_LIBRARY}")
+
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -88,6 +91,7 @@ if (DJINN_DISABLE_BINDER_ASSERTS)
 endif ()
 
 target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
+target_link_libraries(djinn_lib PRIVATE ${LIBXML2_LIBRARY})
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
 
 add_executable(djinn main.cpp)
