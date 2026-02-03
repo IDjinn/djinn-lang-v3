@@ -110,7 +110,6 @@ void DiagnosticEngine::warning(const uint32_t code, const std::string &msg, cons
 
 void DiagnosticEngine::emitAndPrint(const Diagnostic &diag) {
     emit(diag);
-    std::cerr << renderDiagnostic(diag) << std::endl;
 }
 
 std::string DiagnosticEngine::renderDiagnostic(const Diagnostic &diag) const {

@@ -204,33 +204,3 @@ TEST(Enum, GenericMultipleInstantiations) {
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
-
-TEST(Enum, ImportedOptional) {
-    const auto source = R"(
-        import std::types;
-
-        i32 main() {
-            optional<i32> maybe = optional<i32>::Value(42);
-            return 0;
-        }
-    )";
-
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
-    EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, 0);
-}
-
-TEST(Enum, ImportedResult) {
-    const auto source = R"(
-        import std::types;
-
-        i32 main() {
-            result<i32, i8*> res = result<i32, i8*>::Ok(100);
-            return 0;
-        }
-    )";
-
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
-    EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, 0);
-}

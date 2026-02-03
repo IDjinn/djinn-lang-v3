@@ -242,6 +242,11 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         optOutput << generator.print();
         optOutput.close();
 
+        if (!diagnostics.get_diagnostics().empty()&&!options.silentMode)
+        {
+            diagnostics.printToStderr(std::stacktrace::current());
+        }
+
         int programReturnCode = 0;
         if (options.generateBinary)
         {
