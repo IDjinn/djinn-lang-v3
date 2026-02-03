@@ -35,15 +35,15 @@ llvm::Value *Generator::generate_switch_expression(const SwitchExpression &expr)
 
     // Determine the enum type from the value
     // The value should be an enum type
-    llvm::Type *enumType = enumValue->getType();
+    const llvm::Type *enumType = enumValue->getType();
     if (!enumType->isStructTy()) {
         GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Switch expression value must be an enum type",
                         expr.value->location);
     }
 
     // Find the enum definition
-    std::string enumTypeName = enumType->getStructName().str();
-    EnumDef *enumDef = currentScope->lookup_enum(enumTypeName);
+    const std::string enumTypeName = enumType->getStructName().str();
+    const EnumDef *enumDef = currentScope->lookup_enum(enumTypeName);
     if (!enumDef) {
         GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Unknown enum type: " + enumTypeName,
                         expr.value->location);

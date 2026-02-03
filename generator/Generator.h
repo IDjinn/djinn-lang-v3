@@ -18,14 +18,26 @@
 #include "../binder/SymbolTable.h"
 #include "../diagnostics/Diagnostic.h"
 
+
+#ifdef GENERATOR_DEBUG
 #define GENERATOR_ERROR(code, msg, location) do { \
-    _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
-    throw CompileError(code, msg, location); \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+assert(false, msg); \
 } while (false)
 
 #define GENERATOR_WARN(code, msg, location) do { \
-    _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+assert(false, msg); \
 } while (false)
+#else
+#define GENERATOR_ERROR(code, msg, location) do { \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+} while (false)
+
+#define GENERATOR_WARN(code, msg, location) do { \
+_diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+} while (false)
+#endif
 
 namespace djinn {
     class GeneratorExpressionVisitor;

@@ -15,8 +15,8 @@
 #include "parser/AST.h"
 
 struct CompilerOptions {
-    bool print_ast = false;
-    bool print_ir = false;
+    bool print_ast = true;
+    bool print_ir = true;
     bool optimize = true;
     bool generateBinary = true;
     bool includeStd = true;
@@ -35,7 +35,7 @@ struct CompilerOptions {
 struct CompilerResult {
     int returnCode;
     std::vector<Token> tokens{};
-    std::unique_ptr<Program> program;
+    std::shared_ptr<Program> program;
     std::string ir;
     std::vector<Diagnostic> diagnostics{};
 };

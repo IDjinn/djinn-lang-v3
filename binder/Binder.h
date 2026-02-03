@@ -19,9 +19,6 @@
 #include "../diagnostics/Diagnostic.h"
 #include <cassert>
 
-// #if !defined(DJINN_TESTING)
-// #define BINDER_DEBUG
-// #endif
 
 #ifdef BINDER_DEBUG
 #define BINDER_ERROR(code, msg, token, location) do { \

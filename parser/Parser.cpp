@@ -10,7 +10,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <cassert>
 
-//#define PARSER_DEBUG
 
 #ifdef PARSER_DEBUG
 #define PARSER_ERROR(code, msg, location) do { \

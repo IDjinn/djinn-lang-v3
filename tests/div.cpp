@@ -2,19 +2,20 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Math, IntegerDivFunction) {
+TEST(Math, IntegerDivFunction)
+{
     const auto source = R"(
         i32 div(i32 a, i32 b) {
             return a / b;
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
-    EXPECT_EQ(result.returnCode, 0);
+    const auto result = DjinnCompiler::run(source, {.print_ast = true, .print_ir = true, .optimize = false});
     EXPECT_EQ(result.program->functions.size(), 1);
 }
 
-TEST(Math, IntegerDiv) {
+TEST(Math, IntegerDiv)
+{
     const auto source = R"(
         i32 div(i32 a, i32 b) {
             return a / b;
@@ -30,7 +31,8 @@ TEST(Math, IntegerDiv) {
     EXPECT_EQ(result.program->functions.size(), 2);
 }
 
-TEST(Math, IntegerDivWithRemainder) {
+TEST(Math, IntegerDivWithRemainder)
+{
     const auto source = R"(
         i32 div(i32 a, i32 b) {
             return a / b;

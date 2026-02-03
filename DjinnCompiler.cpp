@@ -202,7 +202,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             LOG_DEBUG("%s", oss.str().c_str());
         }
 
-        programs.emplace_back(std::move(program));
+        auto userProgram = std::shared_ptr<Program>(std::move(program));
+        programs.emplace_back(userProgram);
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);
@@ -230,7 +231,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
         if (options.useTempDirectory)
         {
-            outputDir = (fs::temp_directory_path() / "djinn_build").string();
+            outputDir = (fs::temp_directory_path() / "djinn_build" / std::to_string(rand())).string();
             fs::create_directories(outputDir);
         }
 
@@ -267,6 +268,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         return {
             .returnCode = programReturnCode,
+            .program = userProgram,
             .ir = generator.print(),
             .diagnostics = diagnostics.get_diagnostics()
         };

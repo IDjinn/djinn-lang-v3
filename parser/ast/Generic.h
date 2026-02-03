@@ -135,6 +135,15 @@ struct GenericContext {
         if (type.elementType) {
             result.elementType = std::make_unique<Type>(substitute(*type.elementType));
         }
+
+        // Recursively substitute generic arguments (e.g., vector<T> -> vector<i32>)
+        if (!type.genericArgs.empty()) {
+            result.genericArgs.clear();
+            for (const auto &arg : type.genericArgs) {
+                result.genericArgs.push_back(substitute(arg));
+            }
+        }
+
         return result;
     }
 

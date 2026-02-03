@@ -246,7 +246,7 @@ void Generator::generate_switch_statement(const SwitchStatement &stmt) {
 
             // Cast case value to match switch value type
             if (caseValue->getType() != switchValue->getType()) {
-                if (auto *caseConst = llvm::dyn_cast<llvm::ConstantInt>(caseValue)) {
+                if (const auto *caseConst = llvm::dyn_cast<llvm::ConstantInt>(caseValue)) {
                     caseValue = llvm::ConstantInt::get(switchValue->getType(),
                                                        caseConst->getSExtValue());
                 }
