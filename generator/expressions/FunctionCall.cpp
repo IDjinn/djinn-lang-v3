@@ -149,7 +149,8 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
             simpleTypeName = simpleTypeName.substr(lastColon + 2);
         }
         // Constructor is mangled as StructName__StructName
-        const std::string ctorName = resolvedTypeName + "__" + simpleTypeName;
+        // Use structDef->name to get the actual qualified name (handles fallback lookup)
+        const std::string ctorName = structDef->name + "__" + simpleTypeName;
         if (const auto ctorIt = functions.find(ctorName); ctorIt != functions.end()) {
             // This is a constructor call!
             llvm::Function *ctorFunc = ctorIt->second;

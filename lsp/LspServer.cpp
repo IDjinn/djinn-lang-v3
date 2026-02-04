@@ -183,6 +183,7 @@ namespace lsp {
             // Compile with diagnostics only (no codegen)
             CompilerOptions options;
             options.print_ast = true;
+            options.useTempDirectory = false;
             options.print_ir = true;
             options.silentMode = true; // Don't print to stderr in LSP mode
 

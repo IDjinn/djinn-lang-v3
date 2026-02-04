@@ -235,15 +235,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
         }
 
-        if (options.optimize)
-        {
-            utils::StopWatch opt_stop_watch("optimize ir");
-            generator.optimize();
-        }
-
         generatedIr = generator.print();
 
-        // Determine output directory and filename
         std::string outputDir = options.outputDirectory;
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
         if (options.useTempDirectory)
@@ -253,11 +246,22 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         const std::string llPath = outputDir + "\\" + outputFileName + ".ll";
+        const std::string llOptPath = outputDir + "\\" + outputFileName + ".opt.ll";
         const std::string exePath = outputDir + "\\" + outputFileName + ".exe";
 
         std::ofstream optOutput(llPath);
         optOutput << generatedIr;
         optOutput.close();
+
+        if (options.optimize)
+        {
+            utils::StopWatch opt_stop_watch("optimize ir");
+            generator.optimize();
+
+            std::ofstream otimized_output(llOptPath);
+            otimized_output << generatedIr;
+            otimized_output.close();
+        }
 
         if (!options.generateBinary)
         {
