@@ -81,6 +81,9 @@ namespace lsp {
             if (opts.contains("includeStd")) {
                 _options.includeStd = opts["includeStd"].get<bool>();
             }
+            if (opts.contains("stdPath")) {
+                _options.stdPath = opts["stdPath"].get<std::string>();
+            }
         }
 
         // Return server capabilities
@@ -186,6 +189,7 @@ namespace lsp {
             // Use options from client initializationOptions
             options.outputDirectory = _options.outputDirectory;
             options.includeStd = _options.includeStd;
+            options.stdLibPath = _options.stdPath;
 
             // Extract filename from URI for output
             std::string filePath = uriToPath(uri);

@@ -270,17 +270,8 @@ void Generator::generate_method(const StructSymbol &struc, const MethodSymbol &m
     }
 
     if (!builder->GetInsertBlock()->getTerminator()) {
-        if (method.isConstructor) {
-            // Constructor: return *this (the initialized struct value)
-            llvm::AllocaInst *thisAlloca = currentScope->lookup_variable("this");
-            if (thisAlloca) {
-                llvm::Value *thisPtr = builder->CreateLoad(thisAlloca->getAllocatedType(), thisAlloca, "this_ptr");
-                llvm::Value *thisVal = builder->CreateLoad(def->llvmType, thisPtr, "this_val");
-                builder->CreateRet(thisVal);
-            } else {
-                builder->CreateRet(llvm::Constant::getNullValue(returnType));
-            }
-        } else if (returnType->isVoidTy()) {
+        if (method.isConstructor || returnType->isVoidTy()) {
+            // Constructors always return void - the allocation happens at call site
             builder->CreateRetVoid();
         } else {
             builder->CreateRet(llvm::Constant::getNullValue(returnType));

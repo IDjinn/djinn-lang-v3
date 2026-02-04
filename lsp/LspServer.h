@@ -16,6 +16,7 @@ namespace lsp {
     // Options received from client via initializationOptions
     struct LspOptions {
         std::string outputDirectory = "build";
+        std::string stdPath = "./std";
         bool includeStd = false; // Default false for faster LSP validation
     };
 
