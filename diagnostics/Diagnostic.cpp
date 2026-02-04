@@ -193,6 +193,6 @@ const std::vector<Diagnostic> &DiagnosticEngine::get_diagnostics() const {
 }
 
 void DiagnosticEngine::printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry> > &stack) const {
-    std::cerr << render();
+    std::cerr << render() << std::endl;;
     std::cerr << stack << std::endl;
 }

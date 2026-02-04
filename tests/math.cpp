@@ -321,12 +321,12 @@ TEST(Math, Exp2) {
 }
 
 // ============================================================================
-// Math Library Import Tests - Using std::sys::math
+// Math Library Import Tests - Using std::math
 // ============================================================================
 
 TEST(Math, ImportMathSqrt) {
     const auto source = R"(
-        import std::sys::math;
+        import std::math;
 
         i32 main() {
             f64 result = sqrt(49.0);
@@ -341,7 +341,7 @@ TEST(Math, ImportMathSqrt) {
 
 TEST(Math, ImportMathPow) {
     const auto source = R"(
-        import std::sys::math;
+        import std::math;
 
         i32 main() {
             f64 result = pow(3.0, 2.0);
@@ -356,7 +356,7 @@ TEST(Math, ImportMathPow) {
 
 TEST(Math, ImportMathMultipleFunctions) {
     const auto source = R"(
-        import std::sys::math;
+        import std::math;
 
         i32 main() {
             f64 a = sqrt(16.0);
@@ -373,7 +373,7 @@ TEST(Math, ImportMathMultipleFunctions) {
 
 TEST(Math, ImportMathFloatFunctions) {
     const auto source = R"(
-        import std::sys::math;
+        import std::math;
 
         i32 main() {
             f32 result = sqrtf(36.0);
@@ -388,7 +388,7 @@ TEST(Math, ImportMathFloatFunctions) {
 
 TEST(Math, CombinedMathOperations) {
     const auto source = R"(
-        import std::sys::math;
+        import std::math;
 
         i32 main() {
             f64 x = 3.0;

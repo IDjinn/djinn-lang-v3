@@ -141,6 +141,21 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
     DiagnosticEngine diagnostics;
     std::vector<std::shared_ptr<Program>> programs;
+    std::shared_ptr<Program> userProgram;
+    std::string generatedIr;
+
+    auto makeResult = [&](int returnCode, const std::stacktrace& trace) {
+        if (!options.silentMode && !diagnostics.get_diagnostics().empty())
+        {
+            diagnostics.printToStderr(trace);
+        }
+        return CompilerResult{
+            .returnCode = returnCode,
+            .program = userProgram,
+            .ir = generatedIr,
+            .diagnostics = diagnostics.get_diagnostics()
+        };
+    };
 
     try
     {
@@ -202,14 +217,14 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             LOG_DEBUG("%s", oss.str().c_str());
         }
 
-        auto userProgram = std::shared_ptr<Program>(std::move(program));
+        userProgram = std::shared_ptr<Program>(std::move(program));
         programs.emplace_back(userProgram);
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);
         if (!bindResult.success)
         {
-            return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            return makeResult(1, std::stacktrace::current());
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
@@ -226,6 +241,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             generator.optimize();
         }
 
+        generatedIr = generator.print();
+
         // Determine output directory and filename
         std::string outputDir = options.outputDirectory;
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
@@ -239,52 +256,38 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         const std::string exePath = outputDir + "\\" + outputFileName + ".exe";
 
         std::ofstream optOutput(llPath);
-        optOutput << generator.print();
+        optOutput << generatedIr;
         optOutput.close();
 
-        if (!diagnostics.get_diagnostics().empty()&&!options.silentMode)
+        if (!options.generateBinary)
         {
-            diagnostics.printToStderr(std::stacktrace::current());
+            return makeResult(0, std::stacktrace::current());
+        }
+
+        int clangResult = system(("clang " + llPath + " -o " + exePath).c_str());
+        if (clangResult != 0)
+        {
+            return makeResult(clangResult, std::stacktrace::current());
         }
 
         int programReturnCode = 0;
-        if (options.generateBinary)
+        if (options.runAfterCompile)
         {
-            const int clangResult = system(("clang " + llPath + " -o " + exePath).c_str());
-            if (clangResult != 0)
+            programReturnCode = system(exePath.c_str());
+#ifndef _WIN32
+            // On Unix, need to extract exit code with WEXITSTATUS
+            if (WIFEXITED(programReturnCode))
             {
-                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+                programReturnCode = WEXITSTATUS(programReturnCode);
             }
-
-            if (options.runAfterCompile)
-            {
-                programReturnCode = system(exePath.c_str());
-#ifdef _WIN32
-                // On Windows, system() returns the exit code directly
-#else
-                // On Unix, need to extract exit code with WEXITSTATUS
-                if (WIFEXITED(programReturnCode))
-                {
-                    programReturnCode = WEXITSTATUS(programReturnCode);
-                }
 #endif
-            }
         }
 
-        return {
-            .returnCode = programReturnCode,
-            .program = userProgram,
-            .ir = generator.print(),
-            .diagnostics = diagnostics.get_diagnostics()
-        };
+        return makeResult(programReturnCode, std::stacktrace::current());
     }
     catch (const CompileError& e)
     {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
-        if (!options.silentMode)
-        {
-            diagnostics.printToStderr(std::stacktrace::current());
-        }
-        return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+        return makeResult(1, std::stacktrace::current());
     }
 }

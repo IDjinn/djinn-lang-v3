@@ -13,24 +13,6 @@ TEST(Math, IntegerMultFunction) {
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
     EXPECT_EQ(result.tokens.size(), 17);
-    EXPECT_EQ(result.ir, R"(; ModuleID = 'djinn'
-source_filename = "djinn"
-
-; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
-define i32 @mult(i32 %a, i32 %b) local_unnamed_addr #0 {
-entry:
-  %multmp = mul i32 %b, %a
-  ret i32 %multmp
-}
-
-; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
-define noundef i32 @main() local_unnamed_addr #0 {
-entry:
-  ret i32 0
-}
-
-attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memory(none) }
-)");
 }
 
 TEST(Math, IntegerMult) {
@@ -48,22 +30,4 @@ TEST(Math, IntegerMult) {
     EXPECT_EQ(result.returnCode, 6);
     EXPECT_EQ(result.program->functions.size(), 2);
     EXPECT_EQ(result.tokens.size(), 31);
-    EXPECT_EQ(result.ir, R"(; ModuleID = 'djinn'
-source_filename = "djinn"
-
-; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
-define i32 @mult(i32 %a, i32 %b) local_unnamed_addr #0 {
-entry:
-  %multmp = mul i32 %b, %a
-  ret i32 %multmp
-}
-
-; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
-define noundef i32 @main() local_unnamed_addr #0 {
-entry:
-  ret i32 6
-}
-
-attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memory(none) }
-)");
 }

@@ -63,7 +63,7 @@ TEST(Namespace, NestedNamespace) {
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
     EXPECT_EQ(result.program->namespaces[0]->namespaces.size(), 1);
-    EXPECT_EQ(result.program->namespaces[0]->name.token_name, "io");
+    EXPECT_EQ(result.program->namespaces[0]->namespaces[0]->name.token_name, "io");
 }
 
 TEST(Namespace, MultipleFunctionsInNamespace) {

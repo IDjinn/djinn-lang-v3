@@ -64,6 +64,25 @@ llvm::Value *Generator::generate_unary_expression(const UnaryExpression &expr) {
         case TokenType::MINUS: {
             auto *operand = generate_expression(*expr.operand);
             if (!operand) return nullptr;
+
+            // For floating-point constants, fold at compile time
+            if (auto *constFP = llvm::dyn_cast<llvm::ConstantFP>(operand)) {
+                llvm::APFloat negVal = constFP->getValueAPF();
+                negVal.changeSign();
+                return llvm::ConstantFP::get(operand->getType(), negVal);
+            }
+
+            // For floating-point runtime values, use fneg
+            if (operand->getType()->isFloatingPointTy()) {
+                return builder->CreateFNeg(operand, "negtmp");
+            }
+
+            // For integer constants, fold at compile time
+            if (auto *constInt = llvm::dyn_cast<llvm::ConstantInt>(operand)) {
+                return llvm::ConstantInt::get(operand->getType(), -constInt->getValue());
+            }
+
+            // For integer runtime values
             return builder->CreateNeg(operand, "negtmp");
         }
 
