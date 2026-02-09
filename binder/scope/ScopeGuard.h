@@ -21,7 +21,7 @@ namespace djinn::binder {
         CASE,
     };
 
-    static constexpr std::string scopeTypeToString(ScopeType scopeType) {
+    [[maybe_unused]] inline std::string scopeTypeToString(ScopeType scopeType) {
         switch (scopeType) {
             case ScopeType::IF:
                 return "IF";

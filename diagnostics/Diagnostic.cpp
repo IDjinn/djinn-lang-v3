@@ -76,7 +76,7 @@ std::string DiagnosticEngine::severityColor(const Severity severity_level) {
     return "0";
 }
 
-constexpr std::string DiagnosticEngine::colorize(const std::string &text, const std::string &code) {
+std::string DiagnosticEngine::colorize(const std::string &text, const std::string &code) {
 #ifdef _WIN32
     return text;
 #else
@@ -193,6 +193,6 @@ const std::vector<Diagnostic> &DiagnosticEngine::get_diagnostics() const {
 }
 
 void DiagnosticEngine::printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry> > &stack) const {
-    std::cerr << render() << std::endl;;
+    std::cerr << render() << std::endl;
     std::cerr << stack << std::endl;
 }

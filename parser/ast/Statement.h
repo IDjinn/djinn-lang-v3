@@ -147,7 +147,7 @@ struct SwitchCaseStatement : Statement {
     std::unique_ptr<Block> body;
 
     // SwitchCaseStatement is not directly visited - it's part of SwitchStatement
-    void accept(djinn::IStatementVisitor &visitor) const override {
+    void accept(djinn::IStatementVisitor &) const override {
         // Not directly visited - handled by SwitchStatement visitor
     }
 

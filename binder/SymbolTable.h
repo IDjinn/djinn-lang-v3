@@ -261,16 +261,6 @@ public:
         return all_variables;
     }
 
-    [[nodiscard]] std::vector<std::shared_ptr<Symbol> > get_all_namespaces() const {
-        std::vector<std::shared_ptr<Symbol> > all_namespaces;
-        for (const auto &symbol: _symbols | std::views::values) {
-            // if (symbol->isInitialized) all_namespaces.push_back(symbol);
-            // TODO THIS SHIT
-        }
-
-        return all_namespaces;
-    }
-
     [[nodiscard]] std::unordered_map<std::string, std::shared_ptr<Symbol> > get_all_symbols() const {
         return this->_symbols;
     }
@@ -293,20 +283,17 @@ public:
         return nullptr;
     }
 
-    std::shared_ptr<Symbol> defineFunctionCall(const std::shared_ptr<Symbol> &shared,
-                                               const std::vector<std::shared_ptr<Symbol> > &vector) {
-        return nullptr;
-    }
-
-    std::shared_ptr<Symbol> defineIntrisicCall(const std::string &string,
-                                               const std::vector<std::shared_ptr<Symbol> > &vector) {
-        return nullptr;
-    }
-
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#endif
 private:
     std::shared_ptr<SymbolTable> _parent;
     std::unordered_map<std::string, std::shared_ptr<Symbol> > _symbols;
     int _depth = 0;
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 };
 
 class ScopedSymbolTable : public SymbolTable, public std::enable_shared_from_this<ScopedSymbolTable> {

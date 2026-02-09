@@ -158,7 +158,7 @@ private:
 
     [[nodiscard]] static std::string severityColor(Severity severity_level);
 
-    [[nodiscard]] static constexpr std::string colorize(const std::string &text, const std::string &code);
+    [[nodiscard]] static std::string colorize(const std::string &text, const std::string &code);
 
     [[nodiscard]] static std::string formatCode(uint32_t code);
 };

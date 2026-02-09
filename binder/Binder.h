@@ -103,7 +103,7 @@ private:
     djinn::ownership::OwnershipTracker _ownership;
 
     template<typename T>
-    constexpr std::string type_to_string(const T &value) const {
+    std::string type_to_string(const T &value) const {
         if constexpr (std::is_same_v<T, Symbol *>)
             return value->name;
         else if constexpr (std::is_same_v<T, Symbol>)

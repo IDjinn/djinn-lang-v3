@@ -39,11 +39,11 @@ namespace djinn {
         _generator.generate_switch_statement(stmt);
     }
 
-    void GeneratorStatementVisitor::visit(const BreakStatement &stmt) {
+    void GeneratorStatementVisitor::visit(const BreakStatement &/*stmt*/) {
         _generator.generate_break_statement();
     }
 
-    void GeneratorStatementVisitor::visit(const ContinueStatement &stmt) {
+    void GeneratorStatementVisitor::visit(const ContinueStatement &/*stmt*/) {
         _generator.generate_continue_statement();
     }
 } // namespace djinn

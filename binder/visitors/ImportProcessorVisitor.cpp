@@ -7,7 +7,7 @@
 #include "../../parser/ast/Declaration.h"
 
 namespace djinn {
-    void ImportProcessorVisitor::visit(const ImportDeclaration &decl, const std::string &prefix) {
+    void ImportProcessorVisitor::visit(const ImportDeclaration &decl, const std::string &/*prefix*/) {
         const auto nsPath = decl.namespacePath.toString();
 
         for (const auto &[name, symbol]: _symbolsCopy) {

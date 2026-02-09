@@ -24,7 +24,7 @@ namespace djinn {
         _binder.collectInterfaceWithPrefix(decl, prefix);
     }
 
-    void DeclarationCollectorVisitor::visit(const ExternFunctionDeclaration &decl, const std::string &prefix) {
+    void DeclarationCollectorVisitor::visit(const ExternFunctionDeclaration &decl, const std::string &/*prefix*/) {
         _binder.collectExternFunction(decl);
     }
 
@@ -32,7 +32,7 @@ namespace djinn {
         _binder.collectNamespace(decl, prefix);
     }
 
-    void DeclarationCollectorVisitor::visit(const ImportDeclaration &decl, const std::string &prefix) {
+    void DeclarationCollectorVisitor::visit(const ImportDeclaration &/*decl*/, const std::string &/*prefix*/) {
         // Imports are handled separately via processImports
     }
 } // namespace djinn

@@ -92,10 +92,10 @@ struct FunctionSymbol : Symbol {
           returnType(std::move(retType)) {
     }
 
-    void addParameter(const std::string &paramName, const Type &paramType, bool isMutable = false) {
+    void addParameter(const std::string &paramName, const Type &paramType, bool paramIsMutable = false) {
         paramNames.push_back(paramName);
         paramTypes.push_back(paramType);
-        paramMutable.push_back(isMutable);
+        paramMutable.push_back(paramIsMutable);
     }
 
     void setBody(std::unique_ptr<Block> b) {
@@ -214,8 +214,8 @@ struct StructSymbol : Symbol {
         : Symbol(SymbolKind::Struct, std::move(name), Type::voided(), loc) {
     }
 
-    void addField(const std::string &fieldName, const Type &fieldType, const bool isMutable = false) {
-        fields.push_back({SymbolKind::Struct, fieldName, fieldType, {}, isMutable});
+    void addField(const std::string &fieldName, const Type &fieldType, const bool fieldIsMutable = false) {
+        fields.push_back({SymbolKind::Struct, fieldName, fieldType, {}, fieldIsMutable});
     }
 
     void addMethod(std::shared_ptr<MethodSymbol> method) {
@@ -230,9 +230,9 @@ struct StructSymbol : Symbol {
         implements.push_back(interfaceName);
     }
 
-    [[nodiscard]] bool hasField(const std::string &name) const {
+    [[nodiscard]] bool hasField(const std::string &memberName) const {
         for (const auto &field: fields) {
-            if (field.name == name) return true;
+            if (field.name == memberName) return true;
         }
         return false;
     }
@@ -241,53 +241,53 @@ struct StructSymbol : Symbol {
         properties.push_back(std::make_shared<PropertySymbol>(propName, propType, hasGetter, hasSetter));
     }
 
-    [[nodiscard]] bool hasProperty(const std::string &name) const {
+    [[nodiscard]] bool hasProperty(const std::string &memberName) const {
         for (const auto &prop: properties) {
-            if (prop->name == name) return true;
+            if (prop->name == memberName) return true;
         }
         return false;
     }
 
-    [[nodiscard]] const Type *getPropertyType(const std::string &name) const {
+    [[nodiscard]] const Type *getPropertyType(const std::string &memberName) const {
         for (const auto &prop: properties) {
-            if (prop->name == name) return &prop->type;
+            if (prop->name == memberName) return &prop->type;
         }
         return nullptr;
     }
 
-    [[nodiscard]] bool hasMember(const std::string &name) const {
-        return hasField(name) || hasProperty(name);
+    [[nodiscard]] bool hasMember(const std::string &memberName) const {
+        return hasField(memberName) || hasProperty(memberName);
     }
 
-    [[nodiscard]] const Type *getMemberType(const std::string &name) const {
-        if (const Type *t = getFieldType(name)) return t;
-        return getPropertyType(name);
+    [[nodiscard]] const Type *getMemberType(const std::string &memberName) const {
+        if (const Type *t = getFieldType(memberName)) return t;
+        return getPropertyType(memberName);
     }
 
-    [[nodiscard]] bool hasMethod(const std::string &name) const {
+    [[nodiscard]] bool hasMethod(const std::string &memberName) const {
         for (const auto &method: methods) {
-            if (method->name == name) return true;
+            if (method->name == memberName) return true;
         }
         return false;
     }
 
-    [[nodiscard]] std::shared_ptr<MethodSymbol> getMethod(const std::string &name) const {
+    [[nodiscard]] std::shared_ptr<MethodSymbol> getMethod(const std::string &memberName) const {
         for (const auto &method: methods) {
-            if (method->name == name) return method;
+            if (method->name == memberName) return method;
         }
         return nullptr;
     }
 
-    [[nodiscard]] const Type *getFieldType(const std::string &name) const {
+    [[nodiscard]] const Type *getFieldType(const std::string &memberName) const {
         for (size_t i = 0; i < fields.size(); ++i) {
-            if (fields[i].name == name) return &fields[i].type;
+            if (fields[i].name == memberName) return &fields[i].type;
         }
         return nullptr;
     }
 
-    [[nodiscard]] int getFieldIndex(const std::string &name) const {
+    [[nodiscard]] int getFieldIndex(const std::string &memberName) const {
         for (size_t i = 0; i < fields.size(); ++i) {
-            if (fields[i].name == name) return static_cast<int>(i);
+            if (fields[i].name == memberName) return static_cast<int>(i);
         }
         return -1;
     }
@@ -313,16 +313,16 @@ struct InterfaceSymbol : Symbol {
         genericParams.push_back(param);
     }
 
-    [[nodiscard]] bool hasMethod(const std::string &name) const {
+    [[nodiscard]] bool hasMethod(const std::string &methodName) const {
         for (const auto &method: methods) {
-            if (method->name == name) return true;
+            if (method->name == methodName) return true;
         }
         return false;
     }
 
-    [[nodiscard]] std::shared_ptr<MethodSymbol> getMethod(const std::string &name) const {
+    [[nodiscard]] std::shared_ptr<MethodSymbol> getMethod(const std::string &methodName) const {
         for (const auto &method: methods) {
-            if (method->name == name) return method;
+            if (method->name == methodName) return method;
         }
         return nullptr;
     }

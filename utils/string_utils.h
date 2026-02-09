@@ -10,7 +10,7 @@
 #include <sstream>
 
 namespace string_utils {
-    static std::string escape_visible(const std::string &input) {
+    inline std::string escape_visible(const std::string &input) {
         std::ostringstream ss;
 
         for (const unsigned char c: input) {
@@ -44,18 +44,6 @@ namespace string_utils {
         return ss.str();
     }
 
-    static std::string escape_unicode(const std::string &input_utf8) {
-        std::stringstream ss;
-        for (const char c: input_utf8) {
-            if (static_cast<unsigned char>(c) > 127 || c == '\\' || c == '"') {
-                ss << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(static_cast<unsigned
-                    char>(c));
-            } else {
-                ss << c;
-            }
-        }
-        return ss.str();
-    }
 }
 
 #endif //DJINN_STRING_UTILS_H

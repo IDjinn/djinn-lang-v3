@@ -39,26 +39,13 @@ namespace djinn {
     // Convenience base class with empty implementations for selective overriding
     class DeclarationVisitorBase : public IDeclarationVisitor {
     public:
-        void visit(const StructDeclaration &decl, const std::string &prefix) override {
-        }
-
-        void visit(const FunctionDeclaration &decl, const std::string &prefix) override {
-        }
-
-        void visit(const EnumDeclaration &decl, const std::string &prefix) override {
-        }
-
-        void visit(const InterfaceDeclaration &decl, const std::string &prefix) override {
-        }
-
-        void visit(const ExternFunctionDeclaration &decl, const std::string &prefix) override {
-        }
-
-        void visit(const NamespaceDeclaration &decl, const std::string &prefix) override {
-        }
-
-        void visit(const ImportDeclaration &decl, const std::string &prefix) override {
-        }
+        void visit(const StructDeclaration &, const std::string &) override {}
+        void visit(const FunctionDeclaration &, const std::string &) override {}
+        void visit(const EnumDeclaration &, const std::string &) override {}
+        void visit(const InterfaceDeclaration &, const std::string &) override {}
+        void visit(const ExternFunctionDeclaration &, const std::string &) override {}
+        void visit(const NamespaceDeclaration &, const std::string &) override {}
+        void visit(const ImportDeclaration &, const std::string &) override {}
     };
 } // namespace djinn
 

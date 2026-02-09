@@ -22,6 +22,9 @@ namespace djinn::binder {
             parameters.emplace_back(binder.bindExpression(*arg));
         }
 
-        return scope->defineIntrisicCall(call.name.token_name, parameters);
+        auto intrinsicSym = std::make_shared<FunctionSymbol>(
+            call.name.token_name, Type::voided(), call.name.location);
+        return std::make_shared<FunctionCallSymbol>(
+            call.name.token_name, intrinsicSym, std::move(parameters), call.name.location);
     }
 } // namespace djinn::binder
