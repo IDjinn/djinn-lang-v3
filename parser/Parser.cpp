@@ -11,24 +11,16 @@
 #include <cassert>
 
 
-#ifdef PARSER_DEBUG
 #define PARSER_ERROR(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
 throw CompileError(code, msg); \
-} while (false)
+} while (false);
 
 #define PARSER_WARNING(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
-} while (false)
-#else
-#define PARSER_ERROR(code, msg, location) do { \
-_diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
-} while (false)
+throw CompileError(code, msg); \
+} while (false);
 
-#define PARSER_WARNING(code, msg, location) do { \
-_diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
-} while (false)
-#endif
 auto makeSourceIdentifier = [](const Token &token) {
     return SourceIdentifier(token.value,
                             SourceLocation(token.position.fileId, token.position.line, token.position.column,
@@ -140,6 +132,21 @@ Token &Parser::expect(const std::string &message, const std::vector<TokenType> &
 
 bool Parser::isAtEnd() {
     return peek().type == TokenType::END_OF_FILE;
+}
+
+void Parser::synchronize() {
+    while (!isAtEnd()) {
+        const auto type = peek().type;
+        if (type == TokenType::IMPORT || type == TokenType::EXTERN ||
+            type == TokenType::NAMESPACE || type == TokenType::ENUM ||
+            type == TokenType::INTERFACE || type == TokenType::STRUCT ||
+            type == TokenType::LBRACKET) {
+            return;
+        }
+        // If we hit a type-like token followed by an identifier, likely a function decl
+        if (isType()) return;
+        advance();
+    }
 }
 
 std::unique_ptr<Type> Parser::parse_type() {
@@ -562,43 +569,47 @@ std::unique_ptr<Program> Parser::parse(const std::string &program_name) {
     auto program = std::make_unique<Program>(program_name);
 
     while (!isAtEnd()) {
-        if (check(TokenType::IMPORT)) {
-            program->imports.push_back(parse_import());
-        } else if (check(TokenType::EXTERN)) {
-            parse_extern(program.get());
-        } else if (check(TokenType::NAMESPACE)) {
-            const size_t saved = current;
-            advance();
+        try {
+            if (check(TokenType::IMPORT)) {
+                program->imports.push_back(parse_import());
+            } else if (check(TokenType::EXTERN)) {
+                parse_extern(program.get());
+            } else if (check(TokenType::NAMESPACE)) {
+                const size_t saved = current;
+                advance();
 
-            if (check(TokenType::IDENTIFIER)) {
-                const auto qualified_name = parse_qualified_name();
+                if (check(TokenType::IDENTIFIER)) {
+                    const auto qualified_name = parse_qualified_name();
 
-                if (match(TokenType::SEMICOLON)) {
-                    program->fileNamespace = qualified_name.toString();
-                    continue;
+                    if (match(TokenType::SEMICOLON)) {
+                        program->fileNamespace = qualified_name.toString();
+                        continue;
+                    }
+                    current = saved;
+                } else {
+                    current = saved;
                 }
-                current = saved;
-            } else {
-                current = saved;
-            }
-            program->namespaces.push_back(parse_namespace());
-        } else if (check(TokenType::ENUM)) {
-            program->enums.push_back(parse_enum());
-        } else if (check(TokenType::INTERFACE)) {
-            program->interfaces.push_back(parse_interface());
-        } else if (check(TokenType::LBRACKET) || check(TokenType::STRUCT)) {
-            auto structDecl = parse_struct();
+                program->namespaces.push_back(parse_namespace());
+            } else if (check(TokenType::ENUM)) {
+                program->enums.push_back(parse_enum());
+            } else if (check(TokenType::INTERFACE)) {
+                program->interfaces.push_back(parse_interface());
+            } else if (check(TokenType::LBRACKET) || check(TokenType::STRUCT)) {
+                auto structDecl = parse_struct();
 
-            // struct { ... } func() { ... }
-            if (!check(TokenType::IDENTIFIER) || isType()) {
-                program->structs.push_back(std::move(structDecl));
+                // struct { ... } func() { ... }
+                if (!check(TokenType::IDENTIFIER) || isType()) {
+                    program->structs.push_back(std::move(structDecl));
+                } else {
+                    auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name.token_name));
+                    program->structs.push_back(std::move(structDecl));
+                    program->functions.push_back(parse_function_with_type(std::move(returnType)));
+                }
             } else {
-                auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name.token_name));
-                program->structs.push_back(std::move(structDecl));
-                program->functions.push_back(parse_function_with_type(std::move(returnType)));
+                program->functions.push_back(parse_function());
             }
-        } else {
-            program->functions.push_back(parse_function());
+        } catch (const CompileError &) {
+            synchronize();
         }
     }
 
@@ -934,6 +945,18 @@ std::unique_ptr<Expression> Parser::parse_factor() {
 }
 
 std::unique_ptr<Expression> Parser::parse_unary() {
+    if (match(TokenType::NEW)) {
+        auto expr = parse_postfix();
+        // The postfix expression should be a FunctionCall (constructor call)
+        if (auto *funcCall = dynamic_cast<FunctionCall *>(expr.get())) {
+            // Release the unique_ptr and re-wrap as FunctionCall unique_ptr
+            expr.release();
+            auto call = std::unique_ptr<FunctionCall>(funcCall);
+            return std::make_unique<NewExpression>(std::move(call));
+        }
+        throw std::runtime_error("Expected constructor call after 'new'");
+    }
+
     if (match(TokenType::BANG) || match(TokenType::MINUS) ||
         match(TokenType::AMPERSAND) || match(TokenType::STAR)) {
         TokenType op = previous().type;

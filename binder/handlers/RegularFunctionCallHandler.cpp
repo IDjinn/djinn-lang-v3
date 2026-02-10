@@ -59,6 +59,7 @@ namespace djinn::binder {
         handlers.push_back(std::make_unique<MethodCallHandler>());
         handlers.push_back(std::make_unique<IntrinsicCallHandler>());
         handlers.push_back(std::make_unique<EnumConstructionHandler>());
+        handlers.push_back(std::make_unique<ConstructorCallHandler>());
         handlers.push_back(std::make_unique<RegularFunctionCallHandler>());
         return handlers;
     }

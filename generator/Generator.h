@@ -19,25 +19,14 @@
 #include "../diagnostics/Diagnostic.h"
 
 
-#ifdef GENERATOR_DEBUG
 #define GENERATOR_ERROR(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
-assert(false, msg); \
-} while (false)
-
-#define GENERATOR_WARN(code, msg, location) do { \
-_diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
-assert(false, msg); \
-} while (false)
-#else
-#define GENERATOR_ERROR(code, msg, location) do { \
-_diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+throw CompileError(code, msg); \
 } while (false)
 
 #define GENERATOR_WARN(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
 } while (false)
-#endif
 
 namespace djinn {
     class GeneratorExpressionVisitor;
@@ -153,6 +142,8 @@ private:
     llvm::Value *generate_unary_expression(const UnaryExpression &expr);
 
     llvm::Value *generate_function_call(const FunctionCall &expr);
+
+    llvm::Value *generate_new_expression(const NewExpression &expr);
 
     llvm::Value *generate_method_call_internal(const FunctionCall &call);
 

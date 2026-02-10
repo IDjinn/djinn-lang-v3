@@ -174,8 +174,11 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
                 argIdx++;
             }
 
-            // Call the constructor - it returns the struct value
-            return builder->CreateCall(ctorFunc, ctorArgs, "ctor_result");
+            // Call the constructor (void return - initializes struct via 'this' pointer)
+            builder->CreateCall(ctorFunc, ctorArgs);
+
+            // Return the pointer to the initialized struct
+            return structAlloca;
         }
     }
 
@@ -211,6 +214,72 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
     }
 
     return builder->CreateCall(func, args);
+}
+
+llvm::Value *Generator::generate_new_expression(const NewExpression &expr) {
+    const auto &call = *expr.constructorCall;
+
+    // Resolve the struct
+    const std::string resolvedTypeName = currentScope->resolve_alias(call.name.token_name);
+    const StructDef *structDef = currentScope->lookup_struct(resolvedTypeName);
+    if (!structDef) {
+        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
+                           "unknown type for new expression: " + call.name.token_name);
+    }
+
+    // Extract simple name for constructor lookup
+    std::string simpleTypeName = call.name.token_name;
+    if (const size_t lastColon = simpleTypeName.rfind("::"); lastColon != std::string::npos) {
+        simpleTypeName = simpleTypeName.substr(lastColon + 2);
+    }
+
+    // Find the constructor function
+    const std::string ctorName = structDef->name + "__" + simpleTypeName;
+    const auto ctorIt = functions.find(ctorName);
+    if (ctorIt == functions.end()) {
+        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
+                           "no constructor found for type: " + call.name.token_name);
+    }
+    llvm::Function *ctorFunc = ctorIt->second;
+
+    // Declare malloc if not already declared
+    llvm::Function *mallocFunc = module->getFunction("malloc");
+    if (!mallocFunc) {
+        auto *mallocType = llvm::FunctionType::get(
+            builder->getPtrTy(),
+            {builder->getInt64Ty()},
+            false);
+        mallocFunc = llvm::Function::Create(
+            mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+    }
+
+    // Calculate size of struct and call malloc
+    const auto &dataLayout = module->getDataLayout();
+    const uint64_t structSize = dataLayout.getTypeAllocSize(structDef->llvmType);
+    llvm::Value *sizeVal = builder->getInt64(structSize);
+    llvm::Value *rawPtr = builder->CreateCall(mallocFunc, {sizeVal}, "new_raw");
+
+    // Prepare constructor arguments: first arg is 'this' pointer
+    std::vector<llvm::Value *> ctorArgs;
+    ctorArgs.push_back(rawPtr);
+
+    // Add the rest of the arguments
+    const llvm::FunctionType *ctorType = ctorFunc->getFunctionType();
+    size_t argIdx = 1; // Start from 1 because 0 is 'this'
+    for (const auto &arg : call.arguments) {
+        llvm::Value *argVal = generate_expression(*arg);
+        if (argIdx < ctorType->getNumParams()) {
+            argVal = cast_value(argVal, ctorType->getParamType(argIdx));
+        }
+        ctorArgs.push_back(argVal);
+        argIdx++;
+    }
+
+    // Call the constructor
+    builder->CreateCall(ctorFunc, ctorArgs);
+
+    // Return the pointer (the constructor modifies the struct through 'this')
+    return rawPtr;
 }
 
 llvm::Value *Generator::generate_method_call_internal(const FunctionCall &call) {

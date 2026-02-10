@@ -20,17 +20,6 @@
 #include <cassert>
 
 
-#ifdef BINDER_DEBUG
-#define BINDER_ERROR(code, msg, token, location) do { \
-    _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
-    assert(false, msg); \
-} while (false)
-
-#define BINDER_WARNING(code, msg, location) do { \
-    _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
-    assert(false, msg); \
-} while (false)
-#else
 #define BINDER_ERROR(code, msg, token, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
 } while (false)
@@ -38,7 +27,6 @@
 #define BINDER_WARNING(code, msg, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
 } while (false)
-#endif
 
 struct Program;
 struct FunctionDeclaration;
@@ -70,6 +58,7 @@ namespace djinn::binder {
     class MethodCallHandler;
     class IntrinsicCallHandler;
     class EnumConstructionHandler;
+    class ConstructorCallHandler;
     class RegularFunctionCallHandler;
 }
 
@@ -84,6 +73,7 @@ class Binder {
     friend class djinn::binder::MethodCallHandler;
     friend class djinn::binder::IntrinsicCallHandler;
     friend class djinn::binder::EnumConstructionHandler;
+    friend class djinn::binder::ConstructorCallHandler;
     friend class djinn::binder::RegularFunctionCallHandler;
 
 public:
@@ -182,6 +172,8 @@ private:
     std::shared_ptr<Symbol> bindAssignment(const Assignment &assign);
 
     std::shared_ptr<Symbol> bindBraceInitializer(const BraceInitializer &init, const Type *expectedType = nullptr);
+
+    std::shared_ptr<Symbol> bindNewExpression(const NewExpression &expr);
 
     std::unique_ptr<Type> resolveType(const Type &type) const;
 

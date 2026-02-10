@@ -52,6 +52,8 @@ private:
 
     bool isAtEnd();
 
+    void synchronize();
+
     std::unique_ptr<Type> parse_type();
 
     std::unique_ptr<StructDeclaration> parse_struct();

@@ -41,3 +41,10 @@ std::shared_ptr<Symbol> Binder::bindFunctionCall(const FunctionCall &call) {
                  call.name.location);
     return nullptr;
 }
+
+std::shared_ptr<Symbol> Binder::bindNewExpression(const NewExpression &expr) {
+    // Bind the inner constructor call
+    auto result = bindFunctionCall(*expr.constructorCall);
+    // The result type becomes a pointer (heap-allocated)
+    return result;
+}

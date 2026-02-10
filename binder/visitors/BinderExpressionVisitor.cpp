@@ -68,4 +68,8 @@ namespace djinn {
         // VariadicForward is handled by FunctionCall binding
         _result = nullptr;
     }
+
+    void BinderExpressionVisitor::visit(const NewExpression &expr) {
+        _result = _binder.bindNewExpression(expr);
+    }
 } // namespace djinn

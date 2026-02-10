@@ -78,6 +78,16 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
                            "não foi possível gerar valor inicial para: " + expr.name.token_name);
     }
 
+    // If the init value is an alloca (e.g. from a constructor call), reuse it directly
+    if (auto *allocaInit = llvm::dyn_cast<llvm::AllocaInst>(initVal)) {
+        if (allocaInit->getAllocatedType()->isStructTy()) {
+            allocaInit->setName(expr.name.token_name);
+            const auto qualifiedName = currentScope->resolve_alias(expr.type.structName);
+            currentScope->define_variable(expr.name.token_name, allocaInit, qualifiedName);
+            return allocaInit;
+        }
+    }
+
     llvm::Type *type;
     llvm::Type *pointeeType = nullptr;
 

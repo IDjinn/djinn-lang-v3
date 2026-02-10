@@ -2,7 +2,4 @@ import std::types;
 
 namespace playground;
 
-void main() {
-    dynamic_vector<i32> test;
-    printf("hello world! %d", 1+ 2);
-}
+ds

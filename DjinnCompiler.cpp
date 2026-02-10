@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -88,14 +89,23 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         if (programs.empty())
         {
+            std::cerr << diagnostics.render();
             LOG_ERROR("No .djinn files found in %s", path.string().c_str());
             return {.returnCode = 1};
+        }
+
+        if (diagnostics.hasErrors())
+        {
+            std::cerr << diagnostics.render();
+            return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);
         if (!bindResult.success)
         {
+            std::cerr << diagnostics.render();
+            LOG_ERROR("Bind result return failed.");
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
@@ -219,6 +229,11 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         userProgram = std::shared_ptr<Program>(std::move(program));
         programs.emplace_back(userProgram);
+
+        if (diagnostics.hasErrors())
+        {
+            return makeResult(1, std::stacktrace::current());
+        }
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);

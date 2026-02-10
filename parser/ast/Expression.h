@@ -383,4 +383,22 @@ struct VariadicForward : Expression {
     }
 };
 
+// Heap-allocated constructor call: new StructName(args)
+struct NewExpression : Expression {
+    std::unique_ptr<FunctionCall> constructorCall;
+
+    explicit NewExpression(std::unique_ptr<FunctionCall> call)
+        : constructorCall(std::move(call)) {
+    }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "NewExpression(\n";
+        constructorCall->print(os, indent + 2);
+        os << ")";
+    }
+};
+
 #endif //DJINN_EXPRESSION_H

@@ -51,6 +51,8 @@ namespace djinn {
         void visit(const SwitchExpression &expr) override;
 
         void visit(const VariadicForward &expr) override;
+
+        void visit(const NewExpression &expr) override;
     };
 } // namespace djinn
 

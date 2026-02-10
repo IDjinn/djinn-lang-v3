@@ -1,0 +1,66 @@
+//
+// ConstructorCallHandler implementation
+//
+
+#include "CallHandler.h"
+#include "../Binder.h"
+
+namespace djinn::binder {
+    bool ConstructorCallHandler::canHandle(const FunctionCall &call,
+                                           std::shared_ptr<ScopedSymbolTable> scope) const {
+        // Don't handle method calls or enum constructions (those have ::)
+        if (call.isMethodCall() || call.name.token_name.find("::") != std::string::npos) {
+            return false;
+        }
+
+        // Check if the call name matches a struct that has a constructor
+        if (const auto structSym = scope->lookupStruct(call.name.token_name)) {
+            for (const auto &method : structSym->methods) {
+                if (method->isConstructor && method->name == call.name.token_name) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    std::shared_ptr<Symbol> ConstructorCallHandler::handle(
+        const FunctionCall &call,
+        Binder &binder,
+        std::shared_ptr<ScopedSymbolTable> scope,
+        DiagnosticEngine &diagnostics) {
+        const auto structSym = scope->lookupStruct(call.name.token_name);
+
+        // Find the constructor method
+        std::shared_ptr<MethodSymbol> ctor;
+        for (const auto &method : structSym->methods) {
+            if (method->isConstructor && method->name == call.name.token_name) {
+                ctor = method;
+                break;
+            }
+        }
+
+        // Validate argument count
+        if (call.arguments.size() != ctor->arity()) {
+            diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::TYPE_MISMATCH,
+                "constructor '" + call.name.token_name + "' expects " +
+                std::to_string(ctor->arity()) +
+                " arguments but got " + std::to_string(call.arguments.size()),
+                call.name.location));
+        }
+
+        // Bind arguments
+        std::vector<std::shared_ptr<Symbol>> parameters;
+        for (const auto &arg : call.arguments) {
+            parameters.emplace_back(binder.bindExpression(*arg));
+        }
+
+        // Return a FunctionCallSymbol - the generator already knows how to handle
+        // constructor calls by looking up the struct name
+        return std::make_shared<FunctionCallSymbol>(
+            call.name.token_name, nullptr, std::move(parameters), call.name.location
+        );
+    }
+} // namespace djinn::binder

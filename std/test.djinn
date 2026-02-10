@@ -3,7 +3,3 @@ import std::sys;
 import std::math;
 
 namespace std;
-
-void test() {
-    dynamic_vector<i32> vec;
-}

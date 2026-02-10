@@ -75,6 +75,20 @@ namespace djinn::binder {
         ) override;
     };
 
+    // Handler for constructor calls (StructName(args))
+    class ConstructorCallHandler : public CallHandler {
+    public:
+        bool canHandle(const FunctionCall &call,
+                       std::shared_ptr<ScopedSymbolTable> scope) const override;
+
+        std::shared_ptr<Symbol> handle(
+            const FunctionCall &call,
+            Binder &binder,
+            std::shared_ptr<ScopedSymbolTable> scope,
+            DiagnosticEngine &diagnostics
+        ) override;
+    };
+
     // Handler for regular function calls
     class RegularFunctionCallHandler : public CallHandler {
     public:
