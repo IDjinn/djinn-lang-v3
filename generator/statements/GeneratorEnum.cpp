@@ -62,7 +62,7 @@ void Generator::generate_enum(const EnumSymbol &enum_symbol) {
     currentScope->define_enum(enum_symbol.name, std::move(def));
 }
 
-void Generator::resolve_enum_body(const EnumSymbol &enum_symbol) {
+void Generator::resolve_enum_body(const EnumSymbol &) {
     // For non-generic enums, the body is already resolved in generate_enum
     // This is kept for potential future use with forward declarations
 }

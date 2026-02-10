@@ -174,7 +174,7 @@ if (DJINN_DISABLE_BINDER_ASSERTS)
     target_compile_definitions(djinn_lib PUBLIC DJINN_TESTING)
 endif ()
 
-target_include_directories(djinn_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_include_directories(djinn_lib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_options(djinn_lib PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
 target_link_libraries(djinn_lib PRIVATE ${LIBXML2_LIBRARY})
