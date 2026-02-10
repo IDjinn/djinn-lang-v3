@@ -88,6 +88,18 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
         }
     }
 
+    // If the init value is from a 'new' expression, variable holds a heap pointer
+    if (dynamic_cast<const NewExpression *>(expr.value.get())) {
+        auto *alloca = builder->CreateAlloca(builder->getPtrTy(), nullptr, expr.name.token_name);
+        std::string structTypeName;
+        if (expr.type.kind == TypeKind::STRUCT) {
+            structTypeName = currentScope->resolve_alias(expr.type.structName);
+        }
+        currentScope->define_variable(expr.name.token_name, alloca, structTypeName);
+        builder->CreateStore(initVal, alloca);
+        return alloca;
+    }
+
     llvm::Type *type;
     llvm::Type *pointeeType = nullptr;
 

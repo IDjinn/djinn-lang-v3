@@ -2,4 +2,17 @@ import std::types;
 
 namespace playground;
 
-ds
+struct user {
+    i32 id;
+    i32 age;
+
+    user(i32 id, i32 age) {
+        this.id = id;
+        this.age = age;
+    }
+}
+
+void main() {
+    user me = new user(1, 69);
+    printf("age %d\n", me.age);
+}
