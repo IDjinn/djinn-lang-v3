@@ -1014,6 +1014,16 @@ std::unique_ptr<Expression> Parser::parse_postfix() {
             else {
                 expr = std::make_unique<FieldAccess>(std::move(expr), std::move(memberName));
             }
+        } else if (match(TokenType::LBRACKET)) {
+            auto index = parse_expression();
+            expect("Esperado ']' após índice", TokenType::RBRACKET);
+
+            if (match(TokenType::EQUAL)) {
+                auto value = parse_expression();
+                expr = std::make_unique<IndexAssignment>(std::move(expr), std::move(index), std::move(value));
+            } else {
+                expr = std::make_unique<IndexAccess>(std::move(expr), std::move(index));
+            }
         } else {
             break;
         }

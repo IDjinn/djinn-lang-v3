@@ -88,4 +88,14 @@ namespace djinn
     {
         _result = _generator.generate_new_expression(expr);
     }
+
+    void GeneratorExpressionVisitor::visit(const IndexAccess& expr)
+    {
+        _result = _generator.generate_index_access(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const IndexAssignment& expr)
+    {
+        _result = _generator.generate_index_assignment(expr);
+    }
 } // namespace djinn

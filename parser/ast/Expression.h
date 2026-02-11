@@ -326,6 +326,48 @@ struct BraceInitializer : Expression {
     }
 };
 
+struct IndexAccess : Expression {
+    std::unique_ptr<Expression> object;
+    std::unique_ptr<Expression> index;
+
+    IndexAccess(std::unique_ptr<Expression> obj, std::unique_ptr<Expression> idx)
+        : object(std::move(obj)), index(std::move(idx)) {
+    }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "IndexAccess[\n";
+        object->print(os, indent + 2);
+        os << "\n";
+        index->print(os, indent + 2);
+        os << "]";
+    }
+};
+
+struct IndexAssignment : Expression {
+    std::unique_ptr<Expression> object;
+    std::unique_ptr<Expression> index;
+    std::unique_ptr<Expression> value;
+
+    IndexAssignment(std::unique_ptr<Expression> obj, std::unique_ptr<Expression> idx, std::unique_ptr<Expression> val)
+        : object(std::move(obj)), index(std::move(idx)), value(std::move(val)) {
+    }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "IndexAssignment[\n";
+        object->print(os, indent + 2);
+        os << "\n";
+        index->print(os, indent + 2);
+        os << "] =\n";
+        value->print(os, indent + 2);
+    }
+};
+
 // Pattern matching switch arm: VariantName binding -> result_expr
 struct SwitchArm : Location {
     SourceIdentifier variantName; // The variant to match (e.g., "Value", "Empty")

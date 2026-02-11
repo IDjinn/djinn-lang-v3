@@ -53,6 +53,10 @@ namespace djinn {
         void visit(const VariadicForward &expr) override;
 
         void visit(const NewExpression &expr) override;
+
+        void visit(const IndexAccess &expr) override;
+
+        void visit(const IndexAssignment &expr) override;
     };
 } // namespace djinn
 

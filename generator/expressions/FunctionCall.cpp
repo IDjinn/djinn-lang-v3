@@ -23,6 +23,18 @@ llvm::Value *Generator::generate_intrinsic_call(const FunctionCall &call) {
                 throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "sizeof requires 1 argument");
             }
 
+            // Check if the argument is a generic type parameter (e.g., sizeof(T))
+            if (_currentGenericCtx) {
+                if (const auto *ident = dynamic_cast<const Identifier *>(call.arguments[0].get())) {
+                    if (const Type *resolved = _currentGenericCtx->resolve(ident->name())) {
+                        llvm::Type *llvmType = generate_type(*resolved);
+                        const auto &dataLayout = module->getDataLayout();
+                        const uint64_t size = dataLayout.getTypeAllocSize(llvmType);
+                        return builder->getInt64(size);
+                    }
+                }
+            }
+
             const llvm::Value *arg = generate_expression(*call.arguments[0]);
             const auto type = arg->getType();
             const auto &dataLayout = module->getDataLayout();

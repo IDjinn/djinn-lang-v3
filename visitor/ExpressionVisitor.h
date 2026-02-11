@@ -22,6 +22,8 @@ struct BraceInitializer;
 struct SwitchExpression;
 struct VariadicForward;
 struct NewExpression;
+struct IndexAccess;
+struct IndexAssignment;
 
 namespace djinn {
     class IExpressionVisitor {
@@ -59,6 +61,10 @@ namespace djinn {
         virtual void visit(const VariadicForward &expr) = 0;
 
         virtual void visit(const NewExpression &expr) = 0;
+
+        virtual void visit(const IndexAccess &expr) = 0;
+
+        virtual void visit(const IndexAssignment &expr) = 0;
     };
 } // namespace djinn
 

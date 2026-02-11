@@ -14,5 +14,5 @@ struct user {
 
 void main() {
     user me = new user(1, 69);
-    printf("age %d\n", me.age);
+    printf("age %d\n", (1 + 2 * 3 / 2 + 5 * 9));
 }

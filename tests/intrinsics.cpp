@@ -149,7 +149,7 @@ TEST(Intrinsics, SizeofF32) {
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_TRUE(result.returnCode == 4 || result.returnCode == 8); // f32 = 4 bytes
+    EXPECT_EQ(result.returnCode, 4); // f32 = 4 bytes
 }
 
 TEST(Intrinsics, SizeofF64) {
@@ -163,5 +163,68 @@ TEST(Intrinsics, SizeofF64) {
 
     const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_TRUE(result.returnCode == 4 || result.returnCode == 8); // f64 = 8 bytes
+    EXPECT_EQ(result.returnCode, 8); // f64 = 8 bytes
+}
+
+// sizeof on monomorphized generic struct instances
+// Note: Type<Args>.staticMethod() syntax not yet supported by parser,
+// so we test sizeof on instances of monomorphized generic structs instead.
+
+TEST(Intrinsics, SizeofGenericStructI32) {
+    const auto source = R"(
+        struct Container<T> {
+            T value;
+        }
+
+        i32 main() {
+            Container<i32> c = { 42 };
+            i64 size = sizeof(c);
+            return size;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 4); // sizeof(Container<i32>) = sizeof(i32) = 4
+}
+
+TEST(Intrinsics, SizeofGenericStructI64) {
+    const auto source = R"(
+        struct Container<T> {
+            T value;
+        }
+
+        i32 main() {
+            Container<i64> c = { 100 };
+            i64 size = sizeof(c);
+            return size;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 8); // sizeof(Container<i64>) = sizeof(i64) = 8
+}
+
+TEST(Intrinsics, SizeofGenericStructPoint) {
+    const auto source = R"(
+        struct Point {
+            i32 x;
+            i32 y;
+        }
+
+        struct Container<T> {
+            T value;
+        }
+
+        i32 main() {
+            Container<Point> c = { { 1, 2 } };
+            i64 size = sizeof(c);
+            return size;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 8); // sizeof(Container<Point>) = sizeof(Point) = 2*i32 = 8
 }

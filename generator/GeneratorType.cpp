@@ -207,6 +207,8 @@ void Generator::monomorphize_method(const MethodSymbol &method,
         ++paramIdx;
     }
 
+    _currentGenericCtx = &ctx;
+
     if (method.body) {
         for (const auto &stmt: method.body->statements) {
             generate_statement(*stmt);
@@ -219,6 +221,8 @@ void Generator::monomorphize_method(const MethodSymbol &method,
             builder->CreateRetVoid();
         }
     }
+
+    _currentGenericCtx = nullptr;
 
     if (!builder->GetInsertBlock()->getTerminator()) {
         if (returnType->isVoidTy()) {

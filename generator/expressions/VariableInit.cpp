@@ -109,8 +109,8 @@ llvm::Value *Generator::generate_variable_init(const VariableInit &expr) {
         type = generate_type(expr.type);
         initVal = cast_value(initVal, type);
 
-        // Track pointee type for pointer variables
-        if (expr.type.kind == TypeKind::POINTER && expr.type.elementType) {
+        // Track pointee type for pointer/array variables
+        if ((expr.type.kind == TypeKind::POINTER || expr.type.kind == TypeKind::ARRAY) && expr.type.elementType) {
             pointeeType = generate_type(*expr.type.elementType);
         }
     }

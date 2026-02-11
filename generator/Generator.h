@@ -159,6 +159,10 @@ private:
 
     llvm::Value *generate_field_assignment(const FieldAssignment &expr);
 
+    llvm::Value *generate_index_access(const IndexAccess &expr);
+
+    llvm::Value *generate_index_assignment(const IndexAssignment &expr);
+
     llvm::Value *generate_variable_init(const VariableInit &expr);
 
     llvm::Value *generate_assignment(const Assignment &expr);
@@ -169,6 +173,8 @@ private:
                                                 const std::string &structName);
 
     llvm::Value *cast_value(llvm::Value *value, llvm::Type *targetType) const;
+
+    const GenericContext *_currentGenericCtx = nullptr;
 
     llvm::Function *currentFunction = nullptr;
 

@@ -3,6 +3,7 @@
 //
 
 #include <cassert>
+#include <sstream>
 
 #include "../Binder.h"
 
@@ -167,5 +168,40 @@ void Binder::checkTypeCompatibility(const Type &expected, const Expression &expr
         BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
                      "cannot implicitly convert floating-point to integer; use explicit cast",
                      expr, loc);
+    }
+
+    // Pointer type compatibility check
+    if ((expectedResolved->kind == TypeKind::POINTER || expectedResolved->kind == TypeKind::ARRAY) &&
+        (inferred.kind == TypeKind::POINTER || inferred.kind == TypeKind::ARRAY)) {
+        const Type *expectedElem = expectedResolved->elementType.get();
+        const Type *inferredElem = inferred.elementType.get();
+
+        if (expectedElem && inferredElem) {
+            // Allow void* <-> T* (C-style implicit cast, needed for malloc)
+            if (expectedElem->kind == TypeKind::VOID || inferredElem->kind == TypeKind::VOID) {
+                return;
+            }
+
+            // Check element type compatibility
+            bool compatible = true;
+            if (expectedElem->kind != inferredElem->kind) {
+                compatible = false;
+            } else if (expectedElem->kind == TypeKind::INTEGER &&
+                       (expectedElem->size != inferredElem->size || expectedElem->sign != inferredElem->sign)) {
+                compatible = false;
+            } else if (expectedElem->kind == TypeKind::STRUCT && expectedElem->structName != inferredElem->structName) {
+                compatible = false;
+            }
+
+            if (!compatible) {
+                std::ostringstream oss;
+                oss << "incompatible pointer types: cannot assign '";
+                inferred.print(oss, 0);
+                oss << "' to '";
+                expectedResolved->print(oss, 0);
+                oss << "'";
+                BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH, oss.str(), expr, loc);
+            }
+        }
     }
 }

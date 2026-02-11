@@ -3,6 +3,35 @@
 Full compile, with lexer, parser and llvm ir generation. Focus in a language c-like but safe and C#/Rust inspired for
 developer experience.
 
+## Project Status
+
+See `todo.md` for full roadmap. Summary:
+
+- **Fase 1 (Fundacao)**: COMPLETA - generics, FFI extern "C", malloc/free, sizeof
+- **Fase 2 (Estruturas)**: ~60% - enums, methods, constructors feitos. Faltam slices e string robusto
+- **Fase 3 (Std)**: ~10% - I/O parcial via extern. Faltam Vec, String, HashMap
+- **Fase 4 (Avancado)**: ~25% - interfaces feitas. Faltam pattern matching, closures, async
+
+Extras ja implementados: control flow, aritmetica, mutabilidade, ownership/copy semantics,
+name mangling, binder/scope, diagnostics, imports, namespaces, LSP server.
+
+## Architecture
+
+```
+lexer/          Lexer, Token, TokenType
+parser/         AST nodes (Declaration, Statement, Type, Generic, Scope)
+binder/         Symbol table, scope resolution, ownership tracking, type validation
+generator/      LLVM IR generation, intrinsics (sizeof), name mangling
+visitor/        Statement/Declaration visitors
+diagnostics/    Error reporting with suggestions
+lsp/            Language Server Protocol (JsonRpc, LspTypes, LspServer)
+utils/          Logger, StopWatch, string_utils
+std/            Standard library definitions (.djinn files)
+tests/          GoogleTest unit tests
+playground/     Test files for manual testing
+examples/       Example .djinn programs
+```
+
 ## Quick Examples
 
 ```djinn
@@ -36,6 +65,22 @@ extern "C" {
     i32 printf(i8* format, ...);
     i32 puts(i8* s);
 }
+```
+
+```djinn
+// Static methods on structs
+struct Console {
+    public static c_result error(i8* message) {
+        return write(2, message, strlen(message));
+    }
+}
+```
+
+```djinn
+// Transparent types (newtype pattern)
+struct size : u32;
+struct c_result : i32;
+struct bool : i1;
 ```
 
 ## Grammar (EBNF)
@@ -241,7 +286,9 @@ LETTER               = "a" | ... | "z" | "A" | ... | "Z" | "_" ;
 
 ## Standard Library
 
-### std::types
+Files in `std/` directory. All use `import std::types;` for base types.
+
+### std::types (std/types/types.djinn)
 
 ```djinn
 namespace std::types;
@@ -260,41 +307,102 @@ enum result<T, E> {
     Ok(T),
     Error(E)
 }
+
+struct string {
+    i8* data;
+    size size;
+    i32 flags; // metadata: static str, expandable, etc.
+}
+
+struct vector<T> {
+    T[] value;
+    size size;
+}
+
+struct dynamic_vector<T> {
+    vector<T> vector;
+    size capacity;
+}
 ```
 
-### std::sys::math
+### std::sys::libc (std/sys/libc.djinn)
 
 ```djinn
-import std::sys::math;
+import std::types;
+namespace std::libc;
 
-// Trigonometric: sin, cos, tan, asin, acos, atan, atan2
-// Hyperbolic: sinh, cosh, tanh, asinh, acosh, atanh
-// Exponential/Log: exp, exp2, log, log10, log2
-// Power: pow, sqrt, cbrt, hypot
-// Rounding: ceil, floor, trunc, round, fmod
-// Other: fabs, fmax, fmin, erf, tgamma
-
-// Float (f32) versions have 'f' suffix: sinf, cosf, sqrtf, etc.
+extern "C" {
+    c_result printf(i8* fmt, ...);
+    void* malloc(size_long size);
+    void free(void* ptr);
+    c_result strlen(i8* s);
+}
 ```
 
-### std::sys::io
+### std::sys::Console (std/sys/console.djinn)
 
 ```djinn
-import std::sys::io;
+import std::types;
+namespace std::sys;
 
-// File operations: fopen, fclose, fread, fwrite
-// Character I/O: fgetc, fputc, getchar, putchar
-// String I/O: fgets, fputs, puts
-// Formatted I/O: fprintf, fscanf, sprintf, snprintf
-// Low-level: open, close, read, write, lseek
+struct Console {
+    public static c_result error(i8* message) {
+        return write(2, message, strlen(message));
+    }
+    public static c_result printf(i8* format) {
+        return printf(format);
+    }
+}
 ```
 
-### std::sys::libc
+### std::debug (std/sys/debug.djinn)
 
 ```djinn
-import std::sys::libc;
+namespace std::debug;
 
-// Memory: malloc, free, realloc, calloc, memcpy, memset, memmove
-// String: strlen, strcpy, strncpy, strcmp, strcat
-// I/O: printf, puts
+struct Debug {
+    public static void pause() {
+        debugtrap();
+    }
+}
+```
+
+### std::sys::io (std/sys/io.djinn)
+
+```djinn
+import std::types;
+namespace std::io;
+
+struct FILE : void*;
+
+extern "C" {
+    // File ops: fopen, fclose, fflush, freopen
+    // Positioning: fseek, ftell, rewind, fgetpos, fsetpos
+    // Binary: fread, fwrite
+    // Char I/O: fgetc, fputc, getc, putc, getchar, putchar, ungetc
+    // String I/O: fgets, fputs, puts, gets
+    // Formatted: fprintf, fscanf, sprintf, snprintf, sscanf
+    // Error: feof, ferror, clearerr, perror
+    // File mgmt: remove, rename, tmpfile, tmpnam
+    // POSIX: open, close, read, write, lseek
+    // FD: fileno, fdopen, dup, dup2
+    // Pipes: pipe, popen, pclose
+}
+```
+
+### std::math (std/sys/math.djinn)
+
+```djinn
+import std::types;
+namespace std::math;
+
+extern "C" {
+    // Trigonometric: sin, cos, tan, asin, acos, atan, atan2
+    // Hyperbolic: sinh, cosh, tanh, asinh, acosh, atanh
+    // Exponential/Log: exp, exp2, expm1, log, log10, log2, log1p
+    // Power: pow, sqrt, cbrt, hypot
+    // Rounding: ceil, floor, trunc, round, fmod, remainder
+    // Other: fabs, fmax, fmin, erf, erfc, tgamma, lgamma
+    // Float (f32) versions have 'f' suffix: sinf, cosf, sqrtf, etc.
+}
 ```

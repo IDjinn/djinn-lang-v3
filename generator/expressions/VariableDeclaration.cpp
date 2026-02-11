@@ -10,14 +10,17 @@ llvm::Value *Generator::generate_variable_declaration(const VariableDeclaration 
     builder->CreateStore(llvm::Constant::getNullValue(type), alloca);
 
     std::string structTypeName;
+    llvm::Type *pointeeType = nullptr;
     if (expr.type.kind == TypeKind::STRUCT) {
         if (expr.type.hasGenericArgs()) {
             structTypeName = Mangler::mangle_generic_struct(expr.type.structName, expr.type.genericArgs);
         } else {
             structTypeName = expr.type.structName;
         }
+    } else if ((expr.type.kind == TypeKind::POINTER || expr.type.kind == TypeKind::ARRAY) && expr.type.elementType) {
+        pointeeType = generate_type(*expr.type.elementType);
     }
 
-    currentScope->define_variable(expr.name.token_name, alloca, structTypeName);
+    currentScope->define_variable(expr.name.token_name, alloca, structTypeName, pointeeType);
     return alloca;
 }
