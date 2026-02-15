@@ -110,6 +110,10 @@ private:
 
     std::unique_ptr<Expression> parse_brace_initializer();
 
+    std::unique_ptr<Expression> parse_array_literal();
+
+    std::unique_ptr<Expression> parse_typed_array_literal(const Token &typeToken);
+
     std::unique_ptr<Expression> parse_switch_expression();
 
     std::unique_ptr<ExternFunctionDeclaration> parse_extern_function(const std::string &abi);

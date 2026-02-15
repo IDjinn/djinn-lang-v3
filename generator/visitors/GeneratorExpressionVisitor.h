@@ -53,6 +53,8 @@ namespace djinn {
 
         void visit(const NewExpression &expr) override;
 
+        void visit(const ArrayLiteral &expr) override;
+
         void visit(const IndexAccess &expr) override;
 
         void visit(const IndexAssignment &expr) override;

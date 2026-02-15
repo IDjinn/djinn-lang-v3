@@ -52,7 +52,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 auto file_name = entry.path().string();
                 diagnostics.registerSource(file_name, source);
 
-                Lexer lexer(source);
+                Lexer lexer(source, file_name);
                 const auto tokens = lexer.tokenize();
 
                 Parser parser(tokens, diagnostics);

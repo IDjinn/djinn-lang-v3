@@ -3,7 +3,7 @@ import std::types;
 namespace playground;
 
 i32 main() {
-    i32[] values = [1, 2, 3, 4, 5]
-    sized_array<i32> arr = sized_array<i32>(values, values.size);
+    i32[] values = [1, 2, 3, 4, 5];
+    printf("values = %d", values[0]);
     return 0;
 }

@@ -947,6 +947,11 @@ std::unique_ptr<Expression> Parser::parse_factor() {
 std::unique_ptr<Expression> Parser::parse_unary() {
     if (match(TokenType::NEW)) {
         auto expr = parse_postfix();
+        // new [1, 2, 3] or new i32[1, 2, 3] — heap-allocated array literal
+        if (auto *arrayLit = dynamic_cast<ArrayLiteral *>(expr.get())) {
+            arrayLit->isHeap = true;
+            return expr;
+        }
         // The postfix expression should be a FunctionCall (constructor call)
         if (auto *funcCall = dynamic_cast<FunctionCall *>(expr.get())) {
             // Release the unique_ptr and re-wrap as FunctionCall unique_ptr
@@ -954,7 +959,7 @@ std::unique_ptr<Expression> Parser::parse_unary() {
             auto call = std::unique_ptr<FunctionCall>(funcCall);
             return std::make_unique<NewExpression>(std::move(call));
         }
-        throw std::runtime_error("Expected constructor call after 'new'");
+        throw std::runtime_error("Expected constructor call or array literal after 'new'");
     }
 
     if (match(TokenType::BANG) || match(TokenType::MINUS) ||
@@ -1070,7 +1075,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<Identifier>(makeSourceIdentifier(previous()));
     }
 
-    if (check(TokenType::AUTO) || check(TokenType::IDENTIFIER)) {
+    if (check(TokenType::AUTO) || check(TokenType::MUT) || check(TokenType::IDENTIFIER)) {
         // Step 1: Consume modifiers (auto, mut)
         const auto isAuto = match(TokenType::AUTO);
         auto isMutable = match(TokenType::MUT);
@@ -1100,8 +1105,14 @@ std::unique_ptr<Expression> Parser::parse_primary() {
 
         bool isArray = false;
         if (isKnownType && match(TokenType::LBRACKET)) {
-            expect("Expected ']' after '['", TokenType::RBRACKET);
-            isArray = true;
+            if (check(TokenType::RBRACKET)) {
+                // i32[] — array type suffix
+                advance(); // consume ]
+                isArray = true;
+            } else {
+                // i32[1, 2, 3] — typed array literal
+                return parse_typed_array_literal(firstToken);
+            }
         }
 
         if (!isMutable && match(TokenType::MUT)) {
@@ -1194,6 +1205,11 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         return std::make_unique<Identifier>(std::move(nameIdentifier));
     }
 
+    // Array literal: [1, 2, 3]
+    if (check(TokenType::LBRACKET)) {
+        return parse_array_literal();
+    }
+
     if (check(TokenType::LBRACE)) {
         return parse_brace_initializer();
     }
@@ -1234,6 +1250,41 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer() {
     expect("Esperado '}'", TokenType::RBRACE);
 
     return std::make_unique<BraceInitializer>(std::move(elements));
+}
+
+std::unique_ptr<Expression> Parser::parse_array_literal() {
+    expect("Esperado '['", TokenType::LBRACKET);
+
+    std::vector<std::unique_ptr<Expression>> elements;
+    if (!check(TokenType::RBRACKET)) {
+        do {
+            elements.push_back(parse_expression());
+        } while (match(TokenType::COMMA));
+    }
+
+    expect("Esperado ']'", TokenType::RBRACKET);
+
+    return std::make_unique<ArrayLiteral>(std::move(elements));
+}
+
+std::unique_ptr<Expression> Parser::parse_typed_array_literal(const Token &typeToken) {
+    // '[' already consumed by caller, parse elements
+    std::vector<std::unique_ptr<Expression>> elements;
+    if (!check(TokenType::RBRACKET)) {
+        do {
+            elements.push_back(parse_expression());
+        } while (match(TokenType::COMMA));
+    }
+
+    expect("Esperado ']'", TokenType::RBRACKET);
+
+    Type elemType = Type::fromToken(typeToken);
+    if (elemType.kind == TypeKind::VOID && typeToken.value != "void") {
+        // Not a primitive — treat as struct type
+        elemType = Type::struct_type(typeToken.value);
+    }
+
+    return std::make_unique<ArrayLiteral>(std::move(elements), std::move(elemType));
 }
 
 std::unique_ptr<Expression> Parser::parse_switch_expression() {

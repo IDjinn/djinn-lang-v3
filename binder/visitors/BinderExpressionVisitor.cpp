@@ -73,6 +73,13 @@ namespace djinn {
         _result = _binder.bindNewExpression(expr);
     }
 
+    void BinderExpressionVisitor::visit(const ArrayLiteral &expr) {
+        for (const auto &elem : expr.elements) {
+            _binder.bindExpression(*elem);
+        }
+        _result = nullptr;
+    }
+
     void BinderExpressionVisitor::visit(const IndexAccess &expr) {
         _binder.bindExpression(*expr.object);
         _binder.bindExpression(*expr.index);

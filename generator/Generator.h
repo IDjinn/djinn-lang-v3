@@ -145,6 +145,8 @@ private:
 
     llvm::Value *generate_new_expression(const NewExpression &expr);
 
+    llvm::Value *generate_array_literal(const ArrayLiteral &expr);
+
     llvm::Value *generate_method_call_internal(const FunctionCall &call);
 
     llvm::Value *generate_intrinsic_call(const FunctionCall &call);

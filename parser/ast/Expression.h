@@ -425,6 +425,36 @@ struct VariadicForward : Expression {
     }
 };
 
+// Array literal: [1, 2, 3] or i32[1, 2, 3]
+struct ArrayLiteral : Expression {
+    std::vector<std::unique_ptr<Expression>> elements;
+    std::optional<Type> elementType;  // set for typed literals like i32[1,2,3], empty for [1,2,3]
+    bool isHeap = false;  // set by NewExpression wrapping
+
+    explicit ArrayLiteral(std::vector<std::unique_ptr<Expression>> elements)
+        : elements(std::move(elements)) {
+    }
+
+    ArrayLiteral(std::vector<std::unique_ptr<Expression>> elements, Type elemType)
+        : elements(std::move(elements)), elementType(std::move(elemType)) {
+    }
+
+    void accept(djinn::IExpressionVisitor &visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream &os, const int indent = 0) const override {
+        writeIndent(os, indent);
+        os << "ArrayLiteral(";
+        if (elementType) {
+            elementType->print(os, 0);
+        }
+        os << "[" << elements.size() << "])\n";
+        for (const auto &elem : elements) {
+            elem->print(os, indent + 2);
+            os << "\n";
+        }
+    }
+};
+
 // Heap-allocated constructor call: new StructName(args)
 struct NewExpression : Expression {
     std::unique_ptr<FunctionCall> constructorCall;

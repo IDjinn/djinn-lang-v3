@@ -137,6 +137,11 @@ Token Lexer::read_number() {
         return make_token(TokenType::FLOAT_LITERAL, value, startLine, startColumn);
     }
 
+    // Check for integer suffix: u (unsigned) or i (signed)
+    if (peek() == 'u' || peek() == 'i') {
+        value += advance();
+    }
+
     return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
 }
 
