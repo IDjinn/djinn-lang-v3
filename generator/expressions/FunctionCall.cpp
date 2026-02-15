@@ -151,46 +151,66 @@ llvm::Value *Generator::generate_function_call(const FunctionCall &expr) {
         }
     }
 
-    // Check if this is a constructor call: Type(args)
+    // Check if this is a constructor call: Type(args) or Type<T>(args)
     // Resolve alias first (e.g., "Point" -> "mymodule::Point")
     const std::string resolvedTypeName = currentScope->resolve_alias(expr.name.token_name);
-    if (const StructDef *structDef = currentScope->lookup_struct(resolvedTypeName)) {
-        // Extract simple name for constructor lookup (e.g., "Point" from "mymodule::Point")
-        std::string simpleTypeName = expr.name.token_name;
-        if (const size_t lastColon = simpleTypeName.rfind("::"); lastColon != std::string::npos) {
-            simpleTypeName = simpleTypeName.substr(lastColon + 2);
+
+    // Extract simple name for constructor lookup (e.g., "Point" from "mymodule::Point")
+    std::string simpleTypeName = expr.name.token_name;
+    if (const size_t lastColon = simpleTypeName.rfind("::"); lastColon != std::string::npos)
+    {
+        simpleTypeName = simpleTypeName.substr(lastColon + 2);
+    }
+
+    if (const StructDef* structDef = currentScope->lookup_struct(resolvedTypeName))
+    {
+        const StructDef* targetDef = structDef;
+        std::string targetStructName = structDef->name;
+
+        // Handle generic struct constructor: e.g., array<i32>()
+        if (expr.hasTypeArguments() && structDef->isGeneric)
+        {
+            monomorphize_struct(resolvedTypeName, expr.typeArguments);
+            targetStructName = Mangler::mangle_generic_struct(resolvedTypeName, expr.typeArguments);
+            targetDef = currentScope->lookup_struct(targetStructName);
         }
-        // Constructor is mangled as StructName__StructName
-        // Use structDef->name to get the actual qualified name (handles fallback lookup)
-        const std::string ctorName = structDef->name + "__" + simpleTypeName;
-        if (const auto ctorIt = functions.find(ctorName); ctorIt != functions.end()) {
-            // This is a constructor call!
-            llvm::Function *ctorFunc = ctorIt->second;
 
-            // Allocate space for the struct
-            llvm::AllocaInst *structAlloca = builder->CreateAlloca(structDef->llvmType, nullptr, "ctor_tmp");
+        if (targetDef)
+        {
+            // Constructor is mangled as StructName__SimpleName
+            const std::string ctorName = targetStructName + "__" + simpleTypeName;
+            if (const auto ctorIt = functions.find(ctorName); ctorIt != functions.end())
+            {
+                // This is a constructor call!
+                llvm::Function* ctorFunc = ctorIt->second;
 
-            // Prepare arguments: first arg is 'this' pointer
-            std::vector<llvm::Value *> ctorArgs;
-            ctorArgs.push_back(structAlloca);
+                // Allocate space for the struct
+                llvm::AllocaInst* structAlloca = builder->CreateAlloca(targetDef->llvmType, nullptr, "ctor_tmp");
 
-            // Add the rest of the arguments
-            const llvm::FunctionType *ctorType = ctorFunc->getFunctionType();
-            size_t argIdx = 1; // Start from 1 because 0 is 'this'
-            for (const auto &arg: expr.arguments) {
-                llvm::Value *argVal = generate_expression(*arg);
-                if (argIdx < ctorType->getNumParams()) {
-                    argVal = cast_value(argVal, ctorType->getParamType(argIdx));
+                // Prepare arguments: first arg is 'this' pointer
+                std::vector<llvm::Value*> ctorArgs;
+                ctorArgs.push_back(structAlloca);
+
+                // Add the rest of the arguments
+                const llvm::FunctionType* ctorType = ctorFunc->getFunctionType();
+                size_t argIdx = 1; // Start from 1 because 0 is 'this'
+                for (const auto& arg : expr.arguments)
+                {
+                    llvm::Value* argVal = generate_expression(*arg);
+                    if (argIdx < ctorType->getNumParams())
+                    {
+                        argVal = cast_value(argVal, ctorType->getParamType(argIdx));
+                    }
+                    ctorArgs.push_back(argVal);
+                    argIdx++;
                 }
-                ctorArgs.push_back(argVal);
-                argIdx++;
+
+                // Call the constructor (void return - initializes struct via 'this' pointer)
+                builder->CreateCall(ctorFunc, ctorArgs);
+
+                // Return the pointer to the initialized struct
+                return structAlloca;
             }
-
-            // Call the constructor (void return - initializes struct via 'this' pointer)
-            builder->CreateCall(ctorFunc, ctorArgs);
-
-            // Return the pointer to the initialized struct
-            return structAlloca;
         }
     }
 
@@ -241,12 +261,27 @@ llvm::Value *Generator::generate_new_expression(const NewExpression &expr) {
 
     // Extract simple name for constructor lookup
     std::string simpleTypeName = call.name.token_name;
-    if (const size_t lastColon = simpleTypeName.rfind("::"); lastColon != std::string::npos) {
+    if (const size_t lastColon = simpleTypeName.rfind("::"); lastColon != std::string::npos)
+    {
         simpleTypeName = simpleTypeName.substr(lastColon + 2);
     }
 
+    // Handle generic struct: e.g., new array<i32>()
+    std::string targetStructName = structDef->name;
+    if (call.hasTypeArguments() && structDef->isGeneric)
+    {
+        monomorphize_struct(resolvedTypeName, call.typeArguments);
+        targetStructName = Mangler::mangle_generic_struct(resolvedTypeName, call.typeArguments);
+        structDef = currentScope->lookup_struct(targetStructName);
+        if (!structDef)
+        {
+            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
+                               "failed to monomorphize type: " + call.name.token_name);
+        }
+    }
+
     // Find the constructor function
-    const std::string ctorName = structDef->name + "__" + simpleTypeName;
+    const std::string ctorName = targetStructName + "__" + simpleTypeName;
     const auto ctorIt = functions.find(ctorName);
     if (ctorIt == functions.end()) {
         throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,

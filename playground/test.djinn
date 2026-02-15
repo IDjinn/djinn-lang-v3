@@ -1,9 +1,12 @@
 import std::types;
+import std::collections;
 
 namespace playground;
 
 i32 main() {
-    i32[] values = [1, 2, 3, 4, 5];
-    printf("values = %d", values[0]);
+    array<i32> arr = array<i32>();
+    arr.push(10);
+    arr.push(20);
+    printf("arr = %d", arr.get(0));
     return 0;
 }
