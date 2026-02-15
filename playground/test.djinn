@@ -2,17 +2,8 @@ import std::types;
 
 namespace playground;
 
-struct user {
-    i32 id;
-    i32 age;
-
-    user(i32 id, i32 age) {
-        this.id = id;
-        this.age = age;
-    }
-}
-
-void main() {
-    user me = new user(1, 69);
-    printf("age %d\n", (1 + 2 * 3 / 2 + 5 * 9));
+i32 main() {
+    i32[] values = [1, 2, 3, 4, 5]
+    sized_array<i32> arr = sized_array<i32>(values, values.size);
+    return 0;
 }

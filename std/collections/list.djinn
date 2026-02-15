@@ -1,0 +1,16 @@
+namespace std::collections;
+
+struct list<T> {
+    sized_array<T> list;
+    size capacity;
+}
+
+struct sized_array<T> {
+    T[] values;
+    size size;
+
+    sized_array(T[] values, size size)  {
+        this.values = values;
+        this.size = size;
+    }
+}
