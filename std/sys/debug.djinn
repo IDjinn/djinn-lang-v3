@@ -12,6 +12,5 @@ struct Debug {
 
         printf(message);
         debugtrap();
-        abort();
     }
 }

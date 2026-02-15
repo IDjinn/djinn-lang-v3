@@ -80,43 +80,43 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
 
     case Intrinsic::Trap:
         {
-            const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
+            const auto trapFunc =
+                llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
+
             builder->CreateCall(trapFunc);
-            auto *unreachable = builder->CreateUnreachable();
-            auto *deadBlock = llvm::BasicBlock::Create(*context, "after_trap", currentFunction);
-            builder->SetInsertPoint(deadBlock);
-            return unreachable;
+            builder->CreateUnreachable();
+            return nullptr;
         }
 
     case Intrinsic::DebugTrap:
         {
-            const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::debugtrap);
+            const auto trapFunc =
+                llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::debugtrap);
+
             builder->CreateCall(trapFunc);
-            auto *unreachable = builder->CreateUnreachable();
-            auto *deadBlock = llvm::BasicBlock::Create(*context, "after_debugtrap", currentFunction);
-            builder->SetInsertPoint(deadBlock);
-            return unreachable;
+            builder->CreateUnreachable();
+            return nullptr;
         }
 
-    case Intrinsic::Abort:
-        {
-            llvm::FunctionType* abortTy =
-                llvm::FunctionType::get(builder->getVoidTy(), false);
-
-            const llvm::FunctionCallee abortFunc =
-                module->getOrInsertFunction("abort", abortTy);
-
-            builder->CreateCall(abortFunc);
-            auto *unreachable = builder->CreateUnreachable();
-            auto *deadBlock = llvm::BasicBlock::Create(*context, "after_abort", currentFunction);
-            builder->SetInsertPoint(deadBlock);
-            return unreachable;
-        }
+    // case Intrinsic::Abort:
+    //     {
+    //         llvm::FunctionType* abortTy =
+    //             llvm::FunctionType::get(builder->getVoidTy(), false);
+    //
+    //         const llvm::FunctionCallee abortFunc =
+    //             module->getOrInsertFunction("abort", abortTy);
+    //
+    //         builder->CreateCall(abortFunc);
+    //         auto* unreachable = builder->CreateUnreachable();
+    //         auto* deadBlock = llvm::BasicBlock::Create(*context, "after_abort", currentFunction);
+    //         builder->SetInsertPoint(deadBlock);
+    //         return unreachable;
+    //     }
 
     case Intrinsic::Unreachable:
         {
-            auto *unreachable = builder->CreateUnreachable();
-            auto *deadBlock = llvm::BasicBlock::Create(*context, "after_unreachable", currentFunction);
+            auto* unreachable = builder->CreateUnreachable();
+            auto* deadBlock = llvm::BasicBlock::Create(*context, "after_unreachable", currentFunction);
             builder->SetInsertPoint(deadBlock);
             return unreachable;
         }

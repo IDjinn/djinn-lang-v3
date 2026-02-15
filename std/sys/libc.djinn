@@ -8,4 +8,6 @@ extern "C" {
   void* memcpy(void* dest, void* src, size_long n);
   void free(void* ptr);
   c_result strlen(i8* s);
+  void abort();
+  void exit(i32 code);
 }
