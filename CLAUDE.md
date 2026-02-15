@@ -8,8 +8,9 @@ developer experience.
 See `todo.md` for full roadmap. Summary:
 
 - **Fase 1 (Fundacao)**: COMPLETA - generics, FFI extern "C", malloc/free, sizeof
-- **Fase 2 (Estruturas)**: ~60% - enums, methods, constructors feitos. Faltam slices e string robusto
-- **Fase 3 (Std)**: ~10% - I/O parcial via extern. Faltam Vec, String, HashMap
+- **Fase 2 (Estruturas)**: ~65% - enums, methods, constructors (incl. generic), array\<T\>. Faltam slices e string
+  robusto
+- **Fase 3 (Std)**: ~15% - I/O parcial via extern, array\<T\> collection. Faltam String, HashMap
 - **Fase 4 (Avancado)**: ~25% - interfaces feitas. Faltam pattern matching, closures, async
 
 Extras ja implementados: control flow, aritmetica, mutabilidade, ownership/copy semantics,

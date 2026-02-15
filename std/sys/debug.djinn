@@ -4,4 +4,14 @@ struct Debug {
     public static void pause() {
         debugtrap();
     }
+
+    public static void assert(bool condition, i8* message) {
+        if (condition) {
+            return;
+        }
+
+        printf(message);
+        debugtrap();
+        abort();
+    }
 }

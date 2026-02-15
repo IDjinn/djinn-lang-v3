@@ -7,17 +7,18 @@
 - [x] Malloc/Free - via libc (intrinsics)
 - [x] Sizeof operator (i8, i32, i64, structs)
 
-## Fase 2: Estruturas Basicas - ~60%
+## Fase 2: Estruturas Basicas - ~65%
 
 - [x] Enums / Tagged unions (definicao, variantes, payload)
 - [x] Methods em structs (block body, arrow =>, parametros)
-- [x] Constructors (stack, field access)
+- [x] Constructors (stack, heap, field access)
+- [x] Generic struct constructors (Box\<i32\>(42), array\<T\>())
 - [ ] Slices - acesso a arrays
 - [ ] String type robusto
 
-## Fase 3: Std Basica - ~10%
+## Fase 3: Std Basica - ~15%
 
-- [ ] Vec\<T\> - dynamic array
+- [x] array\<T\> - generic collection (push, get, set, grow, destroy)
 - [ ] String - dynamic string
 - [~] I/O basico - funciona via extern printf/puts, sem wrapper proprio
 - [ ] HashMap\<K,V\> - hash table

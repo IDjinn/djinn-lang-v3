@@ -7,6 +7,7 @@ i32 main() {
     array<i32> arr = array<i32>();
     arr.push(10);
     arr.push(20);
-    printf("arr = %d", arr.get(0));
+    printf("arr = %d\n", arr.get(0));
+    Debug.assert(0, "test assert");
     return 0;
 }
