@@ -132,7 +132,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         outFileOptimized.close();
 
         if (options.generateBinary)
-            system(("clang -fsanitize=address -g " + out_file_path + ".ll -o " + out_file_path + ".exe").c_str());
+            system(
+                ("clang -fstack-protector-all -fsanitize=address -fno-omit-frame-pointer -g " + out_file_path +
+                    ".ll -o " + out_file_path + ".exe").c_str());
 
 
         return {.returnCode = 0, .diagnostics = diagnostics.get_diagnostics()};
@@ -283,7 +285,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             return makeResult(0, std::stacktrace::current());
         }
 
-        int clangResult = system(("clang -fsanitize=address -g " + llPath + " -o " + exePath).c_str());
+        int clangResult = system(
+            ("clang -fstack-protector-all -fsanitize=address -fno-omit-frame-pointer -g " + llPath + " -o " + exePath).c_str());
         if (clangResult != 0)
         {
             return makeResult(clangResult, std::stacktrace::current());
@@ -307,4 +310,6 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
     catch (const CompileError& e)
     {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
-        return makeResult(1, std::stacktrace::c
+        return makeResult(1, std::stacktrace::current());
+    }
+}

@@ -5,11 +5,13 @@
 #include "Generator.h"
 
 
-void Generator::forward_declare_function(const FunctionSymbol &func) {
-    llvm::Type *returnType = generate_type(func.returnType);
+void Generator::forward_declare_function(const FunctionSymbol& func)
+{
+    llvm::Type* returnType = generate_type(func.returnType);
 
-    std::vector<llvm::Type *> paramTypes;
-    for (const auto &paramType: func.paramTypes) {
+    std::vector<llvm::Type*> paramTypes;
+    for (const auto& paramType : func.paramTypes)
+    {
         paramTypes.push_back(generate_type(paramType));
     }
 
@@ -24,41 +26,49 @@ void Generator::forward_declare_function(const FunctionSymbol &func) {
     functions[func.name] = llvmFunc;
 }
 
-void Generator::generate_function_body(const FunctionSymbol &func) {
+void Generator::generate_function_body(const FunctionSymbol& func)
+{
     push_scope();
 
-    llvm::Function *llvmFunc = functions[func.name];
+    llvm::Function* llvmFunc = functions[func.name];
     currentFunction = llvmFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
     size_t idx = 0;
-    for (auto &arg: llvmFunc->args()) {
-        const auto &paramName = func.paramNames[idx];
-        const auto &paramType = func.paramTypes[idx];
+    for (auto& arg : llvmFunc->args())
+    {
+        const auto& paramName = func.paramNames[idx];
+        const auto& paramType = func.paramTypes[idx];
         arg.setName(paramName);
 
-        auto *alloca = builder->CreateAlloca(arg.getType(), nullptr, paramName);
+        auto* alloca = builder->CreateAlloca(arg.getType(), nullptr, paramName);
         builder->CreateStore(&arg, alloca);
         std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
         currentScope->define_variable(paramName, alloca, structTypeName);
         idx++;
     }
 
-    if (func.body) {
-        for (const auto &stmt: func.body->statements) {
+    if (func.body)
+    {
+        for (const auto& stmt : func.body->statements)
+        {
             generate_statement(*stmt);
         }
     }
 
-    if (builder->GetInsertBlock()->getTerminator()) {
+    if (builder->GetInsertBlock()->getTerminator())
+    {
         pop_scope();
         return;
     }
 
-    llvm::Type *returnType = llvmFunc->getReturnType();
-    if (returnType->isVoidTy()) {
+    emit_scope_cleanup();
+
+    llvm::Type* returnType = llvmFunc->getReturnType();
+    if (returnType->isVoidTy())
+    {
         builder->CreateRetVoid();
         pop_scope();
         return;
@@ -68,21 +78,23 @@ void Generator::generate_function_body(const FunctionSymbol &func) {
     pop_scope();
 }
 
-void Generator::generate_extern_function(const ExternFunctionSymbol &func) {
-    std::vector<llvm::Type *> paramTypes;
-    for (const auto &paramType: func.paramTypes) {
+void Generator::generate_extern_function(const ExternFunctionSymbol& func)
+{
+    std::vector<llvm::Type*> paramTypes;
+    for (const auto& paramType : func.paramTypes)
+    {
         paramTypes.push_back(generate_type(paramType));
     }
 
-    llvm::Type *returnType = generate_type(func.returnType);
+    llvm::Type* returnType = generate_type(func.returnType);
 
-    llvm::FunctionType *funcType = llvm::FunctionType::get(
+    llvm::FunctionType* funcType = llvm::FunctionType::get(
         returnType,
         paramTypes,
         func.isVariadic
     );
 
-    llvm::Function *llvmFunc = llvm::Function::Create(
+    llvm::Function* llvmFunc = llvm::Function::Create(
         funcType,
         llvm::Function::ExternalLinkage,
         func.name,
@@ -92,24 +104,28 @@ void Generator::generate_extern_function(const ExternFunctionSymbol &func) {
     functions[func.name] = llvmFunc;
     externFunctions.push_back(llvmFunc);
 
-    if (func.abi == "C") {
+    if (func.abi == "C")
+    {
         llvmFunc->setCallingConv(llvm::CallingConv::C);
     }
 }
 
-void Generator::emit_used_declarations() {
-    auto *i8PtrTy = llvm::PointerType::getUnqual(*context);
-    std::vector<llvm::Constant *> usedItems;
+void Generator::emit_used_declarations()
+{
+    auto* i8PtrTy = llvm::PointerType::getUnqual(*context);
+    std::vector<llvm::Constant*> usedItems;
 
-    for (auto *func: externFunctions) {
+    for (auto* func : externFunctions)
+    {
         usedItems.push_back(llvm::ConstantExpr::getBitCast(func, i8PtrTy));
     }
 
     int typeIdx = 0;
-    for (auto *structType: declaredTypes) {
+    for (auto* structType : declaredTypes)
+    {
         if (structType->isOpaque()) continue;
 
-        auto *dummy = new llvm::GlobalVariable(
+        auto* dummy = new llvm::GlobalVariable(
             *module,
             structType,
             false,
@@ -123,10 +139,10 @@ void Generator::emit_used_declarations() {
 
     if (usedItems.empty()) return;
 
-    auto *arrayTy = llvm::ArrayType::get(i8PtrTy, usedItems.size());
-    auto *usedArray = llvm::ConstantArray::get(arrayTy, usedItems);
+    auto* arrayTy = llvm::ArrayType::get(i8PtrTy, usedItems.size());
+    auto* usedArray = llvm::ConstantArray::get(arrayTy, usedItems);
 
-    auto *gv = new llvm::GlobalVariable(
+    auto* gv = new llvm::GlobalVariable(
         *module,
         arrayTy,
         false,

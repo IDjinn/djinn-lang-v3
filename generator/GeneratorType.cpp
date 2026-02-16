@@ -290,6 +290,7 @@ void Generator::monomorphize_method(const MethodSymbol& method,
 
     if (!builder->GetInsertBlock()->getTerminator())
     {
+        emit_scope_cleanup();
         if (returnType->isVoidTy())
         {
             builder->CreateRetVoid();

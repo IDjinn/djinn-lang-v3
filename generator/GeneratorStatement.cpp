@@ -17,6 +17,7 @@ void Generator::generate_return_statement(const ReturnStatement &stmt) {
             if (auto *structType = llvm::dyn_cast<llvm::StructType>(returnType)) {
                 const auto structName = structType->getName().str();
                 if (const auto structVal = generate_brace_init_for_struct(*braceInit, structType, structName)) {
+                    emit_all_scope_cleanup();
                     builder->CreateRet(structVal);
                     return;
                 }
@@ -25,20 +26,24 @@ void Generator::generate_return_statement(const ReturnStatement &stmt) {
         auto val = generate_expression(*stmt.value);
         llvm::Type *returnType = currentFunction->getReturnType();
         val = cast_value(val, returnType);
+        emit_all_scope_cleanup();
         builder->CreateRet(val);
     } else {
+        emit_all_scope_cleanup();
         builder->CreateRetVoid();
     }
 }
 
 void Generator::generate_break_statement() {
     if (!breakTargets.empty()) {
+        emit_scope_cleanup();
         builder->CreateBr(breakTargets.back());
     }
 }
 
 void Generator::generate_continue_statement() {
     if (!continueTargets.empty()) {
+        emit_scope_cleanup();
         builder->CreateBr(continueTargets.back());
     }
 }
@@ -51,6 +56,7 @@ void Generator::generate_block(const Block &block) {
             break;
         }
     }
+    emit_scope_cleanup();
     pop_scope();
 }
 
@@ -307,4 +313,71 @@ llvm::Value *Generator::generate_brace_init_for_struct(const BraceInitializer &b
     }
 
     return builder->CreateLoad(structType, alloca, "struct_val");
+}
+
+llvm::Function* Generator::find_destroy_method(llvm::AllocaInst*alloca)
+{
+    if (!alloca) return nullptr;
+
+    llvm::Type* allocatedType = alloca->getAllocatedType();
+
+    // Only struct types can have destroy methods
+    auto* structType = llvm::dyn_cast<llvm::StructType>(allocatedType);
+    if (!structType || !structType->hasName()) return nullptr;
+
+    std::string structName = structType->getName().str();
+
+    // Look up destroy in the struct's method functions
+    if (const StructDef* def = currentScope->lookup_struct(structName))
+    {
+        if (auto it = def->methodFunctions.find("destroy"); it != def->methodFunctions.end())
+        {
+            return it->second;
+        }
+    }
+
+    // Also try the mangled name directly
+    std::string destroyName = structName + "__destroy";
+    if (auto it = functions.find(destroyName); it != functions.end())
+    {
+        return it->second;
+    }
+
+    return nullptr;
+}
+
+void Generator::emit_scope_cleanup()
+{
+    if (builder->GetInsertBlock()->getTerminator()) return;
+
+    // Iterate in reverse order (LIFO) — last declared, first destroyed
+    for (auto it = currentScope->cleanupList.rbegin(); it != currentScope->cleanupList.rend(); ++it)
+    {
+        // Never destroy 'this'
+        if (it->varName == "this") continue;
+
+        llvm::Function* destroyFunc = find_destroy_method(it->alloca);
+        if (!destroyFunc) continue;
+
+        builder->CreateCall(destroyFunc, {it->alloca});
+    }
+}
+
+void Generator::emit_all_scope_cleanup()
+{
+    if (builder->GetInsertBlock()->getTerminator()) return;
+
+    // Walk from current scope up to the top, emitting cleanup for each
+    for (auto scope = currentScope; scope != nullptr; scope = scope->parent)
+    {
+        for (auto it = scope->cleanupList.rbegin(); it != scope->cleanupList.rend(); ++it)
+        {
+            if (it->varName == "this") continue;
+
+            llvm::Function* destroyFunc = find_destroy_method(it->alloca);
+            if (!destroyFunc) continue;
+
+            builder->CreateCall(destroyFunc, {it->alloca});
+        }
+    }
 }

@@ -202,6 +202,11 @@ private:
 
     void generate_continue_statement();
 
+    // RAII cleanup
+    llvm::Function* find_destroy_method(llvm::AllocaInst* alloca);
+    void emit_scope_cleanup();
+    void emit_all_scope_cleanup();
+
     size_t generatedFunctions = 0;
     size_t generatedExternFunctions = 0;
     size_t generatedStructs = 0;
