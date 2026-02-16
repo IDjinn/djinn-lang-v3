@@ -5,9 +5,11 @@ namespace playground;
 
 i32 main() {
     array<i32> arr = array<i32>();
-    arr.push(10);
-    arr.push(20);
+    for (auto mut i = 0; i < 100; i = i + 1) {
+        arr.push(i);
+    }
+    printf("arr = %d\n", arr.get(69));
     printf("arr = %d\n", arr.get(0));
-    Debug.assert(0, "test assert");
+    printf("arr = %d\n", arr.get(99));
     return 0;
 }

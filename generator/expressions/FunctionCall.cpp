@@ -554,17 +554,43 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     }
     else
     {
-        // Instance method call - generate receiver and pass as self
-        llvm::Value* objectValue = generate_expression(*call.receiver);
-        if (objectValue->getType()->isPointerTy())
+        // Instance method call - pass pointer to receiver as self
+        // Must pass the original alloca, NOT a copy, so mutations are visible to the caller
+        if (const auto* ident = dynamic_cast<const Identifier*>(call.receiver.get()))
         {
-            args.push_back(objectValue);
+            if (llvm::AllocaInst* alloca = currentScope->lookup_variable(ident->identifier.token_name))
+            {
+                if (alloca->getAllocatedType()->isPointerTy())
+                {
+                    // 'this' or pointer variable: alloca holds a ptr to the struct, load it
+                    args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "self"));
+                }
+                else
+                {
+                    // Local struct variable: alloca IS the ptr to the struct
+                    args.push_back(alloca);
+                }
+            }
+            else
+            {
+                throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE,
+                                   "variable not found: " + ident->identifier.token_name);
+            }
         }
         else
         {
-            const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
-            builder->CreateStore(objectValue, alloca);
-            args.push_back(alloca);
+            // Complex receiver (field access, etc.) - evaluate and store in temp
+            llvm::Value* objectValue = generate_expression(*call.receiver);
+            if (objectValue->getType()->isPointerTy())
+            {
+                args.push_back(objectValue);
+            }
+            else
+            {
+                const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
+                builder->CreateStore(objectValue, alloca);
+                args.push_back(alloca);
+            }
         }
     }
 

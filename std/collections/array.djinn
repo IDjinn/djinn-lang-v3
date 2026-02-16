@@ -15,6 +15,7 @@ struct array<T> {
 
     public void push(T value) {
         if (this.length == this.capacity) {
+            printf("this.length == this.capacity, %d\n", this.length);
             this.grow();
         }
         this.data[this.length] = value;
@@ -39,6 +40,7 @@ struct array<T> {
             new_cap = this.capacity * 2u;
         }
         this.data = realloc(this.data, new_cap * sizeof(T));
+        printf("called grow! capacity is %d, new %d\n", this.capacity, new_cap);
         this.capacity = new_cap;
     }
 

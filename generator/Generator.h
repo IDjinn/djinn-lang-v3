@@ -172,6 +172,8 @@ private:
 
     llvm::Value* generate_index_assignment(const IndexAssignment& expr);
 
+    llvm::Type* resolve_index_element_type(const Expression& objectExpr);
+
     llvm::Value* generate_variable_init(const VariableInit& expr);
 
     llvm::Value* generate_assignment(const Assignment& expr);
