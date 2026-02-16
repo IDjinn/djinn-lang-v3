@@ -5,11 +5,12 @@ namespace playground;
 
 i32 main() {
     array<i32> arr = array<i32>();
-    for (auto mut i = 0; i < 100; i = i + 1) {
+    for (auto mut i = 0; i < 1000000000; i = i + 1) {
         arr.push(i);
     }
-    printf("arr = %d\n", arr.get(69));
-    printf("arr = %d\n", arr.get(0));
-    printf("arr = %d\n", arr.get(99));
-    return 0;
+
+for (auto mut i = 0; i < 1000000000; i = i + 1) {
+    printf("arr = %d\n", arr.get(i));
+}
+return 0;
 }

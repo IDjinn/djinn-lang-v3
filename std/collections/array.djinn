@@ -1,5 +1,6 @@
 import std::types;
 import std::libc;
+import std::debug;
 namespace std::collections;
 
 struct array<T> {
@@ -22,10 +23,12 @@ struct array<T> {
     }
 
     public T get(size index) {
+        Debug.assert(index < this.length, "array::get - index out of bounds");
         return this.data[index];
     }
 
     public void set(size index, T value) {
+        Debug.assert(index < this.length, "array::set - index out of bounds");
         this.data[index] = value;
     }
 
@@ -38,6 +41,7 @@ struct array<T> {
         if (this.capacity > 0u) {
             new_cap = this.capacity * 2u;
         }
+        printf("called grow, new_cap = %d\n", new_cap);
         this.data = realloc(this.data, new_cap * sizeof(T));
         this.capacity = new_cap;
     }

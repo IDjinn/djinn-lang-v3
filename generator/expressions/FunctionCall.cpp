@@ -617,5 +617,14 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         argIdx++;
     }
 
+    // Inject caller file and line for Debug::assert calls
+    if (isStaticCall && call.name.token_name == "assert" && structName.find("Debug") != std::string::npos)
+    {
+        std::string fileStr = call.name.location.fileId.empty() ? "<unknown>" : call.name.location.fileId;
+        auto* fileConst = builder->CreateGlobalStringPtr(fileStr, "assert_file");
+        args.push_back(fileConst);
+        args.push_back(builder->getInt32(call.name.location.line));
+    }
+
     return builder->CreateCall(func, args);
 }
