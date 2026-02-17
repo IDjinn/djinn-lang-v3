@@ -197,13 +197,20 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     }
 
     // If the init value is from a 'new' expression, variable holds a heap pointer
-    if (dynamic_cast<const NewExpression*>(expr.value.get()))
+    if (const auto* newExpr = dynamic_cast<const NewExpression*>(expr.value.get()))
     {
         auto* alloca = builder->CreateAlloca(builder->getPtrTy(), nullptr, expr.name.token_name);
         std::string structTypeName;
         if (expr.type.kind == TypeKind::STRUCT)
         {
-            structTypeName = currentScope->resolve_alias(expr.type.structName);
+            // Use constructor call's token name (same as generate_new_expression)
+            // to ensure consistent name resolution with how the struct was registered
+            const auto& call = *newExpr->constructorCall;
+            structTypeName = currentScope->resolve_alias(call.name.token_name);
+            if (call.hasTypeArguments())
+            {
+                structTypeName = Mangler::mangle_generic_struct(structTypeName, call.typeArguments);
+            }
         }
         currentScope->define_variable(expr.name.token_name, alloca, structTypeName);
         builder->CreateStore(initVal, alloca);

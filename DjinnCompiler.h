@@ -14,7 +14,8 @@
 #include "lexer/Token.h"
 #include "parser/AST.h"
 
-struct CompilerOptions {
+struct CompilerOptions
+{
     bool print_ast = true;
     bool print_ir = true;
     bool optimize = true;
@@ -25,14 +26,15 @@ struct CompilerOptions {
     bool libraryMode = false;
     bool bundleModules = false;
     bool useTempDirectory = true; // Use system temp directory for output files
-    bool runAfterCompile = false; // Run the compiled binary and capture exit code
+    bool runAfterCompile = true; // Run the compiled binary and capture exit code
     std::string outputFileName{};
     std::string outputDirectory{"build"};
     std::filesystem::path stdLibPath{"./std"};
     std::vector<std::filesystem::path> linkLibraries{};
 };
 
-struct CompilerResult {
+struct CompilerResult
+{
     int returnCode;
     std::vector<Token> tokens{};
     std::shared_ptr<Program> program;
@@ -41,10 +43,11 @@ struct CompilerResult {
 };
 
 
-struct DjinnCompiler {
-    static CompilerResult compileFromDirectory(const std::filesystem::path &path, const CompilerOptions &options = {});
+struct DjinnCompiler
+{
+    static CompilerResult compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options = {});
 
-    static CompilerResult run(const std::string &source, const CompilerOptions &options = {});
+    static CompilerResult run(const std::string& source, const CompilerOptions& options = {});
 };
 
 
