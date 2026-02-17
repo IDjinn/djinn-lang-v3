@@ -16,23 +16,27 @@
 
 struct EnumDeclaration;
 
-enum class VisibilityModifier {
+enum class VisibilityModifier
+{
     PUBLIC,
     PRIVATE,
     STATIC,
 };
 
-struct MethodParameter {
+struct MethodParameter
+{
     std::unique_ptr<Type> type;
     SourceIdentifier name;
     bool isMutable = false;
 
     MethodParameter(std::unique_ptr<Type> type, SourceIdentifier name, bool isMutable = false)
-        : type(std::move(type)), name(std::move(name)), isMutable(isMutable) {
+        : type(std::move(type)), name(std::move(name)), isMutable(isMutable)
+    {
     }
 };
 
-struct StructMethodDeclaration : Location {
+struct StructMethodDeclaration : Location
+{
     std::unique_ptr<Type> returnType;
     SourceIdentifier name;
     std::vector<MethodParameter> parameters;
@@ -53,78 +57,95 @@ struct StructMethodDeclaration : Location {
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
     [[nodiscard]] bool isConstructor() const { return isConstructorMethod; }
 
-    [[nodiscard]] bool isStatic() const {
-        for (const auto &mod: modifiers) {
+    [[nodiscard]] bool isStatic() const
+    {
+        for (const auto& mod : modifiers)
+        {
             if (mod == VisibilityModifier::STATIC) return true;
         }
         return false;
     }
 
-    [[nodiscard]] bool isPublic() const {
-        for (const auto &mod: modifiers) {
+    [[nodiscard]] bool isPublic() const
+    {
+        for (const auto& mod : modifiers)
+        {
             if (mod == VisibilityModifier::PUBLIC) return true;
         }
         return false;
     }
 
-    [[nodiscard]] bool isPrivate() const {
-        for (const auto &mod: modifiers) {
+    [[nodiscard]] bool isPrivate() const
+    {
+        for (const auto& mod : modifiers)
+        {
             if (mod == VisibilityModifier::PRIVATE) return true;
         }
         return false;
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
-        for (const auto &mod: modifiers) {
-            switch (mod) {
-                case VisibilityModifier::PUBLIC: os << "public ";
-                    break;
-                case VisibilityModifier::PRIVATE: os << "private ";
-                    break;
-                case VisibilityModifier::STATIC: os << "static ";
-                    break;
+        for (const auto& mod : modifiers)
+        {
+            switch (mod)
+            {
+            case VisibilityModifier::PUBLIC: os << "public ";
+                break;
+            case VisibilityModifier::PRIVATE: os << "private ";
+                break;
+            case VisibilityModifier::STATIC: os << "static ";
+                break;
             }
         }
         os << *returnType << " " << name.token_name;
-        if (!genericParams.empty()) {
+        if (!genericParams.empty())
+        {
             os << "<";
-            for (size_t i = 0; i < genericParams.size(); ++i) {
+            for (size_t i = 0; i < genericParams.size(); ++i)
+            {
                 if (i > 0) os << ", ";
                 os << genericParams.params[i].name;
             }
             os << ">";
         }
         os << "(";
-        for (size_t i = 0; i < parameters.size(); ++i) {
+        for (size_t i = 0; i < parameters.size(); ++i)
+        {
             if (i > 0) os << ", ";
             os << *parameters[i].type << " " << parameters[i].name;
         }
         if (isVariadic) os << ", ...";
         os << ")";
-        if (isExpressionBody()) {
+        if (isExpressionBody())
+        {
             os << " => ...";
         }
         os << "\n";
     }
 };
 
-struct StructField : Location {
+struct StructField : Location
+{
     std::unique_ptr<Type> type;
     SourceIdentifier name;
 
     StructField(std::unique_ptr<Type> type, SourceIdentifier name)
-        : type(std::move(type)), name(std::move(name)) {
+        : type(std::move(type)), name(std::move(name))
+    {
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "StructField(" << name.token_name << ": " << *type << ")";
     }
 };
 
 // T name { get; set; } or T name { get { ... } set { ... } }
-struct StructProperty : Location {
+struct StructProperty : Location
+{
     std::unique_ptr<Type> type;
     SourceIdentifier name;
     bool hasGetter = false;
@@ -135,34 +156,41 @@ struct StructProperty : Location {
     std::unique_ptr<Expression> setterExpr;
 
     StructProperty(std::unique_ptr<Type> type, SourceIdentifier name)
-        : type(std::move(type)), name(std::move(name)) {
+        : type(std::move(type)), name(std::move(name))
+    {
     }
 
-    [[nodiscard]] bool isAutoProperty() const {
+    [[nodiscard]] bool isAutoProperty() const
+    {
         return (hasGetter && !getterBody && !getterExpr) ||
-               (hasSetter && !setterBody && !setterExpr);
+            (hasSetter && !setterBody && !setterExpr);
     }
 
     // Needs a backing field generated automatically
-    [[nodiscard]] bool needsBackingField() const {
+    [[nodiscard]] bool needsBackingField() const
+    {
         return isAutoProperty();
     }
 
-    [[nodiscard]] std::string backingFieldName() const {
+    [[nodiscard]] std::string backingFieldName() const
+    {
         return name.token_name;
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "StructProperty(" << name.token_name << ": " << *type << " { ";
-        if (hasGetter) {
+        if (hasGetter)
+        {
             os << "get";
             if (getterBody) os << " { ... }";
             else if (getterExpr) os << " => ...";
             else os << ";";
             os << " ";
         }
-        if (hasSetter) {
+        if (hasSetter)
+        {
             os << "set";
             if (setterBody) os << " { ... }";
             else if (setterExpr) os << " => ...";
@@ -172,155 +200,189 @@ struct StructProperty : Location {
     }
 };
 
-struct AttributeUsageDeclaration : Location {
+struct AttributeUsageDeclaration : Location
+{
     SourceIdentifier name;
 
-    AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name)) {
+    AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name))
+    {
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "AttributeUsageDeclaration(" << name.token_name << ")";
     }
 };
 
-struct StructDeclaration : Location {
+struct StructDeclaration : Location
+{
     SourceIdentifier name;
     GenericParams genericParams;
     std::vector<StructField> fields;
     std::vector<StructProperty> properties;
-    std::vector<std::unique_ptr<StructMethodDeclaration> > methods;
+    std::vector<std::unique_ptr<StructMethodDeclaration>> methods;
     std::vector<std::string> implements;
     std::unique_ptr<Type> baseType;
     std::vector<AttributeUsageDeclaration> attributes;
 
     StructDeclaration(SourceIdentifier name, std::vector<StructField> fields)
-        : name(std::move(name)), fields(std::move(fields)) {
+        : name(std::move(name)), fields(std::move(fields))
+    {
     }
 
     StructDeclaration(SourceIdentifier name, GenericParams genericParams, std::vector<StructField> fields)
-        : name(std::move(name)), genericParams(std::move(genericParams)), fields(std::move(fields)) {
+        : name(std::move(name)), genericParams(std::move(genericParams)), fields(std::move(fields))
+    {
     }
 
-    [[nodiscard]] bool isGeneric() const {
+    [[nodiscard]] bool isGeneric() const
+    {
         return !genericParams.empty();
     }
 
-    [[nodiscard]] bool isTransparent() const {
+    [[nodiscard]] bool isTransparent() const
+    {
         return baseType != nullptr && fields.empty() && baseType->kind != TypeKind::STRUCT;
     }
 
-    [[nodiscard]] bool hasBaseType() const {
+    [[nodiscard]] bool hasBaseType() const
+    {
         return baseType != nullptr;
     }
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "StructDeclaration(" << name.token_name;
-        if (!genericParams.empty()) {
+        if (!genericParams.empty())
+        {
             os << "<";
-            for (size_t i = 0; i < genericParams.size(); ++i) {
+            for (size_t i = 0; i < genericParams.size(); ++i)
+            {
                 if (i > 0) os << ", ";
                 os << genericParams.params[i].name;
             }
             os << ">";
         }
-        if (baseType) {
+        if (baseType)
+        {
             os << " : ";
             baseType->print(os, 0);
         }
-        if (!implements.empty()) {
+        if (!implements.empty())
+        {
             os << " implements ";
-            for (size_t i = 0; i < implements.size(); ++i) {
+            for (size_t i = 0; i < implements.size(); ++i)
+            {
                 if (i > 0) os << ", ";
                 os << implements[i];
             }
         }
-        if (isTransparent()) {
+        if (isTransparent())
+        {
             os << " [transparent]";
         }
         os << ")\n";
-        for (const auto &field: fields) {
+        for (const auto& field : fields)
+        {
             field.print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &prop: properties) {
+        for (const auto& prop : properties)
+        {
             prop.print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &method: methods) {
+        for (const auto& method : methods)
+        {
             method->print(os, indent + 2);
         }
     }
 };
 
-struct InterfaceDeclaration : Location {
+struct InterfaceDeclaration : Location
+{
     SourceIdentifier name;
     GenericParams genericParams;
-    std::vector<std::unique_ptr<StructMethodDeclaration> > methods; // abstract method signatures
+    std::vector<std::unique_ptr<StructMethodDeclaration>> methods; // abstract method signatures
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "InterfaceDeclaration(" << name.token_name;
-        if (!genericParams.empty()) {
+        if (!genericParams.empty())
+        {
             os << "<";
-            for (size_t i = 0; i < genericParams.size(); ++i) {
+            for (size_t i = 0; i < genericParams.size(); ++i)
+            {
                 if (i > 0) os << ", ";
                 os << genericParams.params[i].name;
             }
             os << ">";
         }
         os << ")\n";
-        for (const auto &method: methods) {
+        for (const auto& method : methods)
+        {
             method->print(os, indent + 2);
         }
     }
 };
 
-struct Parameter : Location {
+struct Parameter : Location
+{
     std::unique_ptr<Type> type;
     SourceIdentifier name;
     bool isMutable;
 
     Parameter(std::unique_ptr<Type> type, SourceIdentifier name, const bool isMutable = false) : type(std::move(type)),
         name(std::move(name)),
-        isMutable(isMutable) {
+        isMutable(isMutable)
+    {
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "Parameter(" << type << " " << name.token_name << ")";
     }
 };
 
-struct FunctionDeclaration : Location {
+struct FunctionDeclaration : Location
+{
     std::unique_ptr<Type> returnType;
     SourceIdentifier name;
     std::vector<Parameter> parameters;
     std::unique_ptr<Block> body;
 
-    FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter> &parameters,
+    FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)
         : returnType(std::move(retType)), name(std::move(name)), parameters(std::move(parameters)),
-          body(std::move(block)) {
+          body(std::move(block))
+    {
     }
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "Function " << name.token_name << "<" << returnType << ">(";
-        for (size_t i = 0; i < parameters.size(); ++i) {
+        for (size_t i = 0; i < parameters.size(); ++i)
+        {
             if (i > 0) os << ", ";
             os << parameters[i].type << " " << parameters[i].name.token_name;
         }
@@ -330,98 +392,118 @@ struct FunctionDeclaration : Location {
 };
 
 
-struct NamespaceDeclaration : Location {
+struct NamespaceDeclaration : Location
+{
     SourceIdentifier name;
-    std::vector<std::unique_ptr<StructDeclaration> > structs;
-    std::vector<std::unique_ptr<FunctionDeclaration> > functions;
-    std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces; // Nested namespaces
+    std::vector<std::unique_ptr<StructDeclaration>> structs;
+    std::vector<std::unique_ptr<FunctionDeclaration>> functions;
+    std::vector<std::unique_ptr<NamespaceDeclaration>> namespaces; // Nested namespaces
 
-    explicit NamespaceDeclaration(SourceIdentifier name) : name(std::move(name)) {
+    explicit NamespaceDeclaration(SourceIdentifier name) : name(std::move(name))
+    {
     }
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "Namespace(" << name.token_name << ")\n";
-        for (const auto &s: structs) {
+        for (const auto& s : structs)
+        {
             s->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &func: functions) {
+        for (const auto& func : functions)
+        {
             func->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &ns: namespaces) {
+        for (const auto& ns : namespaces)
+        {
             ns->print(os, indent + 2);
             os << '\n';
         }
     }
 };
 
-struct QualifiedName {
+struct QualifiedName
+{
     std::vector<std::string> parts;
 
     QualifiedName() = default;
 
     explicit QualifiedName(std::string single) { parts.push_back(std::move(single)); }
 
-    QualifiedName(std::vector<std::string> parts) : parts(std::move(parts)) {
+    QualifiedName(std::vector<std::string> parts) : parts(std::move(parts))
+    {
     }
 
-    void addPart(const std::string &part) { parts.push_back(part); }
+    void addPart(const std::string& part) { parts.push_back(part); }
 
     [[nodiscard]] bool isQualified() const { return parts.size() > 1; }
     [[nodiscard]] std::string lastName() const { return parts.empty() ? "" : parts.back(); }
 
-    [[nodiscard]] std::string toString() const {
+    [[nodiscard]] std::string toString() const
+    {
         std::string result;
-        for (size_t i = 0; i < parts.size(); ++i) {
+        for (size_t i = 0; i < parts.size(); ++i)
+        {
             if (i > 0) result += "::";
             result += parts[i];
         }
         return result;
     }
 
-    [[nodiscard]] std::vector<std::string> namespacePath() const {
+    [[nodiscard]] std::vector<std::string> namespacePath() const
+    {
         if (parts.size() <= 1) return {};
         return std::vector<std::string>(parts.begin(), parts.end() - 1);
     }
 };
 
-struct ImportDeclaration : Location {
+struct ImportDeclaration : Location
+{
     QualifiedName namespacePath;
 
-    explicit ImportDeclaration(QualifiedName path) : namespacePath(std::move(path)) {
+    explicit ImportDeclaration(QualifiedName path) : namespacePath(std::move(path))
+    {
     }
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "Import(" << namespacePath.toString() << ")";
     }
 };
 
-struct ExternFunctionDeclaration : Location {
+struct ExternFunctionDeclaration : Location
+{
     std::unique_ptr<Type> returnType;
     SourceIdentifier name;
     std::vector<Parameter> parameters;
     bool isVariadic = false;
     std::string abi = "C";
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "extern \"" << abi << "\" fn " << name.token_name << "(";
-        for (size_t i = 0; i < parameters.size(); ++i) {
+        for (size_t i = 0; i < parameters.size(); ++i)
+        {
             if (i > 0) os << ", ";
             os << parameters[i].type << " " << parameters[i].name.token_name;
         }
@@ -430,56 +512,68 @@ struct ExternFunctionDeclaration : Location {
     }
 };
 
-struct EnumValueDeclaration : Location {
+struct EnumValueDeclaration : Location
+{
     SourceIdentifier name;
     std::vector<Type> types;
 
     EnumValueDeclaration(SourceIdentifier name, std::vector<Type> types) : name(std::move(name)),
-                                                                           types(std::move(types)) {
+                                                                           types(std::move(types))
+    {
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "EnumValue(" << name.token_name << ")";
-        for (size_t i = 0; i < types.size(); ++i) {
+        for (size_t i = 0; i < types.size(); ++i)
+        {
             if (i > 0) os << ", ";
             types[i].print(os, indent);
         }
     }
 };
 
-struct EnumDeclaration : Location {
+struct EnumDeclaration : Location
+{
     SourceIdentifier name;
     GenericParams genericParams;
     std::vector<EnumValueDeclaration> values;
 
     explicit EnumDeclaration(SourceIdentifier name, std::vector<EnumValueDeclaration> values)
-        : name(std::move(name)), values(std::move(values)) {
+        : name(std::move(name)), values(std::move(values))
+    {
     }
 
     EnumDeclaration(SourceIdentifier name, GenericParams genericParams, std::vector<EnumValueDeclaration> values)
-        : name(std::move(name)), genericParams(std::move(genericParams)), values(std::move(values)) {
+        : name(std::move(name)), genericParams(std::move(genericParams)), values(std::move(values))
+    {
     }
 
     [[nodiscard]] bool isGeneric() const { return !genericParams.empty(); }
 
-    void accept(djinn::IDeclarationVisitor &visitor, const std::string &prefix = "") const {
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
         visitor.visit(*this, prefix);
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "Enum(" << name.token_name;
-        if (!genericParams.empty()) {
+        if (!genericParams.empty())
+        {
             os << "<";
-            for (size_t i = 0; i < genericParams.params.size(); ++i) {
+            for (size_t i = 0; i < genericParams.params.size(); ++i)
+            {
                 if (i > 0) os << ", ";
                 os << genericParams.params[i].name;
             }
             os << ">";
         }
         os << ": ";
-        for (size_t i = 0; i < values.size(); ++i) {
+        for (size_t i = 0; i < values.size(); ++i)
+        {
             if (i > 0) os << ", ";
             values[i].print(os, indent);
         }
@@ -488,68 +582,80 @@ struct EnumDeclaration : Location {
 };
 
 
-struct Program : Location {
+struct Program : Location
+{
     // File-scoped namespace: "namespace foo;" at top of file
     // Empty string means global namespace
     std::string name;
     std::string fileNamespace;
 
-    std::vector<std::unique_ptr<ImportDeclaration> > imports;
-    std::vector<std::unique_ptr<ExternFunctionDeclaration> > externFunctions;
-    std::vector<std::unique_ptr<InterfaceDeclaration> > interfaces;
-    std::vector<std::unique_ptr<StructDeclaration> > structs;
-    std::vector<std::unique_ptr<FunctionDeclaration> > functions;
-    std::vector<std::unique_ptr<NamespaceDeclaration> > namespaces;
-    std::vector<std::unique_ptr<EnumDeclaration> > enums;
+    std::vector<std::unique_ptr<ImportDeclaration>> imports;
+    std::vector<std::unique_ptr<ExternFunctionDeclaration>> externFunctions;
+    std::vector<std::unique_ptr<InterfaceDeclaration>> interfaces;
+    std::vector<std::unique_ptr<StructDeclaration>> structs;
+    std::vector<std::unique_ptr<FunctionDeclaration>> functions;
+    std::vector<std::unique_ptr<NamespaceDeclaration>> namespaces;
+    std::vector<std::unique_ptr<EnumDeclaration>> enums;
 
-    explicit Program(const std::string &name) {
+    explicit Program(const std::string& name)
+    {
         this->name = name;
     }
 
     [[nodiscard]] bool hasFileNamespace() const { return !fileNamespace.empty(); }
 
-    [[nodiscard]] std::string getNamespacePrefix() const {
+    [[nodiscard]] std::string getNamespacePrefix() const
+    {
         return fileNamespace.empty() ? "" : fileNamespace + "::";
     }
 
-    void acceptAll(djinn::IDeclarationVisitor &visitor) const {
+    void acceptAll(djinn::IDeclarationVisitor& visitor) const
+    {
         const std::string prefix = fileNamespace;
-        for (const auto &decl: imports) decl->accept(visitor, prefix);
-        for (const auto &decl: externFunctions) decl->accept(visitor, "");
-        for (const auto &decl: interfaces) decl->accept(visitor, prefix);
-        for (const auto &decl: enums) decl->accept(visitor, prefix);
-        for (const auto &decl: structs) decl->accept(visitor, prefix);
-        for (const auto &decl: functions) decl->accept(visitor, prefix);
-        for (const auto &decl: namespaces) decl->accept(visitor, "");
+        for (const auto& decl : imports) decl->accept(visitor, prefix);
+        for (const auto& decl : externFunctions) decl->accept(visitor, prefix);
+        for (const auto& decl : interfaces) decl->accept(visitor, prefix);
+        for (const auto& decl : enums) decl->accept(visitor, prefix);
+        for (const auto& decl : structs) decl->accept(visitor, prefix);
+        for (const auto& decl : functions) decl->accept(visitor, prefix);
+        for (const auto& decl : namespaces) decl->accept(visitor, "");
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         os << "Program";
-        if (!fileNamespace.empty()) {
+        if (!fileNamespace.empty())
+        {
             os << " (namespace " << fileNamespace << ")";
         }
         os << "\n";
-        for (const auto &imp: imports) {
+        for (const auto& imp : imports)
+        {
             imp->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &ext: externFunctions) {
+        for (const auto& ext : externFunctions)
+        {
             ext->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &iface: interfaces) {
+        for (const auto& iface : interfaces)
+        {
             iface->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &s: structs) {
+        for (const auto& s : structs)
+        {
             s->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &func: functions) {
+        for (const auto& func : functions)
+        {
             func->print(os, indent + 2);
             os << '\n';
         }
-        for (const auto &ns: namespaces) {
+        for (const auto& ns : namespaces)
+        {
             ns->print(os, indent + 2);
             os << '\n';
         }

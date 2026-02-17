@@ -156,7 +156,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
     std::shared_ptr<Program> userProgram;
     std::string generatedIr;
 
-    auto makeResult = [&](int returnCode, const std::stacktrace& trace) {
+    auto makeResult = [&](int returnCode, const std::stacktrace& trace)
+    {
         if (!options.silentMode && !diagnostics.get_diagnostics().empty())
         {
             diagnostics.printToStderr(trace);
@@ -174,7 +175,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         // Load standard library first if enabled
         if (options.includeStd && fs::exists(options.stdLibPath))
         {
-            for (const auto& entry : fs::recursive_directory_iterator("../std"))
+            for (const auto& entry : fs::recursive_directory_iterator(options.stdLibPath))
             {
                 try
                 {
@@ -286,7 +287,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         int clangResult = system(
-            ("clang -fstack-protector-all -fsanitize=address -fno-omit-frame-pointer -g " + llPath + " -o " + exePath).c_str());
+            ("clang -fstack-protector-all -fsanitize=address -fno-omit-frame-pointer -g " + llPath + " -o " + exePath).
+            c_str());
         if (clangResult != 0)
         {
             return makeResult(clangResult, std::stacktrace::current());

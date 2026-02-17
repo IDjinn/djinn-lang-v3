@@ -4,37 +4,51 @@
 
 #include "../Binder.h"
 
-void Binder::collectExternFunction(const ExternFunctionDeclaration &decl) const {
+void Binder::collectExternFunction(const ExternFunctionDeclaration& decl, const std::string& prefix) const
+{
     const auto funcSym = std::make_shared<ExternFunctionSymbol>(decl.name.token_name, *decl.returnType);
     funcSym->isVariadic = decl.isVariadic;
     funcSym->abi = decl.abi;
 
-    for (const auto &param: decl.parameters) {
+    for (const auto& param : decl.parameters)
+    {
         funcSym->addParameter(param.name.token_name, *param.type);
     }
 
-    if (!_global_scope->defineExternFunction(funcSym)) {
+    if (!_global_scope->defineExternFunction(funcSym))
+    {
         BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
                      "extern function '" + decl.name.token_name + "' is already defined", decl, decl.name.location);
     }
+
+    // Register qualified name alias for import resolution
+    if (!prefix.empty())
+    {
+        const std::string qualifiedName = prefix + "::" + decl.name.token_name;
+        _global_scope->defineAlias(qualifiedName, funcSym);
+    }
 }
 
-void Binder::collectFunction(FunctionDeclaration &decl) const {
+void Binder::collectFunction(FunctionDeclaration& decl) const
+{
     collectFunctionWithPrefix(decl, "");
 }
 
-void Binder::collectFunctionWithPrefix(FunctionDeclaration &decl, const std::string &prefix) const {
+void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::string& prefix) const
+{
     // "main" is always in global namespace
     const std::string qualifiedName = (decl.name.token_name == "main" || prefix.empty())
                                           ? decl.name.token_name
                                           : prefix + "::" + decl.name.token_name;
     const auto funcSym = std::make_shared<FunctionSymbol>(qualifiedName, *decl.returnType);
 
-    for (const auto &param: decl.parameters) {
+    for (const auto& param : decl.parameters)
+    {
         funcSym->addParameter(param.name.token_name, *param.type);
     }
 
-    if (!_global_scope->defineFunction(funcSym)) {
+    if (!_global_scope->defineFunction(funcSym))
+    {
         BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION, "function '" + qualifiedName + "' is already defined", decl,
                      decl.name.location);
     }

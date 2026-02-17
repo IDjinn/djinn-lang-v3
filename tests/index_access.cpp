@@ -55,8 +55,7 @@ TEST(IndexAccess, WithMalloc) {
 
         i32 main() {
             i32* arr = malloc(20);
-            i32 i = 0;
-            for (i = 0; i < 5; i = i + 1) {
+            for (mut i32 i = 0; i < 5; i = i + 1) {
                 arr[i] = i * 10;
             }
             i32 result = arr[3];

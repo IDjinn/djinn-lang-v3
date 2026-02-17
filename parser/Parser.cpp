@@ -915,6 +915,12 @@ std::unique_ptr<Statement> Parser::parse_statement()
         return std::make_unique<ContinueStatement>();
     }
 
+    // Bare block: { ... }
+    if (check(TokenType::LBRACE))
+    {
+        return parse_block();
+    }
+
     // Expression statement
     auto expr = parse_expression();
     expect("Esperado ';'", TokenType::SEMICOLON);
