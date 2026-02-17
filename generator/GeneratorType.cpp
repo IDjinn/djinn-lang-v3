@@ -476,6 +476,10 @@ llvm::Type* Generator::generate_type(const Type& type)
             {
                 throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo ponteiro deve ter tipo de elemento");
             }
+            if (type.elementType->kind == TypeKind::VOID)
+            {
+                return builder->getPtrTy();
+            }
             llvm::Type* pointeeType = generate_type(*type.elementType);
             return llvm::PointerType::get(pointeeType, 0);
         }
