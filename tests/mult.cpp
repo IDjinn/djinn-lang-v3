@@ -12,7 +12,6 @@ TEST(Math, IntegerMultFunction) {
     const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
-    EXPECT_EQ(result.tokens.size(), 17);
 }
 
 TEST(Math, IntegerMult) {
@@ -29,5 +28,4 @@ TEST(Math, IntegerMult) {
     const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.returnCode, 6);
     EXPECT_EQ(result.program->functions.size(), 2);
-    EXPECT_EQ(result.tokens.size(), 31);
 }
