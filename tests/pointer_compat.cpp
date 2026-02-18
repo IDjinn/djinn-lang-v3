@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(PointerCompat, VoidToTyped) {
+TEST(PointerCompat, VoidToTyped)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);
@@ -22,7 +23,8 @@ TEST(PointerCompat, VoidToTyped) {
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
-TEST(PointerCompat, TypedToVoid) {
+TEST(PointerCompat, TypedToVoid)
+{
     const auto source = R"(
         extern "C" {
             void free(void* ptr);
@@ -41,7 +43,8 @@ TEST(PointerCompat, TypedToVoid) {
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
-TEST(PointerCompat, IncompatibleTypes) {
+TEST(PointerCompat, IncompatibleTypes)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);
@@ -58,7 +61,26 @@ TEST(PointerCompat, IncompatibleTypes) {
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
-TEST(PointerCompat, SameType) {
+TEST(PointerCompat, IncompatibleTypesHumanReadableMessage)
+{
+    const auto source = R"(
+        extern "C" {
+            void* malloc(i64 size);
+        }
+
+        i32 main() {
+            i64* data = malloc(8);
+            i32* wrong = data;
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    ASSERT_GE(result.diagnostics.size(), 1);
+}
+
+TEST(PointerCompat, SameType)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);
