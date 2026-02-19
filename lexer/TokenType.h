@@ -5,7 +5,8 @@
 #ifndef DJINN_TOKENTYPE_H
 #define DJINN_TOKENTYPE_H
 
-enum class TokenType {
+enum class TokenType
+{
     UNKNOWN = 0,
     END_OF_FILE,
 
@@ -97,6 +98,7 @@ enum class TokenType {
     UNION,
     ENUM,
     NEW,
+    IMPL,
 };
 
 

@@ -15,37 +15,67 @@ struct InterfaceDeclaration;
 struct ExternFunctionDeclaration;
 struct NamespaceDeclaration;
 struct ImportDeclaration;
+struct ImplDeclaration;
 
-namespace djinn {
-    class IDeclarationVisitor {
+namespace djinn
+{
+    class IDeclarationVisitor
+    {
     public:
         virtual ~IDeclarationVisitor() = default;
 
-        virtual void visit(const StructDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const StructDeclaration& decl, const std::string& prefix) = 0;
 
-        virtual void visit(const FunctionDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const FunctionDeclaration& decl, const std::string& prefix) = 0;
 
-        virtual void visit(const EnumDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const EnumDeclaration& decl, const std::string& prefix) = 0;
 
-        virtual void visit(const InterfaceDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const InterfaceDeclaration& decl, const std::string& prefix) = 0;
 
-        virtual void visit(const ExternFunctionDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const ExternFunctionDeclaration& decl, const std::string& prefix) = 0;
 
-        virtual void visit(const NamespaceDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const NamespaceDeclaration& decl, const std::string& prefix) = 0;
 
-        virtual void visit(const ImportDeclaration &decl, const std::string &prefix) = 0;
+        virtual void visit(const ImportDeclaration& decl, const std::string& prefix) = 0;
+
+        virtual void visit(const ImplDeclaration& decl, const std::string& prefix) = 0;
     };
 
     // Convenience base class with empty implementations for selective overriding
-    class DeclarationVisitorBase : public IDeclarationVisitor {
+    class DeclarationVisitorBase : public IDeclarationVisitor
+    {
     public:
-        void visit(const StructDeclaration &, const std::string &) override {}
-        void visit(const FunctionDeclaration &, const std::string &) override {}
-        void visit(const EnumDeclaration &, const std::string &) override {}
-        void visit(const InterfaceDeclaration &, const std::string &) override {}
-        void visit(const ExternFunctionDeclaration &, const std::string &) override {}
-        void visit(const NamespaceDeclaration &, const std::string &) override {}
-        void visit(const ImportDeclaration &, const std::string &) override {}
+        void visit(const StructDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const FunctionDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const EnumDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const InterfaceDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const ExternFunctionDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const NamespaceDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const ImportDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const ImplDeclaration&, const std::string&) override
+        {
+        }
     };
 } // namespace djinn
 

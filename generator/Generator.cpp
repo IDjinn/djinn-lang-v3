@@ -17,60 +17,84 @@
 #include "../binder/SymbolTable.h"
 #include "../utils/Logger.h"
 
-Generator::Generator(DiagnosticEngine &diagnostics, const std::shared_ptr<ScopedSymbolTable> &symbols)
+Generator::Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<ScopedSymbolTable>& symbols)
     : _diagnostics(diagnostics),
       symbols(symbols),
       context(std::make_unique<llvm::LLVMContext>()),
       module(std::make_unique<llvm::Module>("djinn_module", *context)),
-      builder(std::make_unique<llvm::IRBuilder<> >(*context)),
-      currentScope(std::make_shared<GeneratorScope>()) {
+      builder(std::make_unique<llvm::IRBuilder<>>(*context)),
+      currentScope(std::make_shared<GeneratorScope>())
+{
 }
 
-void Generator::push_scope() {
+void Generator::push_scope()
+{
     currentScope = std::make_shared<GeneratorScope>(currentScope);
 }
 
-void Generator::pop_scope() {
-    if (currentScope->parent) {
+void Generator::pop_scope()
+{
+    if (currentScope->parent)
+    {
         currentScope = currentScope->parent;
     }
 }
 
-void Generator::generate() {
+void Generator::generate()
+{
     // PASS 1: Forward declare all structs (create opaque types)
-    for (const auto &sym: symbols->get_all_structs()) {
+    for (const auto& sym : symbols->get_all_structs())
+    {
         forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(sym));
         generatedStructs++;
     }
 
     // PASS 2: Generate all enums (generic ones are just registered for monomorphization)
-    for (const auto &sym: symbols->get_all_enums()) {
+    for (const auto& sym : symbols->get_all_enums())
+    {
         generate_enum(*std::dynamic_pointer_cast<EnumSymbol>(sym));
     }
 
     // PASS 3: Generate extern functions
-    for (const auto &sym: symbols->get_all_extern_functions()) {
+    for (const auto& sym : symbols->get_all_extern_functions())
+    {
         generate_extern_function(*std::dynamic_pointer_cast<ExternFunctionSymbol>(sym));
         generatedExternFunctions++;
     }
 
     // PASS 4: Resolve struct bodies (fill in field types)
-    for (const auto &sym: symbols->get_all_structs()) {
+    for (const auto& sym : symbols->get_all_structs())
+    {
         resolve_struct_body(*std::dynamic_pointer_cast<StructSymbol>(sym));
     }
 
     // PASS 5: Generate struct methods and properties
-    for (const auto &sym: symbols->get_all_structs()) {
-        generate_struct_methods(*std::dynamic_pointer_cast<StructSymbol>(sym));
+    for (const auto& sym : symbols->get_all_structs())
+    {
+        const auto& structSym = *std::dynamic_pointer_cast<StructSymbol>(sym);
+        if (is_primitive_impl(structSym))
+        {
+            // Primitive impl — generate methods with 'this' passed by value
+            for (const auto& method : structSym.methods)
+            {
+                generate_primitive_impl_method(structSym, *method);
+            }
+        }
+        else
+        {
+            generate_struct_methods(structSym);
+        }
     }
 
     // PASS 6a: Forward declare all global functions
-    for (const auto &sym: symbols->get_all_functions()) {
+    for (const auto& sym : symbols->get_all_functions())
+    {
         forward_declare_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
     }
 
     // PASS 6b: Generate global function bodies
-    for (const auto &sym: symbols->get_all_functions()) {
+    for (const auto& sym : symbols->get_all_functions())
+    {
         generate_function_body(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
         generatedFunctions++;
     }
@@ -82,8 +106,10 @@ void Generator::generate() {
     // emit_used_declarations();
 }
 
-void Generator::verify_all_symbols_generated() {
-    if (!functions.contains("main")) {
+void Generator::verify_all_symbols_generated()
+{
+    if (!functions.contains("main"))
+    {
         generate_default_main();
     }
 
@@ -92,23 +118,25 @@ void Generator::verify_all_symbols_generated() {
     const size_t expectedStructs = symbols->get_all_structs().size();
 
     assert(generatedFunctions == expectedFunctions &&
-           "Not all functions were generated!");
+        "Not all functions were generated!");
     assert(generatedExternFunctions == expectedExternFunctions &&
-           "Not all extern functions were generated!");
+        "Not all extern functions were generated!");
     assert(generatedStructs == expectedStructs &&
-           "Not all structs were generated!");
+        "Not all structs were generated!");
 
     // Verify all generated functions exist in the LLVM module
-    for (const auto &sym: symbols->get_all_functions()) {
+    for (const auto& sym : symbols->get_all_functions())
+    {
         const auto funcSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
         assert(functions.count(funcSym->name) > 0 &&
-               ("Function not found in LLVM module: " + funcSym->name).c_str());
+            ("Function not found in LLVM module: " + funcSym->name).c_str());
     }
 
-    for (const auto &sym: symbols->get_all_extern_functions()) {
+    for (const auto& sym : symbols->get_all_extern_functions())
+    {
         const auto externSym = std::dynamic_pointer_cast<ExternFunctionSymbol>(sym);
         assert(functions.count(externSym->name) > 0 &&
-               ("Extern function not found in LLVM module: " + externSym->name).c_str());
+            ("Extern function not found in LLVM module: " + externSym->name).c_str());
     }
 
     LOG_INFO("verification passed: %zu functions, %zu extern functions, %zu structs generated.",
@@ -116,7 +144,8 @@ void Generator::verify_all_symbols_generated() {
 }
 
 
-void Generator::generate_default_main() {
+void Generator::generate_default_main()
+{
     const auto mainFunc = llvm::Function::Create(
         llvm::FunctionType::get(builder->getInt32Ty(), false),
         llvm::Function::ExternalLinkage,
@@ -175,7 +204,8 @@ void Generator::generate_default_main() {
 //     return llvmFunc;
 // }
 
-void Generator::optimize() const {
+void Generator::optimize() const
+{
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;
@@ -192,11 +222,13 @@ void Generator::optimize() const {
     MPM.run(*module, MAM);
 }
 
-std::string Generator::print() const {
+std::string Generator::print() const
+{
     std::string errorStr;
     llvm::raw_string_ostream errorStream(errorStr);
 
-    if (llvm::verifyModule(*module, &errorStream)) {
+    if (llvm::verifyModule(*module, &errorStream))
+    {
         return "Erro: módulo inválido\n" + errorStr;
     }
 
@@ -206,9 +238,12 @@ std::string Generator::print() const {
     return str;
 }
 
-bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) const {
-    for (const auto &path: llPaths) {
-        if (!std::filesystem::exists(path)) {
+bool Generator::linkModules(const std::vector<std::filesystem::path>& llPaths) const
+{
+    for (const auto& path : llPaths)
+    {
+        if (!std::filesystem::exists(path))
+        {
             LOG_ERROR("Link error: file not found: %s", path.string().c_str());
             return false;
         }
@@ -216,13 +251,15 @@ bool Generator::linkModules(const std::vector<std::filesystem::path> &llPaths) c
         llvm::SMDiagnostic err;
         auto linkedModule = llvm::parseIRFile(path.string(), err, *context);
 
-        if (!linkedModule) {
+        if (!linkedModule)
+        {
             LOG_ERROR("Link error: failed to parse %s", path.string().c_str());
             err.print("djinn", llvm::errs());
             return false;
         }
 
-        if (llvm::Linker::linkModules(*module, std::move(linkedModule))) {
+        if (llvm::Linker::linkModules(*module, std::move(linkedModule)))
+        {
             LOG_ERROR("Link error: failed to link %s", path.string().c_str());
             return false;
         }

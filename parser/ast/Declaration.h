@@ -582,6 +582,47 @@ struct EnumDeclaration : Location
 };
 
 
+struct ImplDeclaration : Location
+{
+    std::unique_ptr<Type> targetType;
+    std::string interfaceName; // empty for inherent impl, filled for "impl Interface for Type"
+    std::vector<std::unique_ptr<StructMethodDeclaration>> methods;
+
+    [[nodiscard]] bool isInterfaceImpl() const { return !interfaceName.empty(); }
+
+    [[nodiscard]] std::string targetTypeName() const
+    {
+        if (targetType->kind == TypeKind::STRUCT) return targetType->structName;
+        // For primitive types, build the name from kind+size
+        if (targetType->kind == TypeKind::INTEGER)
+        {
+            return (targetType->sign ? "i" : "u") + std::to_string(targetType->size);
+        }
+        if (targetType->kind == TypeKind::F32) return "f32";
+        if (targetType->kind == TypeKind::F64) return "f64";
+        if (targetType->kind == TypeKind::F16) return "f16";
+        if (targetType->kind == TypeKind::F128) return "f128";
+        return "unknown";
+    }
+
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
+        visitor.visit(*this, prefix);
+    }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "ImplDeclaration(";
+        if (isInterfaceImpl()) os << interfaceName << " for ";
+        os << targetTypeName() << ")\n";
+        for (const auto& method : methods)
+        {
+            method->print(os, indent + 2);
+        }
+    }
+};
+
 struct Program : Location
 {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -596,6 +637,7 @@ struct Program : Location
     std::vector<std::unique_ptr<FunctionDeclaration>> functions;
     std::vector<std::unique_ptr<NamespaceDeclaration>> namespaces;
     std::vector<std::unique_ptr<EnumDeclaration>> enums;
+    std::vector<std::unique_ptr<ImplDeclaration>> impls;
 
     explicit Program(const std::string& name)
     {
@@ -617,6 +659,7 @@ struct Program : Location
         for (const auto& decl : interfaces) decl->accept(visitor, prefix);
         for (const auto& decl : enums) decl->accept(visitor, prefix);
         for (const auto& decl : structs) decl->accept(visitor, prefix);
+        for (const auto& decl : impls) decl->accept(visitor, prefix);
         for (const auto& decl : functions) decl->accept(visitor, prefix);
         for (const auto& decl : namespaces) decl->accept(visitor, "");
     }
@@ -647,6 +690,11 @@ struct Program : Location
         for (const auto& s : structs)
         {
             s->print(os, indent + 2);
+            os << '\n';
+        }
+        for (const auto& impl : impls)
+        {
+            impl->print(os, indent + 2);
             os << '\n';
         }
         for (const auto& func : functions)

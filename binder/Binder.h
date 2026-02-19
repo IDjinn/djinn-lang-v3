@@ -130,6 +130,8 @@ private:
     void collectFunctionWithPrefix(FunctionDeclaration& decl, const std::string& prefix) const;
 
 
+    void collectImpl(const ImplDeclaration& decl, const std::string& prefix) const;
+
     void collectNamespace(const NamespaceDeclaration& ns, const std::string& prefix) const;
 
     void processImports(const Program& program) const;

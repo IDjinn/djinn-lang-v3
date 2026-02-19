@@ -757,6 +757,10 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             {
                 program->interfaces.push_back(parse_interface());
             }
+            else if (check(TokenType::IMPL))
+            {
+                program->impls.push_back(parse_impl());
+            }
             else if (check(TokenType::LBRACKET) || check(TokenType::STRUCT))
             {
                 auto structDecl = parse_struct();
@@ -1840,4 +1844,40 @@ std::unique_ptr<ImportDeclaration> Parser::parse_import()
     expect("Esperado ';' após import", TokenType::SEMICOLON);
 
     return std::make_unique<ImportDeclaration>(std::move(qname));
+}
+
+std::unique_ptr<ImplDeclaration> Parser::parse_impl()
+{
+    expect("Esperado 'impl'", TokenType::IMPL);
+
+    auto impl = std::make_unique<ImplDeclaration>();
+
+    // Parse the first type (could be the target type or interface name)
+    auto firstType = parse_type();
+
+    // Check for "impl Interface for Type" form
+    if (check(TokenType::FOR))
+    {
+        advance(); // consume 'for'
+        impl->interfaceName = firstType->kind == TypeKind::STRUCT
+                                  ? firstType->structName
+                                  : firstType->toHumanString();
+        impl->targetType = parse_type();
+    }
+    else
+    {
+        // "impl Type { methods }" form
+        impl->targetType = std::move(firstType);
+    }
+
+    expect("Esperado '{' após tipo no impl", TokenType::LBRACE);
+
+    while (!check(TokenType::RBRACE) && !isAtEnd())
+    {
+        impl->methods.push_back(parse_method(true));
+    }
+
+    expect("Esperado '}' no impl", TokenType::RBRACE);
+
+    return impl;
 }

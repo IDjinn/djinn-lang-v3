@@ -237,7 +237,19 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     }
 
     auto* alloca = builder->CreateAlloca(type, nullptr, expr.name.token_name);
-    currentScope->define_variable(expr.name.token_name, alloca, "", pointeeType);
+
+    // Check if this primitive type has an impl block
+    std::string structTypeName;
+    if (expr.type.kind != TypeKind::STRUCT && expr.type.kind != TypeKind::POINTER && expr.type.kind != TypeKind::ARRAY)
+    {
+        std::string primName = get_primitive_type_name(type);
+        if (!primName.empty() && currentScope->lookup_struct(primName))
+        {
+            structTypeName = primName;
+        }
+    }
+
+    currentScope->define_variable(expr.name.token_name, alloca, structTypeName, pointeeType);
     builder->CreateStore(initVal, alloca);
     return alloca;
 }

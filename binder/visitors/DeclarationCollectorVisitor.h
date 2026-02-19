@@ -9,27 +9,32 @@
 
 class Binder;
 
-namespace djinn {
-    class DeclarationCollectorVisitor : public IDeclarationVisitor {
-        const Binder &_binder;
+namespace djinn
+{
+    class DeclarationCollectorVisitor : public IDeclarationVisitor
+    {
+        const Binder& _binder;
 
     public:
-        explicit DeclarationCollectorVisitor(const Binder &binder) : _binder(binder) {
+        explicit DeclarationCollectorVisitor(const Binder& binder) : _binder(binder)
+        {
         }
 
-        void visit(const StructDeclaration &decl, const std::string &prefix) override;
+        void visit(const StructDeclaration& decl, const std::string& prefix) override;
 
-        void visit(const FunctionDeclaration &decl, const std::string &prefix) override;
+        void visit(const FunctionDeclaration& decl, const std::string& prefix) override;
 
-        void visit(const EnumDeclaration &decl, const std::string &prefix) override;
+        void visit(const EnumDeclaration& decl, const std::string& prefix) override;
 
-        void visit(const InterfaceDeclaration &decl, const std::string &prefix) override;
+        void visit(const InterfaceDeclaration& decl, const std::string& prefix) override;
 
-        void visit(const ExternFunctionDeclaration &decl, const std::string &prefix) override;
+        void visit(const ExternFunctionDeclaration& decl, const std::string& prefix) override;
 
-        void visit(const NamespaceDeclaration &decl, const std::string &prefix) override;
+        void visit(const NamespaceDeclaration& decl, const std::string& prefix) override;
 
-        void visit(const ImportDeclaration &decl, const std::string &prefix) override;
+        void visit(const ImportDeclaration& decl, const std::string& prefix) override;
+
+        void visit(const ImplDeclaration& decl, const std::string& prefix) override;
     };
 } // namespace djinn
 

@@ -406,7 +406,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     if (const auto* ident = dynamic_cast<const Identifier*>(call.receiver.get()))
     {
         // Check if the variable holds an enum value
-        if (llvm::AllocaInst*alloca = currentScope->lookup_variable(ident->identifier.token_name))
+        if (llvm::AllocaInst* alloca = currentScope->lookup_variable(ident->identifier.token_name))
         {
             if (auto* enumStructType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
             {
@@ -456,12 +456,24 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         {
             // Receiver is a variable - instance method call
             structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
-            if (const auto*alloca = currentScope->lookup_variable(ident->identifier.token_name))
+            if (const auto* alloca = currentScope->lookup_variable(ident->identifier.token_name))
             {
                 if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
                 {
                     llvmStructName = structType->getName().str();
                 }
+            }
+        }
+    }
+
+    // If no struct type found, check if it's a primitive type with an impl
+    if (structName.empty())
+    {
+        if (const auto* ident = dynamic_cast<const Identifier*>(call.receiver.get()))
+        {
+            if (llvm::AllocaInst* alloca = currentScope->lookup_variable(ident->identifier.token_name))
+            {
+                structName = get_primitive_type_name(alloca->getAllocatedType());
             }
         }
     }
@@ -565,6 +577,11 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                     // 'this' or pointer variable: alloca holds a ptr to the struct, load it
                     args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "self"));
                 }
+                else if (!alloca->getAllocatedType()->isStructTy())
+                {
+                    // Primitive type impl: pass 'this' by value (load the value)
+                    args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "this_val"));
+                }
                 else
                 {
                     // Local struct variable: alloca IS the ptr to the struct
@@ -587,9 +604,18 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             }
             else
             {
-                const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
-                builder->CreateStore(objectValue, alloca);
-                args.push_back(alloca);
+                // Check if the method expects a value parameter (primitive impl)
+                const llvm::FunctionType* fType = func->getFunctionType();
+                if (fType->getNumParams() > 0 && !fType->getParamType(0)->isPointerTy())
+                {
+                    args.push_back(objectValue);
+                }
+                else
+                {
+                    const auto alloca = builder->CreateAlloca(objectValue->getType(), nullptr, "tmp");
+                    builder->CreateStore(objectValue, alloca);
+                    args.push_back(alloca);
+                }
             }
         }
     }

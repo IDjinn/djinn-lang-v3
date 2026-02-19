@@ -76,6 +76,12 @@ private:
 
     void generate_method(const StructSymbol& struc, const MethodSymbol& method);
 
+    bool is_primitive_impl(const StructSymbol& struc) const;
+
+    void generate_primitive_impl_method(const StructSymbol& struc, const MethodSymbol& method);
+
+    static std::string get_primitive_type_name(llvm::Type* type);
+
     void generate_property(const StructSymbol& struc, const PropertySymbol& prop);
 
     void forward_declare_function(const FunctionSymbol& func);

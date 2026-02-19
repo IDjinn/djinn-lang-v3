@@ -43,4 +43,9 @@ namespace djinn
     {
         // Imports are handled separately via processImports
     }
+
+    void DeclarationCollectorVisitor::visit(const ImplDeclaration& decl, const std::string& prefix)
+    {
+        _binder.collectImpl(decl, prefix);
+    }
 } // namespace djinn
