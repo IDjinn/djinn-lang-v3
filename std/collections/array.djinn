@@ -1,9 +1,11 @@
 import std::types;
 import std::libc;
 import std::debug;
+import std::types::constraints;
+
 namespace std::collections;
 
-struct array<T> {
+struct array<T> : Hashable {
     T* data;
     size length;
     size capacity;
@@ -41,13 +43,19 @@ struct array<T> {
         if (this.capacity > 0u) {
             new_cap = this.capacity * 2u;
         }
-        printf("called grow, new_cap = %d\n", new_cap);
         this.data = realloc(this.data, new_cap * sizeof(T));
         this.capacity = new_cap;
     }
 
+    public i32 hash() {
+        mut i32 hash_result = 1;
+        for (mut size i = 0u; i < this.length; i = i + 1u) {
+          hash_result = 31 * hash_result + this.data[i]; // TODO: THIS DOES NOT SUPPORT GENERIC TYPES!
+        }
+        return hash_result;
+    }
+
     public void destroy() {
-        printf("destroy called");
         free(this.data);
     }
 }

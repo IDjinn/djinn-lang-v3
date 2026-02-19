@@ -1,0 +1,13 @@
+namespace std::types::constraints;
+
+interface Hashable {
+    i32 hash();
+}
+
+interface Comparable<T> {
+    i32 compare<O>(O other);
+}
+
+interface Serializable<TOut> {
+    TOut serialize();
+}

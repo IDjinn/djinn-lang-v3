@@ -10,6 +10,10 @@ void Binder::collectInterface(const InterfaceDeclaration &decl) const {
 
 void Binder::collectInterfaceWithPrefix(const InterfaceDeclaration &decl, const std::string &prefix) const {
     const std::string qualifiedName = prefix.empty() ? decl.name.token_name : prefix + "::" + decl.name.token_name;
+
+    // Skip if already collected (e.g., from the interface pre-collection pass)
+    if (_global_scope->lookupInterface(qualifiedName)) return;
+
     const auto ifaceSym = std::make_shared<InterfaceSymbol>(qualifiedName);
 
     for (const auto &genParam: decl.genericParams.params) {

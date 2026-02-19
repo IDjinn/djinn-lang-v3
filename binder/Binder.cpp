@@ -40,6 +40,34 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
         }
     }
 
+    // First pass: collect all interfaces so structs can reference them
+    for (const auto& program : programs)
+    {
+        const std::string prefix = program->fileNamespace;
+        for (const auto& iface : program->interfaces)
+        {
+            collectInterfaceWithPrefix(*iface, prefix);
+        }
+    }
+
+    // Create short-name aliases for namespaced interfaces (e.g., "Hashable" -> "std::types::constraints::Hashable")
+    {
+        std::vector<std::pair<std::string, std::shared_ptr<InterfaceSymbol>>> aliases;
+        for (const auto& [key, symbol] : _global_scope->symbols())
+        {
+            if (!key.starts_with("interface:")) continue;
+            const auto& name = symbol->name;
+            if (const auto pos = name.rfind("::"); pos != std::string::npos)
+            {
+                aliases.emplace_back(name.substr(pos + 2), std::dynamic_pointer_cast<InterfaceSymbol>(symbol));
+            }
+        }
+        for (auto& [shortName, ifaceSym] : aliases)
+        {
+            _global_scope->defineInterfaceAlias(shortName, std::move(ifaceSym));
+        }
+    }
+
     for (const auto &program: programs) {
         LOG_TRACE("collecting declarations of program %s", program->name.c_str());
         collectDeclarations(*program);

@@ -45,6 +45,8 @@ namespace DiagnosticCode {
     constexpr uint32_t DUPLICATE_DEFINITION = 3007;
     constexpr uint32_t MIXED_INITIALIZERS = 3008;
     constexpr uint32_t INVALID_OPERAND = 3009;
+    constexpr uint32_t UNDEFINED_INTERFACE = 3010;
+    constexpr uint32_t MISSING_INTERFACE_METHOD_IMPLEMENTATION = 3011;
 
     // CodeGen errors (4xxx)
     constexpr uint32_t INVALID_TYPE = 4001;

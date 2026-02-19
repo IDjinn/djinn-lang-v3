@@ -77,6 +77,15 @@ public:
         return true;
     }
 
+    bool defineInterfaceAlias(const std::string& alias, std::shared_ptr<InterfaceSymbol> ifaceSym)
+    {
+        const std::string key = "interface:" + alias;
+        if (_symbols.contains(key))
+            return false;
+        _symbols[key] = std::move(ifaceSym);
+        return true;
+    }
+
     bool defineEnum(std::shared_ptr<EnumSymbol> enumSym) {
         return define(std::move(enumSym));
     }
@@ -227,12 +236,14 @@ public:
         return all_functions;
     }
 
-    std::vector<std::shared_ptr<Symbol> > get_all_extern_functions() const {
-        std::vector<std::shared_ptr<Symbol> > all_extern;
-        for (const auto &symbol: _symbols | std::views::values) {
-            if (symbol->kind == SymbolKind::ExternFunction) all_extern.push_back(symbol);
+    std::vector<std::shared_ptr<Symbol>> get_all_extern_functions() const
+    {
+        std::set<std::shared_ptr<Symbol>> unique_extern;
+        for (const auto& symbol : _symbols | std::views::values)
+        {
+            if (symbol->kind == SymbolKind::ExternFunction) unique_extern.insert(symbol);
         }
-        return all_extern;
+        return {unique_extern.begin(), unique_extern.end()};
     }
 
     std::vector<std::shared_ptr<Symbol> > get_all_structs() const {

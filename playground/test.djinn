@@ -1,9 +1,19 @@
 import std::types;
 import std::collections;
+import std::sys;
+import std::debug;
 
 namespace playground;
 
-
-struct Data {
-    i32 value;
+i32 main() {
+    array<i32> arr = array<i32>();
+    for (auto mut i = 0; i < 100; i = i + 1) {
+        arr.push(i);
+    }
+    printf("arr hash = %d\n", arr.hash());
+    for (auto mut i = 0; i < 100; i = i + 1) {
+        arr.push(i);
+    }
+    printf("arr hash = %d\n", arr.hash());
+    return 0;
 }
