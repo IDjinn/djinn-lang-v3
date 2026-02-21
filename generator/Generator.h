@@ -170,6 +170,8 @@ private:
 
     static bool is_intrinsic(const std::string& name);
 
+    static bool is_slice_struct(llvm::StructType* st);
+
     llvm::Value* generate_identifier(const Identifier& expr) const;
 
     llvm::Value* generate_variable_declaration(const VariableDeclaration& expr);

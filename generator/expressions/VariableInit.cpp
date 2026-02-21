@@ -3,9 +3,13 @@
 //
 
 #include "../Generator.h"
+#include "../../utils/Logger.h"
 
 llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
 {
+    LOG_DEBUG("[generator] variable init: '%s' type.kind=%d type.structName='%s' isArray=%d",
+              expr.name.token_name.c_str(), static_cast<int>(expr.type.kind),
+              expr.type.structName.c_str(), expr.type.kind == TypeKind::ARRAY);
     if (auto* braceInit = dynamic_cast<const BraceInitializer*>(expr.value.get()))
     {
         if (expr.type.kind == TypeKind::STRUCT)
@@ -91,6 +95,7 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     }
 
     // Handle ArrayLiteral: delegate to generate_array_literal which produces arr<T> slice
+    LOG_DEBUG("[generator]   checking if value is ArrayLiteral...");
     if (auto* arrayLit = dynamic_cast<const ArrayLiteral*>(expr.value.get()))
     {
         // Set element type on the literal from the declaration type if not already set
@@ -118,12 +123,15 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
                 {
                     elemType = generate_type(*arrayLit->elementType);
                 }
+                LOG_DEBUG("[generator]   array literal -> arr<T> slice: var='%s' structType='%s'",
+                          expr.name.token_name.c_str(), structTypeName.c_str());
                 currentScope->define_variable(expr.name.token_name, allocaInit, structTypeName, elemType);
                 return allocaInit;
             }
         }
 
         // Fallback: raw pointer result
+        LOG_DEBUG("[generator]   array literal -> fallback raw pointer for '%s'", expr.name.token_name.c_str());
         llvm::Type* elemType = nullptr;
         if (expr.type.kind == TypeKind::ARRAY && expr.type.elementType)
         {
@@ -149,6 +157,9 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
         {
             allocaInit->setName(expr.name.token_name);
             const auto qualifiedName = currentScope->resolve_alias(expr.type.structName);
+            LOG_DEBUG("[generator]   struct alloca reuse: var='%s' structName='%s' resolved='%s' llvmType='%s'",
+                      expr.name.token_name.c_str(), expr.type.structName.c_str(), qualifiedName.c_str(),
+                      allocaInit->getAllocatedType()->getStructName().str().c_str());
             currentScope->define_variable(expr.name.token_name, allocaInit, qualifiedName);
 
             // RAII: register for cleanup if struct has destroy()

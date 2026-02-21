@@ -2,12 +2,13 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Intrinsics, SizeofI32) {
+TEST(Intrinsics, SizeofI32)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 42;
-            i64 size = sizeof(x);
-            return size;
+            i64 sz = sizeof(x);
+            return sz;
         }
     )";
 
@@ -16,12 +17,13 @@ TEST(Intrinsics, SizeofI32) {
     EXPECT_EQ(result.returnCode, 4); // i32 = 4 bytes
 }
 
-TEST(Intrinsics, SizeofI64) {
+TEST(Intrinsics, SizeofI64)
+{
     const auto source = R"(
         i32 main() {
             i64 x = 100;
-            i64 size = sizeof(x);
-            return size;
+            i64 sz = sizeof(x);
+            return sz;
         }
     )";
 
@@ -30,12 +32,13 @@ TEST(Intrinsics, SizeofI64) {
     EXPECT_EQ(result.returnCode, 8); // i64 = 8 bytes
 }
 
-TEST(Intrinsics, SizeofI8) {
+TEST(Intrinsics, SizeofI8)
+{
     const auto source = R"(
         i32 main() {
             i8 x = 1;
-            i64 size = sizeof(x);
-            return size;
+            i64 sz = sizeof(x);
+            return sz;
         }
     )";
 
@@ -44,7 +47,8 @@ TEST(Intrinsics, SizeofI8) {
     EXPECT_EQ(result.returnCode, 1); // i8 = 1 byte
 }
 
-TEST(Intrinsics, SizeofStruct) {
+TEST(Intrinsics, SizeofStruct)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -53,8 +57,8 @@ TEST(Intrinsics, SizeofStruct) {
 
         i32 main() {
             Point p = { 10, 20 };
-            i64 size = sizeof(p);
-            return size;
+            i64 sz = sizeof(p);
+            return sz;
         }
     )";
 
@@ -63,7 +67,8 @@ TEST(Intrinsics, SizeofStruct) {
     EXPECT_EQ(result.returnCode, 8); // 2 * i32 = 8 bytes
 }
 
-TEST(Intrinsics, AlignofI32) {
+TEST(Intrinsics, AlignofI32)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 42;
@@ -77,7 +82,8 @@ TEST(Intrinsics, AlignofI32) {
     EXPECT_EQ(result.returnCode, 4); // i32 alignment = 4
 }
 
-TEST(Intrinsics, AlignofI64) {
+TEST(Intrinsics, AlignofI64)
+{
     const auto source = R"(
         i32 main() {
             i64 x = 100;
@@ -92,7 +98,8 @@ TEST(Intrinsics, AlignofI64) {
     EXPECT_TRUE(result.returnCode == 4 || result.returnCode == 8);
 }
 
-TEST(Intrinsics, Likely) {
+TEST(Intrinsics, Likely)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 1;
@@ -108,7 +115,8 @@ TEST(Intrinsics, Likely) {
     EXPECT_EQ(result.returnCode, 42);
 }
 
-TEST(Intrinsics, Unlikely) {
+TEST(Intrinsics, Unlikely)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 0;
@@ -124,12 +132,13 @@ TEST(Intrinsics, Unlikely) {
     EXPECT_EQ(result.returnCode, 99);
 }
 
-TEST(Intrinsics, Expect) {
+TEST(Intrinsics, Expect)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 5;
-            i32 result = expect(x, 5);
-            return result;
+            i32 res = expect(x, 5);
+            return res;
         }
     )";
 
@@ -138,12 +147,13 @@ TEST(Intrinsics, Expect) {
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(Intrinsics, SizeofF32) {
+TEST(Intrinsics, SizeofF32)
+{
     const auto source = R"(
         i32 main() {
             f32 x = 3.14;
-            i64 size = sizeof(x);
-            return size;
+            i64 sz = sizeof(x);
+            return sz;
         }
     )";
 
@@ -152,12 +162,13 @@ TEST(Intrinsics, SizeofF32) {
     EXPECT_EQ(result.returnCode, 4); // f32 = 4 bytes
 }
 
-TEST(Intrinsics, SizeofF64) {
+TEST(Intrinsics, SizeofF64)
+{
     const auto source = R"(
         i32 main() {
             f64 x = 3.14159;
-            i64 size = sizeof(x);
-            return size;
+            i64 sz = sizeof(x);
+            return sz;
         }
     )";
 
@@ -170,7 +181,8 @@ TEST(Intrinsics, SizeofF64) {
 // Note: Type<Args>.staticMethod() syntax not yet supported by parser,
 // so we test sizeof on instances of monomorphized generic structs instead.
 
-TEST(Intrinsics, SizeofGenericStructI32) {
+TEST(Intrinsics, SizeofGenericStructI32)
+{
     const auto source = R"(
         struct Container<T> {
             T value;
@@ -178,8 +190,8 @@ TEST(Intrinsics, SizeofGenericStructI32) {
 
         i32 main() {
             Container<i32> c = { 42 };
-            i64 size = sizeof(c);
-            return size;
+            i64 sz = sizeof(c);
+            return sz;
         }
     )";
 
@@ -188,7 +200,8 @@ TEST(Intrinsics, SizeofGenericStructI32) {
     EXPECT_EQ(result.returnCode, 4); // sizeof(Container<i32>) = sizeof(i32) = 4
 }
 
-TEST(Intrinsics, SizeofGenericStructI64) {
+TEST(Intrinsics, SizeofGenericStructI64)
+{
     const auto source = R"(
         struct Container<T> {
             T value;
@@ -196,8 +209,8 @@ TEST(Intrinsics, SizeofGenericStructI64) {
 
         i32 main() {
             Container<i64> c = { 100 };
-            i64 size = sizeof(c);
-            return size;
+            i64 sz = sizeof(c);
+            return sz;
         }
     )";
 
@@ -206,7 +219,8 @@ TEST(Intrinsics, SizeofGenericStructI64) {
     EXPECT_EQ(result.returnCode, 8); // sizeof(Container<i64>) = sizeof(i64) = 8
 }
 
-TEST(Intrinsics, SizeofGenericStructPoint) {
+TEST(Intrinsics, SizeofGenericStructPoint)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -219,8 +233,8 @@ TEST(Intrinsics, SizeofGenericStructPoint) {
 
         i32 main() {
             Container<Point> c = { { 1, 2 } };
-            i64 size = sizeof(c);
-            return size;
+            i64 sz = sizeof(c);
+            return sz;
         }
     )";
 

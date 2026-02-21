@@ -43,18 +43,23 @@ void Generator::pop_scope()
 void Generator::generate()
 {
     // PASS 0: Register short-name aliases for namespaced symbols
+    LOG_DEBUG("[generator] PASS 0: registering aliases from %zu symbols", symbols->symbols().size());
     for (const auto& [name, sym] : symbols->symbols())
     {
         if (const auto pos = name.rfind("::"); pos != std::string::npos)
         {
             const std::string shortName = name.substr(pos + 2);
+            LOG_DEBUG("[generator]   alias: '%s' -> '%s'", shortName.c_str(), name.c_str());
             currentScope->define_alias(shortName, name);
         }
     }
 
     // PASS 1: Forward declare all structs (create opaque types)
-    for (const auto& sym : symbols->get_all_structs())
+    const auto allStructs = symbols->get_all_structs();
+    LOG_DEBUG("[generator] PASS 1: forward declaring %zu structs", allStructs.size());
+    for (const auto& sym : allStructs)
     {
+        LOG_DEBUG("[generator]   forward declare struct: '%s'", sym->name.c_str());
         forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(sym));
         generatedStructs++;
     }
@@ -239,6 +244,7 @@ std::string Generator::print() const
 
     if (llvm::verifyModule(*module, &errorStream))
     {
+        LOG_ERROR("LLVM module verification failed:\n%s", errorStr.c_str());
         return "Erro: módulo inválido\n" + errorStr;
     }
 

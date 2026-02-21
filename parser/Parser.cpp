@@ -10,6 +10,8 @@
 #include <llvm/Support/CommandLine.h>
 #include <cassert>
 
+#include "../utils/Logger.h"
+
 
 #define PARSER_ERROR(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
@@ -46,6 +48,7 @@ Parser::Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics) : token
 
 void Parser::registerKnownType(const std::string& name)
 {
+    LOG_DEBUG("[parser] registerKnownType: '%s'", name.c_str());
     currentScope->define_struct(name, Type::struct_type(name));
 }
 
@@ -380,6 +383,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     }
 
     popScope();
+    LOG_DEBUG("[parser] method declared: '%s' with %zu params%s",
+              method->name.token_name.c_str(), method->parameters.size(),
+              method->isConstructorMethod ? " (constructor)" : "");
     return method;
 }
 
@@ -492,6 +498,8 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     }
 
     currentScope->define_struct(name.token_name, Type::struct_type(name.token_name));
+    LOG_DEBUG("[parser] struct declared: '%s'%s", name.token_name.c_str(),
+              genericParams.empty() ? "" : " (generic)");
 
     // Register generic param names as types within struct scope for field parsing
     if (!genericParams.empty())
@@ -611,6 +619,9 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
         }
     }
 
+    LOG_DEBUG("[parser] struct '%s' parsed: %zu fields, %zu methods, %zu properties",
+              name.token_name.c_str(), fields.size(), methods.size(), structDecl_properties.size());
+
     auto structDecl = std::make_unique<StructDeclaration>(std::move(name), std::move(genericParams), std::move(fields));
     structDecl->properties = std::move(structDecl_properties);
     structDecl->methods = std::move(methods);
@@ -714,6 +725,7 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes()
 
 std::unique_ptr<Program> Parser::parse(const std::string& program_name)
 {
+    LOG_DEBUG("[parser] === parsing program: '%s' ===", program_name.c_str());
     auto program = std::make_unique<Program>(program_name);
 
     while (!isAtEnd())
@@ -740,6 +752,7 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                     if (match(TokenType::SEMICOLON))
                     {
                         program->fileNamespace = qualified_name.toString();
+                        LOG_DEBUG("[parser] namespace: '%s'", program->fileNamespace.c_str());
                         continue;
                     }
                     current = saved;
@@ -789,6 +802,9 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
         }
     }
 
+    LOG_DEBUG("[parser] === done parsing '%s': %zu structs, %zu enums, %zu functions, %zu imports, ns='%s' ===",
+              program_name.c_str(), program->structs.size(), program->enums.size(),
+              program->functions.size(), program->imports.size(), program->fileNamespace.c_str());
     return program;
 }
 
@@ -815,6 +831,7 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
 
     popScope();
 
+    LOG_DEBUG("[parser] function declared: '%s' with %zu params", nameToken.value.c_str(), params.size());
     return std::make_unique<FunctionDeclaration>(std::move(returnType), makeSourceIdentifier(nameToken), params,
                                                  std::move(body));
 }
@@ -1428,6 +1445,10 @@ std::unique_ptr<Expression> Parser::parse_primary()
             if (isArray) varType = Type::array(std::move(varType));
 
             currentScope->define_variable(varName.token_name, varType);
+            LOG_DEBUG(
+                "[parser] variable declared: '%s' type='%s' (knownType=%d, declaredStruct=%d, primitive=%d, isArray=%d, ptr=%d, inference=%d)",
+                varName.token_name.c_str(), firstToken.value.c_str(),
+                isKnownType, isDeclaredStruct, isPrimitive, isArray, pointerDepth, isTypeInference);
 
             if (match(TokenType::EQUAL))
             {
@@ -1813,9 +1834,13 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum()
         }
 
         expect("Esperado } após declaração de enum", TokenType::RBRACE);
+        LOG_DEBUG("[parser] enum declared: '%s' with %zu variants%s", identifierToken.value.c_str(),
+                  values.size(), genericParams.empty() ? "" : " (generic)");
         return std::make_unique<EnumDeclaration>(makeSourceIdentifier(identifierToken), std::move(genericParams),
                                                  values);
     }
+    LOG_DEBUG("[parser] enum declared: '%s' (empty)%s", identifierToken.value.c_str(),
+              genericParams.empty() ? "" : " (generic)");
     return std::make_unique<EnumDeclaration>(makeSourceIdentifier(identifierToken), std::move(genericParams),
                                              std::vector<EnumValueDeclaration>{});
 }

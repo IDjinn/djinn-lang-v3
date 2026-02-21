@@ -585,11 +585,17 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
     return value;
 }
 
-static bool is_slice_struct(llvm::StructType* st)
+bool Generator::is_slice_struct(llvm::StructType* st)
 {
     if (!st || !st->hasName()) return false;
     auto name = st->getName();
-    return name == "str" || name.starts_with("_ZN3arr");
+    // Match both short names (str, _ZN3arr...) and qualified names (std::types::str, _ZN15std::types::arrI...E)
+    if (name == "str" || name == "std::types::str" || name.ends_with("::str"))
+        return true;
+    // Mangled arr<T>: _ZN3arrI...E (unqualified) or _ZN15std::types::arrI...E (qualified)
+    if (name.starts_with("_ZN") && name.contains("arrI"))
+        return true;
+    return false;
 }
 
 llvm::Value* Generator::coerce_str_to_ptr(llvm::Value* value)
@@ -599,7 +605,7 @@ llvm::Value* Generator::coerce_str_to_ptr(llvm::Value* value)
     {
         if (auto* st = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
         {
-            if (is_slice_struct(st))
+            if (Generator::is_slice_struct(st))
             {
                 auto* gep = builder->CreateStructGEP(st, alloca, 0, "slice.data");
                 return builder->CreateLoad(builder->getPtrTy(), gep, "slice_ptr");
@@ -609,7 +615,7 @@ llvm::Value* Generator::coerce_str_to_ptr(llvm::Value* value)
     // Case 2: loaded struct value (from generate_identifier)
     if (auto* st = llvm::dyn_cast<llvm::StructType>(value->getType()))
     {
-        if (is_slice_struct(st))
+        if (Generator::is_slice_struct(st))
         {
             auto* tmp = builder->CreateAlloca(st, nullptr, "slice_tmp");
             builder->CreateStore(value, tmp);

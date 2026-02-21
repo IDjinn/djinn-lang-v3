@@ -3,13 +3,17 @@
 //
 
 #include "../Generator.h"
+#include "../../utils/Logger.h"
 
 llvm::Value* Generator::generate_string_literal(const StringLiteral& expr)
 {
     const std::string resolved = currentScope->resolve_alias("str");
+    LOG_DEBUG("[generator] string literal: value='%.20s...' resolved_alias='%s'",
+              expr.value.c_str(), resolved.c_str());
     StructDef* strDef = currentScope->lookup_struct(resolved);
     if (!strDef || !strDef->llvmType)
     {
+        LOG_DEBUG("[generator]   FAILED: str struct not found (strDef=%p)", (void*)strDef);
         throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
                            "tipo 'str' nao encontrado. Adicione: import std::types;");
     }

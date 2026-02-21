@@ -13,11 +13,6 @@
 TEST(Str, LiteralCreatesStrStruct)
 {
     const auto source = R"(
-
-        extern "C" {
-            i32 printf(i8* format, ...);
-        }
-
         i32 main() {
             str s = "hello";
             return s.len;
@@ -47,11 +42,6 @@ TEST(Str, EmptyLiteral)
 TEST(Str, CoercionToI8PtrForPrintf)
 {
     const auto source = R"(
-
-        extern "C" {
-            i32 printf(i8* format, ...);
-        }
-
         i32 main() {
             str s = "hello";
             printf("%s", s);
@@ -258,7 +248,7 @@ TEST(Arr, SumElements)
 
         i32 main() {
             i32[] nums = [10, 20, 30, 40];
-            i32 sum = 0;
+            mut i32 sum = 0;
             for (mut i32 i = 0; i < nums.len; i = i + 1) {
                 sum = sum + nums[i];
             }
@@ -274,11 +264,6 @@ TEST(Arr, SumElements)
 TEST(Arr, WithPrintf)
 {
     const auto source = R"(
-
-        extern "C" {
-            i32 printf(i8* format, ...);
-        }
-
         i32 main() {
             i32[] nums = [5, 10, 15];
             printf("len: %d\n", nums.len);

@@ -4,9 +4,11 @@
 //
 
 #include "../Generator.h"
+#include "../../utils/Logger.h"
 
 llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
 {
+    LOG_DEBUG("[generator] array literal: %zu elements", expr.elements.size());
     if (expr.elements.empty())
     {
         GENERATOR_ERROR(DiagnosticCode::INVALID_OPERATION,
@@ -86,7 +88,10 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
 
     // Try to build arr<T> slice struct
     const std::string arrName = currentScope->resolve_alias("arr");
+    LOG_DEBUG("[generator]   resolve_alias('arr') = '%s'", arrName.c_str());
     StructDef* arrBaseDef = currentScope->lookup_struct(arrName);
+    LOG_DEBUG("[generator]   lookup_struct('%s') = %p (isGeneric=%d)",
+              arrName.c_str(), (void*)arrBaseDef, arrBaseDef ? arrBaseDef->isGeneric : -1);
     if (arrBaseDef && arrBaseDef->isGeneric)
     {
         // Determine the element Type for monomorphization
@@ -122,6 +127,8 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
         const std::string mangledName = Mangler::mangle_generic_struct(arrName, typeArgs);
         StructDef* sliceDef = currentScope->lookup_struct(mangledName);
 
+        LOG_DEBUG("[generator]   monomorphize arr<%s>: mangledName='%s' sliceDef=%p sliceType=%p",
+                  mangledName.c_str(), mangledName.c_str(), (void*)sliceDef, (void*)sliceType);
         if (sliceDef && sliceType)
         {
             auto* sliceAlloca = builder->CreateAlloca(sliceType, nullptr, "arr_lit");

@@ -129,8 +129,6 @@ file(GLOB_RECURSE DJINN_HEADERS
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Define source root for logger relative paths
-add_compile_definitions(SOURCE_ROOT="${CMAKE_SOURCE_DIR}/")
 
 message(STATUS "LIBXML2_INCLUDE_DIR = ${LIBXML2_INCLUDE_DIR}")
 message(STATUS "LIBXML2_LIBRARY = ${LIBXML2_LIBRARY}")

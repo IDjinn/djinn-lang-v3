@@ -20,6 +20,21 @@
 #include "utils/Logger.h"
 #include "utils/StopWatch.h"
 
+// Resolve std library path: try the given path first, then try relative to this source file
+static std::filesystem::path resolve_std_path(const std::filesystem::path& given)
+{
+    namespace fs = std::filesystem;
+    if (fs::exists(given)) return given;
+
+    // Fallback: resolve relative to this source file's directory (project root)
+    const fs::path thisFile(__FILE__);
+    const auto projectRoot = thisFile.parent_path();
+    const auto candidate = projectRoot / "std";
+    if (fs::exists(candidate)) return candidate;
+
+    return given;
+}
+
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
 {
     utils::StopWatch global_watch("build time");
@@ -30,71 +45,103 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
     DiagnosticEngine diagnostics;
     std::vector<std::shared_ptr<Program>> programs;
 
+    // Prelude type names (from std::types) available to all parsers
+    std::vector<std::string> preludeTypeNames;
     std::vector<std::string> stdTypeNames;
 
-    const auto parseDirectory = [&](const fs::path& dir, const bool isStdLib)
+    const auto parseFile = [&](const fs::path& filePath, const bool registerPrelude, const bool isUserCode)
     {
-        if (!fs::exists(dir)) return;
+        std::ifstream file(filePath);
+        if (!file) return;
 
-        for (const auto& entry : fs::recursive_directory_iterator(dir))
+        const auto source = std::string(
+            std::istreambuf_iterator(file),
+            std::istreambuf_iterator<char>()
+        );
+
+        auto file_name = filePath.string();
+        diagnostics.registerSource(file_name, source);
+
+        Lexer lexer(source, file_name);
+        const auto tokens = lexer.tokenize();
+
+        Parser parser(tokens, diagnostics);
+
+        // Register prelude types for std lib and user code parsers
+        if (registerPrelude)
         {
-            try
-            {
-                if (!entry.is_regular_file()) continue;
-                if (entry.path().extension() != ".djinn") continue;
-
-                std::ifstream file(entry.path());
-                if (!file) continue;
-
-                const auto source = std::string(
-                    std::istreambuf_iterator(file),
-                    std::istreambuf_iterator<char>()
-                );
-
-                auto file_name = entry.path().string();
-                diagnostics.registerSource(file_name, source);
-
-                Lexer lexer(source, file_name);
-                const auto tokens = lexer.tokenize();
-
-                Parser parser(tokens, diagnostics);
-
-                // Pre-register std library types for user code parsers
-                if (!isStdLib)
-                {
-                    for (const auto& name : stdTypeNames)
-                        parser.registerKnownType(name);
-                }
-
-                auto program = parser.parse(file_name);
-
-                if (options.print_ast && !isStdLib)
-                {
-                    std::ostringstream oss;
-                    oss << "=====AST [" << file_name << "]=====\n";
-                    program->print(oss);
-                    oss << "=====";
-                    LOG_DEBUG("%s", oss.str().c_str());
-                }
-
-                programs.emplace_back(std::move(program));
-            }
-            catch (const CompileError& compile_error)
-            {
-                LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
-            }
+            for (const auto& name : preludeTypeNames)
+                parser.registerKnownType(name);
         }
+        // Register all std types for user code parsers
+        if (isUserCode)
+        {
+            for (const auto& name : stdTypeNames)
+                parser.registerKnownType(name);
+        }
+
+        auto program = parser.parse(file_name);
+
+        if (options.print_ast && isUserCode)
+        {
+            std::ostringstream oss;
+            oss << "=====AST [" << file_name << "]=====\n";
+            program->print(oss);
+            oss << "=====";
+            LOG_DEBUG("%s", oss.str().c_str());
+        }
+
+        programs.emplace_back(std::move(program));
     };
 
     try
     {
         // Load standard library first if enabled
-        if (options.includeStd && fs::exists(options.stdLibPath))
+        const auto stdLibPath = resolve_std_path(options.stdLibPath);
+        if (options.includeStd && fs::exists(stdLibPath))
         {
-            parseDirectory(options.stdLibPath, true);
+            // Phase 1: Parse prelude (std/types/types.djinn) first
+            const auto preludePath = fs::path(stdLibPath) / "types" / "types.djinn";
+            if (fs::exists(preludePath))
+            {
+                try
+                {
+                    parseFile(preludePath, false, false);
+                    // Collect prelude type names
+                    if (!programs.empty())
+                    {
+                        const auto& preludeProgram = programs.back();
+                        for (const auto& s : preludeProgram->structs) preludeTypeNames.push_back(s->name.token_name);
+                        for (const auto& e : preludeProgram->enums) preludeTypeNames.push_back(e->name.token_name);
+                    }
+                }
+                catch (const CompileError& compile_error)
+                {
+                    LOG_ERROR("Error parsing prelude: %s", compile_error.message().c_str());
+                }
+            }
+
+            // Phase 2: Parse remaining std library files (with prelude types registered)
+            for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
+            {
+                try
+                {
+                    if (!entry.is_regular_file()) continue;
+                    if (entry.path().extension() != ".djinn") continue;
+
+                    // Skip prelude — already parsed
+                    if (fs::exists(preludePath) && fs::equivalent(entry.path(), preludePath)) continue;
+
+                    parseFile(entry.path(), true, false);
+                }
+                catch (const CompileError& compile_error)
+                {
+                    LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
+                }
+            }
         }
 
-        // Collect std library type names for user code parsers
+        // Collect all std library type names for user code parsers
         for (const auto& prog : programs)
         {
             for (const auto& s : prog->structs) stdTypeNames.push_back(s->name.token_name);
@@ -102,7 +149,22 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         }
 
         // Load user code
-        parseDirectory(path, false);
+        if (fs::exists(path))
+        {
+            for (const auto& entry : fs::recursive_directory_iterator(path))
+            {
+                try
+                {
+                    if (!entry.is_regular_file()) continue;
+                    if (entry.path().extension() != ".djinn") continue;
+                    parseFile(entry.path(), true, true);
+                }
+                catch (const CompileError& compile_error)
+                {
+                    LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
+                }
+            }
+        }
 
         if (programs.empty())
         {
@@ -189,15 +251,63 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
     try
     {
+        // Prelude type names collected from std::types (available to all parsers)
+        std::vector<std::string> preludeTypeNames;
+
+        auto stdLibPath = resolve_std_path(options.stdLibPath);
+
         // Load standard library first if enabled
-        if (options.includeStd && fs::exists(options.stdLibPath))
+        if (options.includeStd && fs::exists(stdLibPath))
         {
-            for (const auto& entry : fs::recursive_directory_iterator(options.stdLibPath))
+            // Phase 1: Parse prelude (std/types/types.djinn) first
+            const auto preludePath = fs::path(stdLibPath) / "types" / "types.djinn";
+            if (fs::exists(preludePath))
+            {
+                try
+                {
+                    std::ifstream file(preludePath);
+                    if (file)
+                    {
+                        const auto stdSource = std::string(
+                            std::istreambuf_iterator(file),
+                            std::istreambuf_iterator<char>()
+                        );
+
+                        auto file_id = preludePath.string();
+                        diagnostics.registerSource(file_id, stdSource);
+
+                        Lexer lexer(stdSource);
+                        const auto tokens = lexer.tokenize();
+
+                        Parser parser(tokens, diagnostics);
+                        auto program = parser.parse(file_id);
+
+                        // Collect prelude type names for subsequent parsers
+                        for (const auto& s : program->structs) preludeTypeNames.push_back(s->name.token_name);
+                        for (const auto& e : program->enums) preludeTypeNames.push_back(e->name.token_name);
+
+                        programs.emplace_back(std::move(program));
+                    }
+                }
+                catch (const CompileError& compile_error)
+                {
+                    if (!options.silentMode)
+                    {
+                        LOG_ERROR("Error parsing prelude: %s", compile_error.message().c_str());
+                    }
+                }
+            }
+
+            // Phase 2: Parse remaining std library files (with prelude types registered)
+            for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
             {
                 try
                 {
                     if (!entry.is_regular_file()) continue;
                     if (entry.path().extension() != ".djinn") continue;
+
+                    // Skip prelude — already parsed
+                    if (fs::equivalent(entry.path(), preludePath)) continue;
 
                     std::ifstream file(entry.path());
                     if (!file) continue;
@@ -214,6 +324,10 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                     const auto tokens = lexer.tokenize();
 
                     Parser parser(tokens, diagnostics);
+                    // Register prelude types so other std files can use them
+                    for (const auto& name : preludeTypeNames)
+                        parser.registerKnownType(name);
+
                     auto program = parser.parse(file_id);
 
                     programs.emplace_back(std::move(program));
@@ -237,7 +351,9 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         Parser parser(tokens, diagnostics);
 
-        // Pre-register std library types so parser recognizes them
+        // Pre-register prelude + std library types so parser recognizes them
+        for (const auto& name : preludeTypeNames)
+            parser.registerKnownType(name);
         for (const auto& prog : programs)
         {
             for (const auto& s : prog->structs) parser.registerKnownType(s->name.token_name);

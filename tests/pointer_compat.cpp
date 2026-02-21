@@ -5,11 +5,6 @@
 TEST(PointerCompat, VoidToTyped)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-            void free(void* ptr);
-        }
-
         i32 main() {
             i32* data = malloc(4);
             data[0] = 42;
@@ -64,10 +59,6 @@ TEST(PointerCompat, IncompatibleTypes)
 TEST(PointerCompat, IncompatibleTypesHumanReadableMessage)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-        }
-
         i32 main() {
             i64* data = malloc(8);
             i32* wrong = data;
@@ -82,11 +73,6 @@ TEST(PointerCompat, IncompatibleTypesHumanReadableMessage)
 TEST(PointerCompat, SameType)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-            void free(void* ptr);
-        }
-
         i32 main() {
             i32* a = malloc(4);
             i32* b = a;

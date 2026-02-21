@@ -6,13 +6,15 @@
 
 #include "../utils/Logger.h"
 
-Binder::Binder(DiagnosticEngine &diagnostics)
-    : _diagnostics(diagnostics) {
+Binder::Binder(DiagnosticEngine& diagnostics)
+    : _diagnostics(diagnostics)
+{
     _global_scope = std::make_shared<ScopedSymbolTable>();
     _current_scope = _global_scope;
 }
 
-BindingResult Binder::bind(const Program &program) {
+BindingResult Binder::bind(const Program& program)
+{
     BindingResult result;
     result.globalScope = _global_scope;
 
@@ -24,7 +26,8 @@ BindingResult Binder::bind(const Program &program) {
     return result;
 }
 
-BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &programs) {
+BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& programs)
+{
     BindingResult result;
     result.globalScope = _global_scope;
 
@@ -76,21 +79,55 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
         }
     }
 
-    for (const auto &program: programs) {
-        LOG_TRACE("collecting declarations of program %s", program->name.c_str());
-        collectDeclarations(*program);
-        LOG_TRACE("end of collecting declarations");
+    // Prelude pass: collect std::types declarations first and create aliases immediately
+    // This ensures prelude types (str, arr, string, bool, size, etc.) are available
+    // for all subsequent binding phases.
+    for (const auto& program : programs)
+    {
+        if (program->fileNamespace == "std::types")
+        {
+            LOG_DEBUG("[binder] PRELUDE: collecting declarations for '%s' (structs=%zu, enums=%zu)",
+                      program->name.c_str(), program->structs.size(), program->enums.size());
+            collectDeclarations(*program);
+
+            // Create short-name aliases for prelude types immediately
+            const std::vector<std::pair<std::string, std::shared_ptr<Symbol>>> snapshot(
+                _global_scope->symbols().begin(), _global_scope->symbols().end());
+            for (const auto& [name, symbol] : snapshot)
+            {
+                if (!name.starts_with("std::types::")) continue;
+                const auto shortName = name.substr(std::string("std::types::").length());
+                if (shortName.find("::") != std::string::npos) continue;
+                if (!_global_scope->isDefinedLocally(shortName))
+                {
+                    LOG_DEBUG("[binder]   prelude alias: '%s' -> '%s'", shortName.c_str(), name.c_str());
+                    _global_scope->defineAlias(shortName, symbol);
+                }
+            }
+            break;
+        }
     }
 
-    for (const auto &program: programs) {
+    // Collect remaining declarations (skip std::types, already done)
+    for (const auto& program : programs)
+    {
+        if (program->fileNamespace == "std::types") continue;
+        LOG_DEBUG("[binder] collecting declarations: '%s' (ns='%s', structs=%zu, enums=%zu, functions=%zu)",
+                  program->name.c_str(), program->fileNamespace.c_str(),
+                  program->structs.size(), program->enums.size(), program->functions.size());
+        collectDeclarations(*program);
+    }
+
+    LOG_DEBUG("[binder] total symbols after collection: %zu", _global_scope->symbols().size());
+
+    for (const auto& program : programs)
+    {
         LOG_TRACE("processing imports of program %s", program->name.c_str());
         processImports(*program);
         LOG_TRACE("end of processing imports");
     }
 
-    // Prelude: ensure all namespaced symbols have short-name aliases.
-    // This covers std::types (str, string, bool, size, etc.) and any other namespaced types.
-    // Uses a snapshot to avoid modifying the map during iteration.
+    // Ensure ALL namespaced symbols have short-name aliases (covers non-prelude std types too)
     {
         const std::vector<std::pair<std::string, std::shared_ptr<Symbol>>> snapshot(
             _global_scope->symbols().begin(), _global_scope->symbols().end());
@@ -101,13 +138,15 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
                 const std::string shortName = name.substr(pos + 2);
                 if (!_global_scope->isDefinedLocally(shortName))
                 {
+                    LOG_DEBUG("[binder]   alias: '%s' -> '%s'", shortName.c_str(), name.c_str());
                     _global_scope->defineAlias(shortName, symbol);
                 }
             }
         }
     }
 
-    for (const auto &program: programs) {
+    for (const auto& program : programs)
+    {
         LOG_TRACE("binding program %s", program->name.c_str());
         bindProgram(*program);
         LOG_TRACE("end of binding program");
@@ -118,14 +157,17 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
     return result;
 }
 
-void Binder::pushScope() {
+void Binder::pushScope()
+{
     _current_scope = _current_scope->createChildScope();
     _ownership.pushScope();
 }
 
-void Binder::popScope() {
+void Binder::popScope()
+{
     _ownership.popScope();
-    if (const auto parent = _current_scope->parentScope()) {
+    if (const auto parent = _current_scope->parentScope())
+    {
         _current_scope = parent;
     }
 }

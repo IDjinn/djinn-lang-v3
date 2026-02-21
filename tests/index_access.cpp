@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(IndexAccess, BasicRead) {
+TEST(IndexAccess, BasicRead)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);
@@ -25,7 +26,8 @@ TEST(IndexAccess, BasicRead) {
     EXPECT_EQ(result.returnCode, 20);
 }
 
-TEST(IndexAccess, Write) {
+TEST(IndexAccess, Write)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);
@@ -46,7 +48,8 @@ TEST(IndexAccess, Write) {
     EXPECT_EQ(result.returnCode, 42);
 }
 
-TEST(IndexAccess, WithMalloc) {
+TEST(IndexAccess, WithMalloc)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);
@@ -54,13 +57,13 @@ TEST(IndexAccess, WithMalloc) {
         }
 
         i32 main() {
-            i32* arr = malloc(20);
+            i32* nums = malloc(20);
             for (mut i32 i = 0; i < 5; i = i + 1) {
-                arr[i] = i * 10;
+                nums[i] = i * 10;
             }
-            i32 result = arr[3];
-            free(arr);
-            return result;
+            i32 res = nums[3];
+            free(nums);
+            return res;
         }
     )";
 
@@ -69,7 +72,8 @@ TEST(IndexAccess, WithMalloc) {
     EXPECT_EQ(result.returnCode, 30);
 }
 
-TEST(IndexAccess, I8Pointer) {
+TEST(IndexAccess, I8Pointer)
+{
     const auto source = R"(
         extern "C" {
             void* malloc(i64 size);

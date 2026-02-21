@@ -104,8 +104,8 @@ TEST(Struct, MethodReturnWithBraceInit) {
         }
 
         i32 main() {
-            auto result = sum(10, 20);
-            return result.value;
+            auto res = sum(10, 20);
+            return res.value;
         }
     )";
 

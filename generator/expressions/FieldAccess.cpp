@@ -3,57 +3,95 @@
 //
 
 #include "../Generator.h"
+#include "../../utils/Logger.h"
 
-llvm::Value *Generator::generate_field_access(const FieldAccess &expr) {
-    if (auto *ident = dynamic_cast<const Identifier *>(expr.object.get())) {
+llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
+{
+    if (auto* ident = dynamic_cast<const Identifier*>(expr.object.get()))
+    {
+        LOG_DEBUG("[generator] field access: '%s.%s'", ident->identifier.token_name.c_str(),
+                  expr.fieldName.token_name.c_str());
         const auto alloca = currentScope->lookup_variable(ident->identifier.token_name);
-        if (!alloca) {
+        if (!alloca)
+        {
+            LOG_DEBUG("[generator]   variable '%s' NOT found in scope", ident->identifier.token_name.c_str());
             throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE,
                                "variável não encontrada: " + ident->identifier.token_name);
         }
 
         std::string structName;
-        llvm::StructType *structType = nullptr;
-        llvm::Value *basePtr = alloca;
+        llvm::StructType* structType = nullptr;
+        llvm::Value* basePtr = alloca;
 
         if (const std::string varStructType = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
             varStructType.
-            empty()) {
-            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy()) {
+            empty())
+        {
+            LOG_DEBUG("[generator]   lookup_variable_struct_type('%s') = EMPTY", ident->identifier.token_name.c_str());
+            LOG_DEBUG("[generator]   alloca type: isPtr=%d isStruct=%d isInt=%d",
+                      alloca->getAllocatedType()->isPointerTy(),
+                      alloca->getAllocatedType()->isStructTy(),
+                      alloca->getAllocatedType()->isIntegerTy());
+            if (alloca->getAllocatedType()->isStructTy())
+            {
+                if (auto* st = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
+                {
+                    LOG_DEBUG("[generator]   LLVM struct type name: '%s'", st->getName().str().c_str());
+                }
+            }
+            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy())
+            {
                 basePtr = builder->CreateLoad(allocatedType, alloca, ident->identifier.token_name);
-                throw CompileError(DiagnosticCode::NOT_A_STRUCT,
-                                   "variável não é uma struct: " + ident->identifier.token_name);
-            } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
-                structType = llvmStructType;
-                structName = llvmStructType->getName().str();
-            } else {
+                LOG_DEBUG("[generator]   FAILED: pointer type, throwing NOT_A_STRUCT for '%s'",
+                          ident->identifier.token_name.c_str());
                 throw CompileError(DiagnosticCode::NOT_A_STRUCT,
                                    "variável não é uma struct: " + ident->identifier.token_name);
             }
-        } else {
+            else if (auto* llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType))
+            {
+                structType = llvmStructType;
+                structName = llvmStructType->getName().str();
+            }
+            else
+            {
+                throw CompileError(DiagnosticCode::NOT_A_STRUCT,
+                                   "variável não é uma struct: " + ident->identifier.token_name);
+            }
+        }
+        else
+        {
             structName = varStructType;
-            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy()) {
+            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy())
+            {
                 basePtr = builder->CreateLoad(allocatedType, alloca, ident->identifier.token_name);
                 structType = currentScope->get_llvm_struct(structName);
-            } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+            }
+            else if (auto* llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType))
+            {
                 structType = llvmStructType;
-            } else {
+            }
+            else
+            {
                 structType = currentScope->get_llvm_struct(structName);
             }
         }
 
         const auto fieldIndicesName = structType ? structType->getName().str() : structName;
-        if (const auto propInfo = currentScope->get_property(fieldIndicesName, expr.fieldName.token_name)) {
-            if (!propInfo->hasGetter) {
+        if (const auto propInfo = currentScope->get_property(fieldIndicesName, expr.fieldName.token_name))
+        {
+            if (!propInfo->hasGetter)
+            {
                 throw CompileError(DiagnosticCode::INVALID_OPERATION,
                                    "property '" + expr.fieldName.token_name + "' does not have a getter (write-only)");
             }
 
             const std::string getterName = fieldIndicesName + "__get_" + expr.fieldName.token_name;
-            if (const auto it = functions.find(getterName); it != functions.end()) {
+            if (const auto it = functions.find(getterName); it != functions.end())
+            {
                 const auto getter = it->second;
                 auto thisPtr = basePtr;
-                if (!basePtr->getType()->isPointerTy()) {
+                if (!basePtr->getType()->isPointerTy())
+                {
                     thisPtr = alloca;
                 }
 
@@ -61,81 +99,104 @@ llvm::Value *Generator::generate_field_access(const FieldAccess &expr) {
             }
         }
 
-        const auto *fieldIndices = currentScope->get_field_indices(fieldIndicesName);
-        if (!fieldIndices) {
+        const auto* fieldIndices = currentScope->get_field_indices(fieldIndicesName);
+        if (!fieldIndices)
+        {
             throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
         }
 
         const auto fieldIt = fieldIndices->find(expr.fieldName.token_name);
-        if (fieldIt == fieldIndices->end()) {
+        if (fieldIt == fieldIndices->end())
+        {
             throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + expr.fieldName.token_name);
         }
 
         const unsigned fieldIdx = fieldIt->second;
-        auto *fieldPtr = builder->CreateStructGEP(structType, basePtr, fieldIdx, expr.fieldName.token_name + "_ptr");
-        llvm::Type *fieldType = structType->getElementType(fieldIdx);
+        auto* fieldPtr = builder->CreateStructGEP(structType, basePtr, fieldIdx, expr.fieldName.token_name + "_ptr");
+        llvm::Type* fieldType = structType->getElementType(fieldIdx);
         return builder->CreateLoad(fieldType, fieldPtr, expr.fieldName.token_name);
     }
 
     throw CompileError(DiagnosticCode::INVALID_OPERATION, "acesso a campo só suportado em identificadores simples");
 }
 
-llvm::Value *Generator::generate_field_assignment(const FieldAssignment &expr) {
-    if (auto *ident = dynamic_cast<const Identifier *>(expr.object.get())) {
+llvm::Value* Generator::generate_field_assignment(const FieldAssignment& expr)
+{
+    if (auto* ident = dynamic_cast<const Identifier*>(expr.object.get()))
+    {
         const auto alloca = currentScope->lookup_variable(ident->identifier.token_name);
-        if (!alloca) {
+        if (!alloca)
+        {
             throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE,
                                "variável não encontrada: " + ident->identifier.token_name);
         }
 
         std::string structName;
-        llvm::StructType *structType = nullptr;
-        llvm::Value *basePtr = alloca;
+        llvm::StructType* structType = nullptr;
+        llvm::Value* basePtr = alloca;
 
         if (const std::string varStructType = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
             varStructType.
-            empty()) {
-            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy()) {
+            empty())
+        {
+            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy())
+            {
                 basePtr = builder->CreateLoad(allocatedType, alloca, "this");
                 structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
-                if (structName.empty()) {
+                if (structName.empty())
+                {
                     throw CompileError(DiagnosticCode::NOT_A_STRUCT,
                                        "variável não é uma struct: " + ident->identifier.token_name);
                 }
                 structType = currentScope->get_llvm_struct(structName);
-            } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+            }
+            else if (auto* llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType))
+            {
                 structType = llvmStructType;
                 structName = llvmStructType->getName().str();
-            } else {
+            }
+            else
+            {
                 throw CompileError(DiagnosticCode::NOT_A_STRUCT,
                                    "variável não é uma struct: " + ident->identifier.token_name);
             }
-        } else {
+        }
+        else
+        {
             structName = varStructType;
-            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy()) {
+            if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy())
+            {
                 basePtr = builder->CreateLoad(allocatedType, alloca, ident->identifier.token_name);
                 structType = currentScope->get_llvm_struct(structName);
-            } else if (auto *llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+            }
+            else if (auto* llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType))
+            {
                 structType = llvmStructType;
-            } else {
+            }
+            else
+            {
                 structType = currentScope->get_llvm_struct(structName);
             }
         }
 
         const auto fieldIndicesName = structType ? structType->getName().str() : structName;
-        if (const PropertyInfo *propInfo = currentScope->get_property(fieldIndicesName, expr.fieldName.token_name)) {
-            if (!propInfo->hasSetter) {
+        if (const PropertyInfo* propInfo = currentScope->get_property(fieldIndicesName, expr.fieldName.token_name))
+        {
+            if (!propInfo->hasSetter)
+            {
                 throw CompileError(DiagnosticCode::INVALID_OPERATION,
                                    "property '" + expr.fieldName.token_name + "' does not have a setter (read-only)");
             }
 
             const auto setterName = fieldIndicesName + "__set_" + expr.fieldName.token_name;
-            if (const auto it = functions.find(setterName); it != functions.end()) {
-                llvm::Function *setter = it->second;
+            if (const auto it = functions.find(setterName); it != functions.end())
+            {
+                llvm::Function* setter = it->second;
                 auto val = generate_expression(*expr.value);
 
-                llvm::Value *thisPtr = basePtr;
-                if (!basePtr->getType()->isPointerTy()) {
+                llvm::Value* thisPtr = basePtr;
+                if (!basePtr->getType()->isPointerTy())
+                {
                     thisPtr = alloca;
                 }
 
@@ -147,25 +208,29 @@ llvm::Value *Generator::generate_field_assignment(const FieldAssignment &expr) {
             }
         }
 
-        const auto *fieldIndices = currentScope->get_field_indices(fieldIndicesName);
-        if (!fieldIndices) {
+        const auto* fieldIndices = currentScope->get_field_indices(fieldIndicesName);
+        if (!fieldIndices)
+        {
             throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName);
         }
 
         const auto fieldIt = fieldIndices->find(expr.fieldName.token_name);
-        if (fieldIt == fieldIndices->end()) {
+        if (fieldIt == fieldIndices->end())
+        {
             throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + expr.fieldName.token_name);
         }
 
         const unsigned fieldIdx = fieldIt->second;
-        if (!basePtr->getType()->isPointerTy() || basePtr == alloca) {
-            if (alloca->getAllocatedType()->isPointerTy()) {
+        if (!basePtr->getType()->isPointerTy() || basePtr == alloca)
+        {
+            if (alloca->getAllocatedType()->isPointerTy())
+            {
                 basePtr = builder->CreateLoad(alloca->getAllocatedType(), alloca, ident->identifier.token_name);
             }
         }
 
-        auto *fieldPtr = builder->CreateStructGEP(structType, basePtr, fieldIdx, expr.fieldName.token_name + "_ptr");
-        llvm::Type *fieldType = structType->getElementType(fieldIdx);
+        auto* fieldPtr = builder->CreateStructGEP(structType, basePtr, fieldIdx, expr.fieldName.token_name + "_ptr");
+        llvm::Type* fieldType = structType->getElementType(fieldIdx);
 
         auto val = generate_expression(*expr.value);
         val = cast_value(val, fieldType);

@@ -6,7 +6,8 @@
 // Basic Ownership Tests - Copy Types
 // ============================================================================
 
-TEST(Ownership, CopyTypesDoNotMove) {
+TEST(Ownership, CopyTypesDoNotMove)
+{
     // Primitive types like i32 are copy types and should not be moved
     const auto source = R"(
         i32 main() {
@@ -21,13 +22,14 @@ TEST(Ownership, CopyTypesDoNotMove) {
     EXPECT_EQ(result.returnCode, 84);
 }
 
-TEST(Ownership, FloatCopyTypes) {
+TEST(Ownership, FloatCopyTypes)
+{
     const auto source = R"(
         i32 main() {
             f64 x = 3.14;
             f64 y = x;
-            i32 result = 1;
-            return result;
+            i32 res = 1;
+            return res;
         }
     )";
 
@@ -36,7 +38,8 @@ TEST(Ownership, FloatCopyTypes) {
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(Ownership, PointerCopyTypes) {
+TEST(Ownership, PointerCopyTypes)
+{
     const auto source = R"(
         i32 main() {
             i32 value = 10;
@@ -55,7 +58,8 @@ TEST(Ownership, PointerCopyTypes) {
 // Move Semantics Tests
 // ============================================================================
 
-TEST(Ownership, StructMoveSemantics) {
+TEST(Ownership, StructMoveSemantics)
+{
     // Non-copy types (structs) should be moved
     const auto source = R"(
         struct Data {
@@ -74,7 +78,8 @@ TEST(Ownership, StructMoveSemantics) {
     EXPECT_EQ(result.returnCode, 100);
 }
 
-TEST(Ownership, UseAfterMove) {
+TEST(Ownership, UseAfterMove)
+{
     // Using a moved value should produce an error
     const auto source = R"(
         struct Data {
@@ -92,7 +97,8 @@ TEST(Ownership, UseAfterMove) {
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
-TEST(Ownership, DoubleMoveError) {
+TEST(Ownership, DoubleMoveError)
+{
     // Moving a variable twice should produce an error
     const auto source = R"(
         struct Data {
@@ -115,7 +121,8 @@ TEST(Ownership, DoubleMoveError) {
 // Reinitialize After Move
 // ============================================================================
 
-TEST(Ownership, ReinitializeAfterMove) {
+TEST(Ownership, ReinitializeAfterMove)
+{
     // Assigning to a moved variable should reinitialize it
     const auto source = R"(
         struct Data {
@@ -139,15 +146,16 @@ TEST(Ownership, ReinitializeAfterMove) {
 // Scope Tests
 // ============================================================================
 
-TEST(Ownership, ScopeOwnership) {
+TEST(Ownership, ScopeOwnership)
+{
     const auto source = R"(
         i32 main() {
-            i32 mut result = 0;
+            i32 mut res = 0;
             {
                 i32 x = 10;
-                result = x;
+                res = x;
             }
-            return result;
+            return res;
         }
     )";
 
@@ -156,18 +164,19 @@ TEST(Ownership, ScopeOwnership) {
     EXPECT_EQ(result.returnCode, 10);
 }
 
-TEST(Ownership, NestedScopeOwnership) {
+TEST(Ownership, NestedScopeOwnership)
+{
     const auto source = R"(
         i32 main() {
-            i32 mut result = 0;
+            i32 mut res = 0;
             {
                 i32 a = 1;
                 {
                     i32 b = 2;
-                    result = a + b;
+                    res = a + b;
                 }
             }
-            return result;
+            return res;
         }
     )";
 
@@ -180,7 +189,8 @@ TEST(Ownership, NestedScopeOwnership) {
 // Function Parameter Tests
 // ============================================================================
 
-TEST(Ownership, FunctionParameterCopyType) {
+TEST(Ownership, FunctionParameterCopyType)
+{
     const auto source = R"(
         i32 increment(i32 x) {
             return x + 1;
@@ -188,8 +198,8 @@ TEST(Ownership, FunctionParameterCopyType) {
 
         i32 main() {
             i32 val = 10;
-            i32 result = increment(val);
-            return val + result;  // val is still valid (copy type)
+            i32 res = increment(val);
+            return val + res;  // val is still valid (copy type)
         }
     )";
 
@@ -202,15 +212,16 @@ TEST(Ownership, FunctionParameterCopyType) {
 // Control Flow Tests
 // ============================================================================
 
-TEST(Ownership, IfStatementOwnership) {
+TEST(Ownership, IfStatementOwnership)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 10;
-            i32 mut result = 0;
+            i32 mut res = 0;
             if (x > 5) {
-                result = x;
+                res = x;
             }
-            return result;
+            return res;
         }
     )";
 
@@ -219,7 +230,8 @@ TEST(Ownership, IfStatementOwnership) {
     EXPECT_EQ(result.returnCode, 10);
 }
 
-TEST(Ownership, WhileLoopOwnership) {
+TEST(Ownership, WhileLoopOwnership)
+{
     const auto source = R"(
         i32 main() {
             i32 mut counter = 0;
@@ -237,7 +249,8 @@ TEST(Ownership, WhileLoopOwnership) {
     EXPECT_EQ(result.returnCode, 10); // 0+1+2+3+4
 }
 
-TEST(Ownership, ForLoopOwnership) {
+TEST(Ownership, ForLoopOwnership)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;

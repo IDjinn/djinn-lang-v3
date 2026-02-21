@@ -70,7 +70,7 @@ TEST(Binder, NestedNamespaceQualifiedNames) {
     const auto source = R"(
         namespace std {
             namespace io {
-                i32 read() {
+                i32 read_io() {
                     return 0;
                 }
             }

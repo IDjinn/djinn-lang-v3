@@ -50,7 +50,7 @@ llvm::Value* Generator::extract_slice_data_ptr(llvm::Value* value)
     {
         if (auto* st = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
         {
-            if (st->hasName() && (st->getName() == "str" || st->getName().starts_with("_ZN3arr")))
+            if (is_slice_struct(st))
             {
                 auto* gep = builder->CreateStructGEP(st, alloca, 0, "slice.data");
                 return builder->CreateLoad(builder->getPtrTy(), gep, "slice_ptr");
@@ -60,7 +60,7 @@ llvm::Value* Generator::extract_slice_data_ptr(llvm::Value* value)
     // Case 2: loaded struct value
     if (auto* st = llvm::dyn_cast<llvm::StructType>(value->getType()))
     {
-        if (st->hasName() && (st->getName() == "str" || st->getName().starts_with("_ZN3arr")))
+        if (is_slice_struct(st))
         {
             return builder->CreateExtractValue(value, 0, "slice.data");
         }

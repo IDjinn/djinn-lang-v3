@@ -17,8 +17,8 @@ TEST(Math, Sqrt) {
         }
 
         i32 main() {
-            f64 result = sqrt(16.0);
-            return result;
+            f64 res = sqrt(16.0);
+            return res;
         }
     )";
 
@@ -34,8 +34,8 @@ TEST(Math, SqrtFloat) {
         }
 
         i32 main() {
-            f32 result = sqrtf(25.0);
-            return result;
+            f32 res = sqrtf(25.0);
+            return res;
         }
     )";
 
@@ -51,8 +51,8 @@ TEST(Math, Pow) {
         }
 
         i32 main() {
-            f64 result = pow(2.0, 3.0);
-            return result;
+            f64 res = pow(2.0, 3.0);
+            return res;
         }
     )";
 
@@ -68,8 +68,8 @@ TEST(Math, Floor) {
         }
 
         i32 main() {
-            f64 result = floor(3.7);
-            return result;
+            f64 res = floor(3.7);
+            return res;
         }
     )";
 
@@ -85,8 +85,8 @@ TEST(Math, Ceil) {
         }
 
         i32 main() {
-            f64 result = ceil(3.2);
-            return result;
+            f64 res = ceil(3.2);
+            return res;
         }
     )";
 
@@ -102,8 +102,8 @@ TEST(Math, Round) {
         }
 
         i32 main() {
-            f64 result = round(3.5);
-            return result;
+            f64 res = round(3.5);
+            return res;
         }
     )";
 
@@ -119,8 +119,8 @@ TEST(Math, Fabs) {
         }
 
         i32 main() {
-            f64 result = fabs(-42.0);
-            return result;
+            f64 res = fabs(-42.0);
+            return res;
         }
     )";
 
@@ -136,8 +136,8 @@ TEST(Math, Fmax) {
         }
 
         i32 main() {
-            f64 result = fmax(10.0, 20.0);
-            return result;
+            f64 res = fmax(10.0, 20.0);
+            return res;
         }
     )";
 
@@ -153,8 +153,8 @@ TEST(Math, Fmin) {
         }
 
         i32 main() {
-            f64 result = fmin(10.0, 5.0);
-            return result;
+            f64 res = fmin(10.0, 5.0);
+            return res;
         }
     )";
 
@@ -170,8 +170,8 @@ TEST(Math, Cbrt) {
         }
 
         i32 main() {
-            f64 result = cbrt(27.0);
-            return result;
+            f64 res = cbrt(27.0);
+            return res;
         }
     )";
 
@@ -225,8 +225,8 @@ TEST(Math, Log10) {
         }
 
         i32 main() {
-            f64 result = log10(1000.0);
-            return result;
+            f64 res = log10(1000.0);
+            return res;
         }
     )";
 
@@ -242,8 +242,8 @@ TEST(Math, Log2) {
         }
 
         i32 main() {
-            f64 result = log2(8.0);
-            return result;
+            f64 res = log2(8.0);
+            return res;
         }
     )";
 
@@ -259,8 +259,8 @@ TEST(Math, Fmod) {
         }
 
         i32 main() {
-            f64 result = fmod(10.0, 3.0);
-            return result;
+            f64 res = fmod(10.0, 3.0);
+            return res;
         }
     )";
 
@@ -276,8 +276,8 @@ TEST(Math, Hypot) {
         }
 
         i32 main() {
-            f64 result = hypot(3.0, 4.0);
-            return result;
+            f64 res = hypot(3.0, 4.0);
+            return res;
         }
     )";
 
@@ -293,8 +293,8 @@ TEST(Math, Trunc) {
         }
 
         i32 main() {
-            f64 result = trunc(7.9);
-            return result;
+            f64 res = trunc(7.9);
+            return res;
         }
     )";
 
@@ -310,8 +310,8 @@ TEST(Math, Exp2) {
         }
 
         i32 main() {
-            f64 result = exp2(4.0);
-            return result;
+            f64 res = exp2(4.0);
+            return res;
         }
     )";
 
@@ -329,8 +329,8 @@ TEST(Math, ImportMathSqrt) {
         import std::math;
 
         i32 main() {
-            f64 result = sqrt(49.0);
-            return result;
+            f64 res = sqrt(49.0);
+            return res;
         }
     )";
 
@@ -344,8 +344,8 @@ TEST(Math, ImportMathPow) {
         import std::math;
 
         i32 main() {
-            f64 result = pow(3.0, 2.0);
-            return result;
+            f64 res = pow(3.0, 2.0);
+            return res;
         }
     )";
 
@@ -376,8 +376,8 @@ TEST(Math, ImportMathFloatFunctions) {
         import std::math;
 
         i32 main() {
-            f32 result = sqrtf(36.0);
-            return result;
+            f32 res = sqrtf(36.0);
+            return res;
         }
     )";
 
