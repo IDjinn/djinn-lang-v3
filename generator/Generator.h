@@ -148,7 +148,11 @@ private:
 
     llvm::Value* generate_float_literal(const FloatLiteral& expr) const;
 
-    llvm::Value* generate_string_literal(const StringLiteral& expr) const;
+    llvm::Value* generate_string_literal(const StringLiteral& expr);
+
+    llvm::Value* coerce_str_to_ptr(llvm::Value* value);
+
+    llvm::Value* extract_slice_data_ptr(llvm::Value* value);
 
     llvm::Value* generate_binary_expression(const BinaryExpression& expr);
 

@@ -30,12 +30,20 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
 
     LOG_DEBUG("starting binding programs");
 
-    for (const auto &[name, symbol]: _global_scope->symbols()) {
-        if (const auto pos = name.rfind("::"); pos != std::string::npos) {
-            const std::string shortName = name.substr(pos + 2);
-            if (!_global_scope->isDefinedLocally(shortName)) {
-                LOG_TRACE("defining global alias %s to %s namespace", shortName.c_str(), symbol->name.c_str());
-                _global_scope->defineAlias(shortName, symbol);
+    // Create aliases for any pre-existing namespaced symbols (snapshot to avoid UB)
+    {
+        const std::vector<std::pair<std::string, std::shared_ptr<Symbol>>> existing(
+            _global_scope->symbols().begin(), _global_scope->symbols().end());
+        for (const auto& [name, symbol] : existing)
+        {
+            if (const auto pos = name.rfind("::"); pos != std::string::npos)
+            {
+                const std::string shortName = name.substr(pos + 2);
+                if (!_global_scope->isDefinedLocally(shortName))
+                {
+                    LOG_TRACE("defining global alias %s to %s namespace", shortName.c_str(), symbol->name.c_str());
+                    _global_scope->defineAlias(shortName, symbol);
+                }
             }
         }
     }
@@ -78,6 +86,25 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program> > &prog
         LOG_TRACE("processing imports of program %s", program->name.c_str());
         processImports(*program);
         LOG_TRACE("end of processing imports");
+    }
+
+    // Prelude: ensure all namespaced symbols have short-name aliases.
+    // This covers std::types (str, string, bool, size, etc.) and any other namespaced types.
+    // Uses a snapshot to avoid modifying the map during iteration.
+    {
+        const std::vector<std::pair<std::string, std::shared_ptr<Symbol>>> snapshot(
+            _global_scope->symbols().begin(), _global_scope->symbols().end());
+        for (const auto& [name, symbol] : snapshot)
+        {
+            if (const auto pos = name.rfind("::"); pos != std::string::npos)
+            {
+                const std::string shortName = name.substr(pos + 2);
+                if (!_global_scope->isDefinedLocally(shortName))
+                {
+                    _global_scope->defineAlias(shortName, symbol);
+                }
+            }
+        }
     }
 
     for (const auto &program: programs) {

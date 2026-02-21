@@ -1,19 +1,20 @@
-import std::types;
-import std::collections;
-import std::sys;
-import std::debug;
 
-namespace playground;
+impl i32 {
+    public i32 abs() {
+        if (this < 0) {
+            return 0 - this;
+        }
+        return this;
+    }
 
-i32 main() {
-    array<i32> arr = array<i32>();
-    for (auto mut i = 0; i < 100; i = i + 1) {
-        arr.push(i);
+    public void hello(){
+        printf("world\n");
     }
-    printf("arr hash = %d\n", arr.hash());
-    for (auto mut i = 0; i < 100; i = i + 1) {
-        arr.push(i);
-    }
-    printf("arr hash = %d\n", arr.hash());
-    return 0;
+}
+
+void main() {
+    i32 x = -42;
+    i32 result = x.abs();
+    x.hello();
+    printf("abs(-42) = %d\n", result);
 }

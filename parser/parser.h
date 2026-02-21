@@ -19,6 +19,9 @@ public:
 
     std::unique_ptr<Program> parse(const std::string &program_name);
 
+    // Pre-register type names from standard library so isType() recognizes them
+    void registerKnownType(const std::string& name);
+
 private:
     std::vector<Token> tokens;
     size_t current = 0;

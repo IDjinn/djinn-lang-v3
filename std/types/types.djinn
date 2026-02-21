@@ -18,8 +18,42 @@ enum result<T, E> {
     Error(E)
 }
 
+struct str {
+    i8* data;
+    size len;
+
+    public bool is_empty() {
+        return this.len == 0;
+    }
+
+    public i8* ptr() {
+        return this.data;
+    }
+}
+
+struct arr<T> {
+    T* data;
+    size len;
+
+    public bool is_empty() {
+        return this.len == 0;
+    }
+
+    public i8* ptr() {
+        return this.data;
+    }
+}
+
 struct string {
     i8* data;
-    size size;
-    i32 flags; // contains metadata like static str, expandable etc.
+    size len;
+    size capacity;
+
+    public bool is_empty() {
+        return this.len == 0;
+    }
+
+    public i8* ptr() {
+        return this.data;
+    }
 }

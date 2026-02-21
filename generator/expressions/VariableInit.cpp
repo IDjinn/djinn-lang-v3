@@ -90,83 +90,48 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
         }
     }
 
-    // Handle ArrayLiteral: use declared type to determine element type
+    // Handle ArrayLiteral: delegate to generate_array_literal which produces arr<T> slice
     if (auto* arrayLit = dynamic_cast<const ArrayLiteral*>(expr.value.get()))
     {
-        // Determine element type from declaration (i32[]) or explicit annotation (i32[1,2,3])
+        // Set element type on the literal from the declaration type if not already set
+        if (!arrayLit->elementType && expr.type.kind == TypeKind::ARRAY && expr.type.elementType)
+        {
+            const_cast<ArrayLiteral*>(arrayLit)->elementType = *expr.type.elementType;
+        }
+
+        llvm::Value* initVal = generate_array_literal(*arrayLit);
+
+        // If it returned an arr<T> slice struct alloca, reuse directly
+        if (auto* allocaInit = llvm::dyn_cast<llvm::AllocaInst>(initVal))
+        {
+            if (allocaInit->getAllocatedType()->isStructTy())
+            {
+                allocaInit->setName(expr.name.token_name);
+                std::string structTypeName = allocaInit->getAllocatedType()->getStructName().str();
+                // Track element type for index access
+                llvm::Type* elemType = nullptr;
+                if (expr.type.kind == TypeKind::ARRAY && expr.type.elementType)
+                {
+                    elemType = generate_type(*expr.type.elementType);
+                }
+                else if (arrayLit->elementType)
+                {
+                    elemType = generate_type(*arrayLit->elementType);
+                }
+                currentScope->define_variable(expr.name.token_name, allocaInit, structTypeName, elemType);
+                return allocaInit;
+            }
+        }
+
+        // Fallback: raw pointer result
         llvm::Type* elemType = nullptr;
         if (expr.type.kind == TypeKind::ARRAY && expr.type.elementType)
         {
             elemType = generate_type(*expr.type.elementType);
         }
-        else if (arrayLit->elementType)
-        {
-            elemType = generate_type(*arrayLit->elementType);
-        }
-
-        // Generate element values
-        std::vector<llvm::Value*> elementValues;
-        for (const auto& elem : arrayLit->elements)
-        {
-            llvm::Value* val = generate_expression(*elem);
-            if (!val)
-            {
-                throw CompileError(DiagnosticCode::INVALID_OPERATION,
-                                   "failed to generate array element");
-            }
-            elementValues.push_back(val);
-        }
-
-        // Fallback: infer from first element if no type info available
-        if (!elemType && !elementValues.empty())
-        {
-            elemType = elementValues[0]->getType();
-        }
-
-        const uint64_t numElements = elementValues.size();
-        llvm::Type* arrayType = llvm::ArrayType::get(elemType, numElements);
-        llvm::Value* arrPtr;
-
-        if (arrayLit->isHeap)
-        {
-            // Heap allocation via malloc
-            llvm::Function* mallocFunc = module->getFunction("malloc");
-            if (!mallocFunc)
-            {
-                llvm::FunctionType* mallocTy = llvm::FunctionType::get(
-                    builder->getPtrTy(), {builder->getInt64Ty()}, false);
-                mallocFunc = llvm::Function::Create(
-                    mallocTy, llvm::Function::ExternalLinkage, "malloc", module.get());
-            }
-            const llvm::DataLayout& dataLayout = module->getDataLayout();
-            uint64_t totalSize = dataLayout.getTypeAllocSize(elemType) * numElements;
-            arrPtr = builder->CreateCall(mallocFunc, {builder->getInt64(totalSize)}, "arr_heap");
-
-            for (uint64_t i = 0; i < numElements; i++)
-            {
-                llvm::Value* idx = builder->getInt64(i);
-                llvm::Value* ep = builder->CreateGEP(elemType, arrPtr, idx, "arr_elem");
-                builder->CreateStore(cast_value(elementValues[i], elemType), ep);
-            }
-        }
-        else
-        {
-            // Stack allocation
-            llvm::Value* arrAlloca = builder->CreateAlloca(arrayType, nullptr, "arr");
-            for (uint64_t i = 0; i < numElements; i++)
-            {
-                llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(i)};
-                llvm::Value* ep = builder->CreateGEP(arrayType, arrAlloca, indices, "arr_elem");
-                builder->CreateStore(cast_value(elementValues[i], elemType), ep);
-            }
-            // Decay to pointer to first element
-            llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(0)};
-            arrPtr = builder->CreateGEP(arrayType, arrAlloca, indices, "arr_ptr");
-        }
-
         auto* alloca = builder->CreateAlloca(builder->getPtrTy(), nullptr, expr.name.token_name);
         currentScope->define_variable(expr.name.token_name, alloca, "", elemType);
-        builder->CreateStore(arrPtr, alloca);
+        builder->CreateStore(initVal, alloca);
         return alloca;
     }
 

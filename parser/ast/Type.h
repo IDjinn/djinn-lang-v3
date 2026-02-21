@@ -14,7 +14,6 @@
 enum class TypeKind: uint8_t
 {
     INTEGER,
-    STRING,
     VOID,
     F16,
     F32,
@@ -34,7 +33,6 @@ const std::unordered_map<std::string, TypeKind> string_to_type_kind = {
     {"void", TypeKind::VOID},
     {"auto", TypeKind::AUTO},
     {"struct", TypeKind::STRUCT},
-    {"string", TypeKind::STRING},
 };
 
 struct Type : Location
@@ -136,11 +134,6 @@ struct Type : Location
         return Type(TypeKind::VOID, 0, false);
     }
 
-    static Type string()
-    {
-        return Type(TypeKind::STRING, 0, false);
-    }
-
     static Type array(Type elemType)
     {
         Type arr(TypeKind::ARRAY, 0, false);
@@ -165,7 +158,6 @@ struct Type : Location
         switch (k)
         {
         case TypeKind::INTEGER: return "INTEGER";
-        case TypeKind::STRING: return "STRING";
         case TypeKind::VOID: return "VOID";
         case TypeKind::F16: return "F16";
         case TypeKind::F32: return "F32";
@@ -190,7 +182,6 @@ struct Type : Location
         case TypeKind::F64: return "f64";
         case TypeKind::F128: return "f128";
         case TypeKind::VOID: return "void";
-        case TypeKind::STRING: return "string";
         case TypeKind::AUTO: return "auto";
         case TypeKind::POINTER:
             return (elementType ? elementType->toHumanString() : "void") + "*";
@@ -264,7 +255,6 @@ struct Type : Location
         if (token.value == "f64") return Type(TypeKind::F64, 64, true);
         if (token.value == "f128") return Type(TypeKind::F128, 128, true);
         if (token.value == "void") return Type(TypeKind::VOID, 0, false);
-        if (token.value == "string") return Type(TypeKind::STRING, 0, false);
         if (token.value == "auto") return Type(TypeKind::AUTO, 0, false);
 
         return Type(TypeKind::VOID, 0, false);

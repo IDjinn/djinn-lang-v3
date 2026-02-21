@@ -30,6 +30,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
     DiagnosticEngine diagnostics;
     std::vector<std::shared_ptr<Program>> programs;
 
+    std::vector<std::string> stdTypeNames;
+
     const auto parseDirectory = [&](const fs::path& dir, const bool isStdLib)
     {
         if (!fs::exists(dir)) return;
@@ -56,6 +58,14 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 const auto tokens = lexer.tokenize();
 
                 Parser parser(tokens, diagnostics);
+
+                // Pre-register std library types for user code parsers
+                if (!isStdLib)
+                {
+                    for (const auto& name : stdTypeNames)
+                        parser.registerKnownType(name);
+                }
+
                 auto program = parser.parse(file_name);
 
                 if (options.print_ast && !isStdLib)
@@ -82,6 +92,13 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         if (options.includeStd && fs::exists(options.stdLibPath))
         {
             parseDirectory(options.stdLibPath, true);
+        }
+
+        // Collect std library type names for user code parsers
+        for (const auto& prog : programs)
+        {
+            for (const auto& s : prog->structs) stdTypeNames.push_back(s->name.token_name);
+            for (const auto& e : prog->enums) stdTypeNames.push_back(e->name.token_name);
         }
 
         // Load user code
@@ -219,6 +236,14 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens, diagnostics);
+
+        // Pre-register std library types so parser recognizes them
+        for (const auto& prog : programs)
+        {
+            for (const auto& s : prog->structs) parser.registerKnownType(s->name.token_name);
+            for (const auto& e : prog->enums) parser.registerKnownType(e->name.token_name);
+        }
+
         auto program = parser.parse("main");
 
         if (options.print_ast)

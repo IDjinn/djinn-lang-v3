@@ -1,5 +1,6 @@
 //
 // Array literal code generation: [1, 2, 3] and i32[1, 2, 3]
+// Now produces arr<T> slice structs { T* data, u32 len }
 //
 
 #include "../Generator.h"
@@ -42,9 +43,11 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
     const uint64_t numElements = elementValues.size();
     llvm::Type* arrayType = llvm::ArrayType::get(elemType, numElements);
 
+    llvm::Value* dataPtr;
+
     if (expr.isHeap)
     {
-        // Heap allocation: new [1, 2, 3] or new i32[1, 2, 3]
+        // Heap allocation
         llvm::Function* mallocFunc = module->getFunction("malloc");
         if (!mallocFunc)
         {
@@ -57,33 +60,85 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
         const llvm::DataLayout& dataLayout = module->getDataLayout();
         uint64_t elemSize = dataLayout.getTypeAllocSize(elemType);
         uint64_t totalSize = elemSize * numElements;
-        llvm::Value* sizeVal = builder->getInt64(totalSize);
-        llvm::Value* rawPtr = builder->CreateCall(mallocFunc, {sizeVal}, "arr_heap");
+        dataPtr = builder->CreateCall(mallocFunc, {builder->getInt64(totalSize)}, "arr_heap");
 
-        // Store elements via GEP on the raw pointer
         for (uint64_t i = 0; i < numElements; i++)
         {
             llvm::Value* idx = builder->getInt64(i);
-            llvm::Value* elemPtr = builder->CreateGEP(elemType, rawPtr, idx, "arr_elem");
-            llvm::Value* val = cast_value(elementValues[i], elemType);
-            builder->CreateStore(val, elemPtr);
+            llvm::Value* elemPtr = builder->CreateGEP(elemType, dataPtr, idx, "arr_elem");
+            builder->CreateStore(cast_value(elementValues[i], elemType), elemPtr);
+        }
+    }
+    else
+    {
+        // Stack allocation
+        llvm::Value* arrAlloca = builder->CreateAlloca(arrayType, nullptr, "arr_data");
+        for (uint64_t i = 0; i < numElements; i++)
+        {
+            llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(i)};
+            llvm::Value* elemPtr = builder->CreateGEP(arrayType, arrAlloca, indices, "arr_elem");
+            builder->CreateStore(cast_value(elementValues[i], elemType), elemPtr);
+        }
+        // Decay to pointer to first element
+        llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(0)};
+        dataPtr = builder->CreateGEP(arrayType, arrAlloca, indices, "arr_ptr");
+    }
+
+    // Try to build arr<T> slice struct
+    const std::string arrName = currentScope->resolve_alias("arr");
+    StructDef* arrBaseDef = currentScope->lookup_struct(arrName);
+    if (arrBaseDef && arrBaseDef->isGeneric)
+    {
+        // Determine the element Type for monomorphization
+        Type elemDjinnType;
+        if (expr.elementType)
+        {
+            elemDjinnType = *expr.elementType;
+        }
+        else
+        {
+            // Infer from LLVM type
+            if (elemType->isIntegerTy())
+            {
+                elemDjinnType = Type::integer(elemType->getIntegerBitWidth(), true);
+            }
+            else if (elemType->isFloatTy())
+            {
+                elemDjinnType = Type::floating(32);
+            }
+            else if (elemType->isDoubleTy())
+            {
+                elemDjinnType = Type::floating(64);
+            }
+            else
+            {
+                // Fallback: return raw pointer
+                return dataPtr;
+            }
         }
 
-        return rawPtr;
+        std::vector<Type> typeArgs = {elemDjinnType};
+        llvm::StructType* sliceType = monomorphize_struct(arrName, typeArgs);
+        const std::string mangledName = Mangler::mangle_generic_struct(arrName, typeArgs);
+        StructDef* sliceDef = currentScope->lookup_struct(mangledName);
+
+        if (sliceDef && sliceType)
+        {
+            auto* sliceAlloca = builder->CreateAlloca(sliceType, nullptr, "arr_lit");
+
+            // data (field 0)
+            builder->CreateStore(dataPtr,
+                                 builder->CreateStructGEP(sliceType, sliceAlloca, 0));
+
+            // len (field 1)
+            builder->CreateStore(
+                builder->getInt32(static_cast<uint32_t>(numElements)),
+                builder->CreateStructGEP(sliceType, sliceAlloca, 1));
+
+            return sliceAlloca;
+        }
     }
 
-    // Stack allocation: [1, 2, 3] or i32[1, 2, 3]
-    llvm::Value* alloca = builder->CreateAlloca(arrayType, nullptr, "arr");
-
-    for (uint64_t i = 0; i < numElements; i++)
-    {
-        llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(i)};
-        llvm::Value* elemPtr = builder->CreateGEP(arrayType, alloca, indices, "arr_elem");
-        llvm::Value* val = cast_value(elementValues[i], elemType);
-        builder->CreateStore(val, elemPtr);
-    }
-
-    // Decay to pointer (like C arrays) — return pointer to first element
-    llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(0)};
-    return builder->CreateGEP(arrayType, alloca, indices, "arr_ptr");
+    // Fallback: return raw pointer
+    return dataPtr;
 }

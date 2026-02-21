@@ -42,6 +42,16 @@ void Generator::pop_scope()
 
 void Generator::generate()
 {
+    // PASS 0: Register short-name aliases for namespaced symbols
+    for (const auto& [name, sym] : symbols->symbols())
+    {
+        if (const auto pos = name.rfind("::"); pos != std::string::npos)
+        {
+            const std::string shortName = name.substr(pos + 2);
+            currentScope->define_alias(shortName, name);
+        }
+    }
+
     // PASS 1: Forward declare all structs (create opaque types)
     for (const auto& sym : symbols->get_all_structs())
     {

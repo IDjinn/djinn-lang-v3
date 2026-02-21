@@ -20,7 +20,6 @@ namespace djinn::binder {
     bool TypeValidator::isTypeDefined(Type &type) const {
         switch (type.kind) {
             case TypeKind::INTEGER:
-            case TypeKind::STRING:
             case TypeKind::VOID:
             case TypeKind::F16:
             case TypeKind::F32:

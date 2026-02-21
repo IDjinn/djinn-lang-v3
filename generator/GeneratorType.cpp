@@ -455,7 +455,6 @@ llvm::Type* Generator::generate_type(const Type& type)
     switch (type.kind)
     {
     case TypeKind::INTEGER: return builder->getIntNTy(type.size);
-    case TypeKind::STRING: return builder->getPtrTy();
     case TypeKind::VOID: return builder->getVoidTy();
     case TypeKind::F16: return builder->getHalfTy();
     case TypeKind::F32: return builder->getFloatTy();
@@ -467,6 +466,14 @@ llvm::Type* Generator::generate_type(const Type& type)
             {
                 throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo array deve ter tipo de elemento");
             }
+            // Try to monomorphize arr<T> slice
+            const std::string arrName = currentScope->resolve_alias("arr");
+            if (currentScope->lookup_struct(arrName))
+            {
+                std::vector<Type> typeArgs = {*type.elementType};
+                return monomorphize_struct(arrName, typeArgs);
+            }
+            // Fallback: raw pointer
             llvm::Type* elemType = generate_type(*type.elementType);
             return llvm::PointerType::get(elemType, 0);
         }
@@ -575,5 +582,40 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
         return builder->CreateFPToSI(value, targetType, "fptosi");
     }
 
+    return value;
+}
+
+static bool is_slice_struct(llvm::StructType* st)
+{
+    if (!st || !st->hasName()) return false;
+    auto name = st->getName();
+    return name == "str" || name.starts_with("_ZN3arr");
+}
+
+llvm::Value* Generator::coerce_str_to_ptr(llvm::Value* value)
+{
+    // Case 1: alloca to slice struct (str, arr<T>)
+    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
+    {
+        if (auto* st = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
+        {
+            if (is_slice_struct(st))
+            {
+                auto* gep = builder->CreateStructGEP(st, alloca, 0, "slice.data");
+                return builder->CreateLoad(builder->getPtrTy(), gep, "slice_ptr");
+            }
+        }
+    }
+    // Case 2: loaded struct value (from generate_identifier)
+    if (auto* st = llvm::dyn_cast<llvm::StructType>(value->getType()))
+    {
+        if (is_slice_struct(st))
+        {
+            auto* tmp = builder->CreateAlloca(st, nullptr, "slice_tmp");
+            builder->CreateStore(value, tmp);
+            auto* gep = builder->CreateStructGEP(st, tmp, 0, "slice.data");
+            return builder->CreateLoad(builder->getPtrTy(), gep, "slice_ptr");
+        }
+    }
     return value;
 }

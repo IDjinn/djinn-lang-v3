@@ -30,7 +30,7 @@ auto makeSourceIdentifier = [](const Token& token)
 
 auto isPrimitiveType = [](const std::string& name)
 {
-    if (name == "void" || name == "string" || name == "auto") return true;
+    if (name == "void" || name == "auto") return true;
     if (name.starts_with('f') && string_to_type_kind.contains(name)) return true;
     if ((name.starts_with('i') || name.starts_with('u')) && name.length() > 1)
     {
@@ -42,6 +42,11 @@ auto isPrimitiveType = [](const std::string& name)
 Parser::Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics) : tokens(std::move(tokens)),
                                                                            _diagnostics(diagnostics)
 {
+}
+
+void Parser::registerKnownType(const std::string& name)
+{
+    currentScope->define_struct(name, Type::struct_type(name));
 }
 
 
@@ -103,7 +108,7 @@ bool Parser::isType()
 
 bool Parser::isType(const Token& token) const
 {
-    if (token.type == TokenType::STRING || token.type == TokenType::AUTO || token.type == TokenType::VOID)
+    if (token.type == TokenType::AUTO || token.type == TokenType::VOID)
     {
         return true;
     }
@@ -129,7 +134,7 @@ bool Parser::isType(const Token& token) const
         return true;
     }
 
-    return token.value == "void" || token.value == "string" || token.value == "auto";
+    return token.value == "void" || token.value == "auto";
 }
 
 Token& Parser::expect(const std::string& message, const TokenType type)
@@ -179,7 +184,7 @@ void Parser::synchronize()
 std::unique_ptr<Type> Parser::parse_type()
 {
     const auto identifier = expect("Expected a type", {
-                                       TokenType::IDENTIFIER, TokenType::VOID, TokenType::STRING, TokenType::AUTO
+                                       TokenType::IDENTIFIER, TokenType::VOID, TokenType::AUTO
                                    });
 
     std::unique_ptr<Type> baseType;
@@ -204,10 +209,6 @@ std::unique_ptr<Type> Parser::parse_type()
     else if (identifier.value == "void" || identifier.type == TokenType::VOID)
     {
         baseType = std::make_unique<Type>(Type::voided());
-    }
-    else if (identifier.value == "string" || identifier.type == TokenType::STRING)
-    {
-        baseType = std::make_unique<Type>(Type::string());
     }
     else if (identifier.value == "auto" || identifier.type == TokenType::AUTO)
     {

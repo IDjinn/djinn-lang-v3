@@ -251,6 +251,7 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
                 for (const auto& arg : expr.arguments)
                 {
                     llvm::Value* argVal = generate_expression(*arg);
+                    argVal = coerce_str_to_ptr(argVal);
                     if (argIdx < ctorType->getNumParams())
                     {
                         argVal = cast_value(argVal, ctorType->getParamType(argIdx));
@@ -288,6 +289,7 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     for (const auto& arg : expr.arguments)
     {
         llvm::Value* argVal = generate_expression(*arg);
+        argVal = coerce_str_to_ptr(argVal);
 
         if (argIdx < funcType->getNumParams())
         {
@@ -625,6 +627,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     for (const auto& arg : call.arguments)
     {
         llvm::Value* argVal = generate_expression(*arg);
+        argVal = coerce_str_to_ptr(argVal);
 
         if (argIdx < funcType->getNumParams())
         {

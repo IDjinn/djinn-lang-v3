@@ -36,7 +36,6 @@ bool Binder::isTypeDefined(const Type& type) const
     switch (mutableType.kind)
     {
     case TypeKind::INTEGER:
-    case TypeKind::STRING:
     case TypeKind::VOID:
     case TypeKind::F16:
     case TypeKind::F32:
@@ -112,7 +111,7 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
 
     if (dynamic_cast<const StringLiteral*>(&expr))
     {
-        return Type::pointer(Type::integer(8, true)); // i8*
+        return Type::struct_type("str");
     }
 
     if (const auto* ident = dynamic_cast<const Identifier*>(&expr))

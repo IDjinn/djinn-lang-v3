@@ -256,4 +256,11 @@ target_link_libraries(tests PRIVATE
 target_compile_features(tests PRIVATE cxx_std_23)
 
 include(GoogleTest)
-gtest_discover_tests(tests)
+gtest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# Clean djinn_build temp directory before running tests
+add_custom_target(clean_djinn_build
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{TEMP}/djinn_build"
+        COMMENT "Cleaning djinn_build temp directory"
+)
+add_dependencies(tests clean_djinn_build)

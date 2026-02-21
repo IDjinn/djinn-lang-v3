@@ -105,7 +105,6 @@ public:
             case TypeKind::F32: return "f"; // float
             case TypeKind::F64: return "d"; // double
             case TypeKind::F128: return "g"; // __float128
-            case TypeKind::STRING: return "Pc"; // char*
             case TypeKind::POINTER:
                 return "P" + (type.elementType ? mangle_type(*type.elementType) : "v");
             case TypeKind::ARRAY:

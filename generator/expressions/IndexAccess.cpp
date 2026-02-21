@@ -42,35 +42,71 @@ llvm::Type* Generator::resolve_index_element_type(const Expression& objectExpr)
     return nullptr;
 }
 
-llvm::Value *Generator::generate_index_access(const IndexAccess &expr) {
+// Extract data pointer from an arr<T> or str slice struct value/alloca
+llvm::Value* Generator::extract_slice_data_ptr(llvm::Value* value)
+{
+    // Case 1: alloca to slice struct
+    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
+    {
+        if (auto* st = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
+        {
+            if (st->hasName() && (st->getName() == "str" || st->getName().starts_with("_ZN3arr")))
+            {
+                auto* gep = builder->CreateStructGEP(st, alloca, 0, "slice.data");
+                return builder->CreateLoad(builder->getPtrTy(), gep, "slice_ptr");
+            }
+        }
+    }
+    // Case 2: loaded struct value
+    if (auto* st = llvm::dyn_cast<llvm::StructType>(value->getType()))
+    {
+        if (st->hasName() && (st->getName() == "str" || st->getName().starts_with("_ZN3arr")))
+        {
+            return builder->CreateExtractValue(value, 0, "slice.data");
+        }
+    }
+    return value;
+}
+
+llvm::Value* Generator::generate_index_access(const IndexAccess& expr)
+{
     llvm::Value* ptr = generate_expression(*expr.object);
     llvm::Value* index = generate_expression(*expr.index);
 
-    llvm::Type *elementType = resolve_index_element_type(*expr.object);
+    // Extract data pointer from slice structs (arr<T>, str)
+    ptr = extract_slice_data_ptr(ptr);
 
-    if (!elementType) {
+    llvm::Type* elementType = resolve_index_element_type(*expr.object);
+
+    if (!elementType)
+    {
         // Fallback to i8 for untyped pointers (void*, i8*)
         elementType = builder->getInt8Ty();
     }
 
-    llvm::Value *elementPtr = builder->CreateGEP(elementType, ptr, index, "idx");
+    llvm::Value* elementPtr = builder->CreateGEP(elementType, ptr, index, "idx");
     return builder->CreateLoad(elementType, elementPtr, "idx_val");
 }
 
-llvm::Value *Generator::generate_index_assignment(const IndexAssignment &expr) {
+llvm::Value* Generator::generate_index_assignment(const IndexAssignment& expr)
+{
     llvm::Value* ptr = generate_expression(*expr.object);
     llvm::Value* index = generate_expression(*expr.index);
 
-    llvm::Type *elementType = resolve_index_element_type(*expr.object);
+    // Extract data pointer from slice structs (arr<T>, str)
+    ptr = extract_slice_data_ptr(ptr);
 
-    if (!elementType) {
+    llvm::Type* elementType = resolve_index_element_type(*expr.object);
+
+    if (!elementType)
+    {
         elementType = builder->getInt8Ty();
     }
 
-    llvm::Value *val = generate_expression(*expr.value);
+    llvm::Value* val = generate_expression(*expr.value);
     val = cast_value(val, elementType);
 
-    llvm::Value *elementPtr = builder->CreateGEP(elementType, ptr, index, "idx");
+    llvm::Value* elementPtr = builder->CreateGEP(elementType, ptr, index, "idx");
     builder->CreateStore(val, elementPtr);
     return val;
 }
