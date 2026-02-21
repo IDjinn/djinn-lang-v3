@@ -96,9 +96,9 @@ TEST(Extern, ArrayWithStdImportsLinksCorrectly)
         namespace test_array;
 
         i32 main() {
-            array<i32> arr = array<i32>();
-            arr.push(42);
-            printf("val = %d\n", arr.get(0));
+            array<i32> array = array<i32>();
+            array.push(42);
+            printf("val = %d\n", array.get(0));
             return 0;
         }
     )";

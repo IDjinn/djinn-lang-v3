@@ -5,11 +5,6 @@
 TEST(IndexAccess, BasicRead)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-            void free(void* ptr);
-        }
-
         i32 main() {
             i32* data = malloc(12);
             data[0] = 10;
@@ -29,11 +24,6 @@ TEST(IndexAccess, BasicRead)
 TEST(IndexAccess, Write)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-            void free(void* ptr);
-        }
-
         i32 main() {
             i32* data = malloc(12);
             data[0] = 42;
@@ -51,11 +41,6 @@ TEST(IndexAccess, Write)
 TEST(IndexAccess, WithMalloc)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-            void free(void* ptr);
-        }
-
         i32 main() {
             i32* nums = malloc(20);
             for (mut i32 i = 0; i < 5; i = i + 1) {
@@ -75,11 +60,6 @@ TEST(IndexAccess, WithMalloc)
 TEST(IndexAccess, I8Pointer)
 {
     const auto source = R"(
-        extern "C" {
-            void* malloc(i64 size);
-            void free(void* ptr);
-        }
-
         i32 main() {
             i8* buf = malloc(4);
             buf[0] = 65;

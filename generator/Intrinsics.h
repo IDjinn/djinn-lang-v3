@@ -9,7 +9,8 @@
 #include <optional>
 #include <unordered_map>
 
-enum class Intrinsic {
+enum class Intrinsic
+{
     Sizeof,
     Alignof,
     Bitcast,
@@ -19,10 +20,12 @@ enum class Intrinsic {
     Likely,
     Unlikely,
     DebugTrap,
+    Typeof,
     // Abort
 };
 
-inline std::optional<Intrinsic> get_intrinsic(const std::string &name) {
+inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
+{
     static const std::unordered_map<std::string, Intrinsic> intrinsics = {
         {"sizeof", Intrinsic::Sizeof},
         {"alignof", Intrinsic::Alignof},
@@ -33,16 +36,19 @@ inline std::optional<Intrinsic> get_intrinsic(const std::string &name) {
         {"expect", Intrinsic::Expect},
         {"likely", Intrinsic::Likely},
         // {"abort", Intrinsic::Abort},
-        {"unlikely", Intrinsic::Unlikely}
+        {"unlikely", Intrinsic::Unlikely},
+        {"typeof", Intrinsic::Typeof}
     };
 
-    if (const auto it = intrinsics.find(name); it != intrinsics.end()) {
+    if (const auto it = intrinsics.find(name); it != intrinsics.end())
+    {
         return it->second;
     }
     return std::nullopt;
 }
 
-inline bool is_intrinsic(const std::string &name) {
+inline bool is_intrinsic(const std::string& name)
+{
     return get_intrinsic(name).has_value();
 }
 

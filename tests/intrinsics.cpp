@@ -242,3 +242,61 @@ TEST(Intrinsics, SizeofGenericStructPoint)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 8); // sizeof(Container<Point>) = sizeof(Point) = 2*i32 = 8
 }
+
+// typeof intrinsic tests
+
+TEST(Intrinsics, TypeofI32)
+{
+    const auto source = R"(
+        import std::types;
+
+        i32 main() {
+            i32 x = 42;
+            str t = typeof(x);
+            return t.len;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 3); // "i32" = 3 chars
+}
+
+TEST(Intrinsics, TypeofF64)
+{
+    const auto source = R"(
+        import std::types;
+
+        i32 main() {
+            f64 x = 3.14;
+            str t = typeof(x);
+            return t.len;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 3); // "f64" = 3 chars
+}
+
+TEST(Intrinsics, TypeofStruct)
+{
+    const auto source = R"(
+        import std::types;
+
+        struct Point {
+            i32 x;
+            i32 y;
+        }
+
+        i32 main() {
+            Point p = { 10, 20 };
+            str t = typeof(p);
+            return t.len;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5); // "Point" = 5 chars
+}

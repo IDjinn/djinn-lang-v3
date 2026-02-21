@@ -21,11 +21,6 @@ TEST(PointerCompat, VoidToTyped)
 TEST(PointerCompat, TypedToVoid)
 {
     const auto source = R"(
-        extern "C" {
-            void free(void* ptr);
-            void* malloc(i64 size);
-        }
-
         i32 main() {
             i32* data = malloc(4);
             void* vp = data;

@@ -57,11 +57,6 @@ TEST(Str, CoercionToI8PtrForPrintf)
 TEST(Str, DirectLiteralCoercion)
 {
     const auto source = R"(
-
-        extern "C" {
-            i32 printf(i8* format, ...);
-        }
-
         i32 main() {
             printf("direct: %s\n", "world");
             return 0;

@@ -162,6 +162,56 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
                 module.get(), llvm::Intrinsic::expect, {cond->getType()});
             return builder->CreateCall(expectFunc, {cond, builder->getFalse()}, "unlikely");
         }
+
+    case Intrinsic::Typeof:
+        {
+            if (call.arguments.empty())
+            {
+                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "typeof requires 1 argument");
+            }
+
+            std::string typeName = call.typeofResolvedName;
+
+            // Fallback for generic type parameters (e.g., typeof(T) inside generic context)
+            if (typeName.empty() && _currentGenericCtx)
+            {
+                if (const auto* ident = dynamic_cast<const Identifier*>(call.arguments[0].get()))
+                {
+                    if (const Type* resolved = _currentGenericCtx->resolve(ident->name()))
+                    {
+                        typeName = resolved->toHumanString();
+                    }
+                }
+            }
+
+            if (typeName.empty())
+            {
+                typeName = "unknown";
+            }
+
+            // Build a str struct: { i8* data, u32 len }
+            const std::string resolvedStr = currentScope->resolve_alias("str");
+            StructDef* strDef = currentScope->lookup_struct(resolvedStr);
+            if (!strDef || !strDef->llvmType)
+            {
+                throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
+                                   "tipo 'str' nao encontrado. Adicione: import std::types;");
+            }
+
+            llvm::Value* globalPtr = builder->CreateGlobalStringPtr(typeName, ".typeof");
+            auto* alloca = builder->CreateAlloca(strDef->llvmType, nullptr, "typeof_str");
+
+            // data (field 0)
+            builder->CreateStore(globalPtr,
+                                 builder->CreateStructGEP(strDef->llvmType, alloca, 0));
+
+            // len (field 1)
+            builder->CreateStore(
+                builder->getInt32(static_cast<uint32_t>(typeName.size())),
+                builder->CreateStructGEP(strDef->llvmType, alloca, 1));
+
+            return alloca;
+        }
     }
 
     return nullptr;
@@ -252,7 +302,10 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
                 for (const auto& arg : expr.arguments)
                 {
                     llvm::Value* argVal = generate_expression(*arg);
-                    argVal = coerce_str_to_ptr(argVal);
+                    if (argIdx < ctorType->getNumParams() && ctorType->getParamType(argIdx)->isPointerTy())
+                    {
+                        argVal = coerce_str_to_ptr(argVal);
+                    }
                     if (argIdx < ctorType->getNumParams())
                     {
                         argVal = cast_value(argVal, ctorType->getParamType(argIdx));
@@ -290,7 +343,15 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     for (const auto& arg : expr.arguments)
     {
         llvm::Value* argVal = generate_expression(*arg);
-        argVal = coerce_str_to_ptr(argVal);
+
+        // Only coerce str/slice -> ptr when the target parameter expects a pointer
+        const bool targetIsPtr = argIdx < funcType->getNumParams()
+                                     ? funcType->getParamType(argIdx)->isPointerTy()
+                                     : funcType->isVarArg(); // variadic extra args always need raw ptrs
+        if (targetIsPtr)
+        {
+            argVal = coerce_str_to_ptr(argVal);
+        }
 
         if (argIdx < funcType->getNumParams())
         {
@@ -652,7 +713,15 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     for (const auto& arg : call.arguments)
     {
         llvm::Value* argVal = generate_expression(*arg);
-        argVal = coerce_str_to_ptr(argVal);
+
+        // Only coerce str/slice -> ptr when the target parameter expects a pointer
+        const bool targetIsPtr = argIdx < funcType->getNumParams()
+                                     ? funcType->getParamType(argIdx)->isPointerTy()
+                                     : funcType->isVarArg();
+        if (targetIsPtr)
+        {
+            argVal = coerce_str_to_ptr(argVal);
+        }
 
         if (argIdx < funcType->getNumParams())
         {
