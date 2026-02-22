@@ -156,7 +156,7 @@ TEST(Enum, GenericWithPointerType) {
         }
 
         i32 main() {
-            optional<i8*> maybe_string = optional<i8*>::Value("hello");
+            optional<str> maybe_string = optional<str>::Value("hello");
             return 0;
         }
     )";

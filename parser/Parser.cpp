@@ -1378,8 +1378,10 @@ std::unique_ptr<Expression> Parser::parse_primary()
         const auto existingVar = currentScope->lookup_variable(firstToken.value);
 
         // Step 3: Parse type modifiers — generics, pointers, arrays
+        // When isAuto, the identifier is always the variable name (not a type),
+        // so skip type modifier parsing to avoid misinterpreting names that shadow types
         std::vector<Type> genericArgs;
-        if ((isDeclaredStruct || (!isPrimitive && !existingVar)) && match(TokenType::LESS))
+        if (!isAuto && !existingVar && (isDeclaredStruct || !isPrimitive) && match(TokenType::LESS))
         {
             do
             {
@@ -1390,7 +1392,7 @@ std::unique_ptr<Expression> Parser::parse_primary()
         }
 
         int pointerDepth = 0;
-        if (isKnownType)
+        if (!isAuto && isKnownType && !existingVar)
         {
             while (match(TokenType::STAR))
             {
@@ -1399,7 +1401,7 @@ std::unique_ptr<Expression> Parser::parse_primary()
         }
 
         bool isArray = false;
-        if (isKnownType && match(TokenType::LBRACKET))
+        if (!isAuto && isKnownType && !existingVar && match(TokenType::LBRACKET))
         {
             if (check(TokenType::RBRACKET))
             {
@@ -1420,7 +1422,7 @@ std::unique_ptr<Expression> Parser::parse_primary()
         }
 
         // Step 4: Decide if this is a variable declaration or an expression
-        const bool isTypeInference = isAuto && !isKnownType && !existingVar &&
+        const bool isTypeInference = isAuto && !existingVar &&
             (check(TokenType::EQUAL) || check(TokenType::SEMICOLON));
         const bool isExplicitType = !existingVar && check(TokenType::IDENTIFIER);
 

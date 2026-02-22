@@ -13,9 +13,9 @@ llvm::Value* Generator::generate_string_literal(const StringLiteral& expr)
     StructDef* strDef = currentScope->lookup_struct(resolved);
     if (!strDef || !strDef->llvmType)
     {
-        LOG_DEBUG("[generator]   FAILED: str struct not found (strDef=%p)", (void*)strDef);
-        throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
-                           "tipo 'str' nao encontrado. Adicione: import std::types;");
+        // str struct not available — fall back to raw i8* (C-string)
+        LOG_DEBUG("[generator]   str struct not found, falling back to i8*");
+        return builder->CreateGlobalStringPtr(expr.value, ".str");
     }
 
     llvm::Value* globalPtr = builder->CreateGlobalStringPtr(expr.value, ".str");

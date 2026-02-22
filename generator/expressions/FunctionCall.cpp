@@ -515,33 +515,35 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
 
     if (const auto* ident = dynamic_cast<const Identifier*>(call.receiver.get()))
     {
-        structDef = currentScope->lookup_struct(ident->identifier.token_name);
-        if (structDef)
-        {
-            // Receiver is a struct name (e.g., Console.printf) - this is a static call
-            structName = structDef->name;
-            isStaticCall = true;
-            LOG_DEBUG("[generator]   found as static struct: '%s'", structName.c_str());
-        }
-        else
+        // Check variable first: if a variable exists with this name, it's an instance method call,
+        // even if the name also matches a struct (e.g., `array<i32> array = ...; array.push(42)`)
+        if (const auto* alloca = currentScope->lookup_variable(ident->identifier.token_name))
         {
             // Receiver is a variable - instance method call
             structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
             LOG_DEBUG("[generator]   lookup_variable_struct_type('%s') = '%s'",
                       ident->identifier.token_name.c_str(), structName.c_str());
-            if (const auto* alloca = currentScope->lookup_variable(ident->identifier.token_name))
+            LOG_DEBUG("[generator]   alloca type: '%s'",
+                      alloca->getAllocatedType()->isStructTy()
+                      ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
+                      : alloca->getAllocatedType()->isPointerTy() ? "pointer"
+                      : alloca->getAllocatedType()->isIntegerTy() ? "integer"
+                      : "other");
+            if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
             {
-                LOG_DEBUG("[generator]   alloca type: '%s'",
-                          alloca->getAllocatedType()->isStructTy()
-                          ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
-                          : alloca->getAllocatedType()->isPointerTy() ? "pointer"
-                          : alloca->getAllocatedType()->isIntegerTy() ? "integer"
-                          : "other");
-                if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
-                {
-                    llvmStructName = structType->getName().str();
-                    LOG_DEBUG("[generator]   llvmStructName: '%s'", llvmStructName.c_str());
-                }
+                llvmStructName = structType->getName().str();
+                LOG_DEBUG("[generator]   llvmStructName: '%s'", llvmStructName.c_str());
+            }
+        }
+        else
+        {
+            // No variable with this name — check if it's a struct name for a static call
+            structDef = currentScope->lookup_struct(ident->identifier.token_name);
+            if (structDef)
+            {
+                structName = structDef->name;
+                isStaticCall = true;
+                LOG_DEBUG("[generator]   found as static struct: '%s'", structName.c_str());
             }
             else
             {
