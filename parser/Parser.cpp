@@ -1381,7 +1381,7 @@ std::unique_ptr<Expression> Parser::parse_primary()
         // When isAuto, the identifier is always the variable name (not a type),
         // so skip type modifier parsing to avoid misinterpreting names that shadow types
         std::vector<Type> genericArgs;
-        if (!isAuto && !existingVar && (isDeclaredStruct || !isPrimitive) && match(TokenType::LESS))
+        if (!isAuto && (isDeclaredStruct || (!existingVar && !isPrimitive)) && match(TokenType::LESS))
         {
             do
             {

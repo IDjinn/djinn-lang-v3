@@ -94,20 +94,25 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         programs.emplace_back(std::move(program));
     };
 
+    // Resolve std path once, canonicalize for comparison
+    const auto stdLibPath = resolve_std_path(options.stdLibPath);
+    const auto stdCanonical = fs::exists(stdLibPath) ? fs::canonical(stdLibPath) : fs::path{};
+
+    // Track parsed files to avoid duplicates
+    std::set<fs::path> parsedFiles;
+
     try
     {
-        // Load standard library first if enabled
-        const auto stdLibPath = resolve_std_path(options.stdLibPath);
-        if (options.includeStd && fs::exists(stdLibPath))
+        // ── Phase 1: Prelude (std/types/types.djinn) ──
+        if (options.includeStd && !stdCanonical.empty())
         {
-            // Phase 1: Parse prelude (std/types/types.djinn) first
-            const auto preludePath = fs::path(stdLibPath) / "types" / "types.djinn";
+            const auto preludePath = stdLibPath / "types" / "types.djinn";
             if (fs::exists(preludePath))
             {
                 try
                 {
+                    parsedFiles.insert(fs::canonical(preludePath));
                     parseFile(preludePath, false, false);
-                    // Collect prelude type names
                     if (!programs.empty())
                     {
                         const auto& preludeProgram = programs.back();
@@ -121,7 +126,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 }
             }
 
-            // Phase 2: Parse remaining std library files (with prelude types registered)
+            // ── Phase 2: Remaining std library files ──
             for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
             {
                 try
@@ -129,8 +134,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                     if (!entry.is_regular_file()) continue;
                     if (entry.path().extension() != ".djinn") continue;
 
-                    // Skip prelude — already parsed
-                    if (fs::exists(preludePath) && fs::equivalent(entry.path(), preludePath)) continue;
+                    auto canonical = fs::canonical(entry.path());
+                    if (parsedFiles.contains(canonical)) continue;
+                    parsedFiles.insert(canonical);
 
                     parseFile(entry.path(), true, false);
                 }
@@ -148,7 +154,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             for (const auto& e : prog->enums) stdTypeNames.push_back(e->name.token_name);
         }
 
-        // Load user code
+        // ── Phase 3: User code (skip anything already parsed or inside std) ──
         if (fs::exists(path))
         {
             for (const auto& entry : fs::recursive_directory_iterator(path))
@@ -157,6 +163,18 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 {
                     if (!entry.is_regular_file()) continue;
                     if (entry.path().extension() != ".djinn") continue;
+
+                    auto canonical = fs::canonical(entry.path());
+                    if (parsedFiles.contains(canonical)) continue;
+
+                    // Skip files inside std library directory
+                    if (!stdCanonical.empty())
+                    {
+                        auto rel = canonical.lexically_relative(stdCanonical);
+                        if (!rel.empty() && !rel.string().starts_with("..")) continue;
+                    }
+
+                    parsedFiles.insert(canonical);
                     parseFile(entry.path(), true, true);
                 }
                 catch (const CompileError& compile_error)

@@ -150,18 +150,18 @@ TEST(Enum, GenericResult) {
 
 TEST(Enum, GenericWithPointerType) {
     const auto source = R"(
-        enum optional<T> {
+        enum opt<T> {
             Empty(),
             Value(T)
         }
 
         i32 main() {
-            optional<str> maybe_string = optional<str>::Value("hello");
+            opt<str> maybe_string = opt<str>::Value("hello");
             return 0;
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
