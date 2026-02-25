@@ -8,6 +8,10 @@ interface Comparable<T> {
     i32 compare<O>(O other);
 }
 
+interface Equatable<T> {
+    bool equals<T>(T other);
+}
+
 interface Serializable<TOut> {
     TOut serialize();
 }

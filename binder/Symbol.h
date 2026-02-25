@@ -14,6 +14,24 @@
 #include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
 
+struct GenericParamInfo
+{
+    std::string name;
+    std::vector<std::string> constraints;
+
+    GenericParamInfo() = default;
+
+    explicit GenericParamInfo(std::string name)
+        : name(std::move(name))
+    {
+    }
+
+    GenericParamInfo(std::string name, std::vector<std::string> constraints)
+        : name(std::move(name)), constraints(std::move(constraints))
+    {
+    }
+};
+
 enum class SymbolKind : uint8_t
 {
     Variable,
@@ -140,7 +158,7 @@ struct MethodSymbol : Symbol
     Type returnType;
     std::vector<Type> paramTypes;
     std::vector<std::string> paramNames;
-    std::vector<std::string> genericParams;
+    std::vector<GenericParamInfo> genericParams;
     bool isAbstract = false;
     bool isStatic = false;
     bool isVariadic = false; // True if method has variadic parameters (...)
@@ -169,7 +187,12 @@ struct MethodSymbol : Symbol
 
     void addGenericParam(const std::string& param)
     {
-        genericParams.push_back(param);
+        genericParams.emplace_back(param);
+    }
+
+    void addGenericParam(const std::string& param, const std::vector<std::string>& constraints)
+    {
+        genericParams.emplace_back(param, constraints);
     }
 
     [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
@@ -217,7 +240,7 @@ struct StructSymbol : Symbol
     std::vector<FieldSymbol> fields;
     std::vector<std::shared_ptr<MethodSymbol>> methods;
     std::vector<std::shared_ptr<PropertySymbol>> properties;
-    std::vector<std::string> genericParams;
+    std::vector<GenericParamInfo> genericParams;
     std::vector<std::string> implements;
     std::unique_ptr<Type> baseType;
 
@@ -253,7 +276,12 @@ struct StructSymbol : Symbol
 
     void addGenericParam(const std::string& param)
     {
-        genericParams.push_back(param);
+        genericParams.emplace_back(param);
+    }
+
+    void addGenericParam(const std::string& param, const std::vector<std::string>& constraints)
+    {
+        genericParams.emplace_back(param, constraints);
     }
 
     void addImplements(const std::string& interfaceName)
@@ -344,7 +372,7 @@ struct StructSymbol : Symbol
 struct InterfaceSymbol : Symbol
 {
     std::vector<std::shared_ptr<MethodSymbol>> methods;
-    std::vector<std::string> genericParams;
+    std::vector<GenericParamInfo> genericParams;
 
     [[nodiscard]] bool isGeneric() const
     {
@@ -363,7 +391,12 @@ struct InterfaceSymbol : Symbol
 
     void addGenericParam(const std::string& param)
     {
-        genericParams.push_back(param);
+        genericParams.emplace_back(param);
+    }
+
+    void addGenericParam(const std::string& param, const std::vector<std::string>& constraints)
+    {
+        genericParams.emplace_back(param, constraints);
     }
 
     [[nodiscard]] bool hasMethod(const std::string& methodName) const
@@ -403,7 +436,7 @@ struct EnumVariant
 struct EnumSymbol : Symbol
 {
     std::vector<EnumVariant> variants;
-    std::vector<std::string> genericParams;
+    std::vector<GenericParamInfo> genericParams;
 
     explicit EnumSymbol(std::string name, const SourceLocation loc = {})
         : Symbol(SymbolKind::Enum, std::move(name), Type::voided(), loc)
@@ -422,7 +455,12 @@ struct EnumSymbol : Symbol
 
     void addGenericParam(const std::string& param)
     {
-        genericParams.push_back(param);
+        genericParams.emplace_back(param);
+    }
+
+    void addGenericParam(const std::string& param, const std::vector<std::string>& constraints)
+    {
+        genericParams.emplace_back(param, constraints);
     }
 
     [[nodiscard]] bool hasVariant(const std::string& variantName) const

@@ -12,7 +12,21 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
     // Generic parameters
     for (const auto& genParam : decl.genericParams.params)
     {
-        structSym->addGenericParam(genParam.name.token_name);
+        structSym->addGenericParam(genParam.name.token_name, genParam.constraints);
+    }
+
+    // Validate constraint interface names
+    for (const auto& genParam : decl.genericParams.params)
+    {
+        for (const auto& constraintName : genParam.constraints)
+        {
+            if (!_current_scope->lookupInterface(constraintName))
+            {
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_INTERFACE,
+                             "constraint interface '" + constraintName + "' has not been defined",
+                             decl, genParam.name.location);
+            }
+        }
     }
 
     // Fields
@@ -77,7 +91,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
 
         for (const auto& genParam : method->genericParams.params)
         {
-            methodSym->addGenericParam(genParam.name.token_name);
+            methodSym->addGenericParam(genParam.name.token_name, genParam.constraints);
         }
 
         structSym->addMethod(methodSym);
@@ -114,8 +128,8 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
                 continue;
 
             BINDER_ERROR(DiagnosticCode::MISSING_INTERFACE_METHOD_IMPLEMENTATION,
-                         "method '" +interface_name+ '.' + method_symbol->name+
-                         "()' has not been implemented for struct '"+structSym->name+"'",
+                         "method '" + interface_name + '.' + method_symbol->name +
+                         "()' has not been implemented for struct '" + structSym->name + "'",
                          decl, decl.name.location);
         }
     }

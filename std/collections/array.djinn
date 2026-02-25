@@ -39,12 +39,8 @@ struct array<T> : Hashable {
     }
 
     public void grow() {
-        mut size new_cap = 4u;
-        if (this.capacity > 0u) {
-            new_cap = this.capacity * 2u;
-        }
-        this.data = realloc(this.data, new_cap * sizeof(T));
-        this.capacity = new_cap;
+        this.capacity = this.capacity * 2u;
+        this.data = realloc(this.data, this.capacity * sizeof(T));
     }
 
     public i32 hash() {

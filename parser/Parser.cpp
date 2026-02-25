@@ -303,6 +303,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
 
+    // Parse where clause: void sort<T>(array<T> arr) where T : IComparable { ... }
+    parse_where_clause(method->genericParams);
+
     // Parse parameters
     expect("Esperado '('", TokenType::LPAREN);
     if (!check(TokenType::RPAREN))
@@ -415,6 +418,9 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface()
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
 
+    // Parse where clause: interface IContainer<T> where T : IEquatable { ... }
+    parse_where_clause(iface->genericParams);
+
     // Register generic param names as types within interface scope
     if (!iface->genericParams.empty())
     {
@@ -457,6 +463,9 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
         while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
+
+    // Parse where clause: struct Array<T> where T : IEquatable { ... }
+    parse_where_clause(genericParams);
 
     // Parse base type or implements: struct Size : i32; or struct Foo : IBar { ... }
     std::vector<std::string> implements;
@@ -1776,6 +1785,50 @@ std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace()
     return ns;
 }
 
+void Parser::parse_where_clause(GenericParams& params)
+{
+    if (!match(TokenType::WHERE)) return;
+
+    // where_clause = "where" constraint_decl { ";" constraint_decl }
+    // constraint_decl = IDENTIFIER ":" IDENTIFIER { "," IDENTIFIER }
+    do
+    {
+        const Token& paramNameToken = expect("Esperado nome do parâmetro genérico na cláusula where",
+                                             TokenType::IDENTIFIER);
+        const std::string& paramName = paramNameToken.value;
+
+        // Find the GenericParam by name
+        GenericParam* target = nullptr;
+        for (auto& p : params.params)
+        {
+            if (p.name.token_name == paramName)
+            {
+                target = &p;
+                break;
+            }
+        }
+
+        if (!target)
+        {
+            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "'" + paramName + "' is not a generic parameter",
+                         SourceLocation(paramNameToken.position.fileId, paramNameToken.position.line,
+                             paramNameToken.position.column, paramName.length()));
+        }
+
+        expect("Esperado ':' após nome do parâmetro na cláusula where", TokenType::COLON);
+
+        // Parse constraint list: IFoo, IBar, IBaz
+        do
+        {
+            const Token& constraintToken = expect("Esperado nome da interface constraint", TokenType::IDENTIFIER);
+            target->constraints.push_back(constraintToken.value);
+        }
+        while (match(TokenType::COMMA));
+    }
+    while (match(TokenType::SEMICOLON));
+}
+
 std::unique_ptr<EnumDeclaration> Parser::parse_enum()
 {
     expect("Esperado enum keyword", TokenType::ENUM);
@@ -1794,6 +1847,9 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum()
         while (match(TokenType::COMMA));
         expect("Esperado '>' após parâmetros genéricos", TokenType::GREATER);
     }
+
+    // Parse where clause: enum Result<T, E> where T : ISerializable { ... }
+    parse_where_clause(genericParams);
 
     // Register generic param names as types so they can be used in variant types
     if (!genericParams.empty())

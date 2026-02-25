@@ -29,6 +29,9 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     }
     const GenericContext ctx = GenericContext::create(genericDef->genericParams, args);
 
+    // Validate generic constraints
+    validate_generic_constraints(genericDef->genericParams, args, baseName);
+
     std::vector<llvm::Type*> fieldTypes;
     std::unordered_map<std::string, unsigned> fieldIndices;
 
@@ -109,6 +112,9 @@ llvm::StructType* Generator::monomorphize_enum(const std::string& baseName, cons
     }
     const GenericContext ctx = GenericContext::create(genericDef->genericParams, args);
 
+    // Validate generic constraints
+    validate_generic_constraints(genericDef->genericParams, args, baseName);
+
     size_t maxPayloadSize = 0;
     for (const auto& variant : genericDef->variants)
     {
@@ -172,6 +178,43 @@ llvm::StructType* Generator::monomorphize_enum(const std::string& baseName, cons
     currentScope->define_enum(mangledName, std::move(monoDef));
 
     return enumType;
+}
+
+void Generator::validate_generic_constraints(const GenericParams& params, const GenericArgs& args,
+                                             const std::string& contextName)
+{
+    for (size_t i = 0; i < params.size() && i < args.size(); ++i)
+    {
+        const auto& param = params.params[i];
+        if (param.constraints.empty()) continue;
+
+        const auto& argType = args.args[i];
+        for (const auto& constraintName : param.constraints)
+        {
+            if (!type_satisfies_constraint(argType, constraintName))
+            {
+                GENERATOR_ERROR(DiagnosticCode::GENERIC_CONSTRAINT_VIOLATION,
+                                "type '" + argType.toHumanString() + "' does not satisfy constraint '" +
+                                constraintName + "' required by generic parameter '" +
+                                param.name.token_name + "' in '" + contextName + "'",
+                                argType.location);
+            }
+        }
+    }
+}
+
+bool Generator::type_satisfies_constraint(const Type& type, const std::string& interfaceName)
+{
+    if (type.kind != TypeKind::STRUCT) return false;
+
+    const auto structSym = symbols->lookupStruct(type.structName);
+    if (!structSym) return false;
+
+    for (const auto& impl : structSym->implements)
+    {
+        if (impl == interfaceName) return true;
+    }
+    return false;
 }
 
 void Generator::forward_declare_monomorphized_method(const MethodSymbol& method,

@@ -17,7 +17,8 @@ enum class Severity { Error, Warning, Note, Help };
 // Diagnostic codes follow the pattern: XYYY
 // X = Category (1=Lexer, 2=Parser, 3=Semantic, 4=CodeGen)
 // YYY = Specific error number
-namespace DiagnosticCode {
+namespace DiagnosticCode
+{
     // Lexer errors (1xxx)
     constexpr uint32_t UNEXPECTED_CHARACTER = 1001;
     constexpr uint32_t UNTERMINATED_STRING = 1002;
@@ -47,6 +48,7 @@ namespace DiagnosticCode {
     constexpr uint32_t INVALID_OPERAND = 3009;
     constexpr uint32_t UNDEFINED_INTERFACE = 3010;
     constexpr uint32_t MISSING_INTERFACE_METHOD_IMPLEMENTATION = 3011;
+    constexpr uint32_t GENERIC_CONSTRAINT_VIOLATION = 3012;
 
     // CodeGen errors (4xxx)
     constexpr uint32_t INVALID_TYPE = 4001;
@@ -65,7 +67,8 @@ namespace DiagnosticCode {
     constexpr uint32_t DOUBLE_MOVE = 5007;
 }
 
-struct SourceLocation {
+struct SourceLocation
+{
     std::string fileId;
     uint32_t line = 0;
     uint32_t column = 0;
@@ -74,15 +77,18 @@ struct SourceLocation {
     SourceLocation() = default;
 
     SourceLocation(const uint32_t l, const uint32_t c, const uint32_t len = 1)
-        : line(l), column(c), length(len) {
+        : line(l), column(c), length(len)
+    {
     }
 
     SourceLocation(std::string file, const uint32_t l, const uint32_t c, const uint32_t len = 1)
-        : fileId(std::move(file)), line(l), column(c), length(len) {
+        : fileId(std::move(file)), line(l), column(c), length(len)
+    {
     }
 };
 
-struct Diagnostic {
+struct Diagnostic
+{
     Severity severity;
     uint32_t code;
     std::string message;
@@ -92,47 +98,54 @@ struct Diagnostic {
     std::vector<std::string> helps;
 
     Diagnostic(const Severity sev, const uint32_t code, std::string msg, const SourceLocation loc = {})
-        : severity(sev), code(code), message(std::move(msg)), location(loc) {
+        : severity(sev), code(code), message(std::move(msg)), location(loc)
+    {
     }
 
-    Diagnostic &withLabel(const std::string &lbl) {
+    Diagnostic& withLabel(const std::string& lbl)
+    {
         label = lbl;
         return *this;
     }
 
-    Diagnostic &withNote(const std::string &note) {
+    Diagnostic& withNote(const std::string& note)
+    {
         notes.push_back(note);
         return *this;
     }
 
-    Diagnostic &withHelp(const std::string &help) {
+    Diagnostic& withHelp(const std::string& help)
+    {
         helps.push_back(help);
         return *this;
     }
 };
 
-struct SourceFile {
+struct SourceFile
+{
     std::string source;
     std::vector<size_t> lineOffsets;
 };
 
-class DiagnosticEngine {
+class DiagnosticEngine
+{
 public:
     DiagnosticEngine() = default;
 
-    explicit DiagnosticEngine(std::string source) {
+    explicit DiagnosticEngine(std::string source)
+    {
         registerSource("main", std::move(source));
     }
 
-    void registerSource(const std::string &fileId, std::string source);
+    void registerSource(const std::string& fileId, std::string source);
 
-    void emit(const Diagnostic &diag);
+    void emit(const Diagnostic& diag);
 
-    void error(uint32_t code, const std::string &msg, SourceLocation loc = {});
+    void error(uint32_t code, const std::string& msg, SourceLocation loc = {});
 
-    void warning(uint32_t code, const std::string &msg, SourceLocation loc = {});
+    void warning(uint32_t code, const std::string& msg, SourceLocation loc = {});
 
-    void emitAndPrint(const Diagnostic &diag);
+    void emitAndPrint(const Diagnostic& diag);
 
     [[nodiscard]] bool hasErrors() const { return total_errors > 0; }
     [[nodiscard]] size_t errorCount() const { return total_errors; }
@@ -140,9 +153,9 @@ public:
 
     [[nodiscard]] std::string render() const;
 
-    [[nodiscard]] const std::vector<Diagnostic> &get_diagnostics() const;
+    [[nodiscard]] const std::vector<Diagnostic>& get_diagnostics() const;
 
-    void printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry> > &stack) const;
+    void printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry>>& stack) const;
 
 private:
     std::unordered_map<std::string, SourceFile> _sources;
@@ -150,31 +163,33 @@ private:
     size_t total_errors = 0;
     size_t total_warnings = 0;
 
-    static std::vector<size_t> buildLineIndex(const std::string &source);
+    static std::vector<size_t> buildLineIndex(const std::string& source);
 
-    [[nodiscard]] std::string getLine(const std::string &fileId, uint32_t lineNum) const;
+    [[nodiscard]] std::string getLine(const std::string& fileId, uint32_t lineNum) const;
 
-    [[nodiscard]] std::string renderDiagnostic(const Diagnostic &diag) const;
+    [[nodiscard]] std::string renderDiagnostic(const Diagnostic& diag) const;
 
     [[nodiscard]] static std::string severityString(Severity severity_level);
 
     [[nodiscard]] static std::string severityColor(Severity severity_level);
 
-    [[nodiscard]] static std::string colorize(const std::string &text, const std::string &code);
+    [[nodiscard]] static std::string colorize(const std::string& text, const std::string& code);
 
     [[nodiscard]] static std::string formatCode(uint32_t code);
 };
 
-class CompileError : public std::exception {
+class CompileError : public std::exception
+{
 public:
     CompileError(const uint32_t code, std::string msg, const SourceLocation loc = {})
-        : code_(code), message_(std::move(msg)), location_(loc) {
+        : code_(code), message_(std::move(msg)), location_(loc)
+    {
     }
 
     [[nodiscard]] uint32_t code() const { return code_; }
-    [[nodiscard]] const std::string &message() const { return message_; }
-    [[nodiscard]] const SourceLocation &location() const { return location_; }
-    [[nodiscard]] const char *what() const noexcept override { return message_.c_str(); }
+    [[nodiscard]] const std::string& message() const { return message_; }
+    [[nodiscard]] const SourceLocation& location() const { return location_; }
+    [[nodiscard]] const char* what() const noexcept override { return message_.c_str(); }
 
 private:
     uint32_t code_;

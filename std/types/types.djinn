@@ -12,7 +12,6 @@ enum optional<T> {
     Value(T)
 }
 
-
 enum result<T, E> {
     Ok(T),
     Error(E)

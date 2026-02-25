@@ -99,6 +99,7 @@ enum class TokenType
     ENUM,
     NEW,
     IMPL,
+    WHERE,
 };
 
 

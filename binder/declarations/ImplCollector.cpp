@@ -56,7 +56,7 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
 
         for (const auto& genParam : method->genericParams.params)
         {
-            methodSym->addGenericParam(genParam.name.token_name);
+            methodSym->addGenericParam(genParam.name.token_name, genParam.constraints);
         }
 
         structSym->addMethod(methodSym);

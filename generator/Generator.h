@@ -126,6 +126,11 @@ private:
                                const GenericContext& ctx,
                                const std::string& mangledStructName);
 
+    void validate_generic_constraints(const GenericParams& params, const GenericArgs& args,
+                                      const std::string& contextName);
+
+    bool type_satisfies_constraint(const Type& type, const std::string& interfaceName);
+
     llvm::Type* generate_type_with_context(const Type& type, const GenericContext* ctx);
 
     void generate_statement(const Statement& stmt);
