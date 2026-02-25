@@ -15,7 +15,8 @@ TEST(Interface, BasicDefinition) {
     EXPECT_EQ(result.program->interfaces.size(), 1);
 }
 
-TEST(Interface, SameNameInterfaceDefinition) {
+TEST(Interface, SameNameInterfaceDefinition)
+{
     const auto source = R"(
         interface Counter {
             i32 getCount();
