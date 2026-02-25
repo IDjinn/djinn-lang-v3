@@ -15,6 +15,23 @@ TEST(Interface, BasicDefinition) {
     EXPECT_EQ(result.program->interfaces.size(), 1);
 }
 
+TEST(Interface, SameNameInterfaceDefinition) {
+    const auto source = R"(
+        interface Counter {
+            i32 getCount();
+            void increment();
+        }
+        struct Counter : Counter {
+            i32 getCount();
+            void increment();
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.program->interfaces.size(), 1);
+}
+
 TEST(Interface, GenericInterface) {
     const auto source = R"(
         interface IComparable<T> {

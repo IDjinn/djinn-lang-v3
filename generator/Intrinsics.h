@@ -35,7 +35,6 @@ inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
         {"unreachable", Intrinsic::Unreachable},
         {"expect", Intrinsic::Expect},
         {"likely", Intrinsic::Likely},
-        // {"abort", Intrinsic::Abort},
         {"unlikely", Intrinsic::Unlikely},
         {"typeof", Intrinsic::Typeof}
     };
