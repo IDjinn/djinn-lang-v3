@@ -69,7 +69,7 @@ TEST(GenericConstraints, ParseWhereClauseMultipleParams)
             i32 serialize();
         }
 
-        struct Map<K, V> where K : IHashable; V : ISerializable {
+        struct Map<K, V> where K : IHashable; where V : ISerializable {
             K key;
             V value;
         }
