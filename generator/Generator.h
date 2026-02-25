@@ -195,6 +195,8 @@ private:
 
     llvm::Value* generate_assignment(const Assignment& expr);
 
+    llvm::Value* generate_cast_expression(const CastExpression& expr);
+
     llvm::Value* generate_brace_initializer(const BraceInitializer& expr);
 
     llvm::Value* generate_brace_init_for_struct(const BraceInitializer& braceInit, llvm::StructType* structType,

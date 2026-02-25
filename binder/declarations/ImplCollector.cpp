@@ -65,28 +65,102 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
     // Handle interface impl: validate interface exists and all methods are implemented
     if (decl.isInterfaceImpl())
     {
-        structSym->addImplements(decl.interfaceName);
-
-        const auto& interfaceSymbol = _current_scope->lookupInterface(decl.interfaceName);
-        if (!interfaceSymbol)
+        for (const auto& ifaceName : decl.interfaceNames)
         {
-            BINDER_ERROR(DiagnosticCode::UNDEFINED_INTERFACE,
-                         "interface '" + decl.interfaceName + "' has not been defined",
-                         decl, decl.targetType->location);
-            return;
-        }
+            structSym->addImplements(ifaceName);
 
-        for (const auto& ifaceMethod : interfaceSymbol->methods)
-        {
-            if (std::ranges::find_if(structSym->methods,
-                                     [&](const auto& m) { return m->name == ifaceMethod->name; })
-                != structSym->methods.end())
+            const auto& interfaceSymbol = _current_scope->lookupInterface(ifaceName);
+            if (!interfaceSymbol)
+            {
+                BINDER_ERROR(DiagnosticCode::UNDEFINED_INTERFACE,
+                             "interface '" + ifaceName + "' has not been defined",
+                             decl, decl.targetType->location);
                 continue;
+            }
 
-            BINDER_ERROR(DiagnosticCode::MISSING_INTERFACE_METHOD_IMPLEMENTATION,
-                         "method '" + decl.interfaceName + "." + ifaceMethod->name +
-                         "()' has not been implemented for type '" + typeName + "'",
-                         decl, decl.targetType->location);
+            // Collect all generic param names from interface + method level
+            std::set<std::string> ifaceGenericNames;
+            for (const auto& gp : interfaceSymbol->genericParams)
+                ifaceGenericNames.insert(gp.name);
+
+            for (const auto& ifaceMethod : interfaceSymbol->methods)
+            {
+                const auto it = std::ranges::find_if(structSym->methods,
+                                                     [&](const auto& m) { return m->name == ifaceMethod->name; });
+
+                if (it == structSym->methods.end())
+                {
+                    BINDER_ERROR(DiagnosticCode::MISSING_INTERFACE_METHOD_IMPLEMENTATION,
+                                 "method '" + ifaceName + "." + ifaceMethod->name +
+                                 "()' has not been implemented for type '" + typeName + "'",
+                                 decl, decl.targetType->location);
+                    continue;
+                }
+
+                const auto& implMethod = *it;
+
+                // Also include method-level generic params
+                std::set<std::string> allGenericNames = ifaceGenericNames;
+                for (const auto& gp : ifaceMethod->genericParams)
+                    allGenericNames.insert(gp.name);
+
+                // Validate return type (skip if it's a generic parameter)
+                const auto& expectedRet = ifaceMethod->returnType;
+                const bool returnIsGeneric = expectedRet.kind == TypeKind::STRUCT
+                    && allGenericNames.contains(expectedRet.structName);
+
+                if (!returnIsGeneric && expectedRet.toHumanString() != implMethod->returnType.toHumanString())
+                {
+                    BINDER_ERROR(DiagnosticCode::IMPL_METHOD_SIGNATURE_MISMATCH,
+                                 "method '" + ifaceName + "." + ifaceMethod->name +
+                                 "()' expects return type '" + expectedRet.toHumanString() +
+                                 "' but implementation for '" + typeName +
+                                 "' returns '" + implMethod->returnType.toHumanString() + "'",
+                                 decl, decl.targetType->location);
+                }
+
+                // Validate parameter count
+                if (ifaceMethod->paramTypes.size() != implMethod->paramTypes.size())
+                {
+                    BINDER_ERROR(DiagnosticCode::IMPL_METHOD_SIGNATURE_MISMATCH,
+                                 "method '" + ifaceName + "." + ifaceMethod->name +
+                                 "()' expects " + std::to_string(ifaceMethod->paramTypes.size()) +
+                                 " parameter(s) but implementation for '" + typeName +
+                                 "' has " + std::to_string(implMethod->paramTypes.size()),
+                                 decl, decl.targetType->location);
+                }
+                else
+                {
+                    // Validate parameter types
+                    // Generic params (T) in the interface are substituted with the target type
+                    const std::string targetTypeStr = decl.targetType->toHumanString();
+
+                    for (size_t p = 0; p < ifaceMethod->paramTypes.size(); ++p)
+                    {
+                        const auto& expectedParam = ifaceMethod->paramTypes[p];
+                        const auto& actualParam = implMethod->paramTypes[p];
+
+                        // If interface param is a generic name, expected type is the target type
+                        const bool paramIsGeneric = expectedParam.kind == TypeKind::STRUCT
+                            && allGenericNames.contains(expectedParam.structName);
+
+                        const std::string expectedStr = paramIsGeneric
+                                                            ? targetTypeStr
+                                                            : expectedParam.toHumanString();
+
+                        if (expectedStr != actualParam.toHumanString())
+                        {
+                            BINDER_ERROR(DiagnosticCode::IMPL_METHOD_SIGNATURE_MISMATCH,
+                                         "method '" + ifaceName + "." + ifaceMethod->name +
+                                         "()' parameter '" + ifaceMethod->paramNames[p] +
+                                         "' expects type '" + expectedStr +
+                                         "' but implementation for '" + typeName +
+                                         "' has '" + actualParam.toHumanString() + "'",
+                                         decl, decl.targetType->location);
+                        }
+                    }
+                }
+            }
         }
     }
 }

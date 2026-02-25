@@ -304,7 +304,10 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     }
 
     // Parse where clause: void sort<T>(array<T> arr) where T : IComparable { ... }
-    parse_where_clause(method->genericParams);
+    while (check(TokenType::WHERE))
+    {
+        parse_where_clause(method->genericParams);
+    }
 
     // Parse parameters
     expect("Esperado '('", TokenType::LPAREN);
@@ -419,7 +422,10 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface()
     }
 
     // Parse where clause: interface IContainer<T> where T : IEquatable { ... }
-    parse_where_clause(iface->genericParams);
+    while (check(TokenType::WHERE))
+    {
+        parse_where_clause(iface->genericParams);
+    }
 
     // Register generic param names as types within interface scope
     if (!iface->genericParams.empty())
@@ -465,7 +471,10 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     }
 
     // Parse where clause: struct Array<T> where T : IEquatable { ... }
-    parse_where_clause(genericParams);
+    while (check(TokenType::WHERE))
+    {
+        parse_where_clause(genericParams);
+    }
 
     // Parse base type or implements: struct Size : i32; or struct Foo : IBar { ... }
     std::vector<std::string> implements;
@@ -504,6 +513,12 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
             }
             while (match(TokenType::COMMA));
         }
+    }
+
+    // Also parse where clauses after implements: struct Foo<T> : IBar where T : IEquatable { ... }
+    while (check(TokenType::WHERE))
+    {
+        parse_where_clause(genericParams);
     }
 
     currentScope->define_struct(name.token_name, Type::struct_type(name.token_name));
@@ -1206,6 +1221,26 @@ std::unique_ptr<Expression> Parser::parse_factor()
 
 std::unique_ptr<Expression> Parser::parse_unary()
 {
+    // C-style cast: (Type)expr
+    if (check(TokenType::LPAREN))
+    {
+        const size_t saved = current;
+        advance(); // consume '('
+        if (isType())
+        {
+            auto castType = parse_type();
+            if (match(TokenType::RPAREN))
+            {
+                auto operand = parse_unary();
+                auto castExpr = std::make_unique<CastExpression>(std::move(*castType), std::move(operand));
+                const auto& pos = tokens[saved].position;
+                castExpr->location = SourceLocation(pos.line, pos.column);
+                return castExpr;
+            }
+        }
+        current = saved; // backtrack — not a cast
+    }
+
     if (match(TokenType::NEW))
     {
         auto expr = parse_postfix();
@@ -1463,8 +1498,13 @@ std::unique_ptr<Expression> Parser::parse_primary()
 
             if (match(TokenType::EQUAL))
             {
-                return std::make_unique<VariableInit>(std::move(varType), std::move(varName),
-                                                      parse_expression(), isMutable);
+                auto initExpression = parse_expression();
+                return std::make_unique<VariableInit>(
+                    std::move(varType),
+                    std::move(varName),
+                    std::move(initExpression),
+                    isMutable
+                );
             }
             return std::make_unique<VariableDeclaration>(std::move(varType), std::move(varName), isMutable);
         }
@@ -1787,46 +1827,46 @@ std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace()
 
 void Parser::parse_where_clause(GenericParams& params)
 {
-    if (!match(TokenType::WHERE)) return;
-
+    expect("Experado 'where' antes de uma constraint", TokenType::WHERE);
     // where_clause = "where" constraint_decl { ";" constraint_decl }
     // constraint_decl = IDENTIFIER ":" IDENTIFIER { "," IDENTIFIER }
+    const Token& paramNameToken = expect("Esperado nome do parâmetro genérico na cláusula where",
+                                         TokenType::IDENTIFIER);
+    const std::string& paramName = paramNameToken.value;
+
+    // Find the GenericParam by name
+    GenericParam* target = nullptr;
+    for (auto& p : params.params)
+    {
+        if (p.name.token_name == paramName)
+        {
+            target = &p;
+            break;
+        }
+    }
+
+    if (!target)
+    {
+        PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                     "'" + paramName + "' is not a generic parameter",
+                     SourceLocation(paramNameToken.position.fileId, paramNameToken.position.line,
+                         paramNameToken.position.column, paramName.length()));
+    }
+
+    expect("Esperado ':' após nome do parâmetro na cláusula where", TokenType::COLON);
+
+    // Parse constraint list: IFoo, IBar, IBaz
     do
     {
-        const Token& paramNameToken = expect("Esperado nome do parâmetro genérico na cláusula where",
-                                             TokenType::IDENTIFIER);
-        const std::string& paramName = paramNameToken.value;
-
-        // Find the GenericParam by name
-        GenericParam* target = nullptr;
-        for (auto& p : params.params)
-        {
-            if (p.name.token_name == paramName)
-            {
-                target = &p;
-                break;
-            }
-        }
-
-        if (!target)
-        {
-            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
-                         "'" + paramName + "' is not a generic parameter",
-                         SourceLocation(paramNameToken.position.fileId, paramNameToken.position.line,
-                             paramNameToken.position.column, paramName.length()));
-        }
-
-        expect("Esperado ':' após nome do parâmetro na cláusula where", TokenType::COLON);
-
-        // Parse constraint list: IFoo, IBar, IBaz
-        do
-        {
-            const Token& constraintToken = expect("Esperado nome da interface constraint", TokenType::IDENTIFIER);
-            target->constraints.push_back(constraintToken.value);
-        }
-        while (match(TokenType::COMMA));
+        const Token& constraintToken = expect("Esperado nome da interface constraint", TokenType::IDENTIFIER);
+        target->constraints.push_back(constraintToken.value);
     }
-    while (match(TokenType::SEMICOLON));
+    while (match(TokenType::COMMA));
+
+    // Consume optional trailing semicolon to allow:
+    //   where Key : Hashable;
+    //   where Value : Hashable
+    match(TokenType::SEMICOLON);
 }
 
 std::unique_ptr<EnumDeclaration> Parser::parse_enum()
@@ -1849,7 +1889,10 @@ std::unique_ptr<EnumDeclaration> Parser::parse_enum()
     }
 
     // Parse where clause: enum Result<T, E> where T : ISerializable { ... }
-    parse_where_clause(genericParams);
+    while (check(TokenType::WHERE))
+    {
+        parse_where_clause(genericParams);
+    }
 
     // Register generic param names as types so they can be used in variant types
     if (!genericParams.empty())
@@ -1939,13 +1982,25 @@ std::unique_ptr<ImplDeclaration> Parser::parse_impl()
     // Parse the first type (could be the target type or interface name)
     auto firstType = parse_type();
 
-    // Check for "impl Interface for Type" form
-    if (check(TokenType::FOR))
+    // Check for "impl Interface[, Interface2, ...] for Type" form
+    if (check(TokenType::COMMA) || check(TokenType::FOR))
     {
-        advance(); // consume 'for'
-        impl->interfaceName = firstType->kind == TypeKind::STRUCT
-                                  ? firstType->structName
-                                  : firstType->toHumanString();
+        // First interface name
+        impl->interfaceNames.push_back(firstType->kind == TypeKind::STRUCT
+                                           ? firstType->structName
+                                           : firstType->toHumanString());
+
+        // Parse additional comma-separated interface names
+        while (check(TokenType::COMMA))
+        {
+            advance(); // consume ','
+            auto nextType = parse_type();
+            impl->interfaceNames.push_back(nextType->kind == TypeKind::STRUCT
+                                               ? nextType->structName
+                                               : nextType->toHumanString());
+        }
+
+        expect("Esperado 'for' após interface(s) no impl", TokenType::FOR);
         impl->targetType = parse_type();
     }
     else

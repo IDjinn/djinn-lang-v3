@@ -13,11 +13,12 @@
 #include "../lexer/TokenType.h"
 #include "AST.h"
 
-class Parser {
+class Parser
+{
 public:
-    explicit Parser(std::vector<Token> tokens, DiagnosticEngine &diagnostics);
+    explicit Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics);
 
-    std::unique_ptr<Program> parse(const std::string &program_name);
+    std::unique_ptr<Program> parse(const std::string& program_name);
 
     // Pre-register type names from standard library so isType() recognizes them
     void registerKnownType(const std::string& name);
@@ -27,19 +28,19 @@ private:
     size_t current = 0;
 
     std::shared_ptr<Scope> currentScope = std::make_shared<Scope>();
-    DiagnosticEngine &_diagnostics;
+    DiagnosticEngine& _diagnostics;
 
     void pushScope();
 
     void popScope();
 
-    Token &peek();
+    Token& peek();
 
-    Token &previous();
+    Token& previous();
 
-    Token &advance();
+    Token& advance();
 
-    bool check(const std::vector<TokenType> &types);
+    bool check(const std::vector<TokenType>& types);
 
     bool check(TokenType type);
 
@@ -47,11 +48,11 @@ private:
 
     bool isType();
 
-    bool isType(const Token &token) const;
+    bool isType(const Token& token) const;
 
-    Token &expect(const std::string &message, TokenType type);
+    Token& expect(const std::string& message, TokenType type);
 
-    Token &expect(const std::string &message, const std::vector<TokenType> &types);
+    Token& expect(const std::string& message, const std::vector<TokenType>& types);
 
     bool isAtEnd();
 
@@ -115,19 +116,21 @@ private:
 
     std::unique_ptr<Expression> parse_array_literal();
 
-    std::unique_ptr<Expression> parse_typed_array_literal(const Token &typeToken);
+    std::unique_ptr<Expression> parse_typed_array_literal(const Token& typeToken);
 
     std::unique_ptr<Expression> parse_switch_expression();
 
-    std::unique_ptr<ExternFunctionDeclaration> parse_extern_function(const std::string &abi);
+    std::unique_ptr<ExternFunctionDeclaration> parse_extern_function(const std::string& abi);
 
-    void parse_extern(Program *program);
+    void parse_extern(Program* program);
 
     std::unique_ptr<NamespaceDeclaration> parse_namespace();
 
     std::unique_ptr<EnumDeclaration> parse_enum();
 
     std::unique_ptr<ImplDeclaration> parse_impl();
+
+    void parse_where_clause(GenericParams& params);
 
     QualifiedName parse_qualified_name();
 

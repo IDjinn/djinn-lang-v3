@@ -56,3 +56,24 @@ struct string {
         return this.data;
     }
 }
+
+
+impl Hashable, Equatable for i32 {
+    i32 hash() {
+        return this;
+    }
+
+    bool equals(i32 other) {
+        return this == other;
+    }
+}
+
+impl Hashable, Equatable for i8* {
+    i32 hash() {
+        return this;
+    }
+
+    bool equals(i8* other) {
+        return this == other;
+    }
+}

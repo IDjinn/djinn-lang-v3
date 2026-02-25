@@ -205,9 +205,13 @@ void Generator::validate_generic_constraints(const GenericParams& params, const 
 
 bool Generator::type_satisfies_constraint(const Type& type, const std::string& interfaceName)
 {
-    if (type.kind != TypeKind::STRUCT) return false;
+    // For struct types, look up by struct name; for primitives, use the human-readable
+    // name to find synthetic structs created by impl blocks (e.g. "impl Hashable for i32")
+    const std::string typeName = (type.kind == TypeKind::STRUCT)
+                                     ? type.structName
+                                     : type.toHumanString();
 
-    const auto structSym = symbols->lookupStruct(type.structName);
+    const auto structSym = symbols->lookupStruct(typeName);
     if (!structSym) return false;
 
     for (const auto& impl : structSym->implements)
@@ -535,6 +539,15 @@ llvm::Type* Generator::generate_type(const Type& type)
         }
     case TypeKind::STRUCT:
         {
+            // Check if this is a generic parameter that needs substitution (e.g., Key, Value in method bodies)
+            if (_currentGenericCtx)
+            {
+                if (const Type* resolved = _currentGenericCtx->resolve(type.structName))
+                {
+                    return generate_type(*resolved);
+                }
+            }
+
             if (llvm::Type* transparentType = currentScope->get_transparent_type(type.structName))
             {
                 return transparentType;
@@ -623,6 +636,21 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
     if (srcType->isFloatingPointTy() && targetType->isIntegerTy())
     {
         return builder->CreateFPToSI(value, targetType, "fptosi");
+    }
+
+    if (srcType->isPointerTy() && targetType->isPointerTy())
+    {
+        return builder->CreatePointerCast(value, targetType, "ptrcast");
+    }
+
+    if (srcType->isPointerTy() && targetType->isIntegerTy())
+    {
+        return builder->CreatePtrToInt(value, targetType, "ptrtoint");
+    }
+
+    if (srcType->isIntegerTy() && targetType->isPointerTy())
+    {
+        return builder->CreateIntToPtr(value, targetType, "inttoptr");
     }
 
     return value;

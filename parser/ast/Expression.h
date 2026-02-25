@@ -557,4 +557,24 @@ struct NewExpression : Expression
     }
 };
 
+struct CastExpression : Expression
+{
+    Type targetType;
+    std::unique_ptr<Expression> operand;
+
+    CastExpression(Type targetType, std::unique_ptr<Expression> operand)
+        : targetType(std::move(targetType)), operand(std::move(operand))
+    {
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "CastExpression(" << targetType << ")\n";
+        operand->print(os, indent + 2);
+    }
+};
+
 #endif //DJINN_EXPRESSION_H

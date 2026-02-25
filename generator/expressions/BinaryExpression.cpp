@@ -2,7 +2,12 @@
 // Created by Luke on 06/12/2025.
 //
 
+#include <llvm/Pass.h>
+#include <llvm/Support/Error.h>
+
 #include "../Generator.h"
+#include "../../utils/Logger.h"
+#include "../../utils/string_utils.h"
 
 llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
 {
@@ -53,6 +58,14 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
             {
                 left = builder->CreateFPExt(left, rightType, "fpext");
             }
+        }
+        else
+        {
+            // Unhandled type mismatch — log before LLVM asserts
+            LOG_ERROR("BinaryExpr type mismatch: \n\tleft: %s \n\tright: %s \n\tat line %d col %d",
+                      string_utils::llvm_type_str(leftType).c_str(),
+                      string_utils::llvm_type_str(rightType).c_str(),
+                      expr.location.line, expr.location.column);
         }
     }
 

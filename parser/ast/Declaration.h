@@ -585,10 +585,10 @@ struct EnumDeclaration : Location
 struct ImplDeclaration : Location
 {
     std::unique_ptr<Type> targetType;
-    std::string interfaceName; // empty for inherent impl, filled for "impl Interface for Type"
+    std::vector<std::string> interfaceNames; // empty for inherent impl, filled for "impl Interface for Type"
     std::vector<std::unique_ptr<StructMethodDeclaration>> methods;
 
-    [[nodiscard]] bool isInterfaceImpl() const { return !interfaceName.empty(); }
+    [[nodiscard]] bool isInterfaceImpl() const { return !interfaceNames.empty(); }
 
     [[nodiscard]] std::string targetTypeName() const
     {
@@ -602,7 +602,7 @@ struct ImplDeclaration : Location
         if (targetType->kind == TypeKind::F64) return "f64";
         if (targetType->kind == TypeKind::F16) return "f16";
         if (targetType->kind == TypeKind::F128) return "f128";
-        return "unknown";
+        return targetType->toHumanString();
     }
 
     void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
@@ -614,7 +614,15 @@ struct ImplDeclaration : Location
     {
         writeIndent(os, indent);
         os << "ImplDeclaration(";
-        if (isInterfaceImpl()) os << interfaceName << " for ";
+        if (isInterfaceImpl())
+        {
+            for (size_t i = 0; i < interfaceNames.size(); ++i)
+            {
+                if (i > 0) os << ", ";
+                os << interfaceNames[i];
+            }
+            os << " for ";
+        }
         os << targetTypeName() << ")\n";
         for (const auto& method : methods)
         {

@@ -1,0 +1,198 @@
+import std::types;
+import std::libc;
+import std::debug;
+import std::types::constraints;
+
+namespace std::collections;
+
+struct map<Key, Value>
+    where Key : Hashable, Equatable;
+    where Value : Hashable, Equatable
+{
+    Key* keys;
+    Value* values;
+    i8* states;
+    size count;
+    size capacity;
+
+    map() {
+        this.capacity = 16u;
+        this.count = 0u;
+        this.keys = malloc(this.capacity * sizeof(Key));
+        this.values = malloc(this.capacity * sizeof(Value));
+        this.states = malloc(this.capacity * 1u);
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            this.states[i] = 0;
+        }
+    }
+
+    public void set(Key key, Value value) {
+        if (this.count * 4u >= this.capacity * 3u) {
+            this._grow();
+        }
+
+        mut size idx = this._hash_index(key);
+        mut size insert_idx = this.capacity;
+
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            i8 state = this.states[idx];
+
+            if (state == 0) {
+                if (insert_idx == this.capacity) {
+                    insert_idx = idx + 0u;
+                }
+                this.keys[insert_idx] = key;
+                this.values[insert_idx] = value;
+                this.states[insert_idx] = 1;
+                this.count = this.count + 1u;
+                return;
+            }
+
+            if (state == 2) {
+                if (insert_idx == this.capacity) {
+                    insert_idx = idx + 0u;
+                }
+            }
+
+            if (state == 1) {
+                if (this.keys[idx] == key) {
+                    this.values[idx] = value;
+                    return;
+                }
+            }
+
+            idx = (idx + 1u) % this.capacity;
+        }
+
+        if (insert_idx < this.capacity) {
+            this.keys[insert_idx] = key;
+            this.values[insert_idx] = value;
+            this.states[insert_idx] = 1;
+            this.count = this.count + 1u;
+        }
+    }
+
+    public Value get(Key key) {
+        mut size idx = this._hash_index(key);
+
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            i8 state = this.states[idx];
+
+            if (state == 0) {
+                Debug.assert(1 == 0, "map::get - key not found");
+            }
+
+            if (state == 1) {
+                if (this.keys[idx] == key) {
+                    return this.values[idx];
+                }
+            }
+
+            idx = (idx + 1u) % this.capacity;
+        }
+
+        Debug.assert(1 == 0, "map::get - key not found");
+        return this.values[0];
+    }
+
+    public bool has(Key key) {
+        mut size idx = this._hash_index(key);
+
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            i8 state = this.states[idx];
+
+            if (state == 0) {
+                return 0 == 1;
+            }
+
+            if (state == 1) {
+                if (this.keys[idx] == key) {
+                    return 1 == 1;
+                }
+            }
+
+            idx = (idx + 1u) % this.capacity;
+        }
+
+        return 0 == 1;
+    }
+
+    public bool remove(Key key) {
+        mut size idx = this._hash_index(key);
+
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            i8 state = this.states[idx];
+
+            if (state == 0) {
+                return 0 == 1;
+            }
+
+            if (state == 1) {
+                if (this.keys[idx] == key) {
+                    this.states[idx] = 2;
+                    this.count = this.count - 1u;
+                    return 1 == 1;
+                }
+            }
+
+            idx = (idx + 1u) % this.capacity;
+        }
+
+        return 0 == 1;
+    }
+
+    public size len() {
+        return this.count;
+    }
+
+    public i32 hash() {
+        mut i32 hash_result = 1;
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            if (this.states[i] == 1) {
+                hash_result = 31 * hash_result + this.keys[i]; // TODO: does not support non-integer generic types
+            }
+        }
+        return hash_result;
+    }
+
+    public void destroy() {
+        free(this.keys);
+        free(this.values);
+        free(this.states);
+    }
+
+    size _hash_index(Key key) {
+        mut i32 h = key;
+        if (h < 0) {
+            h = 0 - h;
+        }
+        return h % this.capacity;
+    }
+
+    void _grow() {
+        size old_capacity = this.capacity;
+        Key* old_keys = this.keys;
+        Value* old_values = this.values;
+        i8* old_states = this.states;
+
+        this.capacity = this.capacity * 2u;
+        this.count = 0u;
+        this.keys = malloc(this.capacity * sizeof(Key));
+        this.values = malloc(this.capacity * sizeof(Value));
+        this.states = malloc(this.capacity * 1u);
+
+        for (mut size i = 0u; i < this.capacity; i = i + 1u) {
+            this.states[i] = 0;
+        }
+
+        for (mut size i = 0u; i < old_capacity; i = i + 1u) {
+            if (old_states[i] == 1) {
+                this.set(old_keys[i], old_values[i]);
+            }
+        }
+
+        free(old_keys);
+        free(old_values);
+        free(old_states);
+    }
+}
