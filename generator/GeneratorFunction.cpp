@@ -265,7 +265,6 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     llvm::Value* freeMem = builder->CreateCall(coroFreeFn, {coroId, coroHandle}, "coro.free.mem");
 
     // Check if freeMem is null before calling free
-    auto* freeCheckBB = llvm::BasicBlock::Create(*context, "coro.free.check", llvmFunc);
     auto* freeDoFreeBB = llvm::BasicBlock::Create(*context, "coro.free.do", llvmFunc);
     llvm::Value* isNull = builder->CreateICmpEQ(freeMem, llvm::ConstantPointerNull::get(ptrTy), "is.null");
     builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);

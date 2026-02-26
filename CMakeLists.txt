@@ -137,6 +137,14 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+# Resolve clang path from the same LLVM installation
+find_program(LLVM_CLANG_PATH clang PATHS "${LLVM_TOOLS_BINARY_DIR}" NO_DEFAULT_PATH)
+if (NOT LLVM_CLANG_PATH)
+    find_program(LLVM_CLANG_PATH clang)
+endif ()
+message(STATUS "Using clang: ${LLVM_CLANG_PATH}")
+add_compile_definitions(DJINN_CLANG_PATH="${LLVM_CLANG_PATH}")
+
 # LLVM includes added per-target as SYSTEM (see below)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})

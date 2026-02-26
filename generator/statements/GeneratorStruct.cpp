@@ -504,7 +504,6 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     builder->SetInsertPoint(cleanupBB);
     auto* coroFreeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_free);
     llvm::Value* freeMem = builder->CreateCall(coroFreeFn, {coroId, coroHandle}, "coro.free.mem");
-    auto* freeCheckBB = llvm::BasicBlock::Create(*context, "coro.free.check", llvmFunc);
     auto* freeDoFreeBB = llvm::BasicBlock::Create(*context, "coro.free.do", llvmFunc);
     llvm::Value* isNull = builder->CreateICmpEQ(freeMem, llvm::ConstantPointerNull::get(ptrTy), "is.null");
     builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);

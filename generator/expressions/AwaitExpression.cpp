@@ -46,7 +46,6 @@ llvm::Value* Generator::generate_await_loop(llvm::Value* handle, llvm::Type* res
         result = builder->CreateLoad(resultType, promisePtr, "await.result");
     }
 
-    // Destroy the coroutine frame
     auto* coroDestroyFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_destroy);
     builder->CreateCall(coroDestroyFn, {handle});
 

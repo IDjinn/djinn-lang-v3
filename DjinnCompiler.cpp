@@ -20,6 +20,10 @@
 #include "utils/Logger.h"
 #include "utils/StopWatch.h"
 
+#ifndef DJINN_CLANG_PATH
+#define DJINN_CLANG_PATH "clang"
+#endif
+
 // Resolve std library path: try the given path first, then try relative to this source file
 static std::filesystem::path resolve_std_path(const std::filesystem::path& given)
 {
@@ -230,7 +234,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         if (options.generateBinary)
             system(
-                ("clang -fstack-protector-all -fsanitize=address -fno-omit-frame-pointer -g " + out_file_path +
+                ("\"" DJINN_CLANG_PATH "\" -fno-omit-frame-pointer -g " + out_file_path +
                     ".ll -o " + out_file_path + ".exe").c_str());
 
 
@@ -446,7 +450,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         int clangResult = system(
-            ("clang -fstack-protector-all -fsanitize=address -fno-omit-frame-pointer -g " + llPath + " -o " + exePath).
+            ("\"" DJINN_CLANG_PATH "\" -fno-omit-frame-pointer -g " + llPath + " -o " + exePath).
             c_str());
         if (clangResult != 0)
         {
