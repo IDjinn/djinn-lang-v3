@@ -13,15 +13,15 @@
 - [x] Methods em structs (block body, arrow =>, parametros)
 - [x] Constructors (stack, heap, field access)
 - [x] Generic struct constructors (Box\<i32\>(42), array\<T\>())
-- [ ] Slices - acesso a arrays
-- [ ] String type robusto
+- [x] Slices - acesso a arrays
+- [x] String type robusto
 
 ## Fase 3: Std Basica - ~15%
 
 - [x] array\<T\> - generic collection (push, get, set, grow, destroy)
 - [ ] String - dynamic string
 - [~] I/O basico - funciona via extern printf/puts, sem wrapper proprio
-- [ ] HashMap\<K,V\> - hash table
+- [x] HashMap\<K,V\> - hash table
 
 ## Fase 4: Features Avancadas - ~25%
 
@@ -51,11 +51,7 @@
 
 ## Proximos passos sugeridos
 
-1. **Slices** - base para manipulacao de arrays
-2. **String type** - wrapper seguro sobre i8*
 3. **Pattern matching** - match em enums/tagged unions
-4. **Vec\<T\>** - dynamic array (depende de slices + constructors + methods)
 5. **I/O wrappers** - print/println proprio da linguagem
-6. **HashMap\<K,V\>** - hash table
 7. **Closures** - funcoes anonimas
 8. **Async** - opcional, futuro

@@ -10,6 +10,10 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Transforms/Coroutines/CoroEarly.h"
+#include "llvm/Transforms/Coroutines/CoroSplit.h"
+#include "llvm/Transforms/Coroutines/CoroElide.h"
+#include "llvm/Transforms/Coroutines/CoroCleanup.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/SourceMgr.h"
@@ -114,10 +118,62 @@ void Generator::generate()
         generatedFunctions++;
     }
 
-    // PASS 7: Verify all symbols were generated
+    // PASS 7: Generate async main wrapper if main is async
+    if (auto mainSym = symbols->lookupFunction("main"))
+    {
+        if (mainSym->isAsync)
+        {
+            // main() was generated as a coroutine returning ptr
+            // Create a real "main" wrapper that calls it and extracts the return value
+
+            hasAsyncFunctions = true;
+            ensure_malloc_free_declared();
+
+            // Rename the async main to __djinn_async_main
+            llvm::Function* asyncMainFn = functions["main"];
+            asyncMainFn->setName("__djinn_async_main");
+            functions.erase("main");
+            functions["__djinn_async_main"] = asyncMainFn;
+
+            // Create real main() -> i32
+            auto* mainFuncType = llvm::FunctionType::get(builder->getInt32Ty(), false);
+            auto* realMainFn = llvm::Function::Create(
+                mainFuncType, llvm::Function::ExternalLinkage, "main", *module);
+            functions["main"] = realMainFn;
+
+            auto* entryBB = llvm::BasicBlock::Create(*context, "entry", realMainFn);
+            builder->SetInsertPoint(entryBB);
+            currentFunction = realMainFn;
+
+            // Call the async main to get the coroutine handle
+            llvm::Value* handle = builder->CreateCall(asyncMainFn, {}, "async.hdl");
+
+            // Resume loop until done
+            llvm::Type* origReturnType = generate_type(mainSym->returnType);
+            llvm::Value* result = generate_await_loop(handle, origReturnType);
+
+            if (result && !origReturnType->isVoidTy())
+            {
+                result = cast_value(result, builder->getInt32Ty());
+                builder->CreateRet(result);
+            }
+            else
+            {
+                builder->CreateRet(builder->getInt32(0));
+            }
+        }
+    }
+
+    // PASS 8: Verify all symbols were generated
     verify_all_symbols_generated();
 
-    // PASS 8: Force emission of used declarations
+    // PASS 9: Run coroutine passes if needed
+    if (hasAsyncFunctions)
+    {
+        run_coroutine_passes();
+    }
+
+    // PASS 10: Force emission of used declarations
     // emit_used_declarations();
 }
 
@@ -281,4 +337,27 @@ bool Generator::linkModules(const std::vector<std::filesystem::path>& llPaths) c
         }
     }
     return true;
+}
+
+void Generator::run_coroutine_passes() const
+{
+    // Run coroutine lowering passes (required for llvm.coro.* intrinsics)
+    // These passes split coroutines into resume/destroy/cleanup functions
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::CGSCCAnalysisManager CGAM;
+    llvm::ModuleAnalysisManager MAM;
+
+    llvm::PassBuilder PB;
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    llvm::ModulePassManager MPM;
+    MPM.addPass(llvm::CoroEarlyPass());
+    MPM.addPass(llvm::createModuleToPostOrderCGSCCPassAdaptor(llvm::CoroSplitPass()));
+    MPM.addPass(llvm::CoroCleanupPass());
+    MPM.run(*module, MAM);
 }

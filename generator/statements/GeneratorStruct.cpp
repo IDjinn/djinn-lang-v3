@@ -251,6 +251,11 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 
     llvm::Type* returnType = generate_type(method.returnType);
 
+    // Async methods return ptr (coroutine handle) instead of their declared return type
+    llvm::Type* actualReturnType = method.isAsync
+                                       ? llvm::PointerType::getUnqual(*context)
+                                       : returnType;
+
     std::vector<llvm::Type*> paramTypes;
     const bool isStatic = method.isStatic;
     if (!isStatic)
@@ -263,13 +268,20 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         paramTypes.push_back(generate_type(paramType));
     }
 
-    const auto funcType = llvm::FunctionType::get(returnType, paramTypes, method.isVariadic);
+    const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
     const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
     functions[mangledName] = llvmFunc;
     def->methodFunctions[method.name] = llvmFunc;
 
     currentFunction = llvmFunc;
+
+    if (method.isAsync)
+    {
+        generate_async_method_body(struc, method, llvmFunc, def);
+        pop_scope();
+        return;
+    }
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
@@ -336,4 +348,186 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
     }
 
     pop_scope();
+}
+
+void Generator::generate_async_method_body(const StructSymbol& struc, const MethodSymbol& method,
+                                           llvm::Function* llvmFunc, StructDef* def)
+{
+    hasAsyncFunctions = true;
+    ensure_malloc_free_declared();
+
+    llvm::Type* origReturnType = generate_type(method.returnType);
+
+    auto* ptrTy = llvm::PointerType::getUnqual(*context);
+    auto* i64Ty = builder->getInt64Ty();
+
+    auto* entryBB = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
+    auto* allocBB = llvm::BasicBlock::Create(*context, "coro.alloc", llvmFunc);
+    auto* beginBB = llvm::BasicBlock::Create(*context, "coro.begin", llvmFunc);
+    auto* finalSuspendBB = llvm::BasicBlock::Create(*context, "coro.final", llvmFunc);
+    auto* cleanupBB = llvm::BasicBlock::Create(*context, "coro.cleanup", llvmFunc);
+    auto* suspendBB = llvm::BasicBlock::Create(*context, "coro.suspend", llvmFunc);
+    auto* trapBB = llvm::BasicBlock::Create(*context, "coro.trap", llvmFunc);
+
+    builder->SetInsertPoint(entryBB);
+
+    // Create promise alloca BEFORE coro.id — LLVM requires this so it can
+    // place the promise in the coroutine frame (accessible via @llvm.coro.promise)
+    // NOTE: Do NOT store to promise here — after CoroSplit the address depends on
+    // coro.begin which isn't available yet. Zero-init happens after coro.begin.
+    llvm::Value* promisePtr = nullptr;
+    if (!origReturnType->isVoidTy())
+    {
+        promisePtr = builder->CreateAlloca(origReturnType, nullptr, "coro.promise");
+    }
+
+    // Pass promise alloca as 2nd arg to coro.id
+    auto* coroIdFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_id);
+    llvm::Value* promiseArg = promisePtr
+                                  ? promisePtr
+                                  : static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy));
+    unsigned promiseAlign = promisePtr
+                                ? module->getDataLayout().getABITypeAlign(origReturnType).value()
+                                : 0;
+    llvm::Value* coroId = builder->CreateCall(coroIdFn, {
+                                                  builder->getInt32(promiseAlign),
+                                                  promiseArg,
+                                                  llvm::ConstantPointerNull::get(ptrTy),
+                                                  llvm::ConstantPointerNull::get(ptrTy)
+                                              }, "coro.id");
+
+    auto* coroAllocFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_alloc);
+    llvm::Value* needAlloc = builder->CreateCall(coroAllocFn, {coroId}, "need.alloc");
+    builder->CreateCondBr(needAlloc, allocBB, beginBB);
+
+    builder->SetInsertPoint(allocBB);
+    auto* coroSizeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_size, {i64Ty});
+    llvm::Value* coroSize = builder->CreateCall(coroSizeFn, {}, "coro.size");
+    auto* mallocFn = module->getFunction("malloc");
+    llvm::Value* mem = builder->CreateCall(mallocFn, {coroSize}, "coro.mem");
+    builder->CreateBr(beginBB);
+
+    builder->SetInsertPoint(beginBB);
+    auto* phiMem = builder->CreatePHI(ptrTy, 2, "coro.mem.phi");
+    phiMem->addIncoming(mem, allocBB);
+    phiMem->addIncoming(llvm::ConstantPointerNull::get(ptrTy), entryBB);
+
+    auto* coroBeginFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_begin);
+    llvm::Value* coroHandle = builder->CreateCall(coroBeginFn, {coroId, phiMem}, "coro.hdl");
+
+    // Save/set async state
+    bool prevInAsync = inAsyncFunction;
+    llvm::Value* prevCoroId = asyncCoroId;
+    llvm::Value* prevCoroHandle = asyncCoroHandle;
+    llvm::Value* prevPromisePtr = asyncPromisePtr;
+    llvm::BasicBlock* prevFinalSuspendBB = asyncFinalSuspendBB;
+    llvm::Type* prevAsyncReturnType = asyncReturnType;
+
+    inAsyncFunction = true;
+    asyncCoroId = coroId;
+    asyncCoroHandle = coroHandle;
+    asyncPromisePtr = promisePtr;
+    asyncFinalSuspendBB = finalSuspendBB;
+    asyncReturnType = origReturnType;
+
+    // Store parameters
+    auto argIt = llvmFunc->arg_begin();
+    if (!method.isStatic)
+    {
+        argIt->setName("this");
+        auto* thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
+        builder->CreateStore(&*argIt, thisAlloca);
+        currentScope->define_variable("this", thisAlloca, struc.name);
+        ++argIt;
+    }
+
+    size_t paramIdx = 0;
+    while (argIt != llvmFunc->arg_end())
+    {
+        const auto& paramName = method.paramNames[paramIdx];
+        const auto& paramType = method.paramTypes[paramIdx];
+        argIt->setName(paramName);
+
+        auto* alloca = builder->CreateAlloca(argIt->getType(), nullptr, paramName);
+        builder->CreateStore(&*argIt, alloca);
+        std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        currentScope->define_variable(paramName, alloca, paramStructType);
+
+        ++argIt;
+        ++paramIdx;
+    }
+
+    // Generate method body
+    if (method.body)
+    {
+        for (const auto& stmt : method.body->statements)
+        {
+            generate_statement(*stmt);
+        }
+    }
+    else if (method.expressionBody)
+    {
+        llvm::Value* result = generate_expression(*method.expressionBody);
+        if (promisePtr && !origReturnType->isVoidTy())
+        {
+            result = cast_value(result, origReturnType);
+            builder->CreateStore(result, promisePtr);
+        }
+        builder->CreateBr(finalSuspendBB);
+    }
+
+    if (!builder->GetInsertBlock()->getTerminator())
+    {
+        if (promisePtr && !origReturnType->isVoidTy())
+        {
+            builder->CreateStore(llvm::Constant::getNullValue(origReturnType), promisePtr);
+        }
+        builder->CreateBr(finalSuspendBB);
+    }
+
+    // Final suspend, trap, cleanup, suspend blocks
+    builder->SetInsertPoint(finalSuspendBB);
+    auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_suspend);
+    llvm::Value* finalSuspend = builder->CreateCall(coroSuspendFn, {
+                                                        llvm::ConstantTokenNone::get(*context),
+                                                        builder->getTrue()
+                                                    }, "coro.final.suspend");
+    auto* switchInst = builder->CreateSwitch(finalSuspend, suspendBB, 2);
+    switchInst->addCase(builder->getInt8(0), trapBB);
+    switchInst->addCase(builder->getInt8(1), cleanupBB);
+
+    builder->SetInsertPoint(trapBB);
+    auto* trapFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
+    builder->CreateCall(trapFn);
+    builder->CreateUnreachable();
+
+    builder->SetInsertPoint(cleanupBB);
+    auto* coroFreeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_free);
+    llvm::Value* freeMem = builder->CreateCall(coroFreeFn, {coroId, coroHandle}, "coro.free.mem");
+    auto* freeCheckBB = llvm::BasicBlock::Create(*context, "coro.free.check", llvmFunc);
+    auto* freeDoFreeBB = llvm::BasicBlock::Create(*context, "coro.free.do", llvmFunc);
+    llvm::Value* isNull = builder->CreateICmpEQ(freeMem, llvm::ConstantPointerNull::get(ptrTy), "is.null");
+    builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);
+
+    builder->SetInsertPoint(freeDoFreeBB);
+    auto* freeFn = module->getFunction("free");
+    builder->CreateCall(freeFn, {freeMem});
+    builder->CreateBr(suspendBB);
+
+    builder->SetInsertPoint(suspendBB);
+    auto* coroEndFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_end);
+    builder->CreateCall(coroEndFn, {
+                            coroHandle,
+                            builder->getFalse(),
+                            llvm::ConstantTokenNone::get(*context)
+                        });
+    builder->CreateRet(coroHandle);
+
+    // Restore async state
+    inAsyncFunction = prevInAsync;
+    asyncCoroId = prevCoroId;
+    asyncCoroHandle = prevCoroHandle;
+    asyncPromisePtr = prevPromisePtr;
+    asyncFinalSuspendBB = prevFinalSuspendBB;
+    asyncReturnType = prevAsyncReturnType;
 }

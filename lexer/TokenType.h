@@ -100,6 +100,8 @@ enum class TokenType
     NEW,
     IMPL,
     WHERE,
+    ASYNC,
+    AWAIT,
 };
 
 

@@ -41,6 +41,7 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
                                           ? decl.name.token_name
                                           : prefix + "::" + decl.name.token_name;
     const auto funcSym = std::make_shared<FunctionSymbol>(qualifiedName, *decl.returnType);
+    funcSym->isAsync = decl.isAsync;
 
     for (const auto& param : decl.parameters)
     {

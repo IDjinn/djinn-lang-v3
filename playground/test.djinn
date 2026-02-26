@@ -2,15 +2,26 @@ import std::types;
 import std::collections;
 import std::libc;
 
+//
+// i32 main() {
+//     i64 first = 69;
+//     map<i32, i8*> m = map<i32, i8*>();
+//     m.set(420, "Hello");
+//     m.set(69, "World");
+//
+//     printf("hello %s\n", m.get(69));
+//     return 240;
+// }
 
-// map<i32, i8*> m = map<i32, i8*>();
-// m.set(420, "Hello");
-// m.set(69, "World");
 
-// printf("hello %s\n", m.get(69));
+
+async i32 compute(i32 x) {
+  return x * 2 + 1;
+}
 
 i32 main() {
-    i64 first = 69;
-    i32 test = (i32)first;
-    return test;
+  i32 result = await_block(compute(10));
+  printf("result: %d\n", result);  // result: 21
+  return 0;
 }
+

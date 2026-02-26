@@ -26,6 +26,7 @@ struct ArrayLiteral;
 struct IndexAccess;
 struct IndexAssignment;
 struct CastExpression;
+struct AwaitExpression;
 
 namespace djinn
 {
@@ -73,6 +74,8 @@ namespace djinn
         virtual void visit(const IndexAssignment& expr) = 0;
 
         virtual void visit(const CastExpression& expr) = 0;
+
+        virtual void visit(const AwaitExpression& expr) = 0;
     };
 } // namespace djinn
 

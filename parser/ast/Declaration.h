@@ -46,6 +46,7 @@ struct StructMethodDeclaration : Location
     std::unique_ptr<Expression> expression;
     bool isConstructorMethod = false; // True if this is a constructor (name == struct name)
     bool isVariadic = false; // True if method has variadic parameters (...)
+    bool isAsync = false; // True if this is an async method
 
     // Variadic forwarding: if this method forwards its variadic args to another function
     // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
@@ -364,6 +365,7 @@ struct FunctionDeclaration : Location
     SourceIdentifier name;
     std::vector<Parameter> parameters;
     std::unique_ptr<Block> body;
+    bool isAsync = false;
 
     FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)
@@ -380,6 +382,7 @@ struct FunctionDeclaration : Location
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
+        if (isAsync) os << "async ";
         os << "Function " << name.token_name << "<" << returnType << ">(";
         for (size_t i = 0; i < parameters.size(); ++i)
         {

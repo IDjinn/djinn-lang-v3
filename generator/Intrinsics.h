@@ -21,7 +21,7 @@ enum class Intrinsic
     Unlikely,
     DebugTrap,
     Typeof,
-    // Abort
+    AwaitBlock,
 };
 
 inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
@@ -36,7 +36,8 @@ inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
         {"expect", Intrinsic::Expect},
         {"likely", Intrinsic::Likely},
         {"unlikely", Intrinsic::Unlikely},
-        {"typeof", Intrinsic::Typeof}
+        {"typeof", Intrinsic::Typeof},
+        {"await_block", Intrinsic::AwaitBlock}
     };
 
     if (const auto it = intrinsics.find(name); it != intrinsics.end())

@@ -197,6 +197,8 @@ private:
 
     llvm::Value* generate_cast_expression(const CastExpression& expr);
 
+    llvm::Value* generate_await_expression(const AwaitExpression& expr);
+
     llvm::Value* generate_brace_initializer(const BraceInitializer& expr);
 
     llvm::Value* generate_brace_init_for_struct(const BraceInitializer& braceInit, llvm::StructType* structType,
@@ -225,6 +227,22 @@ private:
     llvm::Function* find_destroy_method(llvm::AllocaInst* alloca);
     void emit_scope_cleanup();
     void emit_all_scope_cleanup();
+
+    // Async/coroutine state
+    bool inAsyncFunction = false;
+    llvm::Value* asyncCoroId = nullptr;
+    llvm::Value* asyncCoroHandle = nullptr;
+    llvm::Value* asyncPromisePtr = nullptr;
+    llvm::BasicBlock* asyncFinalSuspendBB = nullptr;
+    llvm::Type* asyncReturnType = nullptr; // original return type before coroutine transform
+
+    void generate_async_function_body(const FunctionSymbol& func);
+    void generate_async_method_body(const StructSymbol& struc, const MethodSymbol& method,
+                                    llvm::Function* llvmFunc, StructDef* def);
+    llvm::Value* generate_await_loop(llvm::Value* handle, llvm::Type* resultType);
+    void ensure_malloc_free_declared();
+    void run_coroutine_passes() const;
+    bool hasAsyncFunctions = false;
 
     size_t generatedFunctions = 0;
     size_t generatedExternFunctions = 0;

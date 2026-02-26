@@ -108,4 +108,9 @@ namespace djinn
     {
         _result = _generator.generate_cast_expression(expr);
     }
+
+    void GeneratorExpressionVisitor::visit(const AwaitExpression& expr)
+    {
+        _result = _generator.generate_await_expression(expr);
+    }
 } // namespace djinn

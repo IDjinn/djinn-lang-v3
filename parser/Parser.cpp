@@ -284,6 +284,12 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     // Parse modifiers: public, private, static
     method->modifiers = parse_modifiers();
 
+    // Parse async modifier
+    if (match(TokenType::ASYNC))
+    {
+        method->isAsync = true;
+    }
+
     // Parse return type
     method->returnType = parse_type();
 
@@ -815,6 +821,13 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                     program->functions.push_back(parse_function_with_type(std::move(returnType)));
                 }
             }
+            else if (check(TokenType::ASYNC))
+            {
+                advance(); // consume 'async'
+                auto func = parse_function();
+                func->isAsync = true;
+                program->functions.push_back(std::move(func));
+            }
             else
             {
                 program->functions.push_back(parse_function());
@@ -1239,6 +1252,12 @@ std::unique_ptr<Expression> Parser::parse_unary()
             }
         }
         current = saved; // backtrack — not a cast
+    }
+
+    if (match(TokenType::AWAIT))
+    {
+        auto operand = parse_unary();
+        return std::make_unique<AwaitExpression>(std::move(operand));
     }
 
     if (match(TokenType::NEW))

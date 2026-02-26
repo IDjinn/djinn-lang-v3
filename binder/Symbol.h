@@ -109,6 +109,7 @@ struct FunctionSymbol : Symbol
     std::vector<std::string> paramNames;
     std::vector<bool> paramMutable;
     bool isVariadic = false;
+    bool isAsync = false;
     std::unique_ptr<Block> body;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
@@ -163,6 +164,7 @@ struct MethodSymbol : Symbol
     bool isStatic = false;
     bool isVariadic = false; // True if method has variadic parameters (...)
     bool isConstructor = false; // True if this is a constructor (name == struct name)
+    bool isAsync = false; // True if this is an async method
     std::string structName; // Name of the struct this constructor belongs to (for constructors only)
 
     // Variadic forwarding: if this method forwards variadic args to another function

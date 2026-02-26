@@ -119,4 +119,10 @@ namespace djinn
         _binder.bindExpression(*expr.operand);
         _result = nullptr;
     }
+
+    void BinderExpressionVisitor::visit(const AwaitExpression& expr)
+    {
+        _binder.bindExpression(*expr.operand);
+        _result = nullptr;
+    }
 } // namespace djinn

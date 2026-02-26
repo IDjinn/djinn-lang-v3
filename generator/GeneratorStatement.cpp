@@ -13,6 +13,30 @@ void Generator::generate_statement(const Statement& stmt)
 
 void Generator::generate_return_statement(const ReturnStatement& stmt)
 {
+    // In async functions: store return value in promise and branch to final suspend
+    if (inAsyncFunction)
+    {
+        if (stmt.value && asyncPromisePtr && asyncReturnType && !asyncReturnType->isVoidTy())
+        {
+            auto val = generate_expression(*stmt.value);
+            val = cast_value(val, asyncReturnType);
+
+            // Load from alloca if needed
+            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(val))
+            {
+                if (alloca->getAllocatedType() == asyncReturnType)
+                {
+                    val = builder->CreateLoad(asyncReturnType, alloca, "ret_load");
+                }
+            }
+
+            builder->CreateStore(val, asyncPromisePtr);
+        }
+        emit_all_scope_cleanup();
+        builder->CreateBr(asyncFinalSuspendBB);
+        return;
+    }
+
     if (stmt.value)
     {
         if (auto* braceInit = dynamic_cast<const BraceInitializer*>(stmt.value.get()))

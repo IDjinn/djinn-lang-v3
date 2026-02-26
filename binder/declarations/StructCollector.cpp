@@ -73,6 +73,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         methodSym->isAbstract = method->isAbstract();
         methodSym->isStatic = method->isStatic();
         methodSym->isVariadic = method->isVariadic;
+        methodSym->isAsync = method->isAsync;
         methodSym->variadicForwardTarget = method->variadicForwardTarget;
         methodSym->isConstructor = isCtorMethod;
         if (isCtorMethod)

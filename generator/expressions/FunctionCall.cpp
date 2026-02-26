@@ -163,6 +163,46 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
             return builder->CreateCall(expectFunc, {cond, builder->getFalse()}, "unlikely");
         }
 
+    case Intrinsic::AwaitBlock:
+        {
+            if (call.arguments.empty())
+            {
+                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "await_block requires 1 argument");
+            }
+
+            // Generate the operand (async function call returning coroutine handle)
+            llvm::Value* handle = generate_expression(*call.arguments[0]);
+
+            // Determine result type from the called async function
+            llvm::Type* resultType = builder->getVoidTy();
+            if (auto* funcCallArg = dynamic_cast<const FunctionCall*>(call.arguments[0].get()))
+            {
+                const std::string& funcName = funcCallArg->name.token_name;
+                if (auto funcSym = symbols->lookupFunction(funcName))
+                {
+                    auto* fSym = dynamic_cast<FunctionSymbol*>(funcSym.get());
+                    if (fSym && fSym->isAsync)
+                    {
+                        resultType = generate_type(fSym->returnType);
+                    }
+                }
+                if (resultType->isVoidTy())
+                {
+                    const std::string resolved = currentScope->resolve_alias(funcName);
+                    if (auto funcSym2 = symbols->lookupFunction(resolved))
+                    {
+                        auto* fSym2 = dynamic_cast<FunctionSymbol*>(funcSym2.get());
+                        if (fSym2 && fSym2->isAsync)
+                        {
+                            resultType = generate_type(fSym2->returnType);
+                        }
+                    }
+                }
+            }
+
+            return generate_await_loop(handle, resultType);
+        }
+
     case Intrinsic::Typeof:
         {
             if (call.arguments.empty())
@@ -525,10 +565,12 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                       ident->identifier.token_name.c_str(), structName.c_str());
             LOG_DEBUG("[generator]   alloca type: '%s'",
                       alloca->getAllocatedType()->isStructTy()
-                      ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
-                      : alloca->getAllocatedType()->isPointerTy() ? "pointer"
-                      : alloca->getAllocatedType()->isIntegerTy() ? "integer"
-                      : "other");
+                          ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
+                          : alloca->getAllocatedType()->isPointerTy()
+                          ? "pointer"
+                          : alloca->getAllocatedType()->isIntegerTy()
+                          ? "integer"
+                          : "other");
             if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
             {
                 llvmStructName = structType->getName().str();
