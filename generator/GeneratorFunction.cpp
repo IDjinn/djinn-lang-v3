@@ -201,6 +201,8 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     llvm::Value* prevCoroHandle = asyncCoroHandle;
     llvm::Value* prevPromisePtr = asyncPromisePtr;
     llvm::BasicBlock* prevFinalSuspendBB = asyncFinalSuspendBB;
+    llvm::BasicBlock* prevCleanupBB = asyncCleanupBB;
+    llvm::BasicBlock* prevSuspendBB = asyncSuspendBB;
     llvm::Type* prevAsyncReturnType = asyncReturnType;
 
     inAsyncFunction = true;
@@ -208,6 +210,8 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     asyncCoroHandle = coroHandle;
     asyncPromisePtr = promisePtr;
     asyncFinalSuspendBB = finalSuspendBB;
+    asyncCleanupBB = cleanupBB;
+    asyncSuspendBB = suspendBB;
     asyncReturnType = origReturnType;
 
     // Store function parameters
@@ -293,6 +297,8 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     asyncCoroHandle = prevCoroHandle;
     asyncPromisePtr = prevPromisePtr;
     asyncFinalSuspendBB = prevFinalSuspendBB;
+    asyncCleanupBB = prevCleanupBB;
+    asyncSuspendBB = prevSuspendBB;
     asyncReturnType = prevAsyncReturnType;
 
     pop_scope();

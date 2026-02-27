@@ -974,6 +974,12 @@ std::unique_ptr<Statement> Parser::parse_statement()
         return std::make_unique<ContinueStatement>();
     }
 
+    if (match(TokenType::YIELD))
+    {
+        expect("Esperado ';' após yield", TokenType::SEMICOLON);
+        return std::make_unique<YieldStatement>();
+    }
+
     // Bare block: { ... }
     if (check(TokenType::LBRACE))
     {

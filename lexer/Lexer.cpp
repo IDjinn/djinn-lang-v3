@@ -37,6 +37,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"where", TokenType::WHERE},
     {"async", TokenType::ASYNC},
     {"await", TokenType::AWAIT},
+    {"yield", TokenType::YIELD},
 };
 
 Lexer::Lexer(std::string source, std::string fileId)

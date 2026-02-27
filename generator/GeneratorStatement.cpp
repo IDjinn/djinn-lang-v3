@@ -74,6 +74,31 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
     }
 }
 
+void Generator::generate_yield_statement()
+{
+    if (!inAsyncFunction)
+    {
+        throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "yield só é permitido em funções async");
+    }
+
+    // Intermediate suspend: i1 false (not final)
+    auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
+        module.get(), llvm::Intrinsic::coro_suspend);
+    llvm::Value* suspResult = builder->CreateCall(coroSuspendFn, {
+                                                      llvm::ConstantTokenNone::get(*context),
+                                                      builder->getFalse() // false = intermediate (not final)
+                                                  }, "coro.yield");
+
+    // Switch: 0 = resumed, 1 = destroyed, default = suspend (return to caller)
+    auto* resumeBB = llvm::BasicBlock::Create(*context, "yield.resume", currentFunction);
+    auto* switchInst = builder->CreateSwitch(suspResult, asyncSuspendBB, 2);
+    switchInst->addCase(builder->getInt8(0), resumeBB);
+    switchInst->addCase(builder->getInt8(1), asyncCleanupBB);
+
+    // Continue execution after yield
+    builder->SetInsertPoint(resumeBB);
+}
+
 void Generator::generate_break_statement()
 {
     if (!breakTargets.empty())

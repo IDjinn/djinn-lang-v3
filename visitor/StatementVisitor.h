@@ -16,31 +16,36 @@ struct DoWhileStatement;
 struct SwitchStatement;
 struct BreakStatement;
 struct ContinueStatement;
+struct YieldStatement;
 
-namespace djinn {
-    class IStatementVisitor {
+namespace djinn
+{
+    class IStatementVisitor
+    {
     public:
         virtual ~IStatementVisitor() = default;
 
-        virtual void visit(const ExpressionStatement &stmt) = 0;
+        virtual void visit(const ExpressionStatement& stmt) = 0;
 
-        virtual void visit(const ReturnStatement &stmt) = 0;
+        virtual void visit(const ReturnStatement& stmt) = 0;
 
-        virtual void visit(const Block &stmt) = 0;
+        virtual void visit(const Block& stmt) = 0;
 
-        virtual void visit(const IfStatement &stmt) = 0;
+        virtual void visit(const IfStatement& stmt) = 0;
 
-        virtual void visit(const ForStatement &stmt) = 0;
+        virtual void visit(const ForStatement& stmt) = 0;
 
-        virtual void visit(const WhileStatement &stmt) = 0;
+        virtual void visit(const WhileStatement& stmt) = 0;
 
-        virtual void visit(const DoWhileStatement &stmt) = 0;
+        virtual void visit(const DoWhileStatement& stmt) = 0;
 
-        virtual void visit(const SwitchStatement &stmt) = 0;
+        virtual void visit(const SwitchStatement& stmt) = 0;
 
-        virtual void visit(const BreakStatement &stmt) = 0;
+        virtual void visit(const BreakStatement& stmt) = 0;
 
-        virtual void visit(const ContinueStatement &stmt) = 0;
+        virtual void visit(const ContinueStatement& stmt) = 0;
+
+        virtual void visit(const YieldStatement& stmt) = 0;
     };
 } // namespace djinn
 

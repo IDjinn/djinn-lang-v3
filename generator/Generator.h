@@ -223,6 +223,8 @@ private:
 
     void generate_continue_statement();
 
+    void generate_yield_statement();
+
     // RAII cleanup
     llvm::Function* find_destroy_method(llvm::AllocaInst* alloca);
     void emit_scope_cleanup();
@@ -234,6 +236,8 @@ private:
     llvm::Value* asyncCoroHandle = nullptr;
     llvm::Value* asyncPromisePtr = nullptr;
     llvm::BasicBlock* asyncFinalSuspendBB = nullptr;
+    llvm::BasicBlock* asyncCleanupBB = nullptr;
+    llvm::BasicBlock* asyncSuspendBB = nullptr;
     llvm::Type* asyncReturnType = nullptr; // original return type before coroutine transform
 
     void generate_async_function_body(const FunctionSymbol& func);

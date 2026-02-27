@@ -102,6 +102,7 @@ enum class TokenType
     WHERE,
     ASYNC,
     AWAIT,
+    YIELD,
 };
 
 

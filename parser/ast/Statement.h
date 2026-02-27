@@ -11,65 +11,77 @@
 #include "Expression.h"
 #include "../../visitor/StatementVisitor.h"
 
-struct Statement : Location {
-    virtual void accept(djinn::IStatementVisitor &visitor) const = 0;
+struct Statement : Location
+{
+    virtual void accept(djinn::IStatementVisitor& visitor) const = 0;
 };
 
-struct ExpressionStatement : Statement {
+struct ExpressionStatement : Statement
+{
     std::unique_ptr<Expression> expression;
 
     explicit ExpressionStatement(std::unique_ptr<Expression> expr)
-        : expression(std::move(expr)) {
+        : expression(std::move(expr))
+    {
     }
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "ExpressionStatement\n";
         expression->print(os, indent + 2);
     }
 };
 
-struct ReturnStatement : Statement {
+struct ReturnStatement : Statement
+{
     std::unique_ptr<Expression> value;
 
     explicit ReturnStatement(std::unique_ptr<Expression> val)
-        : value(std::move(val)) {
+        : value(std::move(val))
+    {
     }
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "ReturnStatement\n";
         if (value) value->print(os, indent + 2);
     }
 };
 
-struct Block : Statement {
-    std::vector<std::unique_ptr<Statement> > statements;
+struct Block : Statement
+{
+    std::vector<std::unique_ptr<Statement>> statements;
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "Block\n";
-        for (const auto &stmt: statements) {
+        for (const auto& stmt : statements)
+        {
             stmt->print(os, indent + 2);
             os << '\n';
         }
     }
 };
 
-struct IfStatement : Statement {
+struct IfStatement : Statement
+{
     std::unique_ptr<Expression> condition;
     std::unique_ptr<Block> thenBranch;
     std::unique_ptr<Block> elseBranch;
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "IfStatement\n";
         if (condition) condition->print(os, indent + 2);
@@ -78,15 +90,17 @@ struct IfStatement : Statement {
     }
 };
 
-struct ForStatement : Statement {
+struct ForStatement : Statement
+{
     std::unique_ptr<Expression> initializer;
     std::unique_ptr<Expression> condition;
     std::unique_ptr<Expression> postfix;
     std::unique_ptr<Block> body;
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "ForStatement\n";
         initializer->print(os, indent + 2);
@@ -96,13 +110,15 @@ struct ForStatement : Statement {
     }
 };
 
-struct WhileStatement : Statement {
+struct WhileStatement : Statement
+{
     std::unique_ptr<Expression> condition;
     std::unique_ptr<Block> body;
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "WhileStatement\n";
         condition->print(os, indent + 2);
@@ -110,13 +126,15 @@ struct WhileStatement : Statement {
     }
 };
 
-struct DoWhileStatement : Statement {
+struct DoWhileStatement : Statement
+{
     std::unique_ptr<Block> body;
     std::unique_ptr<Expression> condition;
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "DoWhileStatement\n";
         if (body) body->print(os, indent + 2);
@@ -124,34 +142,52 @@ struct DoWhileStatement : Statement {
     }
 };
 
-struct BreakStatement : Statement {
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+struct BreakStatement : Statement
+{
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "BreakStatement\n";
     }
 };
 
-struct ContinueStatement : Statement {
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+struct ContinueStatement : Statement
+{
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "ContinueStatement\n";
     }
 };
 
-struct SwitchCaseStatement : Statement {
+struct YieldStatement : Statement
+{
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "YieldStatement\n";
+    }
+};
+
+struct SwitchCaseStatement : Statement
+{
     std::unique_ptr<Expression> expression;
     std::unique_ptr<Block> body;
 
     // SwitchCaseStatement is not directly visited - it's part of SwitchStatement
-    void accept(djinn::IStatementVisitor &) const override {
+    void accept(djinn::IStatementVisitor&) const override
+    {
         // Not directly visited - handled by SwitchStatement visitor
     }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "SwitchCaseStatement\n";
         if (expression) expression->print(os, indent + 2);
@@ -159,16 +195,19 @@ struct SwitchCaseStatement : Statement {
     }
 };
 
-struct SwitchStatement : Statement {
+struct SwitchStatement : Statement
+{
     std::unique_ptr<Expression> value;
-    std::vector<std::unique_ptr<SwitchCaseStatement> > cases;
+    std::vector<std::unique_ptr<SwitchCaseStatement>> cases;
 
-    void accept(djinn::IStatementVisitor &visitor) const override { visitor.visit(*this); }
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
-    void print(std::ostream &os, const int indent = 0) const override {
+    void print(std::ostream& os, const int indent = 0) const override
+    {
         writeIndent(os, indent);
         os << "SwitchStatement\n";
-        for (const auto &c: cases) {
+        for (const auto& c : cases)
+        {
             c->print(os, indent + 2);
         }
     }

@@ -286,3 +286,69 @@ TEST(Async, AwaitWithLocalComputation)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 33); // (10 + 1) * 3
 }
+
+// ========================
+// Yield: intermediate suspend
+// ========================
+
+TEST(Async, Yield_BasicYield)
+{
+    const auto source = R"(
+        async i32 compute() {
+            yield;
+            return 42;
+        }
+
+        i32 main() {
+            i32 result = await compute();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Async, Yield_MultipleYields)
+{
+    const auto source = R"(
+        async i32 compute() {
+            yield;
+            yield;
+            yield;
+            return 99;
+        }
+
+        i32 main() {
+            i32 result = await compute();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 99);
+}
+
+TEST(Async, Yield_WithComputation)
+{
+    const auto source = R"(
+        async i32 counter() {
+            mut i32 x = 10;
+            yield;
+            x = x + 20;
+            yield;
+            return x;
+        }
+
+        i32 main() {
+            i32 result = await counter();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 30); // 10 + 20
+}
