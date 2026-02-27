@@ -1,83 +1,30 @@
 import std::types;
-import std::libc;
+import std::builtin;
 
 extern "C" {
-  i32 printf(i8* fmt, ...);
+    i64 __djinn_async_write(i32 fd, void* buf, i64 count, void* coro_handle);
 }
 
-// --- Simple async functions ---
-
-async i32 square(i32 x) {
-  return x * x;
+// Async write wrapper — submits to runtime I/O thread, then yields
+async i32 async_print(i8* message, i64 len) {
+    // TODO: needs coro::handle() to pass our handle to the runtime
+    // For now, pass null — I/O thread won't resume us, busy-loop does
+    void* null_handle = coro::handle();
+    __djinn_async_write(1, message, len, null_handle);
+    yield;
+    return 0;
 }
-
-async i32 add(i32 a, i32 b) {
-  return a + b;
-}
-
-async i32 multiply(i32 a, i32 b) {
-  return a * b;
-}
-
-// --- Chained async: async calling async ---
-
-async i32 sum_of_squares(i32 a, i32 b) {
-  i32 sa = await square(a);
-  i32 sb = await square(b);
-  i32 result = await add(sa, sb);
-  return result;
-}
-
-async i32 dot_product(i32 x1, i32 y1, i32 x2, i32 y2) {
-  i32 a = await multiply(x1, x2);
-  i32 b = await multiply(y1, y2);
-  return await add(a, b);
-}
-
-// --- Deep chaining (3 levels) ---
-
-async i32 step1(i32 x) {
-  return x + 10;
-}
-
-async i32 step2(i32 x) {
-  i32 val = await step1(x);
-  return val * 2;
-}
-
-async i32 pipeline(i32 x) {
-  i32 val = await step2(x);
-  return await add(val, 5);
-}
-
-// --- Entry point ---
 
 async i32 main() {
-  // 1. Simple await
-  i32 sq = await square(7);
-  printf("square(7) = %d\n", sq);
+    printf("=== Async I/O Test ===\n");
 
-  // 2. Multiple awaits
-  i32 a = await add(100, 200);
-  i32 b = await add(a, 50);
-  printf("100 + 200 + 50 = %d\n", b);
+    // Async write to stdout via runtime I/O thread
+    i32 r1 = await async_print("Hello from async I/O!\n", 22);
+    printf("async_print returned %d\n", r1);
 
-  // 3. Chained: sum of squares
-  i32 sos = await sum_of_squares(3, 4);
-  printf("3^2 + 4^2 = %d\n", sos);
+    i32 r2 = await async_print("Second async write!\n", 20);
+    printf("async_print returned %d\n", r2);
 
-  // 4. Chained: dot product
-  i32 dp = await dot_product(2, 3, 4, 5);
-  printf("dot(2,3).(4,5) = %d\n", dp);
-
-  // 5. Deep pipeline: (5 + 10) * 2 + 5 = 35
-  i32 pipe = await pipeline(5);
-  printf("pipeline(5) = %d\n", pipe);
-
-  // 6. Await result feeding into next await
-  i32 x = await square(5);
-  i32 y = await square(x);
-  printf("square(square(5)) = %d\n", y);
-
-  return 0;
+    printf("=== Done ===\n");
+    return 0;
 }

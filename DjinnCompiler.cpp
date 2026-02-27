@@ -26,6 +26,11 @@
 
 #define CLANG_OPT_LEVEL "-o2 "
 
+const std::string preludes[] = {
+    "types/types.djinn",
+    "builtin/coro.djinn",
+};
+
 // Resolve std library path: try the given path first, then try relative to this source file
 static std::filesystem::path resolve_std_path(const std::filesystem::path& given)
 {
@@ -129,9 +134,15 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         // ── Phase 1: Prelude (std/types/types.djinn) ──
         if (options.includeStd && !stdCanonical.empty())
         {
-            const auto preludePath = stdLibPath / "types" / "types.djinn";
-            if (fs::exists(preludePath))
+            for (const auto& prelude : preludes)
             {
+                const auto preludePath = stdLibPath / prelude;
+                if (!fs::exists(preludePath))
+                {
+                    LOG_ERROR("Prelude file %s was not found!", preludePath.c_str());
+                    continue;
+                }
+
                 try
                 {
                     parsedFiles.insert(fs::canonical(preludePath));
@@ -314,35 +325,40 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         // Load standard library first if enabled
         if (options.includeStd && fs::exists(stdLibPath))
         {
-            // Phase 1: Parse prelude (std/types/types.djinn) first
-            const auto preludePath = fs::path(stdLibPath) / "types" / "types.djinn";
-            if (fs::exists(preludePath))
+            for (const auto& prelude : preludes)
             {
+                const auto preludePath = fs::path(stdLibPath) / prelude;
+                if (!fs::exists(preludePath))
+                    continue;
+
                 try
                 {
                     std::ifstream file(preludePath);
-                    if (file)
+                    if (!file)
                     {
-                        const auto stdSource = std::string(
-                            std::istreambuf_iterator(file),
-                            std::istreambuf_iterator<char>()
-                        );
-
-                        auto file_id = preludePath.string();
-                        diagnostics.registerSource(file_id, stdSource);
-
-                        Lexer lexer(stdSource);
-                        const auto tokens = lexer.tokenize();
-
-                        Parser parser(tokens, diagnostics);
-                        auto program = parser.parse(file_id);
-
-                        // Collect prelude type names for subsequent parsers
-                        for (const auto& s : program->structs) preludeTypeNames.push_back(s->name.token_name);
-                        for (const auto& e : program->enums) preludeTypeNames.push_back(e->name.token_name);
-
-                        programs.emplace_back(std::move(program));
+                        LOG_ERROR("Prelude file %s was not found!", preludePath.c_str());
+                        continue;
                     }
+
+                    const auto stdSource = std::string(
+                        std::istreambuf_iterator(file),
+                        std::istreambuf_iterator<char>()
+                    );
+
+                    auto file_id = preludePath.string();
+                    diagnostics.registerSource(file_id, stdSource);
+
+                    Lexer lexer(stdSource);
+                    const auto tokens = lexer.tokenize();
+
+                    Parser parser(tokens, diagnostics);
+                    auto program = parser.parse(file_id);
+
+                    // Collect prelude type names for subsequent parsers
+                    for (const auto& s : program->structs) preludeTypeNames.push_back(s->name.token_name);
+                    for (const auto& e : program->enums) preludeTypeNames.push_back(e->name.token_name);
+
+                    programs.emplace_back(std::move(program));
                 }
                 catch (const CompileError& compile_error)
                 {
@@ -362,7 +378,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                     if (entry.path().extension() != ".djinn") continue;
 
                     // Skip prelude — already parsed
-                    if (fs::equivalent(entry.path(), preludePath)) continue;
+                    // if (fs::equivalent(entry.path(), preludePath)) continue;
 
                     std::ifstream file(entry.path());
                     if (!file) continue;

@@ -254,6 +254,11 @@ private:
                                                 const StructDef* def);
     void generate_spawn_statement(const SpawnStatement& stmt);
 
+    // [intrinsic] struct method support
+    llvm::Value* generate_intrinsic_method(const FunctionCall& call, const StructDef* def,
+                                           const std::string& methodName);
+    llvm::Value* generate_coro_intrinsic(const FunctionCall& call, const std::string& method);
+
     size_t generatedFunctions = 0;
     size_t generatedExternFunctions = 0;
     size_t generatedStructs = 0;

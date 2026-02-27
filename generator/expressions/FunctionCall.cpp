@@ -294,6 +294,16 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
                 return generate_enum_construction(*enumDef, *variant, expr.arguments);
             }
         }
+
+        // Check for [intrinsic] struct static methods (e.g., coro::handle())
+        const std::string resolvedStructName = currentScope->resolve_alias(enumName);
+        if (const StructDef* intrinsicDef = currentScope->lookup_struct(resolvedStructName))
+        {
+            if (intrinsicDef->hasAttribute("intrinsic"))
+            {
+                return generate_intrinsic_method(expr, intrinsicDef, variantName);
+            }
+        }
     }
 
     // Check if this is a constructor call: Type(args) or Type<T>(args)
@@ -660,6 +670,16 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                     }
                 }
             }
+        }
+    }
+
+    // Check for [intrinsic] struct static methods via dot syntax (e.g., coro.handle())
+    if (isStaticCall)
+    {
+        const StructDef* intrinsicDef = currentScope->lookup_struct(structName);
+        if (intrinsicDef && intrinsicDef->hasAttribute("intrinsic"))
+        {
+            return generate_intrinsic_method(call, intrinsicDef, call.name.token_name);
         }
     }
 
