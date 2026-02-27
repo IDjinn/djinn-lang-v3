@@ -119,6 +119,9 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     llvm::Function* llvmFunc = functions[func.name];
     currentFunction = llvmFunc;
 
+    // Mark as presplitcoroutine so CoroSplitPass knows to process this function
+    llvmFunc->addFnAttr(llvm::Attribute::PresplitCoroutine);
+
     // The original return type (what the user declared)
     llvm::Type* origReturnType = generate_type(func.returnType);
 

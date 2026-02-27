@@ -42,7 +42,7 @@ class Generator
 public:
     Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<ScopedSymbolTable>& symbols);
 
-    void optimize() const;
+    void run_passes(bool optimize) const;
 
     std::string print() const;
 
@@ -241,7 +241,6 @@ private:
                                     llvm::Function* llvmFunc, StructDef* def);
     llvm::Value* generate_await_loop(llvm::Value* handle, llvm::Type* resultType);
     void ensure_malloc_free_declared();
-    void run_coroutine_passes() const;
     bool hasAsyncFunctions = false;
 
     size_t generatedFunctions = 0;

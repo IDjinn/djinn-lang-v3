@@ -24,6 +24,8 @@
 #define DJINN_CLANG_PATH "clang"
 #endif
 
+#define CLANG_OPT_LEVEL "-o2 "
+
 // Resolve std library path: try the given path first, then try relative to this source file
 static std::filesystem::path resolve_std_path(const std::filesystem::path& given)
 {
@@ -218,24 +220,26 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         }
 
         const auto out_file_path = options.outputDirectory + "\\" + options.outputFileName;
-        std::ofstream outFile(out_file_path + ".ll");
-        outFile << generator.print();
-        outFile.close();
+        const std::string llPath = out_file_path + ".ll";
 
-        if (options.optimize)
+        // Run coroutine lowering + optional optimization in a single pass
         {
-            utils::StopWatch opt_stop_watch("optimize ir");
-            generator.optimize();
+            utils::StopWatch pass_stop_watch("run passes");
+            generator.run_passes(options.optimize);
         }
 
-        std::ofstream outFileOptimized(out_file_path + ".opt.ll");
-        outFileOptimized << generator.print();
-        outFileOptimized.close();
+        std::string generatedIr = generator.print();
+        std::ofstream outFile(llPath);
+        outFile << generatedIr;
+        outFile.close();
 
         if (options.generateBinary)
-            system(
-                ("\"" DJINN_CLANG_PATH "\" -fno-omit-frame-pointer -g " + out_file_path +
-                    ".ll -o " + out_file_path + ".exe").c_str());
+        {
+            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_OPT_LEVEL + llPath + " -o " + out_file_path +
+                ".exe";
+            LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
+            system(cmdString.c_str());
+        }
 
 
         return {.returnCode = 0, .diagnostics = diagnostics.get_diagnostics()};
@@ -427,31 +431,27 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         const std::string llPath = outputDir + "\\" + outputFileName + ".ll";
-        const std::string llOptPath = outputDir + "\\" + outputFileName + ".opt.ll";
         const std::string exePath = outputDir + "\\" + outputFileName + ".exe";
 
+        // Run coroutine lowering + optional optimization in a single pass
+        {
+            utils::StopWatch pass_stop_watch("run passes");
+            generator.run_passes(options.optimize);
+        }
+
+        generatedIr = generator.print();
         std::ofstream optOutput(llPath);
         optOutput << generatedIr;
         optOutput.close();
-
-        if (options.optimize)
-        {
-            utils::StopWatch opt_stop_watch("optimize ir");
-            generator.optimize();
-
-            std::ofstream otimized_output(llOptPath);
-            otimized_output << generatedIr;
-            otimized_output.close();
-        }
 
         if (!options.generateBinary)
         {
             return makeResult(0, std::stacktrace::current());
         }
 
-        int clangResult = system(
-            ("\"" DJINN_CLANG_PATH "\" -fno-omit-frame-pointer -g " + llPath + " -o " + exePath).
-            c_str());
+        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_OPT_LEVEL + llPath + " -o " + exePath;
+        LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
+        int clangResult = system(cmdString.c_str());
         if (clangResult != 0)
         {
             return makeResult(clangResult, std::stacktrace::current());

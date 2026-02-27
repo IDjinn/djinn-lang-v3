@@ -356,6 +356,9 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     hasAsyncFunctions = true;
     ensure_malloc_free_declared();
 
+    // Mark as presplitcoroutine so CoroSplitPass knows to process this function
+    llvmFunc->addFnAttr(llvm::Attribute::PresplitCoroutine);
+
     llvm::Type* origReturnType = generate_type(method.returnType);
 
     auto* ptrTy = llvm::PointerType::getUnqual(*context);

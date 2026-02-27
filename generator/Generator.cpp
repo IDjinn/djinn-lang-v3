@@ -167,11 +167,7 @@ void Generator::generate()
     // PASS 8: Verify all symbols were generated
     verify_all_symbols_generated();
 
-    // PASS 9: Run coroutine passes if needed
-    if (hasAsyncFunctions)
-    {
-        run_coroutine_passes();
-    }
+    // NOTE: Coroutine and optimization passes are run externally via run_passes()
 
     // PASS 10: Force emission of used declarations
     // emit_used_declarations();
@@ -275,8 +271,10 @@ void Generator::generate_default_main()
 //     return llvmFunc;
 // }
 
-void Generator::optimize() const
+void Generator::run_passes(bool optimize) const
 {
+    if (!optimize) return;
+
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;
@@ -289,6 +287,9 @@ void Generator::optimize() const
     PB.registerLoopAnalyses(LAM);
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+    // O2 pipeline includes CoroEarly/CoroSplit/CoroElide/CoroCleanup.
+    // When not optimizing, we output pre-split IR with presplitcoroutine
+    // attribute and let clang handle coroutine lowering.
     llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
     MPM.run(*module, MAM);
 }
@@ -339,25 +340,3 @@ bool Generator::linkModules(const std::vector<std::filesystem::path>& llPaths) c
     return true;
 }
 
-void Generator::run_coroutine_passes() const
-{
-    // Run coroutine lowering passes (required for llvm.coro.* intrinsics)
-    // These passes split coroutines into resume/destroy/cleanup functions
-    llvm::LoopAnalysisManager LAM;
-    llvm::FunctionAnalysisManager FAM;
-    llvm::CGSCCAnalysisManager CGAM;
-    llvm::ModuleAnalysisManager MAM;
-
-    llvm::PassBuilder PB;
-    PB.registerModuleAnalyses(MAM);
-    PB.registerCGSCCAnalyses(CGAM);
-    PB.registerFunctionAnalyses(FAM);
-    PB.registerLoopAnalyses(LAM);
-    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
-    llvm::ModulePassManager MPM;
-    MPM.addPass(llvm::CoroEarlyPass());
-    MPM.addPass(llvm::createModuleToPostOrderCGSCCPassAdaptor(llvm::CoroSplitPass()));
-    MPM.addPass(llvm::CoroCleanupPass());
-    MPM.run(*module, MAM);
-}
