@@ -1,0 +1,288 @@
+#include <gtest/gtest.h>
+
+#include "../DjinnCompiler.h"
+
+// ========================
+// Async/Await: basic
+// ========================
+
+TEST(Async, SimpleReturnValue)
+{
+    const auto source = R"(
+        async i32 compute() {
+            return 42;
+        }
+
+        i32 main() {
+            i32 result = await compute();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Async, WithParameter)
+{
+    const auto source = R"(
+        async i32 double_val(i32 x) {
+            return x * 2;
+        }
+
+        i32 main() {
+            i32 result = await double_val(21);
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Async, MultipleParameters)
+{
+    const auto source = R"(
+        async i32 add(i32 a, i32 b) {
+            return a + b;
+        }
+
+        i32 main() {
+            i32 result = await add(30, 12);
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Async, ExpressionComputation)
+{
+    const auto source = R"(
+        async i32 compute(i32 x) {
+            return x * 2 + 1;
+        }
+
+        i32 main() {
+            i32 result = await compute(10);
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 21);
+}
+
+// ========================
+// Async/Await: async main
+// ========================
+
+TEST(Async, AsyncMain)
+{
+    const auto source = R"(
+        async i32 get_value() {
+            return 99;
+        }
+
+        async i32 main() {
+            i32 val = await get_value();
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 99);
+}
+
+TEST(Async, AsyncMainWithComputation)
+{
+    const auto source = R"(
+        async i32 square(i32 x) {
+            return x * x;
+        }
+
+        async i32 main() {
+            i32 a = await square(3);
+            i32 b = await square(4);
+            return a + b;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 25); // 9 + 16
+}
+
+// ========================
+// Async/Await: multiple awaits
+// ========================
+
+TEST(Async, MultipleAwaitsSequential)
+{
+    const auto source = R"(
+        async i32 get_a() {
+            return 10;
+        }
+
+        async i32 get_b() {
+            return 20;
+        }
+
+        i32 main() {
+            i32 a = await get_a();
+            i32 b = await get_b();
+            return a + b;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 30);
+}
+
+TEST(Async, ThreeAwaitsAccumulate)
+{
+    const auto source = R"(
+        async i32 val(i32 x) {
+            return x;
+        }
+
+        i32 main() {
+            i32 a = await val(10);
+            i32 b = await val(20);
+            i32 c = await val(30);
+            return a + b + c;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 60);
+}
+
+// ========================
+// Async/Await: chained (async calling async)
+// ========================
+
+TEST(Async, ChainedAwait)
+{
+    const auto source = R"(
+        async i32 inner() {
+            return 10;
+        }
+
+        async i32 outer() {
+            i32 val = await inner();
+            return val + 5;
+        }
+
+        i32 main() {
+            i32 result = await outer();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 15);
+}
+
+TEST(Async, DeepChaining)
+{
+    const auto source = R"(
+        async i32 level3() {
+            return 5;
+        }
+
+        async i32 level2() {
+            i32 val = await level3();
+            return val * 2;
+        }
+
+        async i32 level1() {
+            i32 val = await level2();
+            return val + 3;
+        }
+
+        i32 main() {
+            i32 result = await level1();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 13); // (5 * 2) + 3
+}
+
+TEST(Async, ChainedAsyncMain)
+{
+    const auto source = R"(
+        async i32 add(i32 a, i32 b) {
+            return a + b;
+        }
+
+        async i32 compute() {
+            i32 x = await add(10, 20);
+            i32 y = await add(x, 5);
+            return y;
+        }
+
+        async i32 main() {
+            i32 result = await compute();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 35);
+}
+
+// ========================
+// Async/Await: await result used in further computation
+// ========================
+
+TEST(Async, AwaitResultAsArgument)
+{
+    const auto source = R"(
+        async i32 double_it(i32 x) {
+            return x * 2;
+        }
+
+        i32 main() {
+            i32 a = await double_it(5);
+            i32 b = await double_it(a);
+            return b;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 20); // 5 * 2 = 10, 10 * 2 = 20
+}
+
+TEST(Async, AwaitWithLocalComputation)
+{
+    const auto source = R"(
+        async i32 fetch(i32 x) {
+            return x + 1;
+        }
+
+        i32 main() {
+            i32 val = await fetch(10);
+            i32 local = val * 3;
+            return local;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 33); // (10 + 1) * 3
+}
