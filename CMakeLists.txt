@@ -270,3 +270,11 @@ add_custom_target(clean_djinn_build
         COMMENT "Cleaning djinn_build temp directory"
 )
 add_dependencies(tests clean_djinn_build)
+
+# Copy runtime directory to build directory for clang linking
+add_custom_command(TARGET djinn_lib POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/runtime"
+        "${CMAKE_BINARY_DIR}/runtime"
+        COMMENT "Copying runtime to build directory"
+)

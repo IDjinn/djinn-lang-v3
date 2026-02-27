@@ -8,6 +8,7 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
 {
     StructDef def(struct_symbol.name, struct_symbol.isGeneric());
     def.isTransparent = struct_symbol.isTransparent();
+    def.attributes = struct_symbol.attributes;
 
     unsigned idx = 0;
     for (const auto& field : struct_symbol.fields)

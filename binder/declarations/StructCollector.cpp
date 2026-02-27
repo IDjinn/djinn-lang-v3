@@ -104,6 +104,12 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         structSym->addImplements(ifaceName);
     }
 
+    // Attributes
+    for (const auto& attr : decl.attributes)
+    {
+        structSym->attributes.push_back(attr.name.token_name);
+    }
+
     // Base type
     if (decl.baseType)
     {

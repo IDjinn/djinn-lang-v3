@@ -175,6 +175,25 @@ struct YieldStatement : Statement
     }
 };
 
+struct SpawnStatement : Statement
+{
+    std::unique_ptr<Expression> expression;
+
+    explicit SpawnStatement(std::unique_ptr<Expression> expr)
+        : expression(std::move(expr))
+    {
+    }
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "SpawnStatement\n";
+        if (expression) expression->print(os, indent + 2);
+    }
+};
+
 struct SwitchCaseStatement : Statement
 {
     std::unique_ptr<Expression> expression;

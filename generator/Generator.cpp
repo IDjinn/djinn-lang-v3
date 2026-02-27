@@ -129,6 +129,10 @@ void Generator::generate()
             hasAsyncFunctions = true;
             ensure_malloc_free_declared();
 
+            // Generate coro wrappers and runtime declarations for the event loop
+            generate_coro_wrappers();
+            generate_runtime_declarations();
+
             // Rename the async main to __djinn_async_main
             llvm::Function* asyncMainFn = functions["main"];
             asyncMainFn->setName("__djinn_async_main");
@@ -145,22 +149,24 @@ void Generator::generate()
             builder->SetInsertPoint(entryBB);
             currentFunction = realMainFn;
 
+            // Init runtime with 4 worker threads (default)
+            auto* initFn = module->getFunction("__djinn_runtime_init");
+            builder->CreateCall(initFn, {builder->getInt32(4)});
+
             // Call the async main to get the coroutine handle
             llvm::Value* handle = builder->CreateCall(asyncMainFn, {}, "async.hdl");
 
-            // Resume loop until done
-            llvm::Type* origReturnType = generate_type(mainSym->returnType);
-            llvm::Value* result = generate_await_loop(handle, origReturnType);
+            // Use the proven await loop to resume + extract result directly in IR
+            // (avoids C runtime needing to call @llvm.coro.promise which may not
+            // lower properly in non-coroutine wrapper functions)
+            llvm::Type* mainRetType = generate_type(mainSym->returnType);
+            llvm::Value* result = generate_await_loop(handle, mainRetType);
 
-            if (result && !origReturnType->isVoidTy())
-            {
-                result = cast_value(result, builder->getInt32Ty());
-                builder->CreateRet(result);
-            }
-            else
-            {
-                builder->CreateRet(builder->getInt32(0));
-            }
+            // Shutdown runtime
+            auto* shutdownFn = module->getFunction("__djinn_runtime_shutdown");
+            builder->CreateCall(shutdownFn);
+
+            builder->CreateRet(result);
         }
     }
 

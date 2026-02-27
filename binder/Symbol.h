@@ -5,6 +5,7 @@
 #ifndef DJINN_SYMBOL_H
 #define DJINN_SYMBOL_H
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -244,6 +245,7 @@ struct StructSymbol : Symbol
     std::vector<std::shared_ptr<PropertySymbol>> properties;
     std::vector<GenericParamInfo> genericParams;
     std::vector<std::string> implements;
+    std::vector<std::string> attributes;
     std::unique_ptr<Type> baseType;
 
     [[nodiscard]] bool isGeneric() const
@@ -259,6 +261,11 @@ struct StructSymbol : Symbol
     [[nodiscard]] bool hasBaseType() const
     {
         return baseType != nullptr;
+    }
+
+    [[nodiscard]] bool hasAttribute(const std::string& attr) const
+    {
+        return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
     }
 
     explicit StructSymbol(std::string name, const SourceLocation loc = {})

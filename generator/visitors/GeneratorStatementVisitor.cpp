@@ -62,4 +62,9 @@ namespace djinn
     {
         _generator.generate_yield_statement();
     }
+
+    void GeneratorStatementVisitor::visit(const SpawnStatement& stmt)
+    {
+        _generator.generate_spawn_statement(stmt);
+    }
 } // namespace djinn

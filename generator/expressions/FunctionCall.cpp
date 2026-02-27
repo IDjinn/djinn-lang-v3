@@ -617,6 +617,52 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     }
 
     const auto methodStructName = llvmStructName.empty() ? structName : llvmStructName;
+
+    // Check for task<T> intrinsic methods via [no_mangle] attribute
+    if (!isStaticCall)
+    {
+        const StructDef* taskDef = currentScope->lookup_struct(methodStructName);
+        if (!taskDef) taskDef = currentScope->lookup_struct(structName);
+        if (taskDef && taskDef->hasAttribute("no_mangle"))
+        {
+            // Extract the base name from the struct (e.g., "std::sys::task" -> "task")
+            std::string baseName = taskDef->name;
+            if (auto pos = baseName.rfind("::"); pos != std::string::npos)
+                baseName = baseName.substr(pos + 2);
+            // Monomorphized names contain the base name before 'I'
+            if (auto pos = baseName.find("I"); pos != std::string::npos)
+                baseName = baseName.substr(0, pos);
+            // Also strip mangling prefix _ZN...
+            if (baseName.starts_with("_ZN"))
+            {
+                // Extract name from Itanium mangling: _ZN<len><name>...
+                size_t i = 3;
+                size_t len = 0;
+                while (i < baseName.size() && std::isdigit(baseName[i]))
+                {
+                    len = len * 10 + (baseName[i] - '0');
+                    i++;
+                }
+                if (len > 0 && i + len <= baseName.size())
+                    baseName = baseName.substr(i, len);
+            }
+            // Strip qualified prefix if present
+            if (auto pos2 = baseName.rfind("::"); pos2 != std::string::npos)
+                baseName = baseName.substr(pos2 + 2);
+
+            if (baseName == "task")
+            {
+                if (const auto* ident = dynamic_cast<const Identifier*>(call.receiver.get()))
+                {
+                    if (llvm::AllocaInst* alloca = currentScope->lookup_variable(ident->identifier.token_name))
+                    {
+                        return generate_task_intrinsic_method(call, alloca, taskDef);
+                    }
+                }
+            }
+        }
+    }
+
     const auto mangledName = methodStructName + "__" + call.name.token_name;
 
     if (const auto it = functions.find(mangledName); it == functions.end())

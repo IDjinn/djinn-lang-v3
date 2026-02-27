@@ -974,6 +974,13 @@ std::unique_ptr<Statement> Parser::parse_statement()
         return std::make_unique<ContinueStatement>();
     }
 
+    if (match(TokenType::SPAWN))
+    {
+        auto expr = parse_expression();
+        expect("Esperado ';' após spawn", TokenType::SEMICOLON);
+        return std::make_unique<SpawnStatement>(std::move(expr));
+    }
+
     if (match(TokenType::YIELD))
     {
         expect("Esperado ';' após yield", TokenType::SEMICOLON);

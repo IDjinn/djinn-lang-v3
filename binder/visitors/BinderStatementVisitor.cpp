@@ -67,4 +67,13 @@ namespace djinn
     {
         // Validation of "yield only in async" is done in the generator
     }
+
+    void BinderStatementVisitor::visit(const SpawnStatement& stmt)
+    {
+        // Validate the spawned expression (should be a function call)
+        if (stmt.expression)
+        {
+            _binder.bindExpression(*stmt.expression);
+        }
+    }
 } // namespace djinn

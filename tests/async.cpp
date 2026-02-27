@@ -352,3 +352,163 @@ TEST(Async, Yield_WithComputation)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30); // 10 + 20
 }
+
+// ========================
+// Spawn: basic fire-and-forget
+// ========================
+
+TEST(Spawn, BasicSpawnParse)
+{
+    // Verify spawn keyword parses correctly (IR generation only, no binary)
+    const auto source = R"(
+        async i32 compute(i32 x) {
+            return x * 2;
+        }
+
+        async i32 main() {
+            spawn compute(10);
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    // Verify spawn and event loop declarations appear in IR
+    EXPECT_NE(result.ir.find("__djinn_spawn"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_event_loop"), std::string::npos);
+}
+
+// ========================
+// Event Loop: async main generates runtime calls
+// ========================
+
+TEST(EventLoop, AsyncMainGeneratesRuntimeCalls)
+{
+    const auto source = R"(
+        async i32 get_value() {
+            return 42;
+        }
+
+        async i32 main() {
+            i32 val = await get_value();
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    // Verify runtime init/shutdown are called in the IR
+    EXPECT_NE(result.ir.find("__djinn_runtime_init"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_runtime_shutdown"), std::string::npos);
+}
+
+TEST(EventLoop, CoroWrappersGenerated)
+{
+    const auto source = R"(
+        async i32 compute() {
+            return 1;
+        }
+
+        async i32 main() {
+            i32 r = await compute();
+            return r;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    // Verify coro wrapper functions are generated
+    EXPECT_NE(result.ir.find("__djinn_coro_resume"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_coro_done"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_coro_destroy"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_coro_promise"), std::string::npos);
+}
+
+// ========================
+// Backward Compatibility: non-async main with await still uses busy-loop
+// ========================
+
+TEST(Async, NonAsyncMainStillWorks)
+{
+    const auto source = R"(
+        async i32 compute() {
+            return 77;
+        }
+
+        i32 main() {
+            i32 result = await compute();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 77);
+}
+
+TEST(Async, NonAsyncMainNoRuntimeCalls)
+{
+    const auto source = R"(
+        async i32 compute() {
+            return 1;
+        }
+
+        i32 main() {
+            i32 result = await compute();
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    // Non-async main should NOT have event loop runtime calls
+    EXPECT_EQ(result.ir.find("__djinn_runtime_init"), std::string::npos);
+    EXPECT_EQ(result.ir.find("__djinn_event_loop"), std::string::npos);
+}
+
+// ========================
+// Spawn: multiple spawns parse
+// ========================
+
+TEST(Spawn, MultipleSpawnsParse)
+{
+    const auto source = R"(
+        async i32 work(i32 x) {
+            return x;
+        }
+
+        async i32 main() {
+            spawn work(1);
+            spawn work(2);
+            spawn work(3);
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+// ========================
+// Spawn with Yield
+// ========================
+
+TEST(Spawn, WithYieldParse)
+{
+    const auto source = R"(
+        async i32 worker() {
+            yield;
+            yield;
+            return 0;
+        }
+
+        async i32 main() {
+            spawn worker();
+            yield;
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}

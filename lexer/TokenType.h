@@ -103,6 +103,7 @@ enum class TokenType
     ASYNC,
     AWAIT,
     YIELD,
+    SPAWN,
 };
 
 

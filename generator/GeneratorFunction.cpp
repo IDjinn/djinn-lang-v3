@@ -336,6 +336,124 @@ void Generator::generate_extern_function(const ExternFunctionSymbol& func)
     }
 }
 
+void Generator::generate_coro_wrappers()
+{
+    auto* ptrTy = llvm::PointerType::getUnqual(*context);
+    auto* i1Ty = builder->getInt1Ty();
+    auto* i32Ty = builder->getInt32Ty();
+    auto* voidTy = builder->getVoidTy();
+
+    // __djinn_coro_resume(ptr %handle) -> void
+    {
+        auto* ft = llvm::FunctionType::get(voidTy, {ptrTy}, false);
+        auto* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                          "__djinn_coro_resume", *module);
+        auto* bb = llvm::BasicBlock::Create(*context, "entry", fn);
+        builder->SetInsertPoint(bb);
+        auto* resumeFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_resume);
+        builder->CreateCall(resumeFn, {fn->getArg(0)});
+        builder->CreateRetVoid();
+    }
+
+    // __djinn_coro_done(ptr %handle) -> i1 (returned as i1 for C, will be treated as int)
+    {
+        auto* ft = llvm::FunctionType::get(i1Ty, {ptrTy}, false);
+        auto* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                          "__djinn_coro_done", *module);
+        auto* bb = llvm::BasicBlock::Create(*context, "entry", fn);
+        builder->SetInsertPoint(bb);
+        auto* doneFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_done);
+        auto* result = builder->CreateCall(doneFn, {fn->getArg(0)}, "done");
+        builder->CreateRet(result);
+    }
+
+    // __djinn_coro_destroy(ptr %handle) -> void
+    {
+        auto* ft = llvm::FunctionType::get(voidTy, {ptrTy}, false);
+        auto* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                          "__djinn_coro_destroy", *module);
+        auto* bb = llvm::BasicBlock::Create(*context, "entry", fn);
+        builder->SetInsertPoint(bb);
+        auto* destroyFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_destroy);
+        builder->CreateCall(destroyFn, {fn->getArg(0)});
+        builder->CreateRetVoid();
+    }
+
+    // __djinn_coro_promise(ptr %handle, i32 %align) -> ptr
+    {
+        auto* ft = llvm::FunctionType::get(ptrTy, {ptrTy, i32Ty}, false);
+        auto* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                          "__djinn_coro_promise", *module);
+        auto* bb = llvm::BasicBlock::Create(*context, "entry", fn);
+        builder->SetInsertPoint(bb);
+        auto* promiseFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_promise);
+        auto* result = builder->CreateCall(promiseFn, {
+                                               fn->getArg(0), fn->getArg(1), builder->getFalse()
+                                           }, "promise");
+        builder->CreateRet(result);
+    }
+}
+
+void Generator::generate_runtime_declarations()
+{
+    auto* ptrTy = llvm::PointerType::getUnqual(*context);
+    auto* i32Ty = builder->getInt32Ty();
+    auto* voidTy = builder->getVoidTy();
+    auto* i64Ty = builder->getInt64Ty();
+
+    // void __djinn_runtime_init(i32 num_threads)
+    if (!module->getFunction("__djinn_runtime_init"))
+    {
+        auto* initTy = llvm::FunctionType::get(voidTy, {i32Ty}, false);
+        llvm::Function::Create(initTy, llvm::Function::ExternalLinkage,
+                               "__djinn_runtime_init", *module);
+    }
+
+    // void __djinn_runtime_shutdown()
+    if (!module->getFunction("__djinn_runtime_shutdown"))
+    {
+        auto* shutdownTy = llvm::FunctionType::get(voidTy, {}, false);
+        llvm::Function::Create(shutdownTy, llvm::Function::ExternalLinkage,
+                               "__djinn_runtime_shutdown", *module);
+    }
+
+    // void __djinn_spawn(ptr handle)
+    if (!module->getFunction("__djinn_spawn"))
+    {
+        auto* spawnTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
+        llvm::Function::Create(spawnTy, llvm::Function::ExternalLinkage,
+                               "__djinn_spawn", *module);
+    }
+
+    // i32 __djinn_event_loop(ptr main_handle)
+    if (!module->getFunction("__djinn_event_loop"))
+    {
+        auto* loopTy = llvm::FunctionType::get(i32Ty, {ptrTy}, false);
+        llvm::Function::Create(loopTy, llvm::Function::ExternalLinkage,
+                               "__djinn_event_loop", *module);
+    }
+
+    // i64 __djinn_async_read(i32 fd, ptr buf, i64 count, ptr coro)
+    if (!module->getFunction("__djinn_async_read"))
+    {
+        auto* readTy = llvm::FunctionType::get(i64Ty, {i32Ty, ptrTy, i64Ty, ptrTy}, false);
+        llvm::Function::Create(readTy, llvm::Function::ExternalLinkage,
+                               "__djinn_async_read", *module);
+    }
+
+    // i64 __djinn_async_write(i32 fd, ptr buf, i64 count, ptr coro)
+    if (!module->getFunction("__djinn_async_write"))
+    {
+        auto* writeTy = llvm::FunctionType::get(i64Ty, {i32Ty, ptrTy, i64Ty, ptrTy}, false);
+        llvm::Function::Create(writeTy, llvm::Function::ExternalLinkage,
+                               "__djinn_async_write", *module);
+    }
+}
+
 void Generator::emit_used_declarations()
 {
     auto* i8PtrTy = llvm::PointerType::getUnqual(*context);

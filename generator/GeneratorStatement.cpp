@@ -99,6 +99,23 @@ void Generator::generate_yield_statement()
     builder->SetInsertPoint(resumeBB);
 }
 
+void Generator::generate_spawn_statement(const SpawnStatement& stmt)
+{
+    // Generate the async function call (returns coroutine handle)
+    llvm::Value* handle = generate_expression(*stmt.expression);
+
+    // Call __djinn_spawn(handle) to submit to event loop
+    auto* spawnFn = module->getFunction("__djinn_spawn");
+    if (!spawnFn)
+    {
+        auto* ptrTy = llvm::PointerType::getUnqual(*context);
+        auto* ft = llvm::FunctionType::get(builder->getVoidTy(), {ptrTy}, false);
+        spawnFn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                         "__djinn_spawn", *module);
+    }
+    builder->CreateCall(spawnFn, {handle});
+}
+
 void Generator::generate_break_statement()
 {
     if (!breakTargets.empty())

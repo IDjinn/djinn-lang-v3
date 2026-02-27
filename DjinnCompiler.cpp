@@ -41,6 +41,23 @@ static std::filesystem::path resolve_std_path(const std::filesystem::path& given
     return given;
 }
 
+// Resolve runtime C file path
+static std::filesystem::path resolve_runtime_path()
+{
+    namespace fs = std::filesystem;
+
+    // Try relative to current directory
+    if (fs::exists("runtime/djinn_runtime.c")) return "runtime/djinn_runtime.c";
+
+    // Try relative to this source file
+    const fs::path thisFile(__FILE__);
+    const auto projectRoot = thisFile.parent_path();
+    const auto candidate = projectRoot / "runtime" / "djinn_runtime.c";
+    if (fs::exists(candidate)) return candidate;
+
+    return "";
+}
+
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
 {
     utils::StopWatch global_watch("build time");
@@ -235,7 +252,19 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         if (options.generateBinary)
         {
-            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_OPT_LEVEL + llPath + " -o " + out_file_path +
+            std::string runtimeArg;
+            // Only link runtime when async main is used (IR contains runtime calls)
+            if (generatedIr.find("__djinn_runtime_init") != std::string::npos)
+            {
+                const auto runtimePath = resolve_runtime_path();
+                if (!runtimePath.empty())
+                {
+                    runtimeArg = " " + runtimePath.string();
+                }
+            }
+
+            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_OPT_LEVEL + llPath + runtimeArg + " -o " +
+                out_file_path +
                 ".exe";
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
             system(cmdString.c_str());
@@ -449,7 +478,18 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             return makeResult(0, std::stacktrace::current());
         }
 
-        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_OPT_LEVEL + llPath + " -o " + exePath;
+        std::string runtimeArg;
+        // Only link runtime when async main is used (IR contains runtime calls)
+        if (generatedIr.find("__djinn_runtime_init") != std::string::npos)
+        {
+            const auto runtimePath = resolve_runtime_path();
+            if (!runtimePath.empty())
+            {
+                runtimeArg = " " + runtimePath.string();
+            }
+        }
+
+        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_OPT_LEVEL + llPath + runtimeArg + " -o " + exePath;
         LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
         int clangResult = system(cmdString.c_str());
         if (clangResult != 0)

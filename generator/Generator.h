@@ -247,6 +247,13 @@ private:
     void ensure_malloc_free_declared();
     bool hasAsyncFunctions = false;
 
+    // Async runtime support
+    void generate_coro_wrappers();
+    void generate_runtime_declarations();
+    llvm::Value* generate_task_intrinsic_method(const FunctionCall& call, llvm::AllocaInst* receiverAlloca,
+                                                const StructDef* def);
+    void generate_spawn_statement(const SpawnStatement& stmt);
+
     size_t generatedFunctions = 0;
     size_t generatedExternFunctions = 0;
     size_t generatedStructs = 0;

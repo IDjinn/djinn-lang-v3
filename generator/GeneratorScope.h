@@ -5,6 +5,7 @@
 #ifndef DJINN_GENERATOR_SCOPE_H
 #define DJINN_GENERATOR_SCOPE_H
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -35,6 +36,7 @@ struct StructDef
     bool isMonomorphized = false;
 
     GenericParams genericParams;
+    std::vector<std::string> attributes;
 
     llvm::Type* transparentUnderlying = nullptr;
 
@@ -54,6 +56,11 @@ struct StructDef
     StructDef(std::string name, bool isGeneric = false)
         : name(std::move(name)), isGeneric(isGeneric)
     {
+    }
+
+    [[nodiscard]] bool hasAttribute(const std::string& attr) const
+    {
+        return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
     }
 
     [[nodiscard]] bool hasField(const std::string& fieldName) const

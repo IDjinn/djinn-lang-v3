@@ -1,0 +1,16 @@
+import std::types;
+namespace std::sys;
+
+[no_mangle]
+struct task<T> {
+    void* handle;
+
+    task(void* h) {
+        this.handle = h;
+    }
+
+    public bool is_completed();
+    public void resume();
+    public T get_result();
+    public void destroy();
+}
