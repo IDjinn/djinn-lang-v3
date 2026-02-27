@@ -11,7 +11,7 @@ See `todo.md` for full roadmap. Summary:
 - **Fase 2 (Estruturas)**: ~65% - enums, methods, constructors (incl. generic), array\<T\>. Faltam slices e string
   robusto
 - **Fase 3 (Std)**: ~15% - I/O parcial via extern, array\<T\> collection. Faltam String, HashMap
-- **Fase 4 (Avancado)**: ~25% - interfaces feitas. Faltam pattern matching, closures, async
+- **Fase 4 (Avancado)**: ~50% - interfaces, async/await feitos. Faltam pattern matching, closures
 
 Extras ja implementados: control flow, aritmetica, mutabilidade, ownership/copy semantics,
 name mangling, binder/scope, diagnostics, imports, namespaces, LSP server.
@@ -82,6 +82,19 @@ struct Console {
 struct size : u32;
 struct c_result : i32;
 struct bool : i1;
+```
+
+```djinn
+// Async/Await (coroutines via LLVM)
+async i32 compute(i32 x) {
+    return x * 2 + 1;
+}
+
+async i32 main() {
+    i32 result = await compute(10);
+    printf("result: %d\n", result);
+    return 0;
+}
 ```
 
 ## Grammar (EBNF)
@@ -157,7 +170,7 @@ attributes           = { "[" IDENTIFIER "]" } ;
 ### Function
 
 ```ebnf
-function             = type IDENTIFIER "(" [ param_list ] ")" block ;
+function             = [ "async" ] type IDENTIFIER "(" [ param_list ] ")" block ;
 param_list           = parameter { "," parameter } ;
 parameter            = type IDENTIFIER [ "mut" ] ;
 ```
@@ -240,7 +253,8 @@ equality             = comparison { ( "==" | "!=" ) comparison } ;
 comparison           = term { ( "<" | "<=" | ">" | ">=" ) term } ;
 term                 = factor { ( "+" | "-" ) factor } ;
 factor               = unary { ( "*" | "/" | "%" ) unary } ;
-unary                = ( "!" | "-" | "*" | "&" ) unary | postfix ;
+unary                = ( "!" | "-" | "*" | "&" ) unary | await_expr | postfix ;
+await_expr           = "await" unary ;
 postfix              = primary { "." IDENTIFIER | "[" expression "]" | "(" [ arg_list ] ")" } ;
 
 primary              = INTEGER_LITERAL

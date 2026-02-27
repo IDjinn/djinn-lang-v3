@@ -23,12 +23,12 @@
 - [~] I/O basico - funciona via extern printf/puts, sem wrapper proprio
 - [x] HashMap\<K,V\> - hash table
 
-## Fase 4: Features Avancadas - ~25%
+## Fase 4: Features Avancadas - ~50%
 
 - [x] Traits/Interfaces (basica, generica, struct implementando)
 - [ ] Pattern matching (existe exemplo em examples/, nao testado)
 - [ ] Closures
-- [ ] Async (opcional)
+- [x] Async/Await - coroutines via LLVM coro intrinsics, presplitcoroutine, await loop
 
 ---
 
@@ -54,4 +54,3 @@
 3. **Pattern matching** - match em enums/tagged unions
 5. **I/O wrappers** - print/println proprio da linguagem
 7. **Closures** - funcoes anonimas
-8. **Async** - opcional, futuro
