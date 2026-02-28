@@ -60,33 +60,47 @@ llvm::Value* Generator::generate_await_loop(llvm::Value* handle, llvm::Type* res
 {
     auto* ptrTy = llvm::PointerType::getUnqual(*context);
 
-    // Resume loop: keep resuming until coroutine is done
-    auto* awaitLoopBB = llvm::BasicBlock::Create(*context, "await.loop", currentFunction);
-    auto* awaitResumeBB = llvm::BasicBlock::Create(*context, "await.resume", currentFunction);
-    auto* awaitReadyBB = llvm::BasicBlock::Create(*context, "await.ready", currentFunction);
+    // Use the event loop to properly resolve nested async awaits.
+    // The naive busy-loop (resume/check done) doesn't work when the awaited
+    // coroutine internally uses __djinn_await, because it would resume the
+    // outermost coroutine past its suspend point before children complete.
+    auto* eventLoopFn = module->getFunction("__djinn_event_loop_run");
+    if (!eventLoopFn && hasAsyncFunctions)
+    {
+        auto* ft = llvm::FunctionType::get(builder->getVoidTy(), {ptrTy}, false);
+        eventLoopFn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                             "__djinn_event_loop_run", *module);
+    }
+    if (eventLoopFn)
+    {
+        builder->CreateCall(eventLoopFn, {handle});
+    }
+    else
+    {
+        // Fallback: simple busy-loop for programs with no async runtime
+        auto* awaitLoopBB = llvm::BasicBlock::Create(*context, "await.loop", currentFunction);
+        auto* awaitResumeBB = llvm::BasicBlock::Create(*context, "await.resume", currentFunction);
+        auto* awaitReadyBB = llvm::BasicBlock::Create(*context, "await.ready", currentFunction);
 
-    builder->CreateBr(awaitLoopBB);
+        builder->CreateBr(awaitLoopBB);
 
-    // --- await.loop ---
-    builder->SetInsertPoint(awaitLoopBB);
-    auto* coroDoneFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_done);
-    llvm::Value* done = builder->CreateCall(coroDoneFn, {handle}, "await.done");
-    builder->CreateCondBr(done, awaitReadyBB, awaitResumeBB);
+        builder->SetInsertPoint(awaitLoopBB);
+        auto* coroDoneFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_done);
+        llvm::Value* done = builder->CreateCall(coroDoneFn, {handle}, "await.done");
+        builder->CreateCondBr(done, awaitReadyBB, awaitResumeBB);
 
-    // --- await.resume ---
-    builder->SetInsertPoint(awaitResumeBB);
-    auto* coroResumeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_resume);
-    builder->CreateCall(coroResumeFn, {handle});
-    builder->CreateBr(awaitLoopBB);
+        builder->SetInsertPoint(awaitResumeBB);
+        auto* coroResumeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_resume);
+        builder->CreateCall(coroResumeFn, {handle});
+        builder->CreateBr(awaitLoopBB);
 
-    // --- await.ready ---
-    builder->SetInsertPoint(awaitReadyBB);
+        builder->SetInsertPoint(awaitReadyBB);
+    }
 
+    // Extract result from coroutine promise
     llvm::Value* result = nullptr;
     if (resultType && !resultType->isVoidTy())
     {
-        // Extract the promise (return value) from the coroutine frame
-        // %promise = call ptr @llvm.coro.promise(ptr %hdl, i32 <align>, i1 false)
         auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_promise);
         unsigned align = module->getDataLayout().getABITypeAlign(resultType).value();
         llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {

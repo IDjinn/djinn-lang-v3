@@ -108,7 +108,10 @@ void Generator::generate()
     // PASS 6a: Forward declare all global functions
     for (const auto& sym : symbols->get_all_functions())
     {
-        forward_declare_function(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
+        auto fSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
+        forward_declare_function(*fSym);
+        if (fSym->isAsync)
+            hasAsyncFunctions = true;
     }
 
     // PASS 6b: Generate global function bodies
@@ -118,20 +121,20 @@ void Generator::generate()
         generatedFunctions++;
     }
 
-    // PASS 7: Generate async main wrapper if main is async
+    // PASS 7: Generate coro wrappers + runtime support for async functions
+    if (hasAsyncFunctions)
+    {
+        ensure_malloc_free_declared();
+        generate_coro_wrappers();
+        generate_runtime_declarations();
+    }
+
     if (auto mainSym = symbols->lookupFunction("main"))
     {
         if (mainSym->isAsync)
         {
             // main() was generated as a coroutine returning ptr
             // Create a real "main" wrapper that calls it and extracts the return value
-
-            hasAsyncFunctions = true;
-            ensure_malloc_free_declared();
-
-            // Generate coro wrappers and runtime declarations for the event loop
-            generate_coro_wrappers();
-            generate_runtime_declarations();
 
             // Rename the async main to __djinn_async_main
             llvm::Function* asyncMainFn = functions["main"];
@@ -189,6 +192,34 @@ void Generator::generate()
             builder->CreateCall(coroDestroyFn, {handle});
 
             // Shutdown runtime
+            auto* shutdownFn = module->getFunction("__djinn_runtime_shutdown");
+            builder->CreateCall(shutdownFn);
+
+            builder->CreateRet(result);
+        }
+        else if (hasAsyncFunctions)
+        {
+            // Sync main but async functions exist — wrap with runtime init/shutdown
+            // so __djinn_await can use the runtime's queue and waiting structures.
+            llvm::Function* syncMainFn = functions["main"];
+            syncMainFn->setName("__djinn_sync_main");
+            functions.erase("main");
+            functions["__djinn_sync_main"] = syncMainFn;
+
+            auto* mainFuncType = llvm::FunctionType::get(builder->getInt32Ty(), false);
+            auto* realMainFn = llvm::Function::Create(
+                mainFuncType, llvm::Function::ExternalLinkage, "main", *module);
+            functions["main"] = realMainFn;
+
+            auto* entryBB = llvm::BasicBlock::Create(*context, "entry", realMainFn);
+            builder->SetInsertPoint(entryBB);
+            currentFunction = realMainFn;
+
+            auto* initFn = module->getFunction("__djinn_runtime_init");
+            builder->CreateCall(initFn, {builder->getInt32(4)});
+
+            llvm::Value* result = builder->CreateCall(syncMainFn, {}, "sync.result");
+
             auto* shutdownFn = module->getFunction("__djinn_runtime_shutdown");
             builder->CreateCall(shutdownFn);
 

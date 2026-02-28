@@ -19,7 +19,7 @@ TEST(Async, SimpleReturnValue)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -37,7 +37,7 @@ TEST(Async, WithParameter)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -55,7 +55,7 @@ TEST(Async, MultipleParameters)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -73,7 +73,7 @@ TEST(Async, ExpressionComputation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 21);
 }
@@ -95,7 +95,7 @@ TEST(Async, AsyncMain)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
@@ -114,7 +114,7 @@ TEST(Async, AsyncMainWithComputation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 25); // 9 + 16
 }
@@ -141,7 +141,7 @@ TEST(Async, MultipleAwaitsSequential)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
 }
@@ -161,7 +161,7 @@ TEST(Async, ThreeAwaitsAccumulate)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 60);
 }
@@ -188,7 +188,7 @@ TEST(Async, ChainedAwait)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15);
 }
@@ -216,7 +216,7 @@ TEST(Async, DeepChaining)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 13); // (5 * 2) + 3
 }
@@ -240,7 +240,7 @@ TEST(Async, ChainedAsyncMain)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 35);
 }
@@ -263,7 +263,7 @@ TEST(Async, AwaitResultAsArgument)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 20); // 5 * 2 = 10, 10 * 2 = 20
 }
@@ -282,7 +282,7 @@ TEST(Async, AwaitWithLocalComputation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 33); // (10 + 1) * 3
 }
@@ -305,7 +305,7 @@ TEST(Async, Yield_BasicYield)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -326,7 +326,7 @@ TEST(Async, Yield_MultipleYields)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
@@ -348,7 +348,7 @@ TEST(Async, Yield_WithComputation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30); // 10 + 20
 }
@@ -441,12 +441,12 @@ TEST(Async, NonAsyncMainStillWorks)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 77);
 }
 
-TEST(Async, NonAsyncMainNoRuntimeCalls)
+TEST(Async, NonAsyncMainWithRuntime)
 {
     const auto source = R"(
         async i32 compute() {
@@ -461,9 +461,10 @@ TEST(Async, NonAsyncMainNoRuntimeCalls)
 
     const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    // Non-async main should NOT have event loop runtime calls
-    EXPECT_EQ(result.ir.find("__djinn_runtime_init"), std::string::npos);
-    EXPECT_EQ(result.ir.find("__djinn_event_loop"), std::string::npos);
+    // Sync main with async functions needs runtime for nested await support
+    EXPECT_NE(result.ir.find("__djinn_runtime_init"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_event_loop_run"), std::string::npos);
+    EXPECT_NE(result.ir.find("__djinn_sync_main"), std::string::npos);
 }
 
 // ========================

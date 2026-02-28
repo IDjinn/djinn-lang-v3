@@ -192,6 +192,7 @@ static djinn_task_t* dequeue_task_blocking(djinn_task_queue_t* q, volatile int* 
 static DWORD WINAPI io_thread_func(LPVOID arg)
 {
 
+
 #else
 static void* io_thread_func(void* arg)
 {
@@ -268,6 +269,7 @@ static void* io_thread_func(void* arg)
 #ifdef _WIN32
 static DWORD WINAPI worker_thread(LPVOID arg)
 {
+
 
 #else
 static void* worker_thread(void* arg)
@@ -553,6 +555,22 @@ int __djinn_event_loop(void* main_handle)
                     }
                 }
             }
+            else
+            {
+                // Coroutine was already done when dequeued (e.g., no suspend points —
+                // ramp ran entire body to final suspend). Still need to process continuations.
+                remove_from_waiting(task->handle);
+                void* parent = pop_continuation(task->handle);
+                if (parent)
+                {
+                    remove_from_waiting(parent);
+                    enqueue_task(&runtime.ready_queue, parent);
+                }
+                else if (task->handle != main_handle)
+                {
+                    __djinn_coro_destroy(task->handle);
+                }
+            }
             free(task);
         }
 
@@ -575,19 +593,20 @@ int __djinn_event_loop(void* main_handle)
                         free(remaining);
                         continue;
                     }
-                    else
+                }
+                // Handle continuations for completed tasks (whether just finished or already done)
+                if (__djinn_coro_done(remaining->handle))
+                {
+                    remove_from_waiting(remaining->handle);
+                    void* parent = pop_continuation(remaining->handle);
+                    if (parent)
                     {
-                        remove_from_waiting(remaining->handle);
-                        void* parent = pop_continuation(remaining->handle);
-                        if (parent)
-                        {
-                            remove_from_waiting(parent);
-                            enqueue_task(&runtime.ready_queue, parent);
-                        }
+                        remove_from_waiting(parent);
+                        enqueue_task(&runtime.ready_queue, parent);
                     }
                 }
                 // Destroy completed spawned tasks (NOT main — we need its promise)
-                if (remaining->handle != main_handle)
+                if (remaining->handle != main_handle && __djinn_coro_done(remaining->handle))
                 {
                     __djinn_coro_destroy(remaining->handle);
                 }
@@ -661,6 +680,21 @@ void __djinn_event_loop_run(void* main_handle)
                     }
                 }
             }
+            else
+            {
+                // Already done when dequeued (no suspend points)
+                remove_from_waiting(task->handle);
+                void* parent = pop_continuation(task->handle);
+                if (parent)
+                {
+                    remove_from_waiting(parent);
+                    enqueue_task(&runtime.ready_queue, parent);
+                }
+                else if (task->handle != main_handle)
+                {
+                    __djinn_coro_destroy(task->handle);
+                }
+            }
             free(task);
         }
 
@@ -683,18 +717,19 @@ void __djinn_event_loop_run(void* main_handle)
                         free(remaining);
                         continue;
                     }
-                    else
+                }
+                // Handle continuations for completed tasks
+                if (__djinn_coro_done(remaining->handle))
+                {
+                    remove_from_waiting(remaining->handle);
+                    void* parent = pop_continuation(remaining->handle);
+                    if (parent)
                     {
-                        remove_from_waiting(remaining->handle);
-                        void* parent = pop_continuation(remaining->handle);
-                        if (parent)
-                        {
-                            remove_from_waiting(parent);
-                            enqueue_task(&runtime.ready_queue, parent);
-                        }
+                        remove_from_waiting(parent);
+                        enqueue_task(&runtime.ready_queue, parent);
                     }
                 }
-                if (remaining->handle != main_handle)
+                if (remaining->handle != main_handle && __djinn_coro_done(remaining->handle))
                 {
                     __djinn_coro_destroy(remaining->handle);
                 }

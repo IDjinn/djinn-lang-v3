@@ -317,12 +317,10 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
     try
     {
-        // Prelude type names collected from std::types (available to all parsers)
+        std::set<fs::path> parsedFiles;
         std::vector<std::string> preludeTypeNames;
 
         auto stdLibPath = resolve_std_path(options.stdLibPath);
-
-        // Load standard library first if enabled
         if (options.includeStd && fs::exists(stdLibPath))
         {
             for (const auto& prelude : preludes)
@@ -340,6 +338,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                         continue;
                     }
 
+                    parsedFiles.insert(fs::canonical(preludePath));
                     const auto stdSource = std::string(
                         std::istreambuf_iterator(file),
                         std::istreambuf_iterator<char>()
@@ -376,6 +375,9 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                 {
                     if (!entry.is_regular_file()) continue;
                     if (entry.path().extension() != ".djinn") continue;
+
+                    auto canonical = fs::canonical(entry.path());
+                    if (parsedFiles.contains(canonical)) continue;
 
                     // Skip prelude — already parsed
                     // if (fs::equivalent(entry.path(), preludePath)) continue;

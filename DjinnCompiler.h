@@ -17,7 +17,7 @@
 struct CompilerOptions
 {
     bool print_ast = false;
-    bool print_ir = false;
+    bool print_ir = true;
     bool optimize = true;
     bool generateBinary = true;
     bool includeStd = true;
