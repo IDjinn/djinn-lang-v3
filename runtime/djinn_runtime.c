@@ -18,16 +18,24 @@
 #include <string.h>
 
 
-#define DJINN_ASSERT(condition, message)                  \
-do {                                                      \
-    if (!(condition)) {                                   \
-        fprintf(stderr,                                   \
-            "ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",  \
-            message, __FILE__, __LINE__                   \
-        );                                                \
-        abort();                                          \
-    }                                                     \
+#define DJINN_ASSERT(condition, message)                            \
+do {                                                                \
+    if (!(condition)) {                                             \
+        fprintf(stderr,                                             \
+            "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",  \
+            message, __FILE__, __LINE__                             \
+        );                                                          \
+        abort();                                                    \
+    }                                                               \
 } while (0)
+
+#define DJINN_ENABLE_TRACE
+
+#ifdef DJINN_ENABLE_TRACE
+#define DJINN_TRACE(message, ...) fprintf(stdout, "[RUNTIME] " message "\n", ##__VA_ARGS__)
+#else
+#define DJINN_TRACE(message, ...) do {} while (0)
+#endif
 
 // ── Global runtime state ──
 static djinn_runtime_t runtime;
@@ -55,10 +63,19 @@ static void init_queue(djinn_task_queue_t* q)
 #endif
 }
 
+DJINN_API void __djinn_free(void* pointer)
+{
+    DJINN_TRACE("de-alocating heap memory at %p\n", pointer);
+    free(pointer);
+    DJINN_TRACE("memory freed\n");
+}
+
 DJINN_API void* __djinn_malloc(size_t size)
 {
+    DJINN_TRACE("allocating size %zu on heap\n", size);
     void* chunk = calloc(1, size);
     DJINN_ASSERT(chunk, "Out of memory");
+    DJINN_TRACE("allocated successed and zeroed at %p\n", chunk);
     return chunk;
 }
 
