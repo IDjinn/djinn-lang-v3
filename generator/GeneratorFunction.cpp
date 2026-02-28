@@ -356,9 +356,9 @@ void Generator::generate_coro_wrappers()
         builder->CreateRetVoid();
     }
 
-    // __djinn_coro_done(ptr %handle) -> i1 (returned as i1 for C, will be treated as int)
+    // __djinn_coro_done(ptr %handle) -> i32 (zext from i1 to match C int return)
     {
-        auto* ft = llvm::FunctionType::get(i1Ty, {ptrTy}, false);
+        auto* ft = llvm::FunctionType::get(i32Ty, {ptrTy}, false);
         auto* fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
                                           "__djinn_coro_done", *module);
         auto* bb = llvm::BasicBlock::Create(*context, "entry", fn);
@@ -366,7 +366,8 @@ void Generator::generate_coro_wrappers()
         auto* doneFn = llvm::Intrinsic::getOrInsertDeclaration(
             module.get(), llvm::Intrinsic::coro_done);
         auto* result = builder->CreateCall(doneFn, {fn->getArg(0)}, "done");
-        builder->CreateRet(result);
+        auto* extended = builder->CreateZExt(result, i32Ty, "done.ext");
+        builder->CreateRet(extended);
     }
 
     // __djinn_coro_destroy(ptr %handle) -> void
@@ -435,6 +436,30 @@ void Generator::generate_runtime_declarations()
         auto* loopTy = llvm::FunctionType::get(i32Ty, {ptrTy}, false);
         llvm::Function::Create(loopTy, llvm::Function::ExternalLinkage,
                                "__djinn_event_loop", *module);
+    }
+
+    // void __djinn_event_loop_run(ptr main_handle)
+    if (!module->getFunction("__djinn_event_loop_run"))
+    {
+        auto* loopRunTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
+        llvm::Function::Create(loopRunTy, llvm::Function::ExternalLinkage,
+                               "__djinn_event_loop_run", *module);
+    }
+
+    // void __djinn_mark_waiting(ptr handle)
+    if (!module->getFunction("__djinn_mark_waiting"))
+    {
+        auto* markWaitingTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
+        llvm::Function::Create(markWaitingTy, llvm::Function::ExternalLinkage,
+                               "__djinn_mark_waiting", *module);
+    }
+
+    // void __djinn_await(ptr child, ptr parent)
+    if (!module->getFunction("__djinn_await"))
+    {
+        auto* awaitTy = llvm::FunctionType::get(voidTy, {ptrTy, ptrTy}, false);
+        llvm::Function::Create(awaitTy, llvm::Function::ExternalLinkage,
+                               "__djinn_await", *module);
     }
 
     // i64 __djinn_async_read(i32 fd, ptr buf, i64 count, ptr coro)

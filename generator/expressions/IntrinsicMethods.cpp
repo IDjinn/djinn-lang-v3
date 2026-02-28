@@ -80,6 +80,42 @@ llvm::Value* Generator::generate_coro_intrinsic(
         return builder->CreateCall(fn, {arg});
     }
 
+    if (method == "suspend")
+    {
+        if (!inAsyncFunction || !asyncCoroHandle)
+        {
+            throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN,
+                               "coro::suspend() can only be called inside an async function");
+        }
+
+        // Call __djinn_mark_waiting(handle) — tells event loop not to re-enqueue
+        auto* markWaitingFn = module->getFunction("__djinn_mark_waiting");
+        if (!markWaitingFn)
+        {
+            auto* ptrTy = llvm::PointerType::getUnqual(*context);
+            auto* ft = llvm::FunctionType::get(builder->getVoidTy(), {ptrTy}, false);
+            markWaitingFn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                                   "__djinn_mark_waiting", *module);
+        }
+        builder->CreateCall(markWaitingFn, {asyncCoroHandle});
+
+        // Emit coro.suspend(false) + switch (same pattern as yield)
+        auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_suspend);
+        llvm::Value* suspResult = builder->CreateCall(coroSuspendFn, {
+                                                          llvm::ConstantTokenNone::get(*context),
+                                                          builder->getFalse()
+                                                      }, "coro.suspend");
+
+        auto* resumeBB = llvm::BasicBlock::Create(*context, "suspend.resume", currentFunction);
+        auto* switchInst = builder->CreateSwitch(suspResult, asyncSuspendBB, 2);
+        switchInst->addCase(builder->getInt8(0), resumeBB);
+        switchInst->addCase(builder->getInt8(1), asyncCleanupBB);
+
+        builder->SetInsertPoint(resumeBB);
+        return nullptr; // void
+    }
+
     throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
                        "unknown coro intrinsic method: " + method);
 }

@@ -1,28 +1,58 @@
 import std::types;
 import std::builtin;
+import std::debug;
 
 extern "C" {
-    i64 __djinn_async_write(i32 fd, void* buf, i64 count, void* coro_handle);
+    i64    __djinn_async_write (i32 fd, void* buf, i64 count, void* coro_handle);
+    i64    __djinn_async_read  (i32 fd, void* buf, i64 count, void* coro_handle);
+    void*  __djinn_malloc      (i32 size);
 }
 
-// Async write wrapper — submits to runtime I/O thread, then yields
-async i32 async_print(i8* message, i64 len) {
-    // TODO: needs coro::handle() to pass our handle to the runtime
-    // For now, pass null — I/O thread won't resume us, busy-loop does
-    void* null_handle = coro::handle();
-    __djinn_async_write(1, message, len, null_handle);
-    yield;
-    return 0;
+async i32 print(i8* message, i64 len) {
+    i32 stdin = 0;
+    i32 stdout = 1;
+
+    void* handle = std::builtin::coro.handle();
+//     Debug.assert(handle == 0, "coroutine handler invalid");
+
+    i32 ret = __djinn_async_write(stdout, message, len, handle);
+    std::builtin::coro.suspend();
+
+    Debug.assert(ret == 0, "async_write call got invalid return");
+    return ret;
+}
+
+struct read_result{
+    void* buffer;
+    i32 errorCode;
+}
+
+async read_result readLine() {
+    i32 stdin = 0;
+    i32 bufferSize = 1024;
+
+    void* buffer = __djinn_malloc(bufferSize);
+    void* handle = std::builtin::coro.handle();
+//     Debug.assert(handle == 0, "coroutine handler invalid");
+
+    i32 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);
+    std::builtin::coro.suspend();
+
+    Debug.assert(ret == 0, "async_read call got invalid return");
+    return { .buffer = buffer, .errorCode = ret };
 }
 
 async i32 main() {
     printf("=== Async I/O Test ===\n");
 
-    // Async write to stdout via runtime I/O thread
-    i32 r1 = await async_print("Hello from async I/O!\n", 22);
+    read_result read = await readLine();
+    printf("async_read returned %d: %s\n", read.errorCode, read.buffer);
+    free(read.buffer);
+
+    i32 r1 = await print("Hello from async I/O!\n", 22);
     printf("async_print returned %d\n", r1);
 
-    i32 r2 = await async_print("Second async write!\n", 20);
+    i32 r2 = await print("Second async write!\n", 20);
     printf("async_print returned %d\n", r2);
 
     printf("=== Done ===\n");

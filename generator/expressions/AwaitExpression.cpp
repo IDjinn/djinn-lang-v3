@@ -4,6 +4,58 @@
 
 #include "../Generator.h"
 
+llvm::Value* Generator::generate_await_in_async(llvm::Value* childHandle, llvm::Type* resultType)
+{
+    auto* ptrTy = llvm::PointerType::getUnqual(*context);
+
+    // 1. Call __djinn_await(child, self) — registers continuation + enqueues child
+    auto* awaitFn = module->getFunction("__djinn_await");
+    if (!awaitFn)
+    {
+        auto* ft = llvm::FunctionType::get(builder->getVoidTy(), {ptrTy, ptrTy}, false);
+        awaitFn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                         "__djinn_await", *module);
+    }
+    builder->CreateCall(awaitFn, {childHandle, asyncCoroHandle});
+
+    // 2. coro.suspend(false) + switch — suspend parent until child completes
+    auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
+        module.get(), llvm::Intrinsic::coro_suspend);
+    llvm::Value* suspResult = builder->CreateCall(coroSuspendFn, {
+                                                      llvm::ConstantTokenNone::get(*context),
+                                                      builder->getFalse()
+                                                  }, "await.susp");
+
+    auto* awaitReadyBB = llvm::BasicBlock::Create(*context, "await.ready", currentFunction);
+    auto* switchInst = builder->CreateSwitch(suspResult, asyncSuspendBB, 2);
+    switchInst->addCase(builder->getInt8(0), awaitReadyBB);
+    switchInst->addCase(builder->getInt8(1), asyncCleanupBB);
+
+    // 3. await.ready: extract result from child promise
+    builder->SetInsertPoint(awaitReadyBB);
+
+    llvm::Value* result = nullptr;
+    if (resultType && !resultType->isVoidTy())
+    {
+        auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_promise);
+        unsigned align = module->getDataLayout().getABITypeAlign(resultType).value();
+        llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
+                                                          childHandle,
+                                                          builder->getInt32(align),
+                                                          builder->getFalse()
+                                                      }, "await.promise");
+        result = builder->CreateLoad(resultType, promisePtr, "await.result");
+    }
+
+    // 4. Destroy child coroutine frame
+    auto* coroDestroyFn = llvm::Intrinsic::getOrInsertDeclaration(
+        module.get(), llvm::Intrinsic::coro_destroy);
+    builder->CreateCall(coroDestroyFn, {childHandle});
+
+    return result;
+}
+
 llvm::Value* Generator::generate_await_loop(llvm::Value* handle, llvm::Type* resultType)
 {
     auto* ptrTy = llvm::PointerType::getUnqual(*context);
@@ -119,5 +171,11 @@ llvm::Value* Generator::generate_await_expression(const AwaitExpression& expr)
         resultType = builder->getVoidTy();
     }
 
+    // In async context: use proper suspend/resume via event loop
+    // In sync context: fallback to busy-loop
+    if (inAsyncFunction)
+    {
+        return generate_await_in_async(handle, resultType);
+    }
     return generate_await_loop(handle, resultType);
 }

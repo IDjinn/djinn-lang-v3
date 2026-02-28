@@ -141,7 +141,7 @@ struct map<Key, Value>
         return 0 == 1;
     }
 
-    public size len() {
+    public size length() {
         return this.count;
     }
 

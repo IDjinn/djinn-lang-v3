@@ -7,4 +7,5 @@ struct coro {
     public static bool done(void* h);
     public static void resume(void* h);
     public static void destroy(void* h);
+    public static void suspend();
 }

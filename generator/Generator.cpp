@@ -156,11 +156,37 @@ void Generator::generate()
             // Call the async main to get the coroutine handle
             llvm::Value* handle = builder->CreateCall(asyncMainFn, {}, "async.hdl");
 
-            // Use the proven await loop to resume + extract result directly in IR
-            // (avoids C runtime needing to call @llvm.coro.promise which may not
-            // lower properly in non-coroutine wrapper functions)
+            // Run the event loop — schedules tasks, processes I/O completions,
+            // resumes coroutines after yield. Returns when main coroutine finishes.
+            auto* eventLoopFn = module->getFunction("__djinn_event_loop_run");
+            builder->CreateCall(eventLoopFn, {handle});
+
+            // Extract result from the coroutine promise in IR
+            // (can't do this in C because @llvm.coro.promise doesn't lower
+            // properly in non-coroutine functions)
             llvm::Type* mainRetType = generate_type(mainSym->returnType);
-            llvm::Value* result = generate_await_loop(handle, mainRetType);
+            llvm::Value* result = nullptr;
+            if (mainRetType && !mainRetType->isVoidTy())
+            {
+                auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(
+                    module.get(), llvm::Intrinsic::coro_promise);
+                unsigned align = module->getDataLayout().getABITypeAlign(mainRetType).value();
+                llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
+                                                                  handle,
+                                                                  builder->getInt32(align),
+                                                                  builder->getFalse()
+                                                              }, "main.promise");
+                result = builder->CreateLoad(mainRetType, promisePtr, "main.result");
+            }
+            else
+            {
+                result = builder->getInt32(0);
+            }
+
+            // Destroy the main coroutine frame
+            auto* coroDestroyFn = llvm::Intrinsic::getOrInsertDeclaration(
+                module.get(), llvm::Intrinsic::coro_destroy);
+            builder->CreateCall(coroDestroyFn, {handle});
 
             // Shutdown runtime
             auto* shutdownFn = module->getFunction("__djinn_runtime_shutdown");
@@ -345,4 +371,3 @@ bool Generator::linkModules(const std::vector<std::filesystem::path>& llPaths) c
     }
     return true;
 }
-

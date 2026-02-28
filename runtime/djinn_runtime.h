@@ -20,6 +20,14 @@
 extern "C" {
 #endif
 
+#ifdef _WIN32
+#define DJINN_API __declspec(dllexport)
+#else
+#define DJINN_API
+#endif
+
+DJINN_API void* __djinn_malloc(size_t size);
+
 // ── Task ──
 typedef struct djinn_task
 {
@@ -85,6 +93,16 @@ typedef struct
     volatile int running;
 } djinn_runtime_t;
 
+// ── Continuation: when child completes, resume parent ──
+typedef struct djinn_continuation
+{
+    void* child;
+    void* parent;
+    struct djinn_continuation* next;
+} djinn_continuation_t;
+
+#define DJINN_MAX_WAITING 256
+
 // ── Lifecycle ──
 void __djinn_runtime_init(int num_threads);
 void __djinn_runtime_shutdown(void);
@@ -98,6 +116,11 @@ extern void* __djinn_coro_promise(void* handle, int align);
 // ── Task management ──
 void __djinn_spawn(void* coro_handle);
 int __djinn_event_loop(void* main_handle);
+void __djinn_event_loop_run(void* main_handle);
+
+// ── Await / Suspend ──
+void __djinn_mark_waiting(void* handle);
+void __djinn_await(void* child_handle, void* parent_handle);
 
 // ── Async I/O ──
 int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro);

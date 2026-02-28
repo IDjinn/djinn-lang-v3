@@ -34,7 +34,7 @@ struct array<T> : Hashable {
         this.data[index] = value;
     }
 
-    public size len() {
+    public size length() {
         return this.length;
     }
 

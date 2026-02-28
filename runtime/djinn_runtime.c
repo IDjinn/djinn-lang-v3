@@ -13,9 +13,31 @@
 #else
 #include <unistd.h>
 #endif
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+
+#define DJINN_ASSERT(condition, message)                  \
+do {                                                      \
+    if (!(condition)) {                                   \
+        fprintf(stderr,                                   \
+            "ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",  \
+            message, __FILE__, __LINE__                   \
+        );                                                \
+        abort();                                          \
+    }                                                     \
+} while (0)
 
 // ── Global runtime state ──
 static djinn_runtime_t runtime;
+
+// ── Waiting set: coroutines suspended for I/O or child completion ──
+static void* waiting_handles[DJINN_MAX_WAITING];
+static int waiting_count = 0;
+
+// ── Continuation list: child→parent mappings ──
+static djinn_continuation_t* continuations = NULL;
 
 // ── Queue operations ──
 
@@ -31,6 +53,13 @@ static void init_queue(djinn_task_queue_t* q)
     pthread_mutex_init(&q->mutex, NULL);
     pthread_cond_init(&q->cond, NULL);
 #endif
+}
+
+DJINN_API void* __djinn_malloc(size_t size)
+{
+    void* chunk = calloc(1, size);
+    DJINN_ASSERT(chunk, "Out of memory");
+    return chunk;
 }
 
 static void destroy_queue(djinn_task_queue_t* q)
@@ -382,18 +411,108 @@ void __djinn_runtime_shutdown(void)
 #endif
 }
 
+// ── Waiting set / Continuation management ──
+
+void __djinn_mark_waiting(void* handle)
+{
+    if (waiting_count < DJINN_MAX_WAITING)
+    {
+        waiting_handles[waiting_count++] = handle;
+    }
+}
+
+// Non-consuming check: is handle in waiting set?
+static int is_in_waiting_set(void* handle)
+{
+    for (int i = 0; i < waiting_count; i++)
+    {
+        if (waiting_handles[i] == handle)
+            return 1;
+    }
+    return 0;
+}
+
+// Check if handle is in waiting set; if so, remove it and return 1
+static int is_waiting(void* handle)
+{
+    for (int i = 0; i < waiting_count; i++)
+    {
+        if (waiting_handles[i] == handle)
+        {
+            // Remove by swapping with last
+            waiting_handles[i] = waiting_handles[waiting_count - 1];
+            waiting_count--;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Remove handle from waiting set without returning status (cleanup for completed coros)
+static void remove_from_waiting(void* handle)
+{
+    is_waiting(handle);
+}
+
+// Pop continuation for a completed child; returns parent handle or NULL
+static void* pop_continuation(void* child)
+{
+    djinn_continuation_t** pp = &continuations;
+    while (*pp)
+    {
+        if ((*pp)->child == child)
+        {
+            void* parent = (*pp)->parent;
+            djinn_continuation_t* to_free = *pp;
+            *pp = (*pp)->next;
+            free(to_free);
+            return parent;
+        }
+        pp = &(*pp)->next;
+    }
+    return NULL;
+}
+
+void __djinn_await(void* child_handle, void* parent_handle)
+{
+    DJINN_ASSERT(child_handle, "child handle is NULL");
+    DJINN_ASSERT(parent_handle, "parent handle is NULL");
+
+    // Register continuation: when child completes, resume parent
+    djinn_continuation_t* cont = (djinn_continuation_t*)malloc(sizeof(djinn_continuation_t));
+    if (!cont) return;
+    cont->child = child_handle;
+    cont->parent = parent_handle;
+    cont->next = continuations;
+    continuations = cont;
+
+    // Mark parent as waiting (event loop won't re-enqueue it)
+    __djinn_mark_waiting(parent_handle);
+
+    // Only enqueue child if it's NOT already waiting for I/O (coro::suspend).
+    // If child called coro::suspend(), the I/O thread will enqueue it when ready.
+    if (!is_in_waiting_set(child_handle))
+    {
+        enqueue_task(&runtime.ready_queue, child_handle);
+    }
+}
+
 // ── Task management ──
 
 void __djinn_spawn(void* coro_handle)
 {
-    if (!coro_handle) return;
+    DJINN_ASSERT(coro_handle, "coro handle is NULL");
     enqueue_task(&runtime.ready_queue, coro_handle);
 }
 
 int __djinn_event_loop(void* main_handle)
 {
-    // Submit main coroutine as first task
-    enqueue_task(&runtime.ready_queue, main_handle);
+    DJINN_ASSERT(main_handle, "main handle is NULL");
+    // Only enqueue main if it's not already waiting (e.g., from __djinn_await during ramp)
+    if (!is_in_waiting_set(main_handle))
+    {
+        enqueue_task(&runtime.ready_queue, main_handle);
+    }
 
     // Main event loop
     while (runtime.running)
@@ -406,8 +525,32 @@ int __djinn_event_loop(void* main_handle)
                 __djinn_coro_resume(task->handle);
                 if (!__djinn_coro_done(task->handle))
                 {
-                    // Re-queue if not finished (yielded or suspended)
-                    enqueue_task(&runtime.ready_queue, task->handle);
+                    if (is_waiting(task->handle))
+                    {
+                        // Waiting for I/O or child — do NOT re-enqueue
+                        // I/O thread or child completion will enqueue it back
+                    }
+                    else
+                    {
+                        // Cooperative yield — re-enqueue immediately
+                        enqueue_task(&runtime.ready_queue, task->handle);
+                    }
+                }
+                else
+                {
+                    // Coroutine finished — clean up stale waiting entry + check continuation
+                    remove_from_waiting(task->handle);
+                    void* parent = pop_continuation(task->handle);
+                    if (parent)
+                    {
+                        // Remove parent from waiting set so it can be resumed
+                        remove_from_waiting(parent);
+                        enqueue_task(&runtime.ready_queue, parent);
+                    }
+                    else if (task->handle != main_handle)
+                    {
+                        __djinn_coro_destroy(task->handle);
+                    }
                 }
             }
             free(task);
@@ -425,9 +568,22 @@ int __djinn_event_loop(void* main_handle)
                     __djinn_coro_resume(remaining->handle);
                     if (!__djinn_coro_done(remaining->handle))
                     {
-                        enqueue_task(&runtime.ready_queue, remaining->handle);
+                        if (!is_waiting(remaining->handle))
+                        {
+                            enqueue_task(&runtime.ready_queue, remaining->handle);
+                        }
                         free(remaining);
                         continue;
+                    }
+                    else
+                    {
+                        remove_from_waiting(remaining->handle);
+                        void* parent = pop_continuation(remaining->handle);
+                        if (parent)
+                        {
+                            remove_from_waiting(parent);
+                            enqueue_task(&runtime.ready_queue, parent);
+                        }
                     }
                 }
                 // Destroy completed spawned tasks (NOT main — we need its promise)
@@ -458,10 +614,117 @@ int __djinn_event_loop(void* main_handle)
     return result;
 }
 
+void __djinn_event_loop_run(void* main_handle)
+{
+    DJINN_ASSERT(main_handle, "main handle is NULL");
+    // Only enqueue main if it's not already waiting (e.g., from __djinn_await during ramp)
+    if (!is_in_waiting_set(main_handle))
+    {
+        enqueue_task(&runtime.ready_queue, main_handle);
+    }
+
+    // Event loop — runs until main coroutine completes
+    while (runtime.running)
+    {
+        djinn_task_t* task = dequeue_task(&runtime.ready_queue);
+        if (task)
+        {
+            if (!__djinn_coro_done(task->handle))
+            {
+                __djinn_coro_resume(task->handle);
+                if (!__djinn_coro_done(task->handle))
+                {
+                    if (is_waiting(task->handle))
+                    {
+                        // Waiting for I/O or child — do NOT re-enqueue
+                    }
+                    else
+                    {
+                        // Cooperative yield — re-enqueue immediately
+                        enqueue_task(&runtime.ready_queue, task->handle);
+                    }
+                }
+                else
+                {
+                    // Coroutine finished — clean up stale waiting entry + check continuation
+                    remove_from_waiting(task->handle);
+                    void* parent = pop_continuation(task->handle);
+                    if (parent)
+                    {
+                        // Remove parent from waiting set so it can be resumed
+                        remove_from_waiting(parent);
+                        enqueue_task(&runtime.ready_queue, parent);
+                    }
+                    else if (task->handle != main_handle)
+                    {
+                        __djinn_coro_destroy(task->handle);
+                    }
+                }
+            }
+            free(task);
+        }
+
+        // Check if main coroutine is done
+        if (__djinn_coro_done(main_handle))
+        {
+            // Drain remaining tasks in ready queue
+            djinn_task_t* remaining;
+            while ((remaining = dequeue_task(&runtime.ready_queue)) != NULL)
+            {
+                if (!__djinn_coro_done(remaining->handle))
+                {
+                    __djinn_coro_resume(remaining->handle);
+                    if (!__djinn_coro_done(remaining->handle))
+                    {
+                        if (!is_waiting(remaining->handle))
+                        {
+                            enqueue_task(&runtime.ready_queue, remaining->handle);
+                        }
+                        free(remaining);
+                        continue;
+                    }
+                    else
+                    {
+                        remove_from_waiting(remaining->handle);
+                        void* parent = pop_continuation(remaining->handle);
+                        if (parent)
+                        {
+                            remove_from_waiting(parent);
+                            enqueue_task(&runtime.ready_queue, parent);
+                        }
+                    }
+                }
+                if (remaining->handle != main_handle)
+                {
+                    __djinn_coro_destroy(remaining->handle);
+                }
+                free(remaining);
+            }
+            break;
+        }
+
+        // Brief yield if no tasks available to avoid busy-spinning
+        if (!runtime.ready_queue.head)
+        {
+#ifdef _WIN32
+            Sleep(0);
+#else
+            sched_yield();
+#endif
+        }
+    }
+    // NOTE: does NOT extract result or destroy main_handle
+    // Caller (LLVM IR) does that via @llvm.coro.promise + @llvm.coro.destroy
+}
+
 // ── Async I/O ──
 
 int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro)
 {
+    DJINN_ASSERT(coro, "coro handle is NULL");
+    DJINN_ASSERT(buf, "buf is NULL");
+    DJINN_ASSERT(count > 0, "count <= 0");
+
     djinn_io_request_t* req = (djinn_io_request_t*)malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
@@ -489,13 +752,17 @@ int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro)
     pthread_mutex_unlock(&runtime.io_mutex);
 #endif
 
-    return 0; // Will be resumed when I/O completes
+    return 0;
 }
 
 int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
 {
+    DJINN_ASSERT(coro, "coro handle is NULL");
+    DJINN_ASSERT(buf, "buf is NULL");
+    DJINN_ASSERT(count > 0, "count <= 0");
+
     djinn_io_request_t* req = (djinn_io_request_t*)malloc(sizeof(djinn_io_request_t));
-    if (!req) return -1;
+    if (!req) return -2;
 
     req->fd = fd;
     req->buffer = buf;
@@ -521,5 +788,5 @@ int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
     pthread_mutex_unlock(&runtime.io_mutex);
 #endif
 
-    return 0; // Will be resumed when I/O completes
+    return 0;
 }

@@ -244,6 +244,7 @@ private:
     void generate_async_method_body(const StructSymbol& struc, const MethodSymbol& method,
                                     llvm::Function* llvmFunc, StructDef* def);
     llvm::Value* generate_await_loop(llvm::Value* handle, llvm::Type* resultType);
+    llvm::Value* generate_await_in_async(llvm::Value* childHandle, llvm::Type* resultType);
     void ensure_malloc_free_declared();
     bool hasAsyncFunctions = false;
 
