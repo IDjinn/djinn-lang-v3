@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 DJINN_API void* __djinn_malloc(size_t size);
-DJINN_API void  __djinn_free(void* pointer);
+DJINN_API void __djinn_free(void* pointer);
 
 // ── Task ──
 typedef struct djinn_task
