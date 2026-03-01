@@ -3,6 +3,11 @@ import std::builtin;
 import std::debug;
 
 extern "C" {
+    i64    __djinn_console_write     (void* str, void* coro_handle);
+    i64    __djinn_console_writeln   (void* str, void* coro_handle);
+    i64    __djinn_console_error     (void* str, void* coro_handle);
+    i64    __djinn_console_read_line (void* str, void* coro_handle);
+
     i64    __djinn_async_write (i32 fd, void* buf, i64 count, void* coro_handle);
     i64    __djinn_async_read  (i32 fd, void* buf, i64 count, void* coro_handle);
     void*  __djinn_malloc      (i32 size);
@@ -26,6 +31,10 @@ async i32 print(i8* message, i64 len) {
 struct read_result{
     void* buffer;
     i32 errorCode;
+
+    void destroy() {
+        __djinn_free(this.buffer);
+    }
 }
 
 async read_result readLine() {
@@ -44,11 +53,8 @@ async read_result readLine() {
 }
 
 async i32 main() {
-    printf("=== Async I/O Test ===\n");
-
-    read_result read = await readLine();
-    printf("async_read returned %d: %s\n", read.errorCode, read.buffer);
-    __djinn_free(read.buffer);
+//     read_result read = await readLine();
+//     printf("async_read returned %d: %s\n", read.errorCode, read.buffer);
 
     i32 r1 = await print("Hello from async I/O!\n", 22);
     printf("async_print returned %d\n", r1);
@@ -56,6 +62,5 @@ async i32 main() {
     i32 r2 = await print("Second async write!\n", 20);
     printf("async_print returned %d\n", r2);
 
-    printf("=== Done ===\n");
     return 0;
 }

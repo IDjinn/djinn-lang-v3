@@ -1,6 +1,7 @@
 //
-// Djinn Async Runtime — Implementation
-// Event loop, thread pool, task queue, async I/O
+// Djinn Runtime v2 — Implementation
+// Event loop, thread pool, task queue, non-blocking I/O (IOCP/epoll),
+// TCP sockets, threading primitives, console I/O
 //
 
 #include "djinn_runtime.h"
@@ -9,45 +10,80 @@
 #include <stdio.h>
 
 #ifdef _WIN32
-#include <io.h>
+    #include <io.h>
+    #pragma comment(lib, "ws2_32.lib")
+    #pragma comment(lib, "mswsock.lib")
 #else
-#include <unistd.h>
+    #include <unistd.h>
+    #include <errno.h>
+    #include <sched.h>
+    #include <time.h>
+    #include <netinet/tcp.h>
 #endif
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 
+// ════════════════════════════════════════════════════════════════════
+// Macros
+// ════════════════════════════════════════════════════════════════════
 
-#define DJINN_ASSERT(condition, message)                            \
-do {                                                                \
-    if (!(condition)) {                                             \
-        fprintf(stderr,                                             \
-            "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",  \
-            message, __FILE__, __LINE__                             \
-        );                                                          \
-        abort();                                                    \
-    }                                                               \
+#define DJINN_ASSERT(condition, message)                               \
+do {                                                                   \
+    if (!(condition)) {                                                \
+        fprintf(stderr,                                                \
+            "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",    \
+            message, __FILE__, __LINE__                                \
+        );                                                             \
+        abort();                                                       \
+    }                                                                  \
 } while (0)
 
 #define DJINN_ENABLE_TRACE
 
 #ifdef DJINN_ENABLE_TRACE
-#define DJINN_TRACE(message, ...) fprintf(stdout, "[RUNTIME] " message "\n", ##__VA_ARGS__)
+    #define DJINN_TRACE(message, ...) fprintf(stdout, "[RUNTIME] " message "\n", ##__VA_ARGS__)
 #else
-#define DJINN_TRACE(message, ...) do {} while (0)
+    #define DJINN_TRACE(message, ...) do {} while (0)
 #endif
 
-// ── Global runtime state ──
+// ════════════════════════════════════════════════════════════════════
+// Global State
+// ════════════════════════════════════════════════════════════════════
+
 static djinn_runtime_t runtime;
 
-// ── Waiting set: coroutines suspended for I/O or child completion ──
+// Waiting set: coroutines suspended for I/O or child completion
 static void* waiting_handles[DJINN_MAX_WAITING];
 static int waiting_count = 0;
 
-// ── Continuation list: child→parent mappings ──
+// Continuation list: child -> parent mappings
 static djinn_continuation_t* continuations = NULL;
 
-// ── Queue operations ──
+#ifdef _WIN32
+// Function pointers loaded at runtime (not all Winsock versions export these directly)
+static LPFN_ACCEPTEX pfnAcceptEx = NULL;
+static LPFN_CONNECTEX pfnConnectEx = NULL;
+#endif
+
+// ════════════════════════════════════════════════════════════════════
+// Memory
+// ════════════════════════════════════════════════════════════════════
+
+DJINN_API void __djinn_free(void* pointer)
+{
+    DJINN_TRACE("de-allocating heap memory at %p", pointer);
+    free(pointer);
+}
+
+DJINN_API void* __djinn_malloc(size_t size)
+{
+    DJINN_TRACE("allocating size %zu on heap", size);
+    void* chunk = calloc(1, size);
+    DJINN_ASSERT(chunk, "Out of memory");
+    return chunk;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Queue Operations
+// ════════════════════════════════════════════════════════════════════
 
 static void init_queue(djinn_task_queue_t* q)
 {
@@ -63,25 +99,8 @@ static void init_queue(djinn_task_queue_t* q)
 #endif
 }
 
-DJINN_API void __djinn_free(void* pointer)
-{
-    DJINN_TRACE("de-alocating heap memory at %p\n", pointer);
-    free(pointer);
-    DJINN_TRACE("memory freed\n");
-}
-
-DJINN_API void* __djinn_malloc(size_t size)
-{
-    DJINN_TRACE("allocating size %zu on heap\n", size);
-    void* chunk = calloc(1, size);
-    DJINN_ASSERT(chunk, "Out of memory");
-    DJINN_TRACE("allocated successed and zeroed at %p\n", chunk);
-    return chunk;
-}
-
 static void destroy_queue(djinn_task_queue_t* q)
 {
-    // Free remaining tasks
     djinn_task_t* t = q->head;
     while (t)
     {
@@ -172,7 +191,6 @@ static djinn_task_t* dequeue_task_blocking(djinn_task_queue_t* q, volatile int* 
     pthread_mutex_lock(&q->mutex);
     while (!q->head && !(*shutdown))
     {
-        // Use timed wait to check shutdown periodically
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_nsec += 100000000; // 100ms
@@ -203,24 +221,104 @@ static djinn_task_t* dequeue_task_blocking(djinn_task_queue_t* q, volatile int* 
     return task;
 }
 
-// ── I/O thread ──
+// ════════════════════════════════════════════════════════════════════
+// Waiting Set / Continuation Management
+// ════════════════════════════════════════════════════════════════════
+
+void __djinn_mark_waiting(void* handle)
+{
+    if (waiting_count < DJINN_MAX_WAITING)
+    {
+        waiting_handles[waiting_count++] = handle;
+    }
+}
+
+static int is_in_waiting_set(void* handle)
+{
+    for (int i = 0; i < waiting_count; i++)
+    {
+        if (waiting_handles[i] == handle)
+            return 1;
+    }
+    return 0;
+}
+
+// Check if handle is in waiting set; if so, remove it and return 1
+static int is_waiting(void* handle)
+{
+    for (int i = 0; i < waiting_count; i++)
+    {
+        if (waiting_handles[i] == handle)
+        {
+            waiting_handles[i] = waiting_handles[waiting_count - 1];
+            waiting_count--;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void remove_from_waiting(void* handle)
+{
+    is_waiting(handle);
+}
+
+static void* pop_continuation(void* child)
+{
+    djinn_continuation_t** pp = &continuations;
+    while (*pp)
+    {
+        if ((*pp)->child == child)
+        {
+            void* parent = (*pp)->parent;
+            djinn_continuation_t* to_free = *pp;
+            *pp = (*pp)->next;
+            free(to_free);
+            return parent;
+        }
+        pp = &(*pp)->next;
+    }
+    return NULL;
+}
+
+void __djinn_await(void* child_handle, void* parent_handle)
+{
+    DJINN_ASSERT(child_handle, "child handle is NULL");
+    DJINN_ASSERT(parent_handle, "parent handle is NULL");
+
+    djinn_continuation_t* cont = (djinn_continuation_t*)malloc(sizeof(djinn_continuation_t));
+    if (!cont) return;
+    cont->child = child_handle;
+    cont->parent = parent_handle;
+    cont->next = continuations;
+    continuations = cont;
+
+    __djinn_mark_waiting(parent_handle);
+
+    if (!is_in_waiting_set(child_handle))
+    {
+        enqueue_task(&runtime.ready_queue, child_handle);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// File I/O Thread (blocking — for fd-based read/write + console)
+// ════════════════════════════════════════════════════════════════════
 
 #ifdef _WIN32
-static DWORD WINAPI io_thread_func(LPVOID arg)
+static DWORD WINAPI file_io_thread_func(LPVOID arg)
 {
-
-
 #else
-static void* io_thread_func(void* arg)
+static void* file_io_thread_func(void* arg)
 {
 #endif
     (void)arg;
     while (runtime.running)
     {
 #ifdef _WIN32
-        EnterCriticalSection(&runtime.io_mutex);
+        EnterCriticalSection(&runtime.file_io_mutex);
 #else
-        pthread_mutex_lock(&runtime.io_mutex);
+        pthread_mutex_lock(&runtime.file_io_mutex);
 #endif
 
         djinn_io_request_t* req = runtime.io_pending;
@@ -230,15 +328,14 @@ static void* io_thread_func(void* arg)
         }
 
 #ifdef _WIN32
-        LeaveCriticalSection(&runtime.io_mutex);
+        LeaveCriticalSection(&runtime.file_io_mutex);
 #else
-        pthread_mutex_unlock(&runtime.io_mutex);
+        pthread_mutex_unlock(&runtime.file_io_mutex);
 #endif
 
         if (req)
         {
-            // Perform blocking I/O
-            if (req->type == 0)
+            if (req->type == DJINN_IO_FILE_READ)
             {
 #ifdef _WIN32
                 req->result = _read(req->fd, req->buffer, (unsigned int)req->count);
@@ -246,7 +343,7 @@ static void* io_thread_func(void* arg)
                 req->result = read(req->fd, req->buffer, (size_t)req->count);
 #endif
             }
-            else
+            else if (req->type == DJINN_IO_FILE_WRITE)
             {
 #ifdef _WIN32
                 req->result = _write(req->fd, req->buffer, (unsigned int)req->count);
@@ -256,7 +353,6 @@ static void* io_thread_func(void* arg)
             }
             req->completed = 1;
 
-            // Resume waiting coroutine by putting it back in the ready queue
             if (req->waiting_coro)
             {
                 enqueue_task(&runtime.ready_queue, req->waiting_coro);
@@ -265,7 +361,6 @@ static void* io_thread_func(void* arg)
         }
         else
         {
-            // No pending I/O — sleep briefly
 #ifdef _WIN32
             Sleep(1);
 #else
@@ -281,13 +376,205 @@ static void* io_thread_func(void* arg)
 #endif
 }
 
-// ── Worker thread ──
+// ════════════════════════════════════════════════════════════════════
+// Socket Poller Thread (IOCP on Windows, epoll on Linux)
+// ════════════════════════════════════════════════════════════════════
+
+#ifdef _WIN32
+
+// Get the io_request from an OVERLAPPED pointer
+#define REQ_FROM_OVERLAPPED(ovl) \
+    ((djinn_io_request_t*)((char*)(ovl) - offsetof(djinn_io_request_t, overlapped)))
+
+static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
+{
+    (void)arg;
+    DWORD bytes_transferred;
+    ULONG_PTR completion_key;
+    OVERLAPPED* ovl;
+
+    while (runtime.running)
+    {
+        BOOL ok = GetQueuedCompletionStatus(
+            runtime.iocp,
+            &bytes_transferred,
+            &completion_key,
+            &ovl,
+            100 // 100ms timeout
+        );
+
+        if (!runtime.running) break;
+
+        if (!ovl)
+        {
+            // Timeout or shutdown signal
+            continue;
+        }
+
+        djinn_io_request_t* req = REQ_FROM_OVERLAPPED(ovl);
+        req->completed = 1;
+
+        if (!ok)
+        {
+            // I/O error
+            req->result = -1;
+            DJINN_TRACE("IOCP error on type=%d, err=%lu", req->type, GetLastError());
+        }
+        else
+        {
+            switch (req->type)
+            {
+                case DJINN_IO_ACCEPT:
+                    req->result = (int64_t)req->accepted_socket;
+                    // Update accepted socket context so it inherits server socket properties
+                    setsockopt(
+                        req->accepted_socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+                        (char*)&req->socket, sizeof(req->socket)
+                    );
+                    // Associate accepted socket with IOCP
+                    CreateIoCompletionPort((HANDLE)req->accepted_socket, runtime.iocp, 0, 0);
+                    break;
+
+                case DJINN_IO_CONNECT:
+                    req->result = 0; // success
+                    setsockopt(
+                        (SOCKET)req->socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT,
+                        NULL, 0
+                    );
+                    break;
+
+                case DJINN_IO_RECV:
+                    req->result = (int64_t)bytes_transferred;
+                    break;
+
+                case DJINN_IO_SEND:
+                    req->result = (int64_t)bytes_transferred;
+                    break;
+
+                default:
+                    req->result = (int64_t)bytes_transferred;
+                    break;
+            }
+        }
+
+        if (req->waiting_coro)
+        {
+            enqueue_task(&runtime.ready_queue, req->waiting_coro);
+        }
+        free(req);
+    }
+
+    return 0;
+}
+
+#else // Linux — epoll
+
+static void* socket_poller_thread_func(void* arg)
+{
+    (void)arg;
+    struct epoll_event events[64];
+
+    while (runtime.running)
+    {
+        int n = epoll_wait(runtime.epoll_fd, events, 64, 100);
+        if (n < 0)
+        {
+            if (errno == EINTR) continue;
+            DJINN_TRACE("epoll_wait error: %d", errno);
+            continue;
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            djinn_io_request_t* req = (djinn_io_request_t*)events[i].data.ptr;
+            if (!req) continue;
+
+            req->completed = 1;
+
+            switch (req->type)
+            {
+                case DJINN_IO_ACCEPT:
+                {
+                    struct sockaddr_in client_addr;
+                    socklen_t addr_len = sizeof(client_addr);
+                    int client_fd = accept4(
+                        (int)req->socket, (struct sockaddr*)&client_addr,
+                        &addr_len, SOCK_NONBLOCK
+                    );
+                    if (client_fd < 0)
+                    {
+                        req->result = -1;
+                    }
+                    else
+                    {
+                        req->result = (int64_t)client_fd;
+                    }
+                    // Remove server socket from epoll (one-shot for accept)
+                    epoll_ctl(runtime.epoll_fd, EPOLL_CTL_DEL, (int)req->socket, NULL);
+                    break;
+                }
+
+                case DJINN_IO_CONNECT:
+                {
+                    // Check if connect succeeded
+                    int err = 0;
+                    socklen_t len = sizeof(err);
+                    getsockopt((int)req->socket, SOL_SOCKET, SO_ERROR, &err, &len);
+                    req->result = (err == 0) ? 0 : -1;
+                    epoll_ctl(runtime.epoll_fd, EPOLL_CTL_DEL, (int)req->socket, NULL);
+                    break;
+                }
+
+                case DJINN_IO_RECV:
+                {
+                    ssize_t n_read = recv((int)req->socket, req->buffer, (size_t)req->count, 0);
+                    if (n_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                    {
+                        req->completed = 0;
+                        continue; // not ready yet, epoll will fire again
+                    }
+                    req->result = (int64_t)n_read;
+                    epoll_ctl(runtime.epoll_fd, EPOLL_CTL_DEL, (int)req->socket, NULL);
+                    break;
+                }
+
+                case DJINN_IO_SEND:
+                {
+                    ssize_t n_sent = send((int)req->socket, req->buffer, (size_t)req->count, 0);
+                    if (n_sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                    {
+                        req->completed = 0;
+                        continue;
+                    }
+                    req->result = (int64_t)n_sent;
+                    epoll_ctl(runtime.epoll_fd, EPOLL_CTL_DEL, (int)req->socket, NULL);
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            if (req->completed && req->waiting_coro)
+            {
+                enqueue_task(&runtime.ready_queue, req->waiting_coro);
+                free(req);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+#endif // _WIN32
+
+// ════════════════════════════════════════════════════════════════════
+// Worker Thread
+// ════════════════════════════════════════════════════════════════════
 
 #ifdef _WIN32
 static DWORD WINAPI worker_thread(LPVOID arg)
 {
-
-
 #else
 static void* worker_thread(void* arg)
 {
@@ -304,7 +591,6 @@ static void* worker_thread(void* arg)
             __djinn_coro_resume(task->handle);
             if (!__djinn_coro_done(task->handle))
             {
-                // Re-queue if not finished
                 enqueue_task(&pool->queue, task->handle);
             }
             else
@@ -322,25 +608,71 @@ static void* worker_thread(void* arg)
 #endif
 }
 
-// ── Lifecycle ──
+// ════════════════════════════════════════════════════════════════════
+// Lifecycle
+// ════════════════════════════════════════════════════════════════════
 
 void __djinn_runtime_init(int num_threads)
 {
     memset(&runtime, 0, sizeof(runtime));
 
+#ifdef _WIN32
+    // Initialize Winsock
+    WSADATA wsadata;
+    int wsa_err = WSAStartup(MAKEWORD(2, 2), &wsadata);
+    DJINN_ASSERT(wsa_err == 0, "WSAStartup failed");
+#endif
+
     init_queue(&runtime.ready_queue);
     init_queue(&runtime.pool.queue);
 
+    // File I/O mutex
 #ifdef _WIN32
-    InitializeCriticalSection(&runtime.io_mutex);
+    InitializeCriticalSection(&runtime.file_io_mutex);
 #else
-    pthread_mutex_init(&runtime.io_mutex, NULL);
+    pthread_mutex_init(&runtime.file_io_mutex, NULL);
+#endif
+
+    // Socket mutex
+#ifdef _WIN32
+    InitializeCriticalSection(&runtime.socket_mutex);
+#else
+    pthread_mutex_init(&runtime.socket_mutex, NULL);
 #endif
 
     runtime.running = 1;
     runtime.pool.shutdown = 0;
 
-    // Create worker threads
+    // ── IOCP / epoll ──
+#ifdef _WIN32
+    runtime.iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
+    DJINN_ASSERT(runtime.iocp != NULL, "CreateIoCompletionPort failed");
+
+    // Load AcceptEx / ConnectEx function pointers
+    {
+        SOCKET tmp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (tmp != INVALID_SOCKET)
+        {
+            DWORD bytes;
+            GUID guid_acceptex = WSAID_ACCEPTEX;
+            GUID guid_connectex = WSAID_CONNECTEX;
+            WSAIoctl(tmp, SIO_GET_EXTENSION_FUNCTION_POINTER,
+                     &guid_acceptex, sizeof(guid_acceptex),
+                     &pfnAcceptEx, sizeof(pfnAcceptEx), &bytes, NULL, NULL);
+            WSAIoctl(tmp, SIO_GET_EXTENSION_FUNCTION_POINTER,
+                     &guid_connectex, sizeof(guid_connectex),
+                     &pfnConnectEx, sizeof(pfnConnectEx), &bytes, NULL, NULL);
+            closesocket(tmp);
+        }
+        DJINN_ASSERT(pfnAcceptEx != NULL, "Failed to load AcceptEx");
+        DJINN_ASSERT(pfnConnectEx != NULL, "Failed to load ConnectEx");
+    }
+#else
+    runtime.epoll_fd = epoll_create1(0);
+    DJINN_ASSERT(runtime.epoll_fd >= 0, "epoll_create1 failed");
+#endif
+
+    // ── Create worker threads ──
     if (num_threads > 0)
     {
         runtime.pool.thread_count = num_threads;
@@ -359,16 +691,26 @@ void __djinn_runtime_init(int num_threads)
 #endif
     }
 
-    // Create I/O thread
+    // ── Create file I/O thread ──
 #ifdef _WIN32
-    runtime.io_thread = CreateThread(NULL, 0, io_thread_func, NULL, 0, NULL);
+    runtime.file_io_thread = CreateThread(NULL, 0, file_io_thread_func, NULL, 0, NULL);
 #else
-    pthread_create(&runtime.io_thread, NULL, io_thread_func, NULL);
+    pthread_create(&runtime.file_io_thread, NULL, file_io_thread_func, NULL);
 #endif
+
+    // ── Create socket poller thread ──
+#ifdef _WIN32
+    runtime.socket_poller_thread = CreateThread(NULL, 0, socket_poller_thread_func, NULL, 0, NULL);
+#else
+    pthread_create(&runtime.socket_poller_thread, NULL, socket_poller_thread_func, NULL);
+#endif
+
+    DJINN_TRACE("runtime initialized (threads=%d, iocp/epoll=active)", num_threads);
 }
 
 void __djinn_runtime_shutdown(void)
 {
+    DJINN_TRACE("runtime shutting down");
     runtime.running = 0;
     runtime.pool.shutdown = 1;
 
@@ -395,23 +737,35 @@ void __djinn_runtime_shutdown(void)
     free(runtime.pool.threads);
     runtime.pool.threads = NULL;
 
-    // Join I/O thread
+    // Join file I/O thread
 #ifdef _WIN32
-    WaitForSingleObject(runtime.io_thread, 5000);
-    CloseHandle(runtime.io_thread);
+    WaitForSingleObject(runtime.file_io_thread, 5000);
+    CloseHandle(runtime.file_io_thread);
 #else
-    pthread_join(runtime.io_thread, NULL);
+    pthread_join(runtime.file_io_thread, NULL);
 #endif
 
-    // Cleanup
+    // Signal socket poller to stop and join
+#ifdef _WIN32
+    // Post a dummy completion to wake the poller
+    PostQueuedCompletionStatus(runtime.iocp, 0, 0, NULL);
+    WaitForSingleObject(runtime.socket_poller_thread, 5000);
+    CloseHandle(runtime.socket_poller_thread);
+    CloseHandle(runtime.iocp);
+#else
+    pthread_join(runtime.socket_poller_thread, NULL);
+    close(runtime.epoll_fd);
+#endif
+
+    // Cleanup queues
     destroy_queue(&runtime.ready_queue);
     destroy_queue(&runtime.pool.queue);
 
-    // Free pending I/O requests
+    // Free pending file I/O requests
 #ifdef _WIN32
-    EnterCriticalSection(&runtime.io_mutex);
+    EnterCriticalSection(&runtime.file_io_mutex);
 #else
-    pthread_mutex_lock(&runtime.io_mutex);
+    pthread_mutex_lock(&runtime.file_io_mutex);
 #endif
     djinn_io_request_t* req = runtime.io_pending;
     while (req)
@@ -422,101 +776,25 @@ void __djinn_runtime_shutdown(void)
     }
     runtime.io_pending = NULL;
 #ifdef _WIN32
-    LeaveCriticalSection(&runtime.io_mutex);
-    DeleteCriticalSection(&runtime.io_mutex);
+    LeaveCriticalSection(&runtime.file_io_mutex);
+    DeleteCriticalSection(&runtime.file_io_mutex);
+    DeleteCriticalSection(&runtime.socket_mutex);
 #else
-    pthread_mutex_unlock(&runtime.io_mutex);
-    pthread_mutex_destroy(&runtime.io_mutex);
+    pthread_mutex_unlock(&runtime.file_io_mutex);
+    pthread_mutex_destroy(&runtime.file_io_mutex);
+    pthread_mutex_destroy(&runtime.socket_mutex);
 #endif
+
+#ifdef _WIN32
+    WSACleanup();
+#endif
+
+    DJINN_TRACE("runtime shut down");
 }
 
-// ── Waiting set / Continuation management ──
-
-void __djinn_mark_waiting(void* handle)
-{
-    if (waiting_count < DJINN_MAX_WAITING)
-    {
-        waiting_handles[waiting_count++] = handle;
-    }
-}
-
-// Non-consuming check: is handle in waiting set?
-static int is_in_waiting_set(void* handle)
-{
-    for (int i = 0; i < waiting_count; i++)
-    {
-        if (waiting_handles[i] == handle)
-            return 1;
-    }
-    return 0;
-}
-
-// Check if handle is in waiting set; if so, remove it and return 1
-static int is_waiting(void* handle)
-{
-    for (int i = 0; i < waiting_count; i++)
-    {
-        if (waiting_handles[i] == handle)
-        {
-            // Remove by swapping with last
-            waiting_handles[i] = waiting_handles[waiting_count - 1];
-            waiting_count--;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-// Remove handle from waiting set without returning status (cleanup for completed coros)
-static void remove_from_waiting(void* handle)
-{
-    is_waiting(handle);
-}
-
-// Pop continuation for a completed child; returns parent handle or NULL
-static void* pop_continuation(void* child)
-{
-    djinn_continuation_t** pp = &continuations;
-    while (*pp)
-    {
-        if ((*pp)->child == child)
-        {
-            void* parent = (*pp)->parent;
-            djinn_continuation_t* to_free = *pp;
-            *pp = (*pp)->next;
-            free(to_free);
-            return parent;
-        }
-        pp = &(*pp)->next;
-    }
-    return NULL;
-}
-
-void __djinn_await(void* child_handle, void* parent_handle)
-{
-    DJINN_ASSERT(child_handle, "child handle is NULL");
-    DJINN_ASSERT(parent_handle, "parent handle is NULL");
-
-    // Register continuation: when child completes, resume parent
-    djinn_continuation_t* cont = (djinn_continuation_t*)malloc(sizeof(djinn_continuation_t));
-    if (!cont) return;
-    cont->child = child_handle;
-    cont->parent = parent_handle;
-    cont->next = continuations;
-    continuations = cont;
-
-    // Mark parent as waiting (event loop won't re-enqueue it)
-    __djinn_mark_waiting(parent_handle);
-
-    // Only enqueue child if it's NOT already waiting for I/O (coro::suspend).
-    // If child called coro::suspend(), the I/O thread will enqueue it when ready.
-    if (!is_in_waiting_set(child_handle))
-    {
-        enqueue_task(&runtime.ready_queue, child_handle);
-    }
-}
-
-// ── Task management ──
+// ════════════════════════════════════════════════════════════════════
+// Task Management
+// ════════════════════════════════════════════════════════════════════
 
 void __djinn_spawn(void* coro_handle)
 {
@@ -524,16 +802,61 @@ void __djinn_spawn(void* coro_handle)
     enqueue_task(&runtime.ready_queue, coro_handle);
 }
 
-int __djinn_event_loop(void* main_handle)
+// ════════════════════════════════════════════════════════════════════
+// Event Loop
+// ════════════════════════════════════════════════════════════════════
+
+// Process a single task from the ready queue. Returns 1 if a task was processed.
+static void process_completed_coro(void* handle, void* main_handle)
+{
+    remove_from_waiting(handle);
+    void* parent = pop_continuation(handle);
+    if (parent)
+    {
+        remove_from_waiting(parent);
+        enqueue_task(&runtime.ready_queue, parent);
+    }
+    else if (handle != main_handle)
+    {
+        __djinn_coro_destroy(handle);
+    }
+}
+
+static void drain_ready_queue(void* main_handle)
+{
+    djinn_task_t* remaining;
+    while ((remaining = dequeue_task(&runtime.ready_queue)) != NULL)
+    {
+        if (!__djinn_coro_done(remaining->handle))
+        {
+            __djinn_coro_resume(remaining->handle);
+            if (!__djinn_coro_done(remaining->handle))
+            {
+                if (!is_waiting(remaining->handle))
+                {
+                    enqueue_task(&runtime.ready_queue, remaining->handle);
+                }
+                free(remaining);
+                continue;
+            }
+        }
+        if (__djinn_coro_done(remaining->handle))
+        {
+            process_completed_coro(remaining->handle, main_handle);
+        }
+        free(remaining);
+    }
+}
+
+static void run_event_loop_core(void* main_handle)
 {
     DJINN_ASSERT(main_handle, "main handle is NULL");
-    // Only enqueue main if it's not already waiting (e.g., from __djinn_await during ramp)
+
     if (!is_in_waiting_set(main_handle))
     {
         enqueue_task(&runtime.ready_queue, main_handle);
     }
 
-    // Main event loop
     while (runtime.running)
     {
         djinn_task_t* task = dequeue_task(&runtime.ready_queue);
@@ -547,7 +870,6 @@ int __djinn_event_loop(void* main_handle)
                     if (is_waiting(task->handle))
                     {
                         // Waiting for I/O or child — do NOT re-enqueue
-                        // I/O thread or child completion will enqueue it back
                     }
                     else
                     {
@@ -557,36 +879,12 @@ int __djinn_event_loop(void* main_handle)
                 }
                 else
                 {
-                    // Coroutine finished — clean up stale waiting entry + check continuation
-                    remove_from_waiting(task->handle);
-                    void* parent = pop_continuation(task->handle);
-                    if (parent)
-                    {
-                        // Remove parent from waiting set so it can be resumed
-                        remove_from_waiting(parent);
-                        enqueue_task(&runtime.ready_queue, parent);
-                    }
-                    else if (task->handle != main_handle)
-                    {
-                        __djinn_coro_destroy(task->handle);
-                    }
+                    process_completed_coro(task->handle, main_handle);
                 }
             }
             else
             {
-                // Coroutine was already done when dequeued (e.g., no suspend points —
-                // ramp ran entire body to final suspend). Still need to process continuations.
-                remove_from_waiting(task->handle);
-                void* parent = pop_continuation(task->handle);
-                if (parent)
-                {
-                    remove_from_waiting(parent);
-                    enqueue_task(&runtime.ready_queue, parent);
-                }
-                else if (task->handle != main_handle)
-                {
-                    __djinn_coro_destroy(task->handle);
-                }
+                process_completed_coro(task->handle, main_handle);
             }
             free(task);
         }
@@ -594,41 +892,7 @@ int __djinn_event_loop(void* main_handle)
         // Check if main coroutine is done
         if (__djinn_coro_done(main_handle))
         {
-            // Drain remaining tasks in ready queue
-            djinn_task_t* remaining;
-            while ((remaining = dequeue_task(&runtime.ready_queue)) != NULL)
-            {
-                if (!__djinn_coro_done(remaining->handle))
-                {
-                    __djinn_coro_resume(remaining->handle);
-                    if (!__djinn_coro_done(remaining->handle))
-                    {
-                        if (!is_waiting(remaining->handle))
-                        {
-                            enqueue_task(&runtime.ready_queue, remaining->handle);
-                        }
-                        free(remaining);
-                        continue;
-                    }
-                }
-                // Handle continuations for completed tasks (whether just finished or already done)
-                if (__djinn_coro_done(remaining->handle))
-                {
-                    remove_from_waiting(remaining->handle);
-                    void* parent = pop_continuation(remaining->handle);
-                    if (parent)
-                    {
-                        remove_from_waiting(parent);
-                        enqueue_task(&runtime.ready_queue, parent);
-                    }
-                }
-                // Destroy completed spawned tasks (NOT main — we need its promise)
-                if (remaining->handle != main_handle && __djinn_coro_done(remaining->handle))
-                {
-                    __djinn_coro_destroy(remaining->handle);
-                }
-                free(remaining);
-            }
+            drain_ready_queue(main_handle);
             break;
         }
 
@@ -642,8 +906,12 @@ int __djinn_event_loop(void* main_handle)
 #endif
         }
     }
+}
 
-    // Extract result from main coroutine's promise
+int __djinn_event_loop(void* main_handle)
+{
+    run_event_loop_core(main_handle);
+
     void* promise = __djinn_coro_promise(main_handle, 4);
     int result = *(int*)promise;
     __djinn_coro_destroy(main_handle);
@@ -652,124 +920,14 @@ int __djinn_event_loop(void* main_handle)
 
 void __djinn_event_loop_run(void* main_handle)
 {
-    DJINN_ASSERT(main_handle, "main handle is NULL");
-    // Only enqueue main if it's not already waiting (e.g., from __djinn_await during ramp)
-    if (!is_in_waiting_set(main_handle))
-    {
-        enqueue_task(&runtime.ready_queue, main_handle);
-    }
-
-    // Event loop — runs until main coroutine completes
-    while (runtime.running)
-    {
-        djinn_task_t* task = dequeue_task(&runtime.ready_queue);
-        if (task)
-        {
-            if (!__djinn_coro_done(task->handle))
-            {
-                __djinn_coro_resume(task->handle);
-                if (!__djinn_coro_done(task->handle))
-                {
-                    if (is_waiting(task->handle))
-                    {
-                        // Waiting for I/O or child — do NOT re-enqueue
-                    }
-                    else
-                    {
-                        // Cooperative yield — re-enqueue immediately
-                        enqueue_task(&runtime.ready_queue, task->handle);
-                    }
-                }
-                else
-                {
-                    // Coroutine finished — clean up stale waiting entry + check continuation
-                    remove_from_waiting(task->handle);
-                    void* parent = pop_continuation(task->handle);
-                    if (parent)
-                    {
-                        // Remove parent from waiting set so it can be resumed
-                        remove_from_waiting(parent);
-                        enqueue_task(&runtime.ready_queue, parent);
-                    }
-                    else if (task->handle != main_handle)
-                    {
-                        __djinn_coro_destroy(task->handle);
-                    }
-                }
-            }
-            else
-            {
-                // Already done when dequeued (no suspend points)
-                remove_from_waiting(task->handle);
-                void* parent = pop_continuation(task->handle);
-                if (parent)
-                {
-                    remove_from_waiting(parent);
-                    enqueue_task(&runtime.ready_queue, parent);
-                }
-                else if (task->handle != main_handle)
-                {
-                    __djinn_coro_destroy(task->handle);
-                }
-            }
-            free(task);
-        }
-
-        // Check if main coroutine is done
-        if (__djinn_coro_done(main_handle))
-        {
-            // Drain remaining tasks in ready queue
-            djinn_task_t* remaining;
-            while ((remaining = dequeue_task(&runtime.ready_queue)) != NULL)
-            {
-                if (!__djinn_coro_done(remaining->handle))
-                {
-                    __djinn_coro_resume(remaining->handle);
-                    if (!__djinn_coro_done(remaining->handle))
-                    {
-                        if (!is_waiting(remaining->handle))
-                        {
-                            enqueue_task(&runtime.ready_queue, remaining->handle);
-                        }
-                        free(remaining);
-                        continue;
-                    }
-                }
-                // Handle continuations for completed tasks
-                if (__djinn_coro_done(remaining->handle))
-                {
-                    remove_from_waiting(remaining->handle);
-                    void* parent = pop_continuation(remaining->handle);
-                    if (parent)
-                    {
-                        remove_from_waiting(parent);
-                        enqueue_task(&runtime.ready_queue, parent);
-                    }
-                }
-                if (remaining->handle != main_handle && __djinn_coro_done(remaining->handle))
-                {
-                    __djinn_coro_destroy(remaining->handle);
-                }
-                free(remaining);
-            }
-            break;
-        }
-
-        // Brief yield if no tasks available to avoid busy-spinning
-        if (!runtime.ready_queue.head)
-        {
-#ifdef _WIN32
-            Sleep(0);
-#else
-            sched_yield();
-#endif
-        }
-    }
+    run_event_loop_core(main_handle);
     // NOTE: does NOT extract result or destroy main_handle
     // Caller (LLVM IR) does that via @llvm.coro.promise + @llvm.coro.destroy
 }
 
-// ── Async I/O ──
+// ════════════════════════════════════════════════════════════════════
+// Async File I/O (routed to blocking file I/O thread)
+// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro)
 {
@@ -777,31 +935,28 @@ int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro)
     DJINN_ASSERT(buf, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)malloc(sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
     if (!req) return -1;
 
+    req->type = DJINN_IO_FILE_READ;
     req->fd = fd;
     req->buffer = buf;
     req->count = count;
-    req->result = 0;
-    req->completed = 0;
     req->waiting_coro = coro;
-    req->type = 0; // read
-    req->next = NULL;
 
 #ifdef _WIN32
-    EnterCriticalSection(&runtime.io_mutex);
+    EnterCriticalSection(&runtime.file_io_mutex);
 #else
-    pthread_mutex_lock(&runtime.io_mutex);
+    pthread_mutex_lock(&runtime.file_io_mutex);
 #endif
 
     req->next = runtime.io_pending;
     runtime.io_pending = req;
 
 #ifdef _WIN32
-    LeaveCriticalSection(&runtime.io_mutex);
+    LeaveCriticalSection(&runtime.file_io_mutex);
 #else
-    pthread_mutex_unlock(&runtime.io_mutex);
+    pthread_mutex_unlock(&runtime.file_io_mutex);
 #endif
 
     return 0;
@@ -813,32 +968,561 @@ int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
     DJINN_ASSERT(buf, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)malloc(sizeof(djinn_io_request_t));
-    if (!req) return -2;
+    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    if (!req) return -1;
 
+    req->type = DJINN_IO_FILE_WRITE;
     req->fd = fd;
     req->buffer = buf;
     req->count = count;
-    req->result = 0;
-    req->completed = 0;
     req->waiting_coro = coro;
-    req->type = 1; // write
-    req->next = NULL;
 
 #ifdef _WIN32
-    EnterCriticalSection(&runtime.io_mutex);
+    EnterCriticalSection(&runtime.file_io_mutex);
 #else
-    pthread_mutex_lock(&runtime.io_mutex);
+    pthread_mutex_lock(&runtime.file_io_mutex);
 #endif
 
     req->next = runtime.io_pending;
     runtime.io_pending = req;
 
 #ifdef _WIN32
-    LeaveCriticalSection(&runtime.io_mutex);
+    LeaveCriticalSection(&runtime.file_io_mutex);
 #else
-    pthread_mutex_unlock(&runtime.io_mutex);
+    pthread_mutex_unlock(&runtime.file_io_mutex);
 #endif
 
     return 0;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Socket API — Sync Helpers
+// ════════════════════════════════════════════════════════════════════
+
+int64_t __djinn_socket_create(void)
+{
+#ifdef _WIN32
+    SOCKET s = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+    if (s == INVALID_SOCKET)
+    {
+        DJINN_TRACE("WSASocket failed: %d", WSAGetLastError());
+        return -1;
+    }
+    // Associate with IOCP
+    HANDLE h = CreateIoCompletionPort((HANDLE)s, runtime.iocp, 0, 0);
+    if (!h)
+    {
+        DJINN_TRACE("CreateIoCompletionPort for socket failed: %lu", GetLastError());
+        closesocket(s);
+        return -1;
+    }
+    return (int64_t)s;
+#else
+    int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    if (fd < 0)
+    {
+        DJINN_TRACE("socket() failed: %d", errno);
+        return -1;
+    }
+    return (int64_t)fd;
+#endif
+}
+
+int64_t __djinn_socket_close(int64_t sock)
+{
+#ifdef _WIN32
+    return closesocket((SOCKET)sock) == 0 ? 0 : -1;
+#else
+    return close((int)sock) == 0 ? 0 : -1;
+#endif
+}
+
+int64_t __djinn_socket_bind(int64_t sock, const char* addr, int port)
+{
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((uint16_t)port);
+
+    if (addr && addr[0] != '\0')
+    {
+        inet_pton(AF_INET, addr, &sa.sin_addr);
+    }
+    else
+    {
+        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+    }
+
+    // Enable SO_REUSEADDR
+    int optval = 1;
+#ifdef _WIN32
+    setsockopt((SOCKET)sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval));
+#else
+    setsockopt((int)sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#endif
+
+#ifdef _WIN32
+    if (bind((SOCKET)sock, (struct sockaddr*)&sa, sizeof(sa)) == SOCKET_ERROR)
+    {
+        DJINN_TRACE("bind failed: %d", WSAGetLastError());
+        return -1;
+    }
+#else
+    if (bind((int)sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
+    {
+        DJINN_TRACE("bind failed: %d", errno);
+        return -1;
+    }
+#endif
+    return 0;
+}
+
+int64_t __djinn_socket_listen(int64_t sock, int backlog)
+{
+#ifdef _WIN32
+    if (listen((SOCKET)sock, backlog) == SOCKET_ERROR)
+    {
+        DJINN_TRACE("listen failed: %d", WSAGetLastError());
+        return -1;
+    }
+#else
+    if (listen((int)sock, backlog) < 0)
+    {
+        DJINN_TRACE("listen failed: %d", errno);
+        return -1;
+    }
+#endif
+    return 0;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Socket API — Async Operations (coroutine-aware)
+// ════════════════════════════════════════════════════════════════════
+
+int64_t __djinn_async_accept(int64_t server_sock, void* coro)
+{
+    DJINN_ASSERT(coro, "coro handle is NULL");
+
+    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    if (!req) return -1;
+
+    req->type = DJINN_IO_ACCEPT;
+    req->socket = server_sock;
+    req->waiting_coro = coro;
+
+#ifdef _WIN32
+    // Create the accepted socket
+    req->accepted_socket = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+    if (req->accepted_socket == INVALID_SOCKET)
+    {
+        DJINN_TRACE("WSASocket for accept failed: %d", WSAGetLastError());
+        free(req);
+        return -1;
+    }
+
+    memset(&req->overlapped, 0, sizeof(req->overlapped));
+    DWORD bytes_received;
+    BOOL ok = pfnAcceptEx(
+        (SOCKET)server_sock,
+        req->accepted_socket,
+        req->accept_buf,
+        0, // no data read with accept
+        sizeof(struct sockaddr_in) + 16,
+        sizeof(struct sockaddr_in) + 16,
+        &bytes_received,
+        &req->overlapped
+    );
+
+    if (!ok && WSAGetLastError() != ERROR_IO_PENDING)
+    {
+        DJINN_TRACE("AcceptEx failed: %d", WSAGetLastError());
+        closesocket(req->accepted_socket);
+        free(req);
+        return -1;
+    }
+    // IOCP will deliver the completion
+#else
+    // Register interest in EPOLLIN on the server socket
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLONESHOT;
+    ev.data.ptr = req;
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)server_sock, &ev) < 0)
+    {
+        // Might already be registered, try MOD
+        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)server_sock, &ev) < 0)
+        {
+            DJINN_TRACE("epoll_ctl for accept failed: %d", errno);
+            free(req);
+            return -1;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* coro)
+{
+    DJINN_ASSERT(coro, "coro handle is NULL");
+    DJINN_ASSERT(addr, "addr is NULL");
+
+    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    if (!req) return -1;
+
+    size_t addr_len = strlen(addr);
+
+    req->type = DJINN_IO_CONNECT;
+    req->socket = sock;
+    req->waiting_coro = coro;
+    req->port = port;
+    memcpy(req->addr, addr, addr_len < sizeof(req->addr) ? addr_len : sizeof(req->addr) - 1);
+    req->addr[sizeof(req->addr) - 1] = '\0';
+
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((uint16_t)port);
+    inet_pton(AF_INET, addr, &sa.sin_addr);
+
+#ifdef _WIN32
+    // ConnectEx requires the socket to be bound first
+    struct sockaddr_in bind_addr;
+    memset(&bind_addr, 0, sizeof(bind_addr));
+    bind_addr.sin_family = AF_INET;
+    bind_addr.sin_addr.s_addr = INADDR_ANY;
+    bind_addr.sin_port = 0;
+    bind((SOCKET)sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+
+    memset(&req->overlapped, 0, sizeof(req->overlapped));
+    BOOL ok = pfnConnectEx(
+        (SOCKET)sock,
+        (struct sockaddr*)&sa,
+        sizeof(sa),
+        NULL, 0, NULL,
+        &req->overlapped
+    );
+
+    if (!ok && WSAGetLastError() != ERROR_IO_PENDING)
+    {
+        DJINN_TRACE("ConnectEx failed: %d", WSAGetLastError());
+        free(req);
+        return -1;
+    }
+#else
+    int ret = connect((int)sock, (struct sockaddr*)&sa, sizeof(sa));
+    if (ret < 0 && errno != EINPROGRESS)
+    {
+        DJINN_TRACE("connect failed: %d", errno);
+        free(req);
+        return -1;
+    }
+
+    if (ret == 0)
+    {
+        // Connected immediately
+        req->result = 0;
+        req->completed = 1;
+        enqueue_task(&runtime.ready_queue, coro);
+        free(req);
+        return 0;
+    }
+
+    // EINPROGRESS — register for EPOLLOUT
+    struct epoll_event ev;
+    ev.events = EPOLLOUT | EPOLLONESHOT;
+    ev.data.ptr = req;
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)sock, &ev) < 0)
+    {
+        DJINN_TRACE("epoll_ctl for connect failed: %d", errno);
+        free(req);
+        return -1;
+    }
+#endif
+
+    return 0;
+}
+
+int64_t __djinn_async_send(int64_t sock, void* buf, int64_t count, void* coro)
+{
+    DJINN_ASSERT(coro, "coro handle is NULL");
+    DJINN_ASSERT(buf, "buf is NULL");
+    DJINN_ASSERT(count > 0, "count <= 0");
+
+    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    if (!req) return -1;
+
+    req->type = DJINN_IO_SEND;
+    req->socket = sock;
+    req->buffer = buf;
+    req->count = count;
+    req->waiting_coro = coro;
+
+#ifdef _WIN32
+    memset(&req->overlapped, 0, sizeof(req->overlapped));
+    req->wsabuf.buf = (char*)buf;
+    req->wsabuf.len = (ULONG)count;
+
+    DWORD bytes_sent;
+    int ret = WSASend((SOCKET)sock, &req->wsabuf, 1, &bytes_sent, 0, &req->overlapped, NULL);
+    if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
+    {
+        DJINN_TRACE("WSASend failed: %d", WSAGetLastError());
+        free(req);
+        return -1;
+    }
+#else
+    struct epoll_event ev;
+    ev.events = EPOLLOUT | EPOLLONESHOT;
+    ev.data.ptr = req;
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)sock, &ev) < 0)
+    {
+        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)sock, &ev) < 0)
+        {
+            DJINN_TRACE("epoll_ctl for send failed: %d", errno);
+            free(req);
+            return -1;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+int64_t __djinn_async_recv(int64_t sock, void* buf, int64_t count, void* coro)
+{
+    DJINN_ASSERT(coro, "coro handle is NULL");
+    DJINN_ASSERT(buf, "buf is NULL");
+    DJINN_ASSERT(count > 0, "count <= 0");
+
+    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    if (!req) return -1;
+
+    req->type = DJINN_IO_RECV;
+    req->socket = sock;
+    req->buffer = buf;
+    req->count = count;
+    req->waiting_coro = coro;
+
+#ifdef _WIN32
+    memset(&req->overlapped, 0, sizeof(req->overlapped));
+    req->wsabuf.buf = (char*)buf;
+    req->wsabuf.len = (ULONG)count;
+
+    DWORD bytes_received;
+    DWORD flags = 0;
+    int ret = WSARecv((SOCKET)sock, &req->wsabuf, 1, &bytes_received, &flags, &req->overlapped, NULL);
+    if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
+    {
+        DJINN_TRACE("WSARecv failed: %d", WSAGetLastError());
+        free(req);
+        return -1;
+    }
+#else
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLONESHOT;
+    ev.data.ptr = req;
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)sock, &ev) < 0)
+    {
+        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)sock, &ev) < 0)
+        {
+            DJINN_TRACE("epoll_ctl for recv failed: %d", errno);
+            free(req);
+            return -1;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Threading API (C# style)
+// ════════════════════════════════════════════════════════════════════
+
+#ifdef _WIN32
+static DWORD WINAPI djinn_thread_entry(LPVOID arg)
+{
+    djinn_thread_t* t = (djinn_thread_t*)arg;
+    t->alive = 1;
+    t->func(t->arg);
+    t->alive = 0;
+    return 0;
+}
+#else
+static void* djinn_thread_entry(void* arg)
+{
+    djinn_thread_t* t = (djinn_thread_t*)arg;
+    t->alive = 1;
+    t->func(t->arg);
+    t->alive = 0;
+    return NULL;
+}
+#endif
+
+djinn_thread_t* __djinn_thread_create(void (*func)(void*), void* arg)
+{
+    DJINN_ASSERT(func, "thread func is NULL");
+
+    djinn_thread_t* t = (djinn_thread_t*)calloc(1, sizeof(djinn_thread_t));
+    if (!t) return NULL;
+
+    t->func = func;
+    t->arg = arg;
+    t->alive = 0;
+
+    return t;
+}
+
+int __djinn_thread_start(djinn_thread_t* thread)
+{
+    DJINN_ASSERT(thread, "thread is NULL");
+
+#ifdef _WIN32
+    thread->handle = CreateThread(NULL, 0, djinn_thread_entry, thread, 0, &thread->id);
+    if (!thread->handle)
+    {
+        DJINN_TRACE("CreateThread failed: %lu", GetLastError());
+        return -1;
+    }
+#else
+    int ret = pthread_create(&thread->handle, NULL, djinn_thread_entry, thread);
+    if (ret != 0)
+    {
+        DJINN_TRACE("pthread_create failed: %d", ret);
+        return -1;
+    }
+#endif
+    return 0;
+}
+
+void __djinn_thread_join(djinn_thread_t* thread)
+{
+    DJINN_ASSERT(thread, "thread is NULL");
+
+#ifdef _WIN32
+    WaitForSingleObject(thread->handle, INFINITE);
+    CloseHandle(thread->handle);
+    thread->handle = NULL;
+#else
+    pthread_join(thread->handle, NULL);
+#endif
+}
+
+int __djinn_thread_is_alive(djinn_thread_t* thread)
+{
+    if (!thread) return 0;
+    return thread->alive;
+}
+
+void __djinn_thread_sleep(int64_t milliseconds)
+{
+#ifdef _WIN32
+    Sleep((DWORD)milliseconds);
+#else
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+#endif
+}
+
+// ── Mutex ──
+
+djinn_mutex_t* __djinn_mutex_create(void)
+{
+    djinn_mutex_t* m = (djinn_mutex_t*)calloc(1, sizeof(djinn_mutex_t));
+    if (!m) return NULL;
+
+#ifdef _WIN32
+    InitializeCriticalSection(&m->cs);
+#else
+    pthread_mutex_init(&m->mtx, NULL);
+#endif
+
+    return m;
+}
+
+void __djinn_mutex_lock(djinn_mutex_t* mutex)
+{
+    DJINN_ASSERT(mutex, "mutex is NULL");
+#ifdef _WIN32
+    EnterCriticalSection(&mutex->cs);
+#else
+    pthread_mutex_lock(&mutex->mtx);
+#endif
+}
+
+void __djinn_mutex_unlock(djinn_mutex_t* mutex)
+{
+    DJINN_ASSERT(mutex, "mutex is NULL");
+#ifdef _WIN32
+    LeaveCriticalSection(&mutex->cs);
+#else
+    pthread_mutex_unlock(&mutex->mtx);
+#endif
+}
+
+int __djinn_mutex_trylock(djinn_mutex_t* mutex)
+{
+    DJINN_ASSERT(mutex, "mutex is NULL");
+#ifdef _WIN32
+    return TryEnterCriticalSection(&mutex->cs) ? 1 : 0;
+#else
+    return pthread_mutex_trylock(&mutex->mtx) == 0 ? 1 : 0;
+#endif
+}
+
+void __djinn_mutex_destroy(djinn_mutex_t* mutex)
+{
+    if (!mutex) return;
+#ifdef _WIN32
+    DeleteCriticalSection(&mutex->cs);
+#else
+    pthread_mutex_destroy(&mutex->mtx);
+#endif
+    free(mutex);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Console I/O (async wrappers over file I/O thread)
+// ════════════════════════════════════════════════════════════════════
+
+int64_t __djinn_console_write(const char* str, void* coro)
+{
+    if (!str) return 0;
+    int64_t len = (int64_t)strlen(str);
+    if (len <= 0) return 0;
+    return __djinn_async_write(1, (void*)str, len, coro);
+}
+
+int64_t __djinn_console_writeln(const char* str, void* coro)
+{
+    if (!str) return 0;
+
+    int64_t len = (int64_t)strlen(str);
+    char* buf = (char*)malloc(len + 2);
+    if (!buf) return -1;
+
+    memcpy(buf, str, len);
+    buf[len] = '\n';
+    buf[len + 1] = '\0';
+
+    // NOTE: buf lifetime — file I/O thread does blocking write before
+    // freeing req, so buf is valid throughout the write. Leak is intentional;
+    // a future allocator can track and free these buffers.
+    return __djinn_async_write(1, buf, len + 1, coro);
+}
+
+int64_t __djinn_console_error(const char* str, void* coro)
+{
+    if (!str) return 0;
+    int64_t len = (int64_t)strlen(str);
+    if (len <= 0) return 0;
+    return __djinn_async_write(2, (void*)str, len, coro);
+}
+
+int64_t __djinn_console_read_line(char* buf, int64_t max, void* coro)
+{
+    if (!buf || max <= 0) return 0;
+    return __djinn_async_read(0, buf, max, coro);
 }
