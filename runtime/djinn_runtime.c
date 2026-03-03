@@ -1495,24 +1495,6 @@ int64_t __djinn_console_write(const char* str, void* coro)
     return __djinn_async_write(1, (void*)str, len, coro);
 }
 
-int64_t __djinn_console_writeln(const char* str, void* coro)
-{
-    if (!str) return 0;
-
-    int64_t len = (int64_t)strlen(str);
-    char* buf = (char*)malloc(len + 2);
-    if (!buf) return -1;
-
-    memcpy(buf, str, len);
-    buf[len] = '\n';
-    buf[len + 1] = '\0';
-
-    // NOTE: buf lifetime — file I/O thread does blocking write before
-    // freeing req, so buf is valid throughout the write. Leak is intentional;
-    // a future allocator can track and free these buffers.
-    return __djinn_async_write(1, buf, len + 1, coro);
-}
-
 int64_t __djinn_console_error(const char* str, void* coro)
 {
     if (!str) return 0;

@@ -11,19 +11,19 @@
 #include <stddef.h>
 
 #ifdef _WIN32
-    #define WIN32_LEAN_AND_MEAN
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #include <mswsock.h>
-    #include <windows.h>
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <mswsock.h>
+#include <windows.h>
 #else
-    #include <pthread.h>
-    #include <unistd.h>
-    #include <sys/socket.h>
-    #include <sys/epoll.h>
-    #include <netinet/in.h>
-    #include <arpa/inet.h>
-    #include <fcntl.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/epoll.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
 #endif
 
 #ifdef __cplusplus
@@ -31,9 +31,9 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
-    #define DJINN_API __declspec(dllexport)
+#define DJINN_API __declspec(dllexport)
 #else
-    #define DJINN_API
+#define DJINN_API
 #endif
 
 // ════════════════════════════════════════════════════════════════════
@@ -41,7 +41,7 @@ extern "C" {
 // ════════════════════════════════════════════════════════════════════
 
 DJINN_API void* __djinn_malloc(size_t size);
-DJINN_API void  __djinn_free(void* pointer);
+DJINN_API void __djinn_free(void* pointer);
 
 // ════════════════════════════════════════════════════════════════════
 // I/O Request Types
@@ -60,9 +60,9 @@ DJINN_API void  __djinn_free(void* pointer);
 
 typedef struct djinn_task
 {
-    void* handle;               // coroutine handle
-    struct djinn_task* next;    // linked list
-    int priority;               // 0 = normal, 1 = high
+    void* handle; // coroutine handle
+    struct djinn_task* next; // linked list
+    int priority; // 0 = normal, 1 = high
 } djinn_task_t;
 
 // ════════════════════════════════════════════════════════════════════
@@ -105,18 +105,18 @@ typedef struct
 
 typedef struct djinn_io_request
 {
-    int type;                           // DJINN_IO_FILE_READ .. DJINN_IO_SEND
+    int type; // DJINN_IO_FILE_READ .. DJINN_IO_SEND
     void* buffer;
     int64_t count;
-    int64_t result;                     // bytes read/written or accepted socket
+    int64_t result; // bytes read/written or accepted socket
     int completed;
-    void* waiting_coro;                 // coroutine to resume when done
+    void* waiting_coro; // coroutine to resume when done
     struct djinn_io_request* next;
 
     union
     {
-        int fd;                         // file descriptor (file I/O)
-        int64_t socket;                 // socket handle (socket I/O)
+        int fd; // file descriptor (file I/O)
+        int64_t socket; // socket handle (socket I/O)
     };
 
     // Socket-specific (connect/accept)
@@ -124,10 +124,10 @@ typedef struct djinn_io_request
     char addr[64];
 
 #ifdef _WIN32
-    OVERLAPPED overlapped;              // IOCP overlapped structure
-    WSABUF wsabuf;                      // WSA buffer descriptor
+    OVERLAPPED overlapped; // IOCP overlapped structure
+    WSABUF wsabuf; // WSA buffer descriptor
     char accept_buf[2 * (sizeof(struct sockaddr_in) + 16)]; // AcceptEx buffer
-    SOCKET accepted_socket;             // result socket from AcceptEx
+    SOCKET accepted_socket; // result socket from AcceptEx
 #endif
 } djinn_io_request_t;
 
@@ -138,10 +138,10 @@ typedef struct djinn_io_request
 typedef struct
 {
     djinn_thread_pool_t pool;
-    djinn_task_queue_t ready_queue;         // tasks ready to execute
+    djinn_task_queue_t ready_queue; // tasks ready to execute
 
     // ── File I/O (dedicated blocking thread) ──
-    djinn_io_request_t* io_pending;         // pending file I/O requests
+    djinn_io_request_t* io_pending; // pending file I/O requests
 #ifdef _WIN32
     HANDLE file_io_thread;
     CRITICAL_SECTION file_io_mutex;
@@ -152,7 +152,7 @@ typedef struct
 
     // ── Socket Poller (IOCP / epoll) ──
 #ifdef _WIN32
-    HANDLE iocp;                            // I/O Completion Port
+    HANDLE iocp; // I/O Completion Port
     HANDLE socket_poller_thread;
 #else
     int epoll_fd;
@@ -192,9 +192,9 @@ DJINN_API void __djinn_runtime_shutdown(void);
 // Coro wrappers (defined in LLVM IR, called by runtime)
 // ════════════════════════════════════════════════════════════════════
 
-extern void  __djinn_coro_resume(void* handle);
-extern int   __djinn_coro_done(void* handle);
-extern void  __djinn_coro_destroy(void* handle);
+extern void __djinn_coro_resume(void* handle);
+extern int __djinn_coro_done(void* handle);
+extern void __djinn_coro_destroy(void* handle);
 extern void* __djinn_coro_promise(void* handle, int align);
 
 // ════════════════════════════════════════════════════════════════════
@@ -202,7 +202,7 @@ extern void* __djinn_coro_promise(void* handle, int align);
 // ════════════════════════════════════════════════════════════════════
 
 DJINN_API void __djinn_spawn(void* coro_handle);
-DJINN_API int  __djinn_event_loop(void* main_handle);
+DJINN_API int __djinn_event_loop(void* main_handle);
 DJINN_API void __djinn_event_loop_run(void* main_handle);
 
 // ════════════════════════════════════════════════════════════════════
@@ -260,15 +260,15 @@ typedef struct djinn_mutex
 } djinn_mutex_t;
 
 DJINN_API djinn_thread_t* __djinn_thread_create(void (*func)(void*), void* arg);
-DJINN_API int  __djinn_thread_start(djinn_thread_t* thread);
+DJINN_API int __djinn_thread_start(djinn_thread_t* thread);
 DJINN_API void __djinn_thread_join(djinn_thread_t* thread);
-DJINN_API int  __djinn_thread_is_alive(djinn_thread_t* thread);
+DJINN_API int __djinn_thread_is_alive(djinn_thread_t* thread);
 DJINN_API void __djinn_thread_sleep(int64_t milliseconds);
 
 DJINN_API djinn_mutex_t* __djinn_mutex_create(void);
 DJINN_API void __djinn_mutex_lock(djinn_mutex_t* mutex);
 DJINN_API void __djinn_mutex_unlock(djinn_mutex_t* mutex);
-DJINN_API int  __djinn_mutex_trylock(djinn_mutex_t* mutex);
+DJINN_API int __djinn_mutex_trylock(djinn_mutex_t* mutex);
 DJINN_API void __djinn_mutex_destroy(djinn_mutex_t* mutex);
 
 // ════════════════════════════════════════════════════════════════════
@@ -276,7 +276,6 @@ DJINN_API void __djinn_mutex_destroy(djinn_mutex_t* mutex);
 // ════════════════════════════════════════════════════════════════════
 
 DJINN_API int64_t __djinn_console_write(const char* str, void* coro);
-DJINN_API int64_t __djinn_console_writeln(const char* str, void* coro);
 DJINN_API int64_t __djinn_console_error(const char* str, void* coro);
 DJINN_API int64_t __djinn_console_read_line(char* buf, int64_t max, void* coro);
 
