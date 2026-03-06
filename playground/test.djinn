@@ -1,66 +1,14 @@
 import std::types;
 import std::builtin;
 import std::debug;
-
-extern "C" {
-    i64    __djinn_console_write     (void* str, void* coro_handle);
-    i64    __djinn_console_writeln   (void* str, void* coro_handle);
-    i64    __djinn_console_error     (void* str, void* coro_handle);
-    i64    __djinn_console_read_line (void* str, void* coro_handle);
-
-    i64    __djinn_async_write (i32 fd, void* buf, i64 count, void* coro_handle);
-    i64    __djinn_async_read  (i32 fd, void* buf, i64 count, void* coro_handle);
-    void*  __djinn_malloc      (i32 size);
-    void   __djinn_free        (void* pointer);
-}
-
-async i32 print(i8* message, i64 len) {
-    i32 stdin = 0;
-    i32 stdout = 1;
-
-    void* handle = std::builtin::coro.handle();
-//     Debug.assert(handle == 0, "coroutine handler invalid");
-
-    i32 ret = __djinn_async_write(stdout, message, len, handle);
-    std::builtin::coro.suspend();
-
-    Debug.assert(ret == 0, "async_write call got invalid return");
-    return ret;
-}
-
-struct read_result{
-    void* buffer;
-    i32 errorCode;
-
-    void destroy() {
-        __djinn_free(this.buffer);
-    }
-}
-
-async read_result readLine() {
-    i32 stdin = 0;
-    i32 bufferSize = 1024;
-
-    void* buffer = __djinn_malloc(bufferSize);
-    void* handle = std::builtin::coro.handle();
-//     Debug.assert(handle == 0, "coroutine handler invalid");
-
-    i32 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);
-    std::builtin::coro.suspend();
-
-    Debug.assert(ret == 0, "async_read call got invalid return");
-    return { .buffer = buffer, .errorCode = ret };
-}
+import std::console;
 
 async i32 main() {
-//     read_result read = await readLine();
-//     printf("async_read returned %d: %s\n", read.errorCode, read.buffer);
+    i32 r1 = await Console.print("Hello from async I/O!\n", 22);
+    await Console.print("async_print returned %d\n", r1);
 
-    i32 r1 = await print("Hello from async I/O!\n", 22);
-    printf("async_print returned %d\n", r1);
-
-    i32 r2 = await print("Second async write!\n", 20);
-    printf("async_print returned %d\n", r2);
+    i32 r2 = await Console.print("Second async write!\n", 20);
+    await Console.print("async_print returned %d\n", r2);
 
     return 0;
 }

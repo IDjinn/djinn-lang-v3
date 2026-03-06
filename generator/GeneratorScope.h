@@ -68,6 +68,12 @@ struct StructDef
         return fieldIndices.contains(fieldName);
     }
 
+    [[nodiscard]] bool hasMethod(const std::string& methodName) const
+    {
+        for (const auto method_symbol : methods) if (method_symbol->name == methodName) return true;
+        return false;
+    }
+
     [[nodiscard]] bool hasProperty(const std::string& propName) const
     {
         return propertyInfos.contains(propName);
@@ -89,6 +95,12 @@ struct StructDef
             return it->second;
         }
         return UINT_MAX;
+    }
+
+    [[nodiscard]] std::shared_ptr<MethodSymbol> getMethod(const std::string& methodName) const
+    {
+        for (auto method_symbol : this->methods) if (method_symbol->name == methodName) return method_symbol;
+        return nullptr;
     }
 };
 

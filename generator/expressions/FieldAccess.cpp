@@ -96,6 +96,7 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
                 }
 
                 return builder->CreateCall(getter, {thisPtr}, expr.fieldName.token_name);
+                // TODO: GETTERS REALLY NEED BE FUNCTIONS?
             }
         }
 
@@ -203,7 +204,7 @@ llvm::Value* Generator::generate_field_assignment(const FieldAssignment& expr)
                 const auto expectedType = setter->getFunctionType()->getParamType(1);
                 val = cast_value(val, expectedType);
 
-                builder->CreateCall(setter, {thisPtr, val});
+                builder->CreateCall(setter, {thisPtr, val}); // TODO: SETTERS REALLY NEED BE FUNCTIONS?
                 return val;
             }
         }

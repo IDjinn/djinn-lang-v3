@@ -1,5 +1,16 @@
 import std::types;
+import std::debug;
+
 namespace std::sys;
+
+extern "C" {
+    i64    __djinn_console_write     (void* str, void* coro_handle);
+    i64    __djinn_console_writeln   (void* str, void* coro_handle);
+    i64    __djinn_console_error     (void* str, void* coro_handle);
+    i64    __djinn_console_read_line (void* str, void* coro_handle);
+    i64    __djinn_async_write (i32 fd, void* buf, i64 count, void* coro_handle);
+    i64    __djinn_async_read  (i32 fd, void* buf, i64 count, void* coro_handle);
+}
 
 struct Console {
     public static c_result error(i8* message) {
@@ -8,5 +19,30 @@ struct Console {
 
     public static c_result printf(i8* format) {
         return printf(format);
+    }
+
+   public async i32 print(i8* message, i64 len) {
+        i32 stdin = 0;
+        i32 stdout = 1;
+
+        void* handle = std::builtin::coro.handle();
+        i32 ret = __djinn_async_write(stdout, message, len, handle);
+        std::builtin::coro.suspend();
+
+        Debug.assert(ret == 0, "async_write call got invalid return");
+        return ret;
+    }
+
+    public async void* readLine() {
+        i32 stdin = 0;
+        i32 bufferSize = 1024;
+
+        void* buffer = __djinn_malloc(bufferSize);
+        void* handle = std::builtin::coro.handle();
+        i32 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);
+        std::builtin::coro.suspend();
+
+        Debug.assert(ret == 0, "async_read call got invalid return");
+        return buffer;
     }
 }

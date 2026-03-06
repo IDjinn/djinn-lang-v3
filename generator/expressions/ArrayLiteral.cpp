@@ -50,13 +50,14 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
     if (expr.isHeap)
     {
         // Heap allocation
-        llvm::Function* mallocFunc = module->getFunction("malloc");
+        llvm::Function* mallocFunc = module->getFunction("__djinn_malloc");
         if (!mallocFunc)
         {
-            llvm::FunctionType* mallocTy = llvm::FunctionType::get(
-                builder->getPtrTy(), {builder->getInt64Ty()}, false);
-            mallocFunc = llvm::Function::Create(
-                mallocTy, llvm::Function::ExternalLinkage, "malloc", module.get());
+            GENERATOR_ERROR(
+                DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION,
+                "__djinn_malloc function could not be found in module for generate heap allocation!",
+                expr.location
+            );
         }
 
         const llvm::DataLayout& dataLayout = module->getDataLayout();

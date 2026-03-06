@@ -2,6 +2,8 @@
 // Created by Luke on 06/12/2025.
 //
 
+#include <iostream>
+
 #include "../Generator.h"
 #include "../Intrinsics.h"
 #include "llvm/IR/Intrinsics.h"
@@ -18,7 +20,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
     const auto intrinsic = get_intrinsic(call.name.token_name);
     if (!intrinsic)
     {
-        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "unknown intrinsic: " + call.name.token_name);
+        GENERATOR_ERROR(
+            DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION,
+            "unknown intrinsic: " + call.name.token_name,
+            call.location
+        );
     }
 
     switch (*intrinsic)
@@ -27,7 +33,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.empty())
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "sizeof requires 1 argument");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "sizeof requires 1 argument",
+                    call.location
+                );
             }
 
             // Check if the argument is a generic type parameter (e.g., sizeof(T))
@@ -56,7 +66,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.empty())
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "alignof requires 1 argument");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "alignof requires 1 argument",
+                    call.location
+                );
             }
             const llvm::Value* arg = generate_expression(*call.arguments[0]);
             llvm::Type* type = arg->getType();
@@ -69,8 +83,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.size() < 2)
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT,
-                                   "bitcast requires 2 arguments (value, target_type_value)");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "bitcast requires 2 arguments (value, target_type_value)",
+                    call.location
+                );
             }
 
             const auto value = generate_expression(*call.arguments[0]);
@@ -81,8 +98,10 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
 
     case Intrinsic::Trap:
         {
-            const auto trapFunc =
-                llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
+            const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
+            if (!trapFunc)
+                GENERATOR_ERROR(DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION, "missing intrinsic trap()",
+                            call.location);
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
@@ -93,6 +112,9 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             const auto trapFunc =
                 llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::debugtrap);
+            if (!trapFunc)
+                GENERATOR_ERROR(DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION, "missing intrinsic debugtrap()",
+                            call.location);
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
@@ -126,7 +148,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.size() < 2)
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "expect requires 2 arguments");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "expect requires 2 arguments",
+                    call.location
+                );
             }
 
             auto val = generate_expression(*call.arguments[0]);
@@ -141,7 +167,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.empty())
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "likely requires 1 argument");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "likely requires 1 argument",
+                    call.location
+                );
             }
 
             auto cond = generate_expression(*call.arguments[0]);
@@ -154,7 +184,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.empty())
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "unlikely requires 1 argument");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "unlikely requires 1 argument",
+                    call.location
+                );
             }
 
             auto cond = generate_expression(*call.arguments[0]);
@@ -167,7 +201,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.empty())
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "await_block requires 1 argument");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "await_block requires 1 argument",
+                    call.location
+                );
             }
 
             // Generate the operand (async function call returning coroutine handle)
@@ -207,7 +245,11 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
         {
             if (call.arguments.empty())
             {
-                throw CompileError(DiagnosticCode::INVALID_ARGUMENT_COUNT, "typeof requires 1 argument");
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "typeof requires 1 argument",
+                    call.location
+                );
             }
 
             std::string typeName = call.typeofResolvedName;
@@ -231,11 +273,14 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
 
             // Build a str struct: { i8* data, u32 len }
             const std::string resolvedStr = currentScope->resolve_alias("str");
-            StructDef* strDef = currentScope->lookup_struct(resolvedStr);
+            const StructDef* strDef = currentScope->lookup_struct(resolvedStr);
             if (!strDef || !strDef->llvmType)
             {
-                throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
-                                   "tipo 'str' nao encontrado. Adicione: import std::types;");
+                GENERATOR_ERROR(
+                    DiagnosticCode::UNDEFINED_STRUCT,
+                    "tipo 'str' nao encontrado. Adicione: import std::types;",
+                    call.location
+                );
             }
 
             llvm::Value* globalPtr = builder->CreateGlobalStringPtr(typeName, ".typeof");
@@ -575,12 +620,12 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                       ident->identifier.token_name.c_str(), structName.c_str());
             LOG_DEBUG("[generator]   alloca type: '%s'",
                       alloca->getAllocatedType()->isStructTy()
-                          ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
-                          : alloca->getAllocatedType()->isPointerTy()
-                          ? "pointer"
-                          : alloca->getAllocatedType()->isIntegerTy()
-                          ? "integer"
-                          : "other");
+                      ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
+                      : alloca->getAllocatedType()->isPointerTy()
+                      ? "pointer"
+                      : alloca->getAllocatedType()->isIntegerTy()
+                      ? "integer"
+                      : "other");
             if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
             {
                 llvmStructName = structType->getName().str();
@@ -622,8 +667,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     if (structName.empty())
     {
         LOG_DEBUG("[generator]   FAILED: structName empty, throwing 'cannot call method on non-struct type'");
-        throw CompileError(DiagnosticCode::TYPE_MISMATCH,
-                           "cannot call method on non-struct type");
+        GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH, "cannot call method on non-struct type", call.location);
     }
 
     const auto methodStructName = llvmStructName.empty() ? structName : llvmStructName;
@@ -679,6 +723,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         const StructDef* intrinsicDef = currentScope->lookup_struct(structName);
         if (intrinsicDef && intrinsicDef->hasAttribute("intrinsic"))
         {
+            LOG_TRACE("[generator] generate intrinsic call for %s", intrinsicDef->name.c_str());
             return generate_intrinsic_method(call, intrinsicDef, call.name.token_name);
         }
     }
@@ -764,6 +809,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     }
     else
     {
+        // const auto a = structDef->getMethod(call.name.token_name);
         // Instance method call - pass pointer to receiver as self
         // Must pass the original alloca, NOT a copy, so mutations are visible to the caller
         if (const auto* ident = dynamic_cast<const Identifier*>(call.receiver.get()))
@@ -777,19 +823,20 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                 }
                 else if (!alloca->getAllocatedType()->isStructTy())
                 {
-                    // Primitive type impl: pass 'this' by value (load the value)
                     args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "this_val"));
                 }
                 else
                 {
-                    // Local struct variable: alloca IS the ptr to the struct
                     args.push_back(alloca);
                 }
             }
             else
             {
-                throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE,
-                                   "variable not found: " + ident->identifier.token_name);
+                GENERATOR_ERROR(
+                    DiagnosticCode::UNDEFINED_VARIABLE,
+                    "variable not found: " + ident->identifier.token_name,
+                    ident->identifier.location
+                );
             }
         }
         else
