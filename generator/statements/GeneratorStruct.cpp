@@ -407,7 +407,7 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     builder->SetInsertPoint(allocBB);
     auto* coroSizeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_size, {i64Ty});
     llvm::Value* coroSize = builder->CreateCall(coroSizeFn, {}, "coro.size");
-    auto* mallocFn = module->getFunction("malloc");
+    auto* mallocFn = module->getFunction("__djinn_malloc");
     llvm::Value* mem = builder->CreateCall(mallocFn, {coroSize}, "coro.mem");
     builder->CreateBr(beginBB);
 
@@ -425,6 +425,8 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     llvm::Value* prevCoroHandle = asyncCoroHandle;
     llvm::Value* prevPromisePtr = asyncPromisePtr;
     llvm::BasicBlock* prevFinalSuspendBB = asyncFinalSuspendBB;
+    llvm::BasicBlock* prevCleanupBB = asyncCleanupBB;
+    llvm::BasicBlock* prevSuspendBB = asyncSuspendBB;
     llvm::Type* prevAsyncReturnType = asyncReturnType;
 
     inAsyncFunction = true;
@@ -432,6 +434,8 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     asyncCoroHandle = coroHandle;
     asyncPromisePtr = promisePtr;
     asyncFinalSuspendBB = finalSuspendBB;
+    asyncCleanupBB = cleanupBB;
+    asyncSuspendBB = suspendBB;
     asyncReturnType = origReturnType;
 
     // Store parameters
@@ -513,7 +517,7 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);
 
     builder->SetInsertPoint(freeDoFreeBB);
-    auto* freeFn = module->getFunction("free");
+    auto* freeFn = module->getFunction("__djinn_free");
     builder->CreateCall(freeFn, {freeMem});
     builder->CreateBr(suspendBB);
 
@@ -532,5 +536,7 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     asyncCoroHandle = prevCoroHandle;
     asyncPromisePtr = prevPromisePtr;
     asyncFinalSuspendBB = prevFinalSuspendBB;
+    asyncCleanupBB = prevCleanupBB;
+    asyncSuspendBB = prevSuspendBB;
     asyncReturnType = prevAsyncReturnType;
 }

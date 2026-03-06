@@ -75,9 +75,9 @@ DJINN_API void __djinn_free(void* pointer)
 
 DJINN_API void* __djinn_malloc(size_t size)
 {
-    DJINN_TRACE("allocating size %zu on heap", size);
     void* chunk = calloc(1, size);
     DJINN_ASSERT(chunk, "Out of memory");
+    DJINN_TRACE("allocated size %zu on heap at %p", size, &chunk);
     return chunk;
 }
 

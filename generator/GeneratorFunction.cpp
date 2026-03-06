@@ -95,16 +95,17 @@ void Generator::ensure_malloc_free_declared()
     auto* i64Ty = builder->getInt64Ty();
     auto* voidTy = builder->getVoidTy();
 
-    if (!module->getFunction("malloc"))
+    // Use __djinn_malloc/__djinn_free from runtime for memory tracing
+    if (!module->getFunction("__djinn_malloc"))
     {
         auto* mallocTy = llvm::FunctionType::get(ptrTy, {i64Ty}, false);
-        auto* mallocFn = llvm::Function::Create(mallocTy, llvm::Function::ExternalLinkage, "malloc", *module);
+        auto* mallocFn = llvm::Function::Create(mallocTy, llvm::Function::ExternalLinkage, "__djinn_malloc", *module);
         mallocFn->setCallingConv(llvm::CallingConv::C);
     }
-    if (!module->getFunction("free"))
+    if (!module->getFunction("__djinn_free"))
     {
         auto* freeTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
-        auto* freeFn = llvm::Function::Create(freeTy, llvm::Function::ExternalLinkage, "free", *module);
+        auto* freeFn = llvm::Function::Create(freeTy, llvm::Function::ExternalLinkage, "__djinn_free", *module);
         freeFn->setCallingConv(llvm::CallingConv::C);
     }
 }
@@ -178,8 +179,8 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     auto* coroSizeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_size, {i64Ty});
     llvm::Value* coroSize = builder->CreateCall(coroSizeFn, {}, "coro.size");
 
-    // %mem = call ptr @malloc(i64 %size)
-    auto* mallocFn = module->getFunction("malloc");
+    // %mem = call ptr @__djinn_malloc(i64 %size)
+    auto* mallocFn = module->getFunction("__djinn_malloc");
     llvm::Value* mem = builder->CreateCall(mallocFn, {coroSize}, "coro.mem");
     builder->CreateBr(beginBB);
 
@@ -277,7 +278,7 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);
 
     builder->SetInsertPoint(freeDoFreeBB);
-    auto* freeFn = module->getFunction("free");
+    auto* freeFn = module->getFunction("__djinn_free");
     builder->CreateCall(freeFn, {freeMem});
     builder->CreateBr(suspendBB);
 

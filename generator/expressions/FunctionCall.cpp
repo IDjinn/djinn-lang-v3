@@ -511,8 +511,8 @@ llvm::Value* Generator::generate_new_expression(const NewExpression& expr)
     }
     llvm::Function* ctorFunc = ctorIt->second;
 
-    // Declare malloc if not already declared
-    llvm::Function* mallocFunc = module->getFunction("malloc");
+    // Use __djinn_malloc from runtime for memory tracing
+    llvm::Function* mallocFunc = module->getFunction("__djinn_malloc");
     if (!mallocFunc)
     {
         auto* mallocType = llvm::FunctionType::get(
@@ -520,10 +520,10 @@ llvm::Value* Generator::generate_new_expression(const NewExpression& expr)
             {builder->getInt64Ty()},
             false);
         mallocFunc = llvm::Function::Create(
-            mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+            mallocType, llvm::Function::ExternalLinkage, "__djinn_malloc", module.get());
     }
 
-    // Calculate size of struct and call malloc
+    // Calculate size of struct and call __djinn_malloc
     const auto& dataLayout = module->getDataLayout();
     const uint64_t structSize = dataLayout.getTypeAllocSize(structDef->llvmType);
     llvm::Value* sizeVal = builder->getInt64(structSize);

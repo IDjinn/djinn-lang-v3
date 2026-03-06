@@ -121,13 +121,13 @@ void Generator::generate()
         generatedFunctions++;
     }
 
-    // PASS 7: Generate coro wrappers + runtime support for async functions
-    if (hasAsyncFunctions)
-    {
-        ensure_malloc_free_declared();
-        generate_coro_wrappers();
-        generate_runtime_declarations();
-    }
+    // PASS 7: Always generate coro wrappers + runtime support (async by default)
+    // All programs use the runtime for memory tracing (__djinn_malloc/__djinn_free)
+    // and async infrastructure
+    hasAsyncFunctions = true;
+    ensure_malloc_free_declared();
+    generate_coro_wrappers();
+    generate_runtime_declarations();
 
     if (auto mainSym = symbols->lookupFunction("main"))
     {
@@ -197,10 +197,11 @@ void Generator::generate()
 
             builder->CreateRet(result);
         }
-        else if (hasAsyncFunctions)
+        else
         {
-            // Sync main but async functions exist — wrap with runtime init/shutdown
-            // so __djinn_await can use the runtime's queue and waiting structures.
+            // Sync main — always wrap with runtime init/shutdown (async by default)
+            // Runtime is needed for memory tracing (__djinn_malloc/__djinn_free)
+            // and async infrastructure used by any called functions.
             llvm::Function* syncMainFn = functions["main"];
             syncMainFn->setName("__djinn_sync_main");
             functions.erase("main");
@@ -225,6 +226,10 @@ void Generator::generate()
 
             builder->CreateRet(result);
         }
+        // NOTE: Old code had a path where main ran without runtime wrapping
+        // when no async functions existed. Now runtime is always initialized
+        // (async by default). To restore optional non-async mode, add a
+        // compiler flag and guard the else branch with `if (!alwaysAsync)`.
     }
 
     // PASS 8: Verify all symbols were generated

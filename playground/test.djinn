@@ -3,12 +3,11 @@ import std::builtin;
 import std::debug;
 import std::console;
 
+async i32 compute() {
+    return 42;
+}
+
 async i32 main() {
-    i32 r1 = await Console.print("Hello from async I/O!\n", 22);
-    await Console.print("async_print returned %d\n", r1);
-
-    i32 r2 = await Console.print("Second async write!\n", 20);
-    await Console.print("async_print returned %d\n", r2);
-
-    return 0;
+    printf("%d\n", await compute());
+    return 1;
 }

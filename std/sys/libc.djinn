@@ -12,6 +12,6 @@ extern "C" {
   void exit(i32 code);
 
 
-  void*  __djinn_malloc      (i32 size);
+  void*  __djinn_malloc      (size_long size);
   void   __djinn_free        (void* pointer);
 }
