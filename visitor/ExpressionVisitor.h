@@ -6,6 +6,7 @@
 #define DJINN_EXPRESSION_VISITOR_H
 
 // Forward declarations of all expression types (global namespace)
+struct BooleanLiteral;
 struct IntegerLiteral;
 struct FloatLiteral;
 struct StringLiteral;
@@ -40,6 +41,8 @@ namespace djinn
         virtual void visit(const FloatLiteral& expr) = 0;
 
         virtual void visit(const StringLiteral& expr) = 0;
+
+        virtual void visit(const BooleanLiteral& expr) = 0;
 
         virtual void visit(const Identifier& expr) = 0;
 

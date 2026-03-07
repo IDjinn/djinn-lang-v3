@@ -1,0 +1,36 @@
+import std::types;
+
+namespace std::logger;
+
+extern "C" {
+    void* logger_create(void *name, i32 output, i32 level);
+    void* logger_info(void* logger, void *format, ...);
+}
+
+enum LoggerLevel {
+    TRACE,
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR,
+    CRITICAL
+}
+
+struct Logger {
+    void* log;
+    string name;
+
+    Logger(string loggerName){
+        this.name = loggerName;
+
+        this.log = logger_create(loggerName.ptr(), 1, 1);
+    }
+
+    bool isEnabled(LoggerLevel level){
+        return true;
+    }
+
+    void info(string message) {
+        logger_info(this.log, message.ptr());
+    }
+}

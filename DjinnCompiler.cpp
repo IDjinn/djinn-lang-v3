@@ -37,6 +37,13 @@ const std::string preludes[] = {
     "builtin/coro.djinn",
 };
 
+const std::filesystem::path runtimePaths[] = {
+    "runtime/djinn_runtime.c",
+    // "runtime/djinn_runtime.h",
+    // "runtime/logger.h",
+    "runtime/logger.c",
+};
+
 
 // Resolve std library path: try the given path first, then try relative to this source file
 static std::filesystem::path resolve_std_path(const std::filesystem::path& given)
@@ -53,22 +60,6 @@ static std::filesystem::path resolve_std_path(const std::filesystem::path& given
     return given;
 }
 
-// Resolve runtime C file path
-static std::filesystem::path resolve_runtime_path()
-{
-    namespace fs = std::filesystem;
-
-    // Try relative to current directory
-    if (fs::exists("runtime/djinn_runtime.c")) return "runtime/djinn_runtime.c";
-
-    // Try relative to this source file
-    const fs::path thisFile(__FILE__);
-    const auto projectRoot = thisFile.parent_path();
-    const auto candidate = projectRoot / "runtime" / "djinn_runtime.c";
-    if (fs::exists(candidate)) return candidate;
-
-    return "";
-}
 
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
 {
@@ -272,10 +263,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         {
             // Always link runtime (async by default — runtime needed for memory tracing and async infra)
             std::string runtimeArg;
-            const auto runtimePath = resolve_runtime_path();
-            if (!runtimePath.empty())
+            for (auto& runtime_path : runtimePaths)
             {
-                runtimeArg = " " + runtimePath.string();
+                runtimeArg += " " + runtime_path.string();
             }
 
             const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " +
@@ -502,10 +492,9 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         // Always link runtime (async by default — runtime needed for memory tracing and async infra)
         std::string runtimeArg;
-        const auto runtimePath = resolve_runtime_path();
-        if (!runtimePath.empty())
+        for (const auto& runtime_path : runtimePaths)
         {
-            runtimeArg = " " + runtimePath.string();
+            runtimeArg += " " + runtime_path.string();
         }
 
         const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;

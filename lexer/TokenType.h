@@ -104,6 +104,8 @@ enum class TokenType
     AWAIT,
     YIELD,
     SPAWN,
+    FALSE,
+    TRUE,
 };
 
 

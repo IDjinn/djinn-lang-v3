@@ -395,7 +395,7 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
 
     while (runtime.running)
     {
-        BOOL ok = GetQueuedCompletionStatus(
+        const BOOL ok = GetQueuedCompletionStatus(
             runtime.iocp,
             &bytes_transferred,
             &completion_key,
@@ -619,7 +619,7 @@ void __djinn_runtime_init(int num_threads)
 #ifdef _WIN32
     // Initialize Winsock
     WSADATA wsadata;
-    int wsa_err = WSAStartup(MAKEWORD(2, 2), &wsadata);
+    const int wsa_err = WSAStartup(MAKEWORD(2, 2), &wsadata);
     DJINN_ASSERT(wsa_err == 0, "WSAStartup failed");
 #endif
 
@@ -650,7 +650,7 @@ void __djinn_runtime_init(int num_threads)
 
     // Load AcceptEx / ConnectEx function pointers
     {
-        SOCKET tmp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        const SOCKET tmp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (tmp != INVALID_SOCKET)
         {
             DWORD bytes;
@@ -913,7 +913,7 @@ int __djinn_event_loop(void* main_handle)
     run_event_loop_core(main_handle);
 
     void* promise = __djinn_coro_promise(main_handle, 4);
-    int result = *(int*)promise;
+    const int result = *(int*)promise;
     __djinn_coro_destroy(main_handle);
     return result;
 }
@@ -1002,14 +1002,14 @@ int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
 int64_t __djinn_socket_create(void)
 {
 #ifdef _WIN32
-    SOCKET s = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+    const SOCKET s = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
     if (s == INVALID_SOCKET)
     {
         DJINN_TRACE("WSASocket failed: %d", WSAGetLastError());
         return -1;
     }
     // Associate with IOCP
-    HANDLE h = CreateIoCompletionPort((HANDLE)s, runtime.iocp, 0, 0);
+    const HANDLE h = CreateIoCompletionPort((HANDLE)s, runtime.iocp, 0, 0);
     if (!h)
     {
         DJINN_TRACE("CreateIoCompletionPort for socket failed: %lu", GetLastError());
@@ -1054,7 +1054,7 @@ int64_t __djinn_socket_bind(int64_t sock, const char* addr, int port)
     }
 
     // Enable SO_REUSEADDR
-    int optval = 1;
+    const int optval = 1;
 #ifdef _WIN32
     setsockopt((SOCKET)sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval));
 #else
@@ -1122,7 +1122,7 @@ int64_t __djinn_async_accept(int64_t server_sock, void* coro)
 
     memset(&req->overlapped, 0, sizeof(req->overlapped));
     DWORD bytes_received;
-    BOOL ok = pfnAcceptEx(
+    const BOOL ok = pfnAcceptEx(
         (SOCKET)server_sock,
         req->accepted_socket,
         req->accept_buf,
@@ -1169,7 +1169,7 @@ int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* co
     djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
     if (!req) return -1;
 
-    size_t addr_len = strlen(addr);
+    const size_t addr_len = strlen(addr);
 
     req->type = DJINN_IO_CONNECT;
     req->socket = sock;
@@ -1194,7 +1194,7 @@ int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* co
     bind((SOCKET)sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
 
     memset(&req->overlapped, 0, sizeof(req->overlapped));
-    BOOL ok = pfnConnectEx(
+    const BOOL ok = pfnConnectEx(
         (SOCKET)sock,
         (struct sockaddr*)&sa,
         sizeof(sa),
@@ -1263,7 +1263,7 @@ int64_t __djinn_async_send(int64_t sock, void* buf, int64_t count, void* coro)
     req->wsabuf.len = (ULONG)count;
 
     DWORD bytes_sent;
-    int ret = WSASend((SOCKET)sock, &req->wsabuf, 1, &bytes_sent, 0, &req->overlapped, NULL);
+    const int ret = WSASend((SOCKET)sock, &req->wsabuf, 1, &bytes_sent, 0, &req->overlapped, NULL);
     if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
     {
         DJINN_TRACE("WSASend failed: %d", WSAGetLastError());
@@ -1310,7 +1310,7 @@ int64_t __djinn_async_recv(int64_t sock, void* buf, int64_t count, void* coro)
 
     DWORD bytes_received;
     DWORD flags = 0;
-    int ret = WSARecv((SOCKET)sock, &req->wsabuf, 1, &bytes_received, &flags, &req->overlapped, NULL);
+    const int ret = WSARecv((SOCKET)sock, &req->wsabuf, 1, &bytes_received, &flags, &req->overlapped, NULL);
     if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
     {
         DJINN_TRACE("WSARecv failed: %d", WSAGetLastError());
@@ -1490,7 +1490,7 @@ void __djinn_mutex_destroy(djinn_mutex_t* mutex)
 int64_t __djinn_console_write(const char* str, void* coro)
 {
     if (!str) return 0;
-    int64_t len = (int64_t)strlen(str);
+    const int64_t len = (int64_t)strlen(str);
     if (len <= 0) return 0;
     return __djinn_async_write(1, (void*)str, len, coro);
 }
@@ -1498,7 +1498,7 @@ int64_t __djinn_console_write(const char* str, void* coro)
 int64_t __djinn_console_error(const char* str, void* coro)
 {
     if (!str) return 0;
-    int64_t len = (int64_t)strlen(str);
+    const int64_t len = (int64_t)strlen(str);
     if (len <= 0) return 0;
     return __djinn_async_write(2, (void*)str, len, coro);
 }

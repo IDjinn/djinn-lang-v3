@@ -23,6 +23,11 @@ namespace djinn
         _result = _generator.generate_string_literal(expr);
     }
 
+    void GeneratorExpressionVisitor::visit(const BooleanLiteral& expr)
+    {
+        _result = llvm::ConstantInt::get(_generator.builder->getInt1Ty(), expr.value == "true" ? 1 : 0);
+    }
+
     void GeneratorExpressionVisitor::visit(const Identifier& expr)
     {
         _result = _generator.generate_identifier(expr);

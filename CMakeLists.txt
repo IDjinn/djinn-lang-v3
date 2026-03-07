@@ -278,6 +278,8 @@ add_dependencies(tests clean_djinn_build)
 add_library(djinn_runtime STATIC
         runtime/djinn_runtime.c
         runtime/djinn_runtime.h
+        runtime/logger.h
+        runtime/logger.c
 )
 target_include_directories(djinn_runtime PUBLIC "${CMAKE_SOURCE_DIR}/runtime")
 set_target_properties(djinn_runtime PROPERTIES LINKER_LANGUAGE C)

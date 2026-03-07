@@ -18,6 +18,12 @@ namespace djinn
         _result = std::make_shared<FloatLiteralSymbol>(expr.value, 64, expr.location);
     }
 
+    void BinderExpressionVisitor::visit(const BooleanLiteral& expr)
+    {
+        _result = std::make_shared<
+            IntegerLiteralSymbol>(std::to_string(expr.value == "true" ? 1 : 0), 1, expr.location);
+    }
+
     void BinderExpressionVisitor::visit(const StringLiteral& expr)
     {
         _result = std::make_shared<StringLiteralSymbol>(expr.value, expr.location);

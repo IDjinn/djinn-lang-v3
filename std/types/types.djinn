@@ -55,6 +55,10 @@ struct string {
     public i8* ptr() {
         return this.data;
     }
+
+    public i32 len() {
+        return this.len;
+    }
 }
 
 

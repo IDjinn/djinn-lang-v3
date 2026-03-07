@@ -160,6 +160,23 @@ struct FloatLiteral : Expression
     }
 };
 
+struct BooleanLiteral : Expression
+{
+    std::string value;
+
+    explicit BooleanLiteral(std::string val) : value(std::move(val))
+    {
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "BooleanLiteral(" << value << ")";
+    }
+};
+
 struct Identifier : Expression
 {
     SourceIdentifier identifier;

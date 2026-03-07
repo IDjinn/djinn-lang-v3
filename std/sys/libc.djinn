@@ -3,6 +3,7 @@ namespace std::libc;
 
 extern "C" {
   c_result printf(i8* fmt, ...);
+
   void* malloc(size_long size);
   void* realloc(void* ptr, size_long new_size);
   void* memcpy(void* dest, void* src, size_long n);

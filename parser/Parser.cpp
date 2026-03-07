@@ -1429,6 +1429,11 @@ std::unique_ptr<Expression> Parser::parse_primary()
         return std::make_unique<FloatLiteral>(previous().value);
     }
 
+    if (match(TokenType::TRUE) || match(TokenType::FALSE))
+    {
+        return std::make_unique<BooleanLiteral>(previous().value);
+    }
+
     if (match(TokenType::STRING_LITERAL))
     {
         return std::make_unique<StringLiteral>(previous().value);
