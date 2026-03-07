@@ -127,7 +127,7 @@ file(GLOB_RECURSE DJINN_HEADERS
         visitor/*.h
 )
 
-include_directories(${CMAKE_SOURCE_DIR}/include)
+# Scoped per-target below instead of global include_directories
 
 
 message(STATUS "LIBXML2_INCLUDE_DIR = ${LIBXML2_INCLUDE_DIR}")
@@ -180,10 +180,12 @@ if (DJINN_DISABLE_BINDER_ASSERTS)
     target_compile_definitions(djinn_lib PUBLIC DJINN_TESTING)
 endif ()
 
+target_include_directories(djinn_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(djinn_lib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_options(djinn_lib PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
 target_link_libraries(djinn_lib PRIVATE ${LIBXML2_LIBRARY})
+target_link_libraries(djinn_lib PUBLIC ryml::ryml)
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
 
 add_executable(djinn main.cpp)
@@ -194,14 +196,23 @@ target_link_libraries(djinn PRIVATE djinn_lib)
 # LSP Server
 # ========================
 
-# Fetch nlohmann/json
+# Fetch dependencies
 include(FetchContent)
+
 FetchContent_Declare(
         nlohmann_json
         GIT_REPOSITORY https://github.com/nlohmann/json.git
         GIT_TAG v3.11.3
 )
-FetchContent_MakeAvailable(nlohmann_json)
+
+FetchContent_Declare(
+        rapidyaml
+        GIT_REPOSITORY https://github.com/biojppm/rapidyaml.git
+        GIT_TAG v0.7.2
+        GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(nlohmann_json rapidyaml)
 
 add_executable(djinn-lsp
         lsp/main.cpp

@@ -14,6 +14,11 @@
 #include "lexer/Token.h"
 #include "parser/AST.h"
 
+struct RuntimeProperties
+{
+    std::string loggerLevel = "INFO";
+};
+
 struct CompilerOptions
 {
     bool print_ast = false;
@@ -31,6 +36,7 @@ struct CompilerOptions
     std::string outputDirectory{"build"};
     std::filesystem::path stdLibPath{"./std"};
     std::vector<std::filesystem::path> linkLibraries{};
+    RuntimeProperties runtimeProperties{};
 };
 
 struct CompilerResult

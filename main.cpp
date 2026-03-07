@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "DjinnCompiler.h"
+#include "config/ProjectConfig.h"
 #include "utils/Logger.h"
 
 #define BINDER_DEBUG 1
@@ -195,6 +196,19 @@ int main(int argc, char* argv[])
     {
         baseDir = baseDir.parent_path();
     }
+
+    // Load project config if djinn.proj exists
+    const auto projFile = baseDir / "djinn.proj";
+    if (fs::exists(projFile))
+    {
+        LOG_DEBUG("loading project file %s", projFile.string().c_str());
+        const auto config = ProjectConfig::load(projFile);
+        if (!config.name.empty())
+            LOG_INFO("Project: %s v%s", config.name.c_str(), config.version.c_str());
+
+        options.runtimeProperties.loggerLevel = config.runtime.logger.level;
+    }
+
     result = DjinnCompiler::compileFromDirectory(baseDir, options);
 
     return result.returnCode;

@@ -68,6 +68,13 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
     assert(!options.outputDirectory.empty() && "You need give output directory!");
 
     fs::create_directories(options.outputDirectory);
+
+    // Write runtime.properties for the compiled binary
+    {
+        std::ofstream props(options.outputDirectory + "/runtime.properties");
+        props << "logger.level=" << options.runtimeProperties.loggerLevel << "\n";
+    }
+
     DiagnosticEngine diagnostics;
     std::vector<std::shared_ptr<Program>> programs;
 
