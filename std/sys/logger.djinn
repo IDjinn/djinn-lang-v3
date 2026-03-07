@@ -3,8 +3,20 @@ import std::types;
 namespace std::logger;
 
 extern "C" {
-    void* logger_create(void *name, i32 output, i32 level);
-    void* logger_info(void* logger, void *format, ...);
+    void* logger_create(i8* name, i32 output, i32 level);
+    void logger_trace(void* logger, i8* format, ...);
+    void logger_debug(void* logger, i8* format, ...);
+    void logger_info(void* logger, i8* format, ...);
+    void logger_warn(void* logger, i8* format, ...);
+    void logger_error(void* logger, i8* format, ...);
+    void logger_fatal(void* logger, i8* format, ...);
+    void logger_set_level(void* logger, i32 level);
+    void logger_destroy(void* logger);
+}
+
+enum LoggerOutput {
+    STDOUT,
+    STDERR
 }
 
 enum LoggerLevel {
@@ -13,24 +25,47 @@ enum LoggerLevel {
     INFO,
     WARN,
     ERROR,
-    CRITICAL
+    FATAL
 }
 
 struct Logger {
     void* log;
-    string name;
+    str name;
 
-    Logger(string loggerName){
+    Logger(str loggerName){
         this.name = loggerName;
-
-        this.log = logger_create(loggerName.ptr(), 1, 1);
+        this.log = logger_create(loggerName.ptr(), 1, 0);
     }
 
-    bool isEnabled(LoggerLevel level){
-        return true;
+    void trace(str message) {
+        logger_trace(this.log, message.ptr());
     }
 
-    void info(string message) {
+    void debug(str message) {
+        logger_debug(this.log, message.ptr());
+    }
+
+    void info(str message) {
         logger_info(this.log, message.ptr());
+    }
+
+    void warn(str message) {
+        logger_warn(this.log, message.ptr());
+    }
+
+    void error(str message) {
+        logger_error(this.log, message.ptr());
+    }
+
+    void fatal(str message) {
+        logger_fatal(this.log, message.ptr());
+    }
+
+    void setLevel(i32 level) {
+        logger_set_level(this.log, level);
+    }
+
+    void destroy() {
+        logger_destroy(this.log);
     }
 }

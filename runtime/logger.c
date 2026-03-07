@@ -27,7 +27,7 @@ static void log_internal(Logger* logger, LogLevel level, const char* fmt, va_lis
     char timebuf[32];
     get_timestamp(timebuf, sizeof(timebuf));
 
-    fprintf(logger->output, "[%s] [%s] [%s] ",
+    fprintf(logger->output, "[%s] [%-5s] [%s] ",
             timebuf,
             level_names[level],
             logger->name);
@@ -38,12 +38,12 @@ static void log_internal(Logger* logger, LogLevel level, const char* fmt, va_lis
     fflush(logger->output);
 }
 
-Logger* logger_create(const char* name, FILE* output, LogLevel level)
+Logger* logger_create(const char* name, int output, LogLevel level)
 {
     Logger* logger = malloc(sizeof(Logger));
 
     logger->name = name;
-    logger->output = output;
+    logger->output = (output == 2) ? stderr : stdout;
     logger->level = level;
 
     return logger;

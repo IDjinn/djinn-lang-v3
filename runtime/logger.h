@@ -24,7 +24,7 @@ typedef struct
     const char* name;
 } Logger;
 
-Logger* logger_create(const char* name, FILE* output, LogLevel level);
+Logger* logger_create(const char* name, int output, LogLevel level);
 
 void logger_set_level(Logger* logger, LogLevel level);
 

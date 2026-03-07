@@ -156,7 +156,12 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
         if (allocaInit->getAllocatedType()->isStructTy())
         {
             allocaInit->setName(expr.name.token_name);
-            const auto qualifiedName = currentScope->resolve_alias(expr.type.structName);
+            std::string qualifiedName = currentScope->resolve_alias(expr.type.structName);
+            // When type is 'auto', structName is empty — use LLVM struct name as fallback
+            if (qualifiedName.empty())
+            {
+                qualifiedName = allocaInit->getAllocatedType()->getStructName().str();
+            }
             LOG_DEBUG("[generator]   struct alloca reuse: var='%s' structName='%s' resolved='%s' llvmType='%s'",
                       expr.name.token_name.c_str(), expr.type.structName.c_str(), qualifiedName.c_str(),
                       allocaInit->getAllocatedType()->getStructName().str().c_str());

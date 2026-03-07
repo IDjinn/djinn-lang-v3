@@ -639,6 +639,18 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
         return builder->CreateFPToSI(value, targetType, "fptosi");
     }
 
+    // Load struct from alloca when target expects struct by value
+    if (srcType->isPointerTy() && targetType->isStructTy())
+    {
+        if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
+        {
+            if (alloca->getAllocatedType() == targetType)
+            {
+                return builder->CreateLoad(targetType, alloca, "struct_load");
+            }
+        }
+    }
+
     if (srcType->isPointerTy() && targetType->isPointerTy())
     {
         return builder->CreatePointerCast(value, targetType, "ptrcast");
