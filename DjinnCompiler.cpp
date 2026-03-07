@@ -24,7 +24,10 @@
 #define DJINN_CLANG_PATH "clang"
 #endif
 
-#define CLANG_ARGS "-o2 "
+// NOTE: -fsanitize=address is incompatible with LLVM coroutines (false positives
+// on coro frame access after resume). Use __djinn_malloc/__djinn_free runtime
+// tracing instead for memory debugging.
+#define CLANG_ARGS "-O2 "
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
@@ -275,7 +278,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 runtimeArg = " " + runtimePath.string();
             }
 
-            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS + llPath + runtimeArg + " -o " +
+            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " +
                 out_file_path +
                 ".exe";
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
@@ -505,7 +508,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             runtimeArg = " " + runtimePath.string();
         }
 
-        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS + llPath + runtimeArg + " -o " + exePath;
+        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;
         LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
         int clangResult = system(cmdString.c_str());
         if (clangResult != 0)

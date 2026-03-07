@@ -72,7 +72,11 @@ private:
 
     void resolve_struct_body(const StructSymbol& struct_symbol);
 
+    void forward_declare_struct_methods(const StructSymbol& struct_symbol);
+
     void generate_struct_methods(const StructSymbol& struct_symbol);
+
+    void forward_declare_method(const StructSymbol& struc, const MethodSymbol& method);
 
     void generate_method(const StructSymbol& struc, const MethodSymbol& method);
 

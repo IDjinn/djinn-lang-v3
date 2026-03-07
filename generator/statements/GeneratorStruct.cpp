@@ -89,6 +89,25 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
     }
 }
 
+void Generator::forward_declare_struct_methods(const StructSymbol& struct_symbol)
+{
+    if (struct_symbol.isGeneric())
+    {
+        return;
+    }
+
+    const StructDef* def = currentScope->lookup_struct(struct_symbol.name);
+    if (!def || !def->llvmType)
+    {
+        throw std::runtime_error("Struct not found for method forward-declare: " + struct_symbol.name);
+    }
+
+    for (const auto& method : struct_symbol.methods)
+    {
+        forward_declare_method(struct_symbol, *method);
+    }
+}
+
 void Generator::generate_struct_methods(const StructSymbol& struct_symbol)
 {
     if (struct_symbol.isGeneric())
@@ -237,6 +256,36 @@ void Generator::generate_property(const StructSymbol& struc, const PropertySymbo
     }
 }
 
+void Generator::forward_declare_method(const StructSymbol& struc, const MethodSymbol& method)
+{
+    StructDef* def = currentScope->lookup_struct(struc.name);
+    if (!def || !def->llvmType) return;
+
+    const std::string mangledName = struc.name + "__" + method.name;
+    if (functions.contains(mangledName)) return; // already declared
+
+    llvm::Type* returnType = generate_type(method.returnType);
+    llvm::Type* actualReturnType = method.isAsync
+                                       ? llvm::PointerType::getUnqual(*context)
+                                       : returnType;
+
+    std::vector<llvm::Type*> paramTypes;
+    if (!method.isStatic)
+    {
+        paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
+    }
+    for (const auto& paramType : method.paramTypes)
+    {
+        paramTypes.push_back(generate_type(paramType));
+    }
+
+    const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
+    const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
+
+    functions[mangledName] = llvmFunc;
+    def->methodFunctions[method.name] = llvmFunc;
+}
+
 void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& method)
 {
     push_scope();
@@ -250,32 +299,40 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 
     const std::string mangledName = struc.name + "__" + method.name;
 
-    llvm::Type* returnType = generate_type(method.returnType);
-
-    // Async methods return ptr (coroutine handle) instead of their declared return type
-    llvm::Type* actualReturnType = method.isAsync
-                                       ? llvm::PointerType::getUnqual(*context)
-                                       : returnType;
-
-    std::vector<llvm::Type*> paramTypes;
-    const bool isStatic = method.isStatic;
-    if (!isStatic)
+    // Use already forward-declared function, or create it now
+    llvm::Function* llvmFunc = nullptr;
+    if (auto it = functions.find(mangledName); it != functions.end())
     {
-        paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
+        llvmFunc = it->second;
     }
-
-    for (const auto& paramType : method.paramTypes)
+    else
     {
-        paramTypes.push_back(generate_type(paramType));
+        llvm::Type* returnType = generate_type(method.returnType);
+        llvm::Type* actualReturnType = method.isAsync
+                                           ? llvm::PointerType::getUnqual(*context)
+                                           : returnType;
+
+        std::vector<llvm::Type*> paramTypes;
+        if (!method.isStatic)
+        {
+            paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
+        }
+        for (const auto& paramType : method.paramTypes)
+        {
+            paramTypes.push_back(generate_type(paramType));
+        }
+
+        const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
+        llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
+
+        functions[mangledName] = llvmFunc;
+        def->methodFunctions[method.name] = llvmFunc;
     }
-
-    const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
-    const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
-
-    functions[mangledName] = llvmFunc;
-    def->methodFunctions[method.name] = llvmFunc;
 
     currentFunction = llvmFunc;
+
+    const bool isStatic = method.isStatic;
+    llvm::Type* returnType = generate_type(method.returnType);
 
     if (method.isAsync)
     {
@@ -407,7 +464,8 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     builder->SetInsertPoint(allocBB);
     auto* coroSizeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_size, {i64Ty});
     llvm::Value* coroSize = builder->CreateCall(coroSizeFn, {}, "coro.size");
-    auto* mallocFn = module->getFunction("__djinn_malloc");
+    // NOTE: coro frames use standard malloc/free — CoroSplit expects these names
+    auto* mallocFn = module->getFunction("malloc");
     llvm::Value* mem = builder->CreateCall(mallocFn, {coroSize}, "coro.mem");
     builder->CreateBr(beginBB);
 
@@ -437,6 +495,21 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     asyncCleanupBB = cleanupBB;
     asyncSuspendBB = suspendBB;
     asyncReturnType = origReturnType;
+
+    // --- initial suspend: method returns handle immediately, body runs on first resume ---
+    {
+        auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_suspend);
+        llvm::Value* initSusp = builder->CreateCall(coroSuspendFn, {
+                                                        llvm::ConstantTokenNone::get(*context),
+                                                        builder->getFalse()
+                                                    }, "coro.init.susp");
+        auto* initResumeBB = llvm::BasicBlock::Create(*context, "init.resume", llvmFunc);
+        auto* initSwitch = builder->CreateSwitch(initSusp, suspendBB, 2);
+        initSwitch->addCase(builder->getInt8(0), initResumeBB);
+        initSwitch->addCase(builder->getInt8(1), cleanupBB);
+        builder->SetInsertPoint(initResumeBB);
+    }
 
     // Store parameters
     auto argIt = llvmFunc->arg_begin();
@@ -517,7 +590,7 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
     builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);
 
     builder->SetInsertPoint(freeDoFreeBB);
-    auto* freeFn = module->getFunction("__djinn_free");
+    auto* freeFn = module->getFunction("free");
     builder->CreateCall(freeFn, {freeMem});
     builder->CreateBr(suspendBB);
 

@@ -87,7 +87,17 @@ void Generator::generate()
         resolve_struct_body(*std::dynamic_pointer_cast<StructSymbol>(sym));
     }
 
-    // PASS 5: Generate struct methods and properties
+    // PASS 5a: Forward-declare all struct methods (so methods can reference each other)
+    for (const auto& sym : symbols->get_all_structs())
+    {
+        const auto& structSym = *std::dynamic_pointer_cast<StructSymbol>(sym);
+        if (!is_primitive_impl(structSym))
+        {
+            forward_declare_struct_methods(structSym);
+        }
+    }
+
+    // PASS 5b: Generate struct method bodies and properties
     for (const auto& sym : symbols->get_all_structs())
     {
         const auto& structSym = *std::dynamic_pointer_cast<StructSymbol>(sym);
@@ -219,7 +229,16 @@ void Generator::generate()
             auto* initFn = module->getFunction("__djinn_runtime_init");
             builder->CreateCall(initFn, {builder->getInt32(4)});
 
-            llvm::Value* result = builder->CreateCall(syncMainFn, {}, "sync.result");
+            llvm::Value* result;
+            if (syncMainFn->getReturnType()->isVoidTy())
+            {
+                builder->CreateCall(syncMainFn, {});
+                result = builder->getInt32(0);
+            }
+            else
+            {
+                result = builder->CreateCall(syncMainFn, {}, "sync.result");
+            }
 
             auto* shutdownFn = module->getFunction("__djinn_runtime_shutdown");
             builder->CreateCall(shutdownFn);

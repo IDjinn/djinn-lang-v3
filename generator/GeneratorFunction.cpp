@@ -95,7 +95,21 @@ void Generator::ensure_malloc_free_declared()
     auto* i64Ty = builder->getInt64Ty();
     auto* voidTy = builder->getVoidTy();
 
-    // Use __djinn_malloc/__djinn_free from runtime for memory tracing
+    // Standard malloc/free for coro frames (CoroSplit expects these)
+    if (!module->getFunction("malloc"))
+    {
+        auto* mallocTy = llvm::FunctionType::get(ptrTy, {i64Ty}, false);
+        auto* mallocFn = llvm::Function::Create(mallocTy, llvm::Function::ExternalLinkage, "malloc", *module);
+        mallocFn->setCallingConv(llvm::CallingConv::C);
+    }
+    if (!module->getFunction("free"))
+    {
+        auto* freeTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
+        auto* freeFn = llvm::Function::Create(freeTy, llvm::Function::ExternalLinkage, "free", *module);
+        freeFn->setCallingConv(llvm::CallingConv::C);
+    }
+
+    // __djinn_malloc/__djinn_free from runtime for user-level allocations (new, arrays)
     if (!module->getFunction("__djinn_malloc"))
     {
         auto* mallocTy = llvm::FunctionType::get(ptrTy, {i64Ty}, false);
@@ -179,8 +193,9 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     auto* coroSizeFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_size, {i64Ty});
     llvm::Value* coroSize = builder->CreateCall(coroSizeFn, {}, "coro.size");
 
-    // %mem = call ptr @__djinn_malloc(i64 %size)
-    auto* mallocFn = module->getFunction("__djinn_malloc");
+    // %mem = call ptr @malloc(i64 %size)
+    // NOTE: coro frames use standard malloc/free — CoroSplit expects these names
+    auto* mallocFn = module->getFunction("malloc");
     llvm::Value* mem = builder->CreateCall(mallocFn, {coroSize}, "coro.mem");
     builder->CreateBr(beginBB);
 
@@ -214,6 +229,21 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     asyncCleanupBB = cleanupBB;
     asyncSuspendBB = suspendBB;
     asyncReturnType = origReturnType;
+
+    // --- initial suspend: function returns handle immediately, body runs on first resume ---
+    {
+        auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_suspend);
+        llvm::Value* initSusp = builder->CreateCall(coroSuspendFn, {
+                                                        llvm::ConstantTokenNone::get(*context),
+                                                        builder->getFalse()
+                                                    }, "coro.init.susp");
+        auto* initResumeBB = llvm::BasicBlock::Create(*context, "init.resume", llvmFunc);
+        auto* initSwitch = builder->CreateSwitch(initSusp, suspendBB, 2);
+        initSwitch->addCase(builder->getInt8(0), initResumeBB);
+        initSwitch->addCase(builder->getInt8(1), cleanupBB);
+        builder->SetInsertPoint(initResumeBB);
+    }
 
     // Store function parameters
     size_t idx = 0;
@@ -278,7 +308,7 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     builder->CreateCondBr(isNull, suspendBB, freeDoFreeBB);
 
     builder->SetInsertPoint(freeDoFreeBB);
-    auto* freeFn = module->getFunction("__djinn_free");
+    auto* freeFn = module->getFunction("free");
     builder->CreateCall(freeFn, {freeMem});
     builder->CreateBr(suspendBB);
 
