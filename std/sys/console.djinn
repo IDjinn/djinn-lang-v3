@@ -8,8 +8,8 @@ extern "C" {
     i64    __djinn_console_writeln   (void* str, void* coro_handle);
     i64    __djinn_console_error     (void* str, void* coro_handle);
     i64    __djinn_console_read_line (void* str, void* coro_handle);
-    i64    __djinn_async_write (i32 fd, void* buf, i64 count, void* coro_handle);
-    i64    __djinn_async_read  (i32 fd, void* buf, i64 count, void* coro_handle);
+    i64    __djinn_async_write       (i32 fd, void* buf, i64 count, void* coro_handle);
+    i64    __djinn_async_read        (i32 fd, void* buf, i64 count, void* coro_handle);
 }
 
 struct Console {
@@ -21,7 +21,7 @@ struct Console {
         return printf(format);
     }
 
-   public async i32 print(i8* message, i64 len) {
+   public static async i32 print(i8* message, i64 len) {
         i32 stdin = 0;
         i32 stdout = 1;
 
@@ -33,7 +33,7 @@ struct Console {
         return ret;
     }
 
-    public async void* readLine() {
+    public static async void* readLine() {
         i32 stdin = 0;
         i32 bufferSize = 1024;
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.26)
 
 cmake_policy(SET CMP0091 NEW)
 
-project(djinn LANGUAGES CXX)
+project(djinn LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -270,6 +270,17 @@ add_custom_target(clean_djinn_build
         COMMENT "Cleaning djinn_build temp directory"
 )
 add_dependencies(tests clean_djinn_build)
+
+# ========================
+# Runtime (C library — not linked into djinn, used by clang at emit time)
+# ========================
+
+add_library(djinn_runtime STATIC
+        runtime/djinn_runtime.c
+        runtime/djinn_runtime.h
+)
+target_include_directories(djinn_runtime PUBLIC "${CMAKE_SOURCE_DIR}/runtime")
+set_target_properties(djinn_runtime PROPERTIES LINKER_LANGUAGE C)
 
 # Copy runtime directory to build directory for clang linking
 add_custom_command(TARGET djinn_lib POST_BUILD
