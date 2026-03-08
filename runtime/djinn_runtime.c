@@ -419,6 +419,8 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
         djinn_io_request_t* req = REQ_FROM_OVERLAPPED(ovl);
         req->completed = 1;
 
+        DJINN_TRACE("IOCP completion: type=%d, ok=%d, bytes=%lu", req->type, (int)ok, bytes_transferred);
+
         if (!ok)
         {
             // I/O error
@@ -431,6 +433,7 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
             {
                 case DJINN_IO_ACCEPT:
                     req->result = (int64_t)req->accepted_socket;
+                    DJINN_TRACE("accept completed: client_fd=%lld", (long long)req->result);
                     // Update accepted socket context so it inherits server socket properties
                     setsockopt(
                         req->accepted_socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
@@ -450,10 +453,13 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
 
                 case DJINN_IO_RECV:
                     req->result = (int64_t)bytes_transferred;
+                    DJINN_TRACE("recv completed: bytes=%lld, socket=%lld", (long long)req->result,
+                                (long long)req->socket);
                     break;
 
                 case DJINN_IO_SEND:
                     req->result = (int64_t)bytes_transferred;
+                    DJINN_TRACE("send completed: bytes=%lld, socket=%lld", (long long)req->result, (long long)req->socket);
                     break;
 
                 default:
@@ -462,9 +468,20 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
             }
         }
 
+        if (req->out_result)
+        {
+            *req->out_result = req->result;
+            DJINN_TRACE("wrote out_result=%lld to %p", (long long)req->result, (void*)req->out_result);
+        }
+
         if (req->waiting_coro)
         {
+            DJINN_TRACE("resuming coro %p after IO type=%d", req->waiting_coro, req->type);
             enqueue_task(&runtime.ready_queue, req->waiting_coro);
+        }
+        else
+        {
+            DJINN_TRACE("WARNING: no waiting_coro for IO type=%d", req->type);
         }
         free(req);
     }
@@ -557,12 +574,17 @@ static void* socket_poller_thread_func(void* arg)
                 }
 
                 default:
-                    break;
+                break;
             }
 
-            if (req->completed && req->waiting_coro)
+            if (req->completed)
             {
-                enqueue_task(&runtime.ready_queue, req->waiting_coro);
+                if (req->out_result)
+                    *req->out_result = req->result;
+
+                if (req->waiting_coro)
+                    enqueue_task(&runtime.ready_queue, req->waiting_coro);
+
                 free(req);
             }
         }
@@ -1106,7 +1128,7 @@ int64_t __djinn_socket_listen(int64_t socket_fd, int backlog)
 // Socket API — Async Operations (coroutine-aware)
 // ════════════════════════════════════════════════════════════════════
 
-int64_t __djinn_async_accept(int64_t server_sock, void* coro)
+int64_t __djinn_async_accept(int64_t server_sock, int64_t* out_result, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
 
@@ -1115,6 +1137,7 @@ int64_t __djinn_async_accept(int64_t server_sock, void* coro)
 
     req->type = DJINN_IO_ACCEPT;
     req->socket = server_sock;
+    req->out_result = out_result;
     req->waiting_coro = coro;
 
 #ifdef _WIN32
@@ -1165,11 +1188,11 @@ int64_t __djinn_async_accept(int64_t server_sock, void* coro)
     }
 #endif
 
-    DJINN_TRACE("accepted socket: %d", req->accepted_socket);
+    DJINN_TRACE("async_accept submitted for server socket: %lld", (long long)server_sock);
     return 0;
 }
 
-int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, void* coro)
+int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, int64_t* out_result, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
     DJINN_ASSERT(address, "addr is NULL");
@@ -1181,6 +1204,7 @@ int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, 
 
     req->type = DJINN_IO_CONNECT;
     req->socket = socket_fd;
+    req->out_result = out_result;
     req->waiting_coro = coro;
     req->port = port;
     memcpy(req->addr, address, addr_len < sizeof(req->addr) ? addr_len : sizeof(req->addr) - 1);
@@ -1250,7 +1274,7 @@ int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, 
     return 0;
 }
 
-int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, void* coro)
+int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
     DJINN_ASSERT(buffer, "buf is NULL");
@@ -1263,6 +1287,7 @@ int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, void*
     req->socket = socket_fd;
     req->buffer = buffer;
     req->count = count;
+    req->out_result = out_result;
     req->waiting_coro = coro;
 
 #ifdef _WIN32
@@ -1296,11 +1321,13 @@ int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, void*
     return 0;
 }
 
-int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, void* coro)
+int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
     DJINN_ASSERT(buffer, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
+
+    DJINN_TRACE("reading buffer size %d", (int)count);
 
     djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
@@ -1309,6 +1336,7 @@ int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, void*
     req->socket = socket_fd;
     req->buffer = buffer;
     req->count = count;
+    req->out_result = out_result;
     req->waiting_coro = coro;
 
 #ifdef _WIN32
@@ -1322,7 +1350,7 @@ int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, void*
     if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
     {
         DJINN_TRACE("WSARecv failed: %d", WSAGetLastError());
-        free(req);
+        __djinn_free(req);
         return -1;
     }
 #else
@@ -1340,6 +1368,7 @@ int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, void*
     }
 #endif
 
+    DJINN_TRACE("recv done");
     return 0;
 }
 
