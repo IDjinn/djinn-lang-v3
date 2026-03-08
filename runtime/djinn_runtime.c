@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "logger.h"
+
 #ifdef _WIN32
     #include <io.h>
     #pragma comment(lib, "ws2_32.lib")
@@ -29,17 +31,20 @@
 do {                                                                   \
     if (!(condition)) {                                                \
         fprintf(stderr,                                                \
-            "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",    \
+            "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",     \
             message, __FILE__, __LINE__                                \
         );                                                             \
         abort();                                                       \
     }                                                                  \
 } while (0)
 
+Logger* logger;
 #define DJINN_ENABLE_TRACE
-
 #ifdef DJINN_ENABLE_TRACE
-    #define DJINN_TRACE(message, ...) fprintf(stdout, "[RUNTIME] " message "\n", ##__VA_ARGS__)
+#define DJINN_TRACE(message, ...) do {                         \
+    DJINN_ASSERT(logger, "Logger not initlizatied properly!"); \
+    logger_trace(logger, message, ##__VA_ARGS__);              \
+} while(0)
 #else
     #define DJINN_TRACE(message, ...) do {} while (0)
 #endif
@@ -615,6 +620,7 @@ static void* worker_thread(void* arg)
 void __djinn_runtime_init(int num_threads)
 {
     memset(&runtime, 0, sizeof(runtime));
+    logger = logger_create("RUNTIME", 1, LOG_TRACE);
 
 #ifdef _WIN32
     // Initialize Winsock
