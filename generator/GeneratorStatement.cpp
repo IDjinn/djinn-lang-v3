@@ -18,8 +18,23 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
     {
         if (stmt.value && asyncPromisePtr && asyncReturnType && !asyncReturnType->isVoidTy())
         {
-            auto val = generate_expression(*stmt.value);
-            val = cast_value(val, asyncReturnType);
+            llvm::Value* val = nullptr;
+
+            // Handle brace initializers for struct returns (e.g. return { .fd = x, .connected = true })
+            if (auto* braceInit = dynamic_cast<const BraceInitializer*>(stmt.value.get()))
+            {
+                if (auto* structType = llvm::dyn_cast<llvm::StructType>(asyncReturnType))
+                {
+                    const auto structName = structType->getName().str();
+                    val = generate_brace_init_for_struct(*braceInit, structType, structName);
+                }
+            }
+
+            if (!val)
+            {
+                val = generate_expression(*stmt.value);
+                val = cast_value(val, asyncReturnType);
+            }
 
             // Load from alloca if needed
             if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(val))

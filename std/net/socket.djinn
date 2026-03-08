@@ -16,11 +16,13 @@ extern "C" {
 
 struct Socket {
     i64 fd;
+    bool connected;
 
     Socket() {
         this.fd = __djinn_socket_create();
-        printf("fd %d\n", this.fd);
         Debug.assert(this.fd >= 0, "socket_create failed");
+
+        this.connected = true;
     }
 
     public i64 bind(i8* addr, i32 port) {
@@ -38,7 +40,7 @@ struct Socket {
         std::builtin::coro.suspend();
 
         Debug.assert(client_fd >= 0, "async_accept failed");
-        return { .fd = client_fd };
+        return { .fd = client_fd, .connected = true };
     }
 
     public async i64 connect(i8* addr, i32 port) {
@@ -51,6 +53,8 @@ struct Socket {
     }
 
     public async i64 send(void* buf, i64 count) {
+        Debug.assert(this.connected, "Need be connected to send bytes!");
+
         i64 result = -1;
         void* handle = std::builtin::coro.handle();
         __djinn_async_send(this.fd, buf, count, &result, handle);
@@ -60,12 +64,22 @@ struct Socket {
     }
 
     public async i64 recv(void* buf, i64 count) {
+        Debug.assert(this.connected, "Need be connected to receive bytes!");
+
         i64 result = -1;
         void* handle = std::builtin::coro.handle();
         __djinn_async_recv(this.fd, buf, count, &result, handle);
         std::builtin::coro.suspend();
 
+        if(result <= 0){
+            this.connected = false;
+        }
+
         return result;
+    }
+
+    public bool isConnected() {
+        return this.connected;
     }
 
     public i64 close() {

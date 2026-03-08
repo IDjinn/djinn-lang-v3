@@ -230,7 +230,8 @@ DJINN_API int64_t __djinn_socket_bind(int64_t socket_fd, const char* address, in
 DJINN_API int64_t __djinn_socket_listen(int64_t socket_fd, int backlog);
 
 DJINN_API int64_t __djinn_async_accept(int64_t server_sock, int64_t* out_result, void* coro);
-DJINN_API int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, int64_t* out_result, void* coro);
+DJINN_API int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, int64_t* out_result,
+                                        void* coro);
 DJINN_API int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
 DJINN_API int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
 
