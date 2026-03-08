@@ -941,7 +941,7 @@ int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro)
     DJINN_ASSERT(buf, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
     req->type = DJINN_IO_FILE_READ;
@@ -974,7 +974,7 @@ int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
     DJINN_ASSERT(buf, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
     req->type = DJINN_IO_FILE_WRITE;
@@ -1008,21 +1008,21 @@ int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
 int64_t __djinn_socket_create(void)
 {
 #ifdef _WIN32
-    const SOCKET s = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
-    if (s == INVALID_SOCKET)
+    const SOCKET socket_fd = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+    if (socket_fd == INVALID_SOCKET)
     {
         DJINN_TRACE("WSASocket failed: %d", WSAGetLastError());
         return -1;
     }
     // Associate with IOCP
-    const HANDLE h = CreateIoCompletionPort((HANDLE)s, runtime.iocp, 0, 0);
-    if (!h)
+    const HANDLE handle = CreateIoCompletionPort((HANDLE)socket_fd, runtime.iocp, 0, 0);
+    if (!handle)
     {
         DJINN_TRACE("CreateIoCompletionPort for socket failed: %lu", GetLastError());
-        closesocket(s);
+        closesocket(socket_fd);
         return -1;
     }
-    return (int64_t)s;
+    return (int64_t)socket_fd;
 #else
     int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (fd < 0)
@@ -1034,47 +1034,48 @@ int64_t __djinn_socket_create(void)
 #endif
 }
 
-int64_t __djinn_socket_close(int64_t sock)
+int64_t __djinn_socket_close(int64_t socket_fd)
 {
+    DJINN_TRACE("closing socket: %d", socket_fd);
 #ifdef _WIN32
-    return closesocket((SOCKET)sock) == 0 ? 0 : -1;
+    return closesocket((SOCKET)socket_fd) == 0 ? 0 : -1;
 #else
-    return close((int)sock) == 0 ? 0 : -1;
+    return close((int)socket_fd) == 0 ? 0 : -1;
 #endif
 }
 
-int64_t __djinn_socket_bind(int64_t sock, const char* addr, int port)
+int64_t __djinn_socket_bind(int64_t socket_fd, const char* address, int port)
 {
-    struct sockaddr_in sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons((uint16_t)port);
+    struct sockaddr_in socket_address;
+    memset(&socket_address, 0, sizeof(socket_address));
+    socket_address.sin_family = AF_INET;
+    socket_address.sin_port = htons((uint16_t)port);
 
-    if (addr && addr[0] != '\0')
+    if (address && address[0] != '\0')
     {
-        inet_pton(AF_INET, addr, &sa.sin_addr);
+        inet_pton(AF_INET, address, &socket_address.sin_addr);
     }
     else
     {
-        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+        socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
     }
 
     // Enable SO_REUSEADDR
     const int optval = 1;
 #ifdef _WIN32
-    setsockopt((SOCKET)sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval));
+    setsockopt((SOCKET)socket_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval));
 #else
-    setsockopt((int)sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    setsockopt((int)socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 #endif
 
 #ifdef _WIN32
-    if (bind((SOCKET)sock, (struct sockaddr*)&sa, sizeof(sa)) == SOCKET_ERROR)
+    if (bind((SOCKET)socket_fd, (struct sockaddr*)&socket_address, sizeof(socket_address)) == SOCKET_ERROR)
     {
         DJINN_TRACE("bind failed: %d", WSAGetLastError());
         return -1;
     }
 #else
-    if (bind((int)sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
+    if (bind((int)socket_fd, (struct sockaddr*)&socket_address, sizeof(socket_address)) < 0)
     {
         DJINN_TRACE("bind failed: %d", errno);
         return -1;
@@ -1083,16 +1084,16 @@ int64_t __djinn_socket_bind(int64_t sock, const char* addr, int port)
     return 0;
 }
 
-int64_t __djinn_socket_listen(int64_t sock, int backlog)
+int64_t __djinn_socket_listen(int64_t socket_fd, int backlog)
 {
 #ifdef _WIN32
-    if (listen((SOCKET)sock, backlog) == SOCKET_ERROR)
+    if (listen((SOCKET)socket_fd, backlog) == SOCKET_ERROR)
     {
         DJINN_TRACE("listen failed: %d", WSAGetLastError());
         return -1;
     }
 #else
-    if (listen((int)sock, backlog) < 0)
+    if (listen((int)socket_fd, backlog) < 0)
     {
         DJINN_TRACE("listen failed: %d", errno);
         return -1;
@@ -1109,7 +1110,7 @@ int64_t __djinn_async_accept(int64_t server_sock, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
     req->type = DJINN_IO_ACCEPT;
@@ -1164,31 +1165,32 @@ int64_t __djinn_async_accept(int64_t server_sock, void* coro)
     }
 #endif
 
+    DJINN_TRACE("accepted socket: %d", req->accepted_socket);
     return 0;
 }
 
-int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* coro)
+int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
-    DJINN_ASSERT(addr, "addr is NULL");
+    DJINN_ASSERT(address, "addr is NULL");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
-    const size_t addr_len = strlen(addr);
+    const size_t addr_len = strlen(address);
 
     req->type = DJINN_IO_CONNECT;
-    req->socket = sock;
+    req->socket = socket_fd;
     req->waiting_coro = coro;
     req->port = port;
-    memcpy(req->addr, addr, addr_len < sizeof(req->addr) ? addr_len : sizeof(req->addr) - 1);
+    memcpy(req->addr, address, addr_len < sizeof(req->addr) ? addr_len : sizeof(req->addr) - 1);
     req->addr[sizeof(req->addr) - 1] = '\0';
 
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
     sa.sin_port = htons((uint16_t)port);
-    inet_pton(AF_INET, addr, &sa.sin_addr);
+    inet_pton(AF_INET, address, &sa.sin_addr);
 
 #ifdef _WIN32
     // ConnectEx requires the socket to be bound first
@@ -1197,11 +1199,11 @@ int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* co
     bind_addr.sin_family = AF_INET;
     bind_addr.sin_addr.s_addr = INADDR_ANY;
     bind_addr.sin_port = 0;
-    bind((SOCKET)sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+    bind((SOCKET)socket_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
 
     memset(&req->overlapped, 0, sizeof(req->overlapped));
     const BOOL ok = pfnConnectEx(
-        (SOCKET)sock,
+        (SOCKET)socket_fd,
         (struct sockaddr*)&sa,
         sizeof(sa),
         NULL, 0, NULL,
@@ -1215,7 +1217,7 @@ int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* co
         return -1;
     }
 #else
-    int ret = connect((int)sock, (struct sockaddr*)&sa, sizeof(sa));
+    int ret = connect((int)socket_fd, (struct sockaddr*)&sa, sizeof(sa));
     if (ret < 0 && errno != EINPROGRESS)
     {
         DJINN_TRACE("connect failed: %d", errno);
@@ -1237,7 +1239,7 @@ int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* co
     struct epoll_event ev;
     ev.events = EPOLLOUT | EPOLLONESHOT;
     ev.data.ptr = req;
-    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)sock, &ev) < 0)
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)socket_fd, &ev) < 0)
     {
         DJINN_TRACE("epoll_ctl for connect failed: %d", errno);
         free(req);
@@ -1248,28 +1250,28 @@ int64_t __djinn_async_connect(int64_t sock, const char* addr, int port, void* co
     return 0;
 }
 
-int64_t __djinn_async_send(int64_t sock, void* buf, int64_t count, void* coro)
+int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
-    DJINN_ASSERT(buf, "buf is NULL");
+    DJINN_ASSERT(buffer, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
     req->type = DJINN_IO_SEND;
-    req->socket = sock;
-    req->buffer = buf;
+    req->socket = socket_fd;
+    req->buffer = buffer;
     req->count = count;
     req->waiting_coro = coro;
 
 #ifdef _WIN32
     memset(&req->overlapped, 0, sizeof(req->overlapped));
-    req->wsabuf.buf = (char*)buf;
+    req->wsabuf.buf = (char*)buffer;
     req->wsabuf.len = (ULONG)count;
 
     DWORD bytes_sent;
-    const int ret = WSASend((SOCKET)sock, &req->wsabuf, 1, &bytes_sent, 0, &req->overlapped, NULL);
+    const int ret = WSASend((SOCKET)socket_fd, &req->wsabuf, 1, &bytes_sent, 0, &req->overlapped, NULL);
     if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
     {
         DJINN_TRACE("WSASend failed: %d", WSAGetLastError());
@@ -1280,9 +1282,9 @@ int64_t __djinn_async_send(int64_t sock, void* buf, int64_t count, void* coro)
     struct epoll_event ev;
     ev.events = EPOLLOUT | EPOLLONESHOT;
     ev.data.ptr = req;
-    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)sock, &ev) < 0)
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)socket_fd, &ev) < 0)
     {
-        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)sock, &ev) < 0)
+        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)socket_fd, &ev) < 0)
         {
             DJINN_TRACE("epoll_ctl for send failed: %d", errno);
             free(req);
@@ -1294,29 +1296,29 @@ int64_t __djinn_async_send(int64_t sock, void* buf, int64_t count, void* coro)
     return 0;
 }
 
-int64_t __djinn_async_recv(int64_t sock, void* buf, int64_t count, void* coro)
+int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
-    DJINN_ASSERT(buf, "buf is NULL");
+    DJINN_ASSERT(buffer, "buf is NULL");
     DJINN_ASSERT(count > 0, "count <= 0");
 
-    djinn_io_request_t* req = (djinn_io_request_t*)calloc(1, sizeof(djinn_io_request_t));
+    djinn_io_request_t* req = __djinn_malloc(sizeof(djinn_io_request_t));
     if (!req) return -1;
 
     req->type = DJINN_IO_RECV;
-    req->socket = sock;
-    req->buffer = buf;
+    req->socket = socket_fd;
+    req->buffer = buffer;
     req->count = count;
     req->waiting_coro = coro;
 
 #ifdef _WIN32
     memset(&req->overlapped, 0, sizeof(req->overlapped));
-    req->wsabuf.buf = (char*)buf;
+    req->wsabuf.buf = (char*)buffer;
     req->wsabuf.len = (ULONG)count;
 
     DWORD bytes_received;
     DWORD flags = 0;
-    const int ret = WSARecv((SOCKET)sock, &req->wsabuf, 1, &bytes_received, &flags, &req->overlapped, NULL);
+    const int ret = WSARecv((SOCKET)socket_fd, &req->wsabuf, 1, &bytes_received, &flags, &req->overlapped, NULL);
     if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
     {
         DJINN_TRACE("WSARecv failed: %d", WSAGetLastError());
@@ -1327,9 +1329,9 @@ int64_t __djinn_async_recv(int64_t sock, void* buf, int64_t count, void* coro)
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLONESHOT;
     ev.data.ptr = req;
-    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)sock, &ev) < 0)
+    if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)socket_fd, &ev) < 0)
     {
-        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)sock, &ev) < 0)
+        if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)socket_fd, &ev) < 0)
         {
             DJINN_TRACE("epoll_ctl for recv failed: %d", errno);
             free(req);
@@ -1369,7 +1371,7 @@ djinn_thread_t* __djinn_thread_create(void (*func)(void*), void* arg)
 {
     DJINN_ASSERT(func, "thread func is NULL");
 
-    djinn_thread_t* t = (djinn_thread_t*)calloc(1, sizeof(djinn_thread_t));
+    djinn_thread_t* t = __djinn_malloc(sizeof(djinn_thread_t));
     if (!t) return NULL;
 
     t->func = func;
@@ -1436,7 +1438,7 @@ void __djinn_thread_sleep(int64_t milliseconds)
 
 djinn_mutex_t* __djinn_mutex_create(void)
 {
-    djinn_mutex_t* m = (djinn_mutex_t*)calloc(1, sizeof(djinn_mutex_t));
+    djinn_mutex_t* m = __djinn_malloc(sizeof(djinn_mutex_t));
     if (!m) return NULL;
 
 #ifdef _WIN32

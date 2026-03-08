@@ -1,0 +1,74 @@
+import std::types;
+import std::debug;
+
+namespace std::net;
+
+extern "C" {
+    i64 __djinn_socket_create();
+    i64 __djinn_socket_close(i64 sock);
+    i64 __djinn_socket_bind(i64 sock, i8* addr, i32 port);
+    i64 __djinn_socket_listen(i64 sock, i32 backlog);
+    i64 __djinn_async_accept(i64 server_sock, i64* out_result, void* coro_handle);
+    i64 __djinn_async_connect(i64 sock, i8* addr, i32 port, i64* out_result, void* coro_handle);
+    i64 __djinn_async_send(i64 sock, void* buf, i64 count, i64* out_result, void* coro_handle);
+    i64 __djinn_async_recv(i64 sock, void* buf, i64 count, i64* out_result, void* coro_handle);
+}
+
+struct Socket {
+    i64 fd;
+
+    Socket() {
+        this.fd = __djinn_socket_create();
+        printf("fd %d\n", this.fd);
+        Debug.assert(this.fd >= 0, "socket_create failed");
+    }
+
+    public i64 bind(i8* addr, i32 port) {
+        return __djinn_socket_bind(this.fd, addr, port);
+    }
+
+    public i64 listen(i32 backlog) {
+        return __djinn_socket_listen(this.fd, backlog);
+    }
+
+    public async Socket accept() {
+        i64 client_fd = -1;
+        void* handle = std::builtin::coro.handle();
+        __djinn_async_accept(this.fd, &client_fd, handle);
+        std::builtin::coro.suspend();
+
+        Debug.assert(client_fd >= 0, "async_accept failed");
+        return { .fd = client_fd };
+    }
+
+    public async i64 connect(i8* addr, i32 port) {
+        i64 result = -1;
+        void* handle = std::builtin::coro.handle();
+        __djinn_async_connect(this.fd, addr, port, &result, handle);
+        std::builtin::coro.suspend();
+
+        return result;
+    }
+
+    public async i64 send(void* buf, i64 count) {
+        i64 result = -1;
+        void* handle = std::builtin::coro.handle();
+        __djinn_async_send(this.fd, buf, count, &result, handle);
+        std::builtin::coro.suspend();
+
+        return result;
+    }
+
+    public async i64 recv(void* buf, i64 count) {
+        i64 result = -1;
+        void* handle = std::builtin::coro.handle();
+        __djinn_async_recv(this.fd, buf, count, &result, handle);
+        std::builtin::coro.suspend();
+
+        return result;
+    }
+
+    public i64 close() {
+        return __djinn_socket_close(this.fd);
+    }
+}

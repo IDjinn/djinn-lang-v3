@@ -14,7 +14,8 @@ extern "C" {
 
 struct Console {
     public static c_result error(i8* message) {
-        return write(2, message, strlen(message));
+        i32 stderr = 2;
+        return write(stderr, message, strlen(message));
     }
 
     public static c_result printf(i8* format) {
@@ -22,7 +23,6 @@ struct Console {
     }
 
    public static async i32 print(i8* message, i64 len) {
-        i32 stdin = 0;
         i32 stdout = 1;
 
         void* handle = std::builtin::coro.handle();

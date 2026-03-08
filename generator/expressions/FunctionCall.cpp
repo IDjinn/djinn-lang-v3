@@ -666,7 +666,8 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
 
     if (structName.empty())
     {
-        LOG_DEBUG("[generator]   FAILED: structName empty, throwing 'cannot call method on non-struct type'");
+        LOG_DEBUG("[generator]   FAILED: structName empty, throwing 'cannot call method on non-struct type': %s",
+                  call.name.token_name.c_str());
         GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH, "cannot call method on non-struct type", call.location);
     }
 
