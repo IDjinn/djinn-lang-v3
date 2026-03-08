@@ -22,7 +22,9 @@ class YamlNode
 
 public:
     explicit YamlNode(ryml::ConstNodeRef node, bool valid = true)
-        : _node(node), _valid(valid) {}
+        : _node(node), _valid(valid)
+    {
+    }
 
     YamlNode operator[](const std::string& key) const
     {
@@ -50,7 +52,7 @@ public:
     [[nodiscard]] bool is_map() const { return _valid && _node.is_map(); }
     [[nodiscard]] bool is_seq() const { return _valid && _node.is_seq(); }
 
-    template<typename T>
+    template <typename T>
     [[nodiscard]] std::optional<T> get(const std::string& path) const
     {
         YamlNode node = at(path);
@@ -67,11 +69,28 @@ public:
         }
     }
 
-    template<typename T>
+    template <typename T>
     [[nodiscard]] T get(const std::string& path, const T& defaultValue) const
     {
         auto result = get<T>(path);
         return result.value_or(defaultValue);
+    }
+
+    [[nodiscard]] std::vector<std::string> get_string_list(const std::string& path) const
+    {
+        std::vector<std::string> result;
+        YamlNode node = at(path);
+        if (!node._valid || !node._node.is_seq()) return result;
+        for (const auto& child : node._node.children())
+        {
+            if (child.has_val())
+            {
+                std::string val;
+                child >> val;
+                result.push_back(val);
+            }
+        }
+        return result;
     }
 
     [[nodiscard]] bool has(const std::string& path) const
@@ -85,16 +104,43 @@ public:
 struct LoggerConfig
 {
     std::string level = "INFO";
+    std::string format;
+};
+
+struct OutputConfig
+{
+    std::string fileName;
+    std::string directory;
+    std::optional<bool> generateBinary;
+    std::optional<bool> runAfterCompile;
+    std::optional<bool> bundleModules;
+};
+
+struct InternalsConfig
+{
+    std::optional<bool> printTokens; // lexer output
+    std::optional<bool> printAst; // parser output
+    std::optional<bool> printIr; // generator output
+};
+
+struct GeneratorConfig
+{
+    int optimizationLevel = 2;
+};
+
+struct CompilerConfig
+{
+    LoggerConfig logger;
+    OutputConfig output;
+    InternalsConfig internals;
+    GeneratorConfig generator;
+    std::vector<std::string> libs = {"std"}; // "std" = djinn stdlib, others = .ll link targets
+    std::optional<bool> libraryMode;
 };
 
 struct RuntimeConfig
 {
     LoggerConfig logger;
-};
-
-struct CompilerConfig
-{
-    int optimizationLevel = 2;
 };
 
 struct ProjectConfig
@@ -125,13 +171,42 @@ struct ProjectConfig
         ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
         YamlNode root(tree.rootref());
 
+        // Project metadata
         config.name = root.get<std::string>("project", "");
         if (config.name.empty())
-            LOG_ERROR(" [project] project file '%s' does not have a valid 'project' name declared!", projFile.string().c_str());
-
+            LOG_ERROR(" [project] project file '%s' does not have a valid 'project' name declared!",
+                  projFile.string().c_str());
         config.version = root.get<std::string>("version", "1.0.0");
-        config.compiler.optimizationLevel = root.get<int>("compiler.options.optimization-level", 2);
+
+        // compiler.logger
+        config.compiler.logger.level = root.get<std::string>("compiler.logger.level", "TRACE");
+        config.compiler.logger.format = root.get<std::string>("compiler.logger.format", "");
+
+        // compiler.output
+        config.compiler.output.fileName = root.get<std::string>("compiler.output.file", "");
+        config.compiler.output.directory = root.get<std::string>("compiler.output.directory", "");
+        config.compiler.output.generateBinary = root.get<bool>("compiler.output.generate-binary");
+        config.compiler.output.runAfterCompile = root.get<bool>("compiler.output.run-after-compile");
+        config.compiler.output.bundleModules = root.get<bool>("compiler.output.bundle-modules");
+
+        // compiler.internals
+        config.compiler.internals.printTokens = root.get<bool>("compiler.internals.print-tokens");
+        config.compiler.internals.printAst = root.get<bool>("compiler.internals.print-ast");
+        config.compiler.internals.printIr = root.get<bool>("compiler.internals.print-ir");
+
+        // compiler.generator
+        config.compiler.generator.optimizationLevel = root.get<int>("compiler.generator.optimization-level", 2);
+
+        // compiler.libs — if declared, replaces default ["std"]
+        if (root.has("compiler.libs"))
+            config.compiler.libs = root.get_string_list("compiler.libs");
+
+        // compiler (top-level)
+        config.compiler.libraryMode = root.get<bool>("compiler.library-mode");
+
+        // runtime
         config.runtime.logger.level = root.get<std::string>("runtime.logger.level", "INFO");
+
         return config;
     }
 };
