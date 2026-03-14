@@ -1168,7 +1168,8 @@ std::unique_ptr<Expression> Parser::parse_or()
     {
         TokenType op = previous().type;
         auto right = parse_and();
-        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right));
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
 
     return left;
@@ -1182,7 +1183,8 @@ std::unique_ptr<Expression> Parser::parse_and()
     {
         TokenType op = previous().type;
         auto right = parse_equality();
-        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right));
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
 
     return left;
@@ -1196,7 +1198,8 @@ std::unique_ptr<Expression> Parser::parse_equality()
     {
         TokenType op = previous().type;
         auto right = parse_comparison();
-        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right));
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
 
     return left;
@@ -1211,7 +1214,8 @@ std::unique_ptr<Expression> Parser::parse_comparison()
     {
         TokenType op = previous().type;
         auto right = parse_term();
-        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right));
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
 
     return left;
@@ -1225,7 +1229,8 @@ std::unique_ptr<Expression> Parser::parse_term()
     {
         TokenType op = previous().type;
         auto right = parse_factor();
-        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right));
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
 
     return left;
@@ -1239,7 +1244,8 @@ std::unique_ptr<Expression> Parser::parse_factor()
     {
         TokenType op = previous().type;
         auto right = parse_unary();
-        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right));
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
 
     return left;
@@ -1258,10 +1264,12 @@ std::unique_ptr<Expression> Parser::parse_unary()
             if (match(TokenType::RPAREN))
             {
                 auto operand = parse_unary();
-                auto castExpr = std::make_unique<CastExpression>(std::move(*castType), std::move(operand));
-                const auto& pos = tokens[saved].position;
-                castExpr->location = SourceLocation(pos.line, pos.column);
-                return castExpr;
+                auto finalLocation = operand->location - castType->location;
+                return std::make_unique<CastExpression>(
+                    std::move(*castType),
+                    std::move(operand),
+                    finalLocation
+                );
             }
         }
         current = saved; // backtrack — not a cast
@@ -1269,8 +1277,10 @@ std::unique_ptr<Expression> Parser::parse_unary()
 
     if (match(TokenType::AWAIT))
     {
+        auto awaitLocation = SourceLocation(previous().position, previous().value.length());
         auto operand = parse_unary();
-        return std::make_unique<AwaitExpression>(std::move(operand));
+        auto finalLocation = operand->location - awaitLocation;
+        return std::make_unique<AwaitExpression>(std::move(operand), finalLocation);
     }
 
     if (match(TokenType::NEW))
@@ -1297,8 +1307,10 @@ std::unique_ptr<Expression> Parser::parse_unary()
         match(TokenType::AMPERSAND) || match(TokenType::STAR))
     {
         TokenType op = previous().type;
+        const auto opLocation = SourceLocation(previous().position, previous().value.length());
         auto operand = parse_unary();
-        return std::make_unique<UnaryExpression>(op, std::move(operand));
+        auto finalLocation = operand->location - opLocation;
+        return std::make_unique<UnaryExpression>(op, std::move(operand), finalLocation);
     }
 
     return parse_postfix();
@@ -1377,11 +1389,13 @@ std::unique_ptr<Expression> Parser::parse_postfix()
             if (match(TokenType::EQUAL))
             {
                 auto value = parse_expression();
-                expr = std::make_unique<IndexAssignment>(std::move(expr), std::move(index), std::move(value));
+                auto finalLocation = value->location - index->location;
+                expr = std::make_unique<IndexAssignment>(std::move(expr), std::move(index), std::move(value),
+                                                         finalLocation);
             }
             else
             {
-                expr = std::make_unique<IndexAccess>(std::move(expr), std::move(index));
+                expr = std::make_unique<IndexAccess>(std::move(expr), std::move(index), index->location);
             }
         }
         else
@@ -1396,6 +1410,7 @@ std::unique_ptr<Expression> Parser::parse_postfix()
 std::unique_ptr<Expression> Parser::parse_primary()
 {
     // Switch expression: switch expr { Variant -> result, ... }
+    auto currentLocation = SourceLocation(peek().position, peek().value.length());
     if (check(TokenType::SWITCH))
     {
         return parse_switch_expression();
@@ -1413,30 +1428,30 @@ std::unique_ptr<Expression> Parser::parse_primary()
         if (value.ends_with("i"))
         {
             // Signed integer suffix (e.g., 10i)
-            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), true);
+            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), true, currentLocation);
         }
         if (value.ends_with("u"))
         {
             // Unsigned integer suffix (e.g., 10u)
-            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), false);
+            return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), false, currentLocation);
         }
         // Default: signed integer
-        return std::make_unique<IntegerLiteral>(value, true);
+        return std::make_unique<IntegerLiteral>(value, true, currentLocation);
     }
 
     if (match(TokenType::FLOAT_LITERAL))
     {
-        return std::make_unique<FloatLiteral>(previous().value);
+        return std::make_unique<FloatLiteral>(previous().value, currentLocation);
     }
 
     if (match(TokenType::TRUE) || match(TokenType::FALSE))
     {
-        return std::make_unique<BooleanLiteral>(previous().value);
+        return std::make_unique<BooleanLiteral>(previous().value, currentLocation);
     }
 
     if (match(TokenType::STRING_LITERAL))
     {
-        return std::make_unique<StringLiteral>(previous().value);
+        return std::make_unique<StringLiteral>(previous().value, currentLocation);
     }
 
     // Handle 'this' keyword as a simple identifier
@@ -1638,6 +1653,7 @@ std::unique_ptr<Expression> Parser::parse_primary()
 
 std::unique_ptr<Expression> Parser::parse_brace_initializer()
 {
+    const auto initialLocation = SourceLocation(peek().position, peek().value.length());
     expect("Esperado '{'", TokenType::LBRACE);
 
     std::vector<InitializerElement> elements;
@@ -1665,12 +1681,14 @@ std::unique_ptr<Expression> Parser::parse_brace_initializer()
     }
 
     expect("Esperado '}'", TokenType::RBRACE);
+    const auto finalLocation = SourceLocation(peek().position, peek().value.length());
 
-    return std::make_unique<BraceInitializer>(std::move(elements));
+    return std::make_unique<BraceInitializer>(std::move(elements), finalLocation - initialLocation);
 }
 
 std::unique_ptr<Expression> Parser::parse_array_literal()
 {
+    const auto initialLocation = SourceLocation(peek().position, peek().value.length());
     expect("Esperado '['", TokenType::LBRACKET);
 
     std::vector<std::unique_ptr<Expression>> elements;
@@ -1684,8 +1702,9 @@ std::unique_ptr<Expression> Parser::parse_array_literal()
     }
 
     expect("Esperado ']'", TokenType::RBRACKET);
+    const auto finalLocation = SourceLocation(peek().position, peek().value.length());
 
-    return std::make_unique<ArrayLiteral>(std::move(elements));
+    return std::make_unique<ArrayLiteral>(std::move(elements), std::optional<Type>{}, finalLocation - initialLocation);
 }
 
 std::unique_ptr<Expression> Parser::parse_typed_array_literal(const Token& typeToken)
@@ -1710,15 +1729,18 @@ std::unique_ptr<Expression> Parser::parse_typed_array_literal(const Token& typeT
         elemType = Type::struct_type(typeToken.value);
     }
 
-    return std::make_unique<ArrayLiteral>(std::move(elements), std::move(elemType));
+    return std::make_unique<ArrayLiteral>(std::move(elements), std::move(elemType), SourceLocation{});
+    // TODO: VALID SOURCE LOCATION HERE
 }
 
 std::unique_ptr<Expression> Parser::parse_switch_expression()
 {
+    const auto initialLocation = SourceLocation(peek().position, peek().value.length());
     expect("Esperado 'switch'", TokenType::SWITCH);
 
     // Parse the value expression (without parentheses, unlike switch statement)
     auto value = parse_expression();
+    const auto finalLocation = SourceLocation(peek().position, peek().value.length());
 
     expect("Esperado '{'", TokenType::LBRACE);
 
@@ -1755,11 +1777,12 @@ std::unique_ptr<Expression> Parser::parse_switch_expression()
 
     expect("Esperado '}'", TokenType::RBRACE);
 
-    return std::make_unique<SwitchExpression>(std::move(value), std::move(arms));
+    return std::make_unique<SwitchExpression>(std::move(value), std::move(arms), finalLocation - initialLocation);
 }
 
 std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const std::string& abi)
 {
+    const auto initialLocation = SourceLocation(peek().position, peek().value.length());
     std::unique_ptr<Type> returnType = parse_type();
     const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
 
@@ -1781,6 +1804,7 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     const bool isVariadic = match(TokenType::DOT_DOT_DOT);
 
     expect("Esperado ')'", TokenType::RPAREN);
+    const auto finalLocation = SourceLocation(peek().position, peek().value.length());
     expect("Esperado ';'", TokenType::SEMICOLON);
 
     auto decl = std::make_unique<ExternFunctionDeclaration>();
@@ -1788,6 +1812,7 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     decl->returnType = std::move(returnType);
     decl->parameters = std::move(parameters);
     decl->isVariadic = isVariadic;
+    decl->location = finalLocation - initialLocation;
     decl->abi = abi;
 
     return decl;

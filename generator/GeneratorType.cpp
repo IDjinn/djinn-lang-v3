@@ -612,6 +612,11 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
 
         if (srcBits < dstBits)
         {
+            // Use ZExt for i1 (bool) to avoid sign extension issues (i1 true = 1, not -1)
+            if (srcBits == 1)
+            {
+                return builder->CreateZExt(value, targetType, "zext");
+            }
             return builder->CreateSExt(value, targetType, "sext");
         }
         if (srcBits > dstBits)

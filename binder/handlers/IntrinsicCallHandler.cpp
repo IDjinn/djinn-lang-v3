@@ -68,9 +68,26 @@ namespace djinn::binder
             }
         }
 
+        // Determine return type for intrinsics
+        Type returnType = Type::voided();
+        if (intrinsic)
+        {
+            switch (*intrinsic)
+            {
+            case Intrinsic::Sizeof:
+            case Intrinsic::Alignof:
+                returnType = Type::integer(32, false);
+                break;
+            default:
+                break;
+            }
+        }
+
         auto intrinsicSym = std::make_shared<FunctionSymbol>(
-            call.name.token_name, Type::voided(), call.name.location);
-        return std::make_shared<FunctionCallSymbol>(
+            call.name.token_name, returnType, call.name.location);
+        auto result = std::make_shared<FunctionCallSymbol>(
             call.name.token_name, intrinsicSym, std::move(parameters), call.name.location);
+        result->type = returnType;
+        return result;
     }
 } // namespace djinn::binder

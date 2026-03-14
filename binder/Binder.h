@@ -22,6 +22,7 @@
 
 #define BINDER_ERROR(code, msg, token, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
+    throw CompileError(code, msg); \
 } while (false)
 
 #define BINDER_WARNING(code, msg, location) do { \
@@ -159,6 +160,8 @@ private:
     void bindSwitchStatement(const SwitchStatement& stmt);
 
     std::shared_ptr<Symbol> bindExpression(const Expression& expr);
+
+    std::shared_ptr<Symbol> bindIndexAccess(const IndexAccess& expr);
 
     std::shared_ptr<Symbol> bindIdentifier(const Identifier& id);
 

@@ -133,7 +133,7 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
         return operandType;
     }
 
-    if (const auto* binary = dynamic_cast<const BinaryExpression*>(&expr))
+    if (const auto* binary = dynamic_cast<const BinaryExpression*>(&expr)) // TODO: THIS MAY NOT WORK AS EXPECTED
     {
         return inferExpressionType(*binary->left);
     }

@@ -48,17 +48,6 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
                 }
             }
         }
-        else if (leftType->isFloatingPointTy() && rightType->isFloatingPointTy())
-        {
-            if (leftType->getPrimitiveSizeInBits() > rightType->getPrimitiveSizeInBits())
-            {
-                right = builder->CreateFPExt(right, leftType, "fpext");
-            }
-            else
-            {
-                left = builder->CreateFPExt(left, rightType, "fpext");
-            }
-        }
         else
         {
             // Unhandled type mismatch — log before LLVM asserts
@@ -70,6 +59,41 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
     }
 
     const bool isFloat = left->getType()->isFloatingPointTy();
+    const bool isStruct = left->getType()->isStructTy();
+
+    // For struct types with Equatable, dispatch == and != to the equals() method
+    if (isStruct && (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL))
+    {
+        const auto* structType = llvm::dyn_cast<llvm::StructType>(left->getType());
+        const std::string structTypeName = structType->getName().str();
+
+        // Find the equals method: structName__equals
+        const auto mangledName = structTypeName + "__equals";
+        const auto it = functions.find(mangledName);
+        if (it == functions.end())
+        {
+            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
+                               "struct '" + structTypeName + "' does not have an 'equals' method (implement Equatable)",
+                               expr.location);
+        }
+
+        llvm::Function* equalsFunc = it->second;
+
+        // equals(this*, other) -> bool
+        // Store left in alloca so we can pass pointer as 'this'
+        auto* leftAlloca = builder->CreateAlloca(left->getType(), nullptr, "eq_left");
+        builder->CreateStore(left, leftAlloca);
+
+        std::vector<llvm::Value*> args = {leftAlloca, right};
+        llvm::Value* result = builder->CreateCall(equalsFunc, args, "equals_result");
+
+        // For !=, negate the result
+        if (expr.op == TokenType::BANG_EQUAL)
+        {
+            result = builder->CreateNot(result, "neq_result");
+        }
+        return result;
+    }
 
     switch (expr.op)
     {

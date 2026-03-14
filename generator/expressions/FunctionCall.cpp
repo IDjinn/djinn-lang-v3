@@ -101,7 +101,7 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
             const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
             if (!trapFunc)
                 GENERATOR_ERROR(DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION, "missing intrinsic trap()",
-                            call.location);
+                                call.location);
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
@@ -114,7 +114,7 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
                 llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::debugtrap);
             if (!trapFunc)
                 GENERATOR_ERROR(DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION, "missing intrinsic debugtrap()",
-                            call.location);
+                                call.location);
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
@@ -457,7 +457,9 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
             if (argVal->getType()->isIntegerTy() &&
                 argVal->getType()->getIntegerBitWidth() < 32)
             {
-                argVal = builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                argVal = argVal->getType()->getIntegerBitWidth() == 1
+                             ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
+                             : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
             }
         }
         args.push_back(argVal);
@@ -620,12 +622,12 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                       ident->identifier.token_name.c_str(), structName.c_str());
             LOG_DEBUG("[generator]   alloca type: '%s'",
                       alloca->getAllocatedType()->isStructTy()
-                      ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
-                      : alloca->getAllocatedType()->isPointerTy()
-                      ? "pointer"
-                      : alloca->getAllocatedType()->isIntegerTy()
-                      ? "integer"
-                      : "other");
+                          ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
+                          : alloca->getAllocatedType()->isPointerTy()
+                          ? "pointer"
+                          : alloca->getAllocatedType()->isIntegerTy()
+                          ? "integer"
+                          : "other");
             if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
             {
                 llvmStructName = structType->getName().str();
@@ -796,7 +798,9 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                         if (argVal->getType()->isIntegerTy() &&
                             argVal->getType()->getIntegerBitWidth() < 32)
                         {
-                            argVal = builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                            argVal = argVal->getType()->getIntegerBitWidth() == 1
+                                         ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
+                                         : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
                         }
                     }
                     targetArgs.push_back(argVal);
@@ -891,7 +895,9 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             if (argVal->getType()->isIntegerTy() &&
                 argVal->getType()->getIntegerBitWidth() < 32)
             {
-                argVal = builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                argVal = argVal->getType()->getIntegerBitWidth() == 1
+                             ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
+                             : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
             }
         }
         args.push_back(argVal);

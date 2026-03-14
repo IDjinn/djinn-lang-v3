@@ -22,14 +22,14 @@ struct Console {
         return printf(format);
     }
 
-   public static async i32 print(i8* message, i64 len) {
+   public static async i64 print(i8* message, i64 len) {
         i32 stdout = 1;
 
         void* handle = std::builtin::coro.handle();
-        i32 ret = __djinn_async_write(stdout, message, len, handle);
+        i64 ret = __djinn_async_write(stdout, message, len, handle);
         std::builtin::coro.suspend();
 
-        Debug.assert(ret == 0, "async_write call got invalid return");
+        Debug.assert(ret == (i64)0, "async_write call got invalid return");
         return ret;
     }
 
@@ -39,10 +39,10 @@ struct Console {
 
         void* buffer = __djinn_malloc(bufferSize);
         void* handle = std::builtin::coro.handle();
-        i32 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);
+        i64 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);
         std::builtin::coro.suspend();
 
-        Debug.assert(ret == 0, "async_read call got invalid return");
+        Debug.assert(ret == (i64)0, "async_read call got invalid return");
         return buffer;
     }
 }

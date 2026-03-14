@@ -268,6 +268,17 @@ struct StructSymbol : Symbol
         return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
     }
 
+    std::optional<FieldSymbol> findField(const std::string& fieldName)
+    {
+        const auto it = std::ranges::
+            find_if(fields, [&](const FieldSymbol& f) { return f.name == fieldName; });
+
+        if (it != fields.end())
+            return *it;
+
+        return std::nullopt;
+    }
+
     explicit StructSymbol(std::string name, const SourceLocation loc = {})
         : Symbol(SymbolKind::Struct, std::move(name), Type::voided(), loc)
     {
@@ -296,6 +307,11 @@ struct StructSymbol : Symbol
     void addImplements(const std::string& interfaceName)
     {
         implements.push_back(interfaceName);
+    }
+
+    [[nodiscard]] bool hasConstraint(const std::string& constraint) const
+    {
+        return std::ranges::find(implements, constraint) != implements.end();
     }
 
     [[nodiscard]] bool hasField(const std::string& memberName) const
@@ -557,7 +573,7 @@ struct IntegerLiteralSymbol : Symbol
     bool isSigned;
 
     IntegerLiteralSymbol(std::string val, bool sign = true, const SourceLocation loc = {})
-        : Symbol(SymbolKind::IntegerLiteral, val, Type::integer(64, sign), loc),
+        : Symbol(SymbolKind::IntegerLiteral, val, Type::integer(32, sign), loc),
           value(std::move(val)), isSigned(sign)
     {
     }

@@ -12,15 +12,15 @@
 #include "logger.h"
 
 #ifdef _WIN32
-    #include <io.h>
-    #pragma comment(lib, "ws2_32.lib")
-    #pragma comment(lib, "mswsock.lib")
+#include <io.h>
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "mswsock.lib")
 #else
-    #include <unistd.h>
-    #include <errno.h>
-    #include <sched.h>
-    #include <time.h>
-    #include <netinet/tcp.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sched.h>
+#include <time.h>
+#include <netinet/tcp.h>
 #endif
 
 // ════════════════════════════════════════════════════════════════════
@@ -46,8 +46,27 @@ Logger* logger;
     logger_trace(logger, message, ##__VA_ARGS__);              \
 } while(0)
 #else
-    #define DJINN_TRACE(message, ...) do {} while (0)
+#define DJINN_TRACE(message, ...) do {} while (0)
 #endif
+
+
+uint32_t __djinn_compare_strings(
+    char* leftData,
+    char* rightData,
+    size_t leftLen,
+    size_t rightLen
+)
+{
+    if (leftData == rightData) return 1;
+
+    if (!leftData || !rightData)
+        return 0;
+
+    if (leftLen != rightLen)
+        return 0;
+
+    return memcmp(leftData, rightData, leftLen) == 0;
+}
 
 // ════════════════════════════════════════════════════════════════════
 // Global State
@@ -313,6 +332,7 @@ void __djinn_await(void* child_handle, void* parent_handle)
 #ifdef _WIN32
 static DWORD WINAPI file_io_thread_func(LPVOID arg)
 {
+
 #else
 static void* file_io_thread_func(void* arg)
 {
@@ -431,40 +451,40 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
         {
             switch (req->type)
             {
-                case DJINN_IO_ACCEPT:
-                    req->result = (int64_t)req->accepted_socket;
-                    DJINN_TRACE("accept completed: client_fd=%lld", (long long)req->result);
-                    // Update accepted socket context so it inherits server socket properties
-                    setsockopt(
-                        req->accepted_socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
-                        (char*)&req->socket, sizeof(req->socket)
-                    );
-                    // Associate accepted socket with IOCP
-                    CreateIoCompletionPort((HANDLE)req->accepted_socket, runtime.iocp, 0, 0);
-                    break;
+            case DJINN_IO_ACCEPT:
+                req->result = (int64_t)req->accepted_socket;
+                DJINN_TRACE("accept completed: client_fd=%lld", (long long)req->result);
+                // Update accepted socket context so it inherits server socket properties
+                setsockopt(
+                    req->accepted_socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+                    (char*)&req->socket, sizeof(req->socket)
+                );
+                // Associate accepted socket with IOCP
+                CreateIoCompletionPort((HANDLE)req->accepted_socket, runtime.iocp, 0, 0);
+                break;
 
-                case DJINN_IO_CONNECT:
-                    req->result = 0; // success
-                    setsockopt(
-                        (SOCKET)req->socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT,
-                        NULL, 0
-                    );
-                    break;
+            case DJINN_IO_CONNECT:
+                req->result = 0; // success
+                setsockopt(
+                    (SOCKET)req->socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT,
+                    NULL, 0
+                );
+                break;
 
-                case DJINN_IO_RECV:
-                    req->result = (int64_t)bytes_transferred;
-                    DJINN_TRACE("recv completed: bytes=%lld, socket=%lld", (long long)req->result,
-                                (long long)req->socket);
-                    break;
+            case DJINN_IO_RECV:
+                req->result = (int64_t)bytes_transferred;
+                DJINN_TRACE("recv completed: bytes=%lld, socket=%lld", (long long)req->result,
+                            (long long)req->socket);
+                break;
 
-                case DJINN_IO_SEND:
-                    req->result = (int64_t)bytes_transferred;
-                    DJINN_TRACE("send completed: bytes=%lld, socket=%lld", (long long)req->result, (long long)req->socket);
-                    break;
+            case DJINN_IO_SEND:
+                req->result = (int64_t)bytes_transferred;
+                DJINN_TRACE("send completed: bytes=%lld, socket=%lld", (long long)req->result, (long long)req->socket);
+                break;
 
-                default:
-                    req->result = (int64_t)bytes_transferred;
-                    break;
+            default:
+                req->result = (int64_t)bytes_transferred;
+                break;
             }
         }
 
@@ -515,7 +535,7 @@ static void* socket_poller_thread_func(void* arg)
 
             switch (req->type)
             {
-                case DJINN_IO_ACCEPT:
+            case DJINN_IO_ACCEPT:
                 {
                     struct sockaddr_in client_addr;
                     socklen_t addr_len = sizeof(client_addr);
@@ -536,7 +556,7 @@ static void* socket_poller_thread_func(void* arg)
                     break;
                 }
 
-                case DJINN_IO_CONNECT:
+            case DJINN_IO_CONNECT:
                 {
                     // Check if connect succeeded
                     int err = 0;
@@ -547,7 +567,7 @@ static void* socket_poller_thread_func(void* arg)
                     break;
                 }
 
-                case DJINN_IO_RECV:
+            case DJINN_IO_RECV:
                 {
                     ssize_t n_read = recv((int)req->socket, req->buffer, (size_t)req->count, 0);
                     if (n_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
@@ -560,7 +580,7 @@ static void* socket_poller_thread_func(void* arg)
                     break;
                 }
 
-                case DJINN_IO_SEND:
+            case DJINN_IO_SEND:
                 {
                     ssize_t n_sent = send((int)req->socket, req->buffer, (size_t)req->count, 0);
                     if (n_sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
@@ -573,7 +593,7 @@ static void* socket_poller_thread_func(void* arg)
                     break;
                 }
 
-                default:
+            default:
                 break;
             }
 
@@ -602,6 +622,7 @@ static void* socket_poller_thread_func(void* arg)
 #ifdef _WIN32
 static DWORD WINAPI worker_thread(LPVOID arg)
 {
+
 #else
 static void* worker_thread(void* arg)
 {

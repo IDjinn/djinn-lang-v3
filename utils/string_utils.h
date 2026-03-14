@@ -9,10 +9,19 @@
 #include <iomanip>
 #include <sstream>
 #include <llvm/IR/Type.h>
+#include <llvm/IR/Value.h>
 #include <llvm/Support/raw_ostream.h>
 
 namespace string_utils
 {
+    inline std::string llvm_value_str(const llvm::Value* value)
+    {
+        std::string str;
+        llvm::raw_string_ostream os(str);
+        value->print(os);
+        return str;
+    }
+
     inline std::string llvm_type_str(const llvm::Type* type)
     {
         std::string str;

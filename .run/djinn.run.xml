@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
     <configuration default="false" name="djinn" type="CMakeRunConfiguration" factoryName="Application"
-                   PROGRAM_PARAMS="-o test -out .\playground\build -ir --bundle -r .\playground" REDIRECT_INPUT="false"
-                   ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false"
+                   PROGRAM_PARAMS="-o test -out .\playground\build -o3 -ir --bundle -r .\playground"
+                   REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false"
                    WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="djinn" TARGET_NAME="djinn"
                    CONFIG_NAME="Debug-Visual Studio" RUN_TARGET_PROJECT_NAME="djinn" RUN_TARGET_NAME="djinn">
     <method v="2">

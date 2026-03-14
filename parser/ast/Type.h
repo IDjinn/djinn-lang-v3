@@ -83,6 +83,36 @@ struct Type : Location
         return *this;
     }
 
+    bool operator==(const Type& other) const
+    {
+        if (size != other.size) return false;
+        if (kind != other.kind) return false;
+        if (sign != other.sign) return false;
+        if (nullable != other.nullable) return false;
+        if (readOnly != other.readOnly) return false;
+        if (structName != other.structName) return false;
+
+        if (elementType && other.elementType)
+        {
+            if (*elementType != *other.elementType)
+                return false;
+        }
+        else if (elementType || other.elementType)
+        {
+            return false;
+        }
+
+        if (genericArgs != other.genericArgs)
+            return false;
+
+        return true;
+    }
+
+    bool operator!=(const Type& other) const
+    {
+        return !(*this == other);
+    }
+
     Type(Type&&) = default;
 
     Type& operator=(Type&&) = default;

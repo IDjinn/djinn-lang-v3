@@ -1,5 +1,14 @@
 namespace std::types;
 
+extern "C" {
+    u32 __djinn_compare_strings(
+        i8* leftData,
+        i8* rightData,
+        i32 leftLen,
+        i32 rightLen
+    );
+}
+
 struct size : u32;
 struct size_long : u64;
 
@@ -22,7 +31,7 @@ struct str {
     size len;
 
     public bool is_empty() {
-        return this.len == 0;
+        return this.len == 0u;
     }
 
     public i8* ptr() {
@@ -35,7 +44,7 @@ struct arr<T> {
     size len;
 
     public bool is_empty() {
-        return this.len == 0;
+        return this.len == 0u;
     }
 
     public i8* ptr() {
@@ -49,7 +58,7 @@ struct string {
     size capacity;
 
     public bool is_empty() {
-        return this.len == 0;
+        return this.len == 0u;
     }
 
     public i8* ptr() {
@@ -61,6 +70,26 @@ struct string {
     }
 }
 
+
+impl Hashable, Equatable for str {
+    i32 hash() {
+        return 0;
+    }
+
+    bool equals(str other) {
+        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
+    }
+}
+
+impl Hashable, Equatable for string {
+    i32 hash() {
+        return 0;
+    }
+
+    bool equals(string other) {
+        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
+    }
+}
 
 impl Hashable, Equatable for i32 {
     i32 hash() {
@@ -74,7 +103,7 @@ impl Hashable, Equatable for i32 {
 
 impl Hashable, Equatable for i8* {
     i32 hash() {
-        return this;
+        return 0;
     }
 
     bool equals(i8* other) {

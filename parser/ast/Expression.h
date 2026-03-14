@@ -6,6 +6,7 @@
 #define DJINN_EXPRESSION_H
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <memory>
 #include <optional>
@@ -53,6 +54,7 @@ struct VariableDeclaration : Expression
         : type(std::move(type)),
           name(std::move(name)), isMutable(isMutable)
     {
+        location = name.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -72,6 +74,7 @@ struct Assignment : Expression
     Assignment(SourceIdentifier name, std::unique_ptr<Expression> value)
         : name(std::move(name)), value(std::move(value))
     {
+        location = name.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -95,6 +98,7 @@ struct VariableInit : Expression
     VariableInit(Type type, SourceIdentifier name, std::unique_ptr<Expression> value, bool isMutable)
         : type(std::move(type)), name(std::move(name)), value(std::move(value)), isMutable(isMutable)
     {
+        location = name.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -112,8 +116,9 @@ struct StringLiteral : Expression
 {
     std::string value;
 
-    explicit StringLiteral(std::string val) : value(std::move(val))
+    explicit StringLiteral(std::string val, const SourceLocation& location) : value(std::move(val))
     {
+        this->location = location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -130,8 +135,10 @@ struct IntegerLiteral : Expression
     std::string value;
     bool sign;
 
-    IntegerLiteral(const std::string& val, const bool sign) : value(val), sign(sign)
+    explicit IntegerLiteral(std::string val, const bool sign, const SourceLocation& location) : value(std::move(val)),
+        sign(sign)
     {
+        this->location = location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -147,8 +154,9 @@ struct FloatLiteral : Expression
 {
     std::string value;
 
-    explicit FloatLiteral(const std::string& val) : value(val)
+    explicit FloatLiteral(std::string val, const SourceLocation& location) : value(std::move(val))
     {
+        this->location = location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -164,8 +172,9 @@ struct BooleanLiteral : Expression
 {
     std::string value;
 
-    explicit BooleanLiteral(std::string val) : value(std::move(val))
+    explicit BooleanLiteral(std::string val, const SourceLocation& location) : value(std::move(val))
     {
+        this->location = location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -181,8 +190,10 @@ struct Identifier : Expression
 {
     SourceIdentifier identifier;
 
-    explicit Identifier(SourceIdentifier source_identifier) : identifier(std::move(source_identifier))
+    explicit Identifier(const SourceIdentifier& source_identifier)
+        : identifier(source_identifier)
     {
+        this->location = source_identifier.location;
     }
 
     [[nodiscard]] const std::string& name() const { return identifier.token_name; }
@@ -204,6 +215,7 @@ struct FieldAccess : Expression
     FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field)
         : object(std::move(obj)), fieldName(std::move(field))
     {
+        location = field.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -225,6 +237,7 @@ struct FieldAssignment : Expression
     FieldAssignment(std::unique_ptr<Expression> obj, SourceIdentifier field, std::unique_ptr<Expression> val)
         : object(std::move(obj)), fieldName(std::move(field)), value(std::move(val))
     {
+        location = field.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -252,16 +265,19 @@ struct FunctionCall : Expression
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression>> args)
         : name(std::move(n)), arguments(std::move(args))
     {
+        location = n.location;
     }
 
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression>> args, std::unique_ptr<Expression> recv)
         : name(std::move(n)), arguments(std::move(args)), receiver(std::move(recv))
     {
+        location = n.location;
     }
 
     FunctionCall(SourceIdentifier n, std::vector<Type> typeArgs, std::vector<std::unique_ptr<Expression>> args)
         : name(std::move(n)), arguments(std::move(args)), typeArguments(std::move(typeArgs))
     {
+        location = n.location;
     }
 
     [[nodiscard]] bool isMethodCall() const { return receiver != nullptr; }
@@ -306,9 +322,10 @@ struct UnaryExpression : Expression
     TokenType op;
     std::unique_ptr<Expression> operand;
 
-    UnaryExpression(const TokenType op, std::unique_ptr<Expression> operand)
+    UnaryExpression(const TokenType op, std::unique_ptr<Expression> operand, const SourceLocation& location)
         : op(op), operand(std::move(operand))
     {
+        this->location = location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -327,9 +344,15 @@ struct BinaryExpression : Expression
     TokenType op;
     std::unique_ptr<Expression> right;
 
-    BinaryExpression(std::unique_ptr<Expression> left, const TokenType op, std::unique_ptr<Expression> right)
+    BinaryExpression(
+        std::unique_ptr<Expression> left,
+        const TokenType op,
+        std::unique_ptr<Expression> right,
+        const SourceLocation& loc
+    )
         : left(std::move(left)), op(op), right(std::move(right))
     {
+        location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -352,11 +375,13 @@ struct InitializerElement : Location
     InitializerElement(SourceIdentifier fieldName, std::unique_ptr<Expression> value)
         : fieldName(std::move(fieldName)), value(std::move(value))
     {
+        location = fieldName.location;
     }
 
     explicit InitializerElement(std::unique_ptr<Expression> value)
         : fieldName(), value(std::move(value))
     {
+        location = value->location;
     }
 
     [[nodiscard]] bool isDesignated() const { return !fieldName.token_name.empty(); }
@@ -381,9 +406,10 @@ struct BraceInitializer : Expression
 {
     std::vector<InitializerElement> elements;
 
-    explicit BraceInitializer(std::vector<InitializerElement> elements)
+    explicit BraceInitializer(std::vector<InitializerElement> elements, const SourceLocation& loc)
         : elements(std::move(elements))
     {
+        location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -407,9 +433,11 @@ struct IndexAccess : Expression
     std::unique_ptr<Expression> object;
     std::unique_ptr<Expression> index;
 
-    IndexAccess(std::unique_ptr<Expression> obj, std::unique_ptr<Expression> idx)
+    explicit IndexAccess(std::unique_ptr<Expression> obj, std::unique_ptr<Expression> idx,
+                         const SourceLocation& loc)
         : object(std::move(obj)), index(std::move(idx))
     {
+        location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -431,9 +459,15 @@ struct IndexAssignment : Expression
     std::unique_ptr<Expression> index;
     std::unique_ptr<Expression> value;
 
-    IndexAssignment(std::unique_ptr<Expression> obj, std::unique_ptr<Expression> idx, std::unique_ptr<Expression> val)
+    IndexAssignment(
+        std::unique_ptr<Expression> obj,
+        std::unique_ptr<Expression> idx,
+        std::unique_ptr<Expression> val,
+        const SourceLocation& loc
+    )
         : object(std::move(obj)), index(std::move(idx)), value(std::move(val))
     {
+        this->location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -460,6 +494,7 @@ struct SwitchArm : Location
     SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Expression> res)
         : variantName(std::move(variant)), binding(std::move(bind)), result(std::move(res))
     {
+        location = variant.location;
     }
 
     void print(std::ostream& os, const int indent = 0) const override
@@ -482,9 +517,14 @@ struct SwitchExpression : Expression
     std::unique_ptr<Expression> value; // The enum value being matched
     std::vector<SwitchArm> arms; // The match arms
 
-    SwitchExpression(std::unique_ptr<Expression> val, std::vector<SwitchArm> a)
+    explicit SwitchExpression(
+        std::unique_ptr<Expression> val,
+        std::vector<SwitchArm> a,
+        const SourceLocation& loc
+    )
         : value(std::move(val)), arms(std::move(a))
     {
+        this->location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -524,14 +564,14 @@ struct ArrayLiteral : Expression
     std::optional<Type> elementType; // set for typed literals like i32[1,2,3], empty for [1,2,3]
     bool isHeap = false; // set by NewExpression wrapping
 
-    explicit ArrayLiteral(std::vector<std::unique_ptr<Expression>> elements)
-        : elements(std::move(elements))
+    explicit ArrayLiteral(
+        std::vector<std::unique_ptr<Expression>> elements,
+        const std::optional<Type>& elementType,
+        const SourceLocation& loc
+    )
+        : elements(std::move(elements)), elementType(elementType)
     {
-    }
-
-    ArrayLiteral(std::vector<std::unique_ptr<Expression>> elements, Type elemType)
-        : elements(std::move(elements)), elementType(std::move(elemType))
-    {
+        this->location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -561,6 +601,7 @@ struct NewExpression : Expression
     explicit NewExpression(std::unique_ptr<FunctionCall> call)
         : constructorCall(std::move(call))
     {
+        location = constructorCall->location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -578,9 +619,10 @@ struct AwaitExpression : Expression
 {
     std::unique_ptr<Expression> operand;
 
-    explicit AwaitExpression(std::unique_ptr<Expression> operand)
+    explicit AwaitExpression(std::unique_ptr<Expression> operand, const SourceLocation& loc)
         : operand(std::move(operand))
     {
+        location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -598,9 +640,10 @@ struct CastExpression : Expression
     Type targetType;
     std::unique_ptr<Expression> operand;
 
-    CastExpression(Type targetType, std::unique_ptr<Expression> operand)
+    CastExpression(Type targetType, std::unique_ptr<Expression> operand, const SourceLocation& loc)
         : targetType(std::move(targetType)), operand(std::move(operand))
     {
+        this->location = loc;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }

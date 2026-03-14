@@ -5,12 +5,17 @@
 #ifndef DJINN_DIAGNOSTIC_H
 #define DJINN_DIAGNOSTIC_H
 
+#include <assert.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <sstream>
 #include <cstdint>
+#include <iostream>
 #include <stacktrace>
+
+#include "../lexer/Token.h"
+#include "../utils/Logger.h"
 
 enum class Severity { Error, Warning, Note, Help };
 
@@ -86,6 +91,35 @@ struct SourceLocation
     SourceLocation(std::string file, const uint32_t l, const uint32_t c, const uint32_t len = 1)
         : fileId(std::move(file)), line(l), column(c), length(len)
     {
+    }
+
+    explicit SourceLocation(Position position, const uint32_t length)
+        : fileId(std::move(position.fileId)), line(position.line), column(position.column), length(length)
+    {
+    }
+
+    SourceLocation operator-(const SourceLocation& start) const
+    {
+        if (fileId != start.fileId && fileId.length() > 0 && start.fileId.length() > 0)
+        {
+            std::cerr
+                << "Tried to compare different source file location!\n"
+                << "\t" << fileId << "\n"
+                << "\t" << start.fileId
+                << std::endl;
+            assert(false);
+        }
+
+        SourceLocation result;
+
+        result.fileId = fileId.empty() ? start.fileId : fileId;
+        result.line = start.line;
+        result.column = start.column;
+
+        const uint32_t endColumn = column + length;
+        result.length = endColumn - start.column;
+
+        return result;
     }
 };
 

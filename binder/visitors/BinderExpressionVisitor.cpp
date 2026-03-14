@@ -107,9 +107,10 @@ namespace djinn
 
     void BinderExpressionVisitor::visit(const IndexAccess& expr)
     {
-        _binder.bindExpression(*expr.object);
-        _binder.bindExpression(*expr.index);
-        _result = nullptr;
+        // _binder.bindExpression(*expr.object);
+        // _binder.bindExpression(*expr.index);
+        // _result = nullptr;
+        _result = _binder.bindIndexAccess(expr);
     }
 
     void BinderExpressionVisitor::visit(const IndexAssignment& expr)
@@ -122,8 +123,8 @@ namespace djinn
 
     void BinderExpressionVisitor::visit(const CastExpression& expr)
     {
-        _binder.bindExpression(*expr.operand);
-        _result = nullptr;
+        auto operand = _binder.bindExpression(*expr.operand);
+        _result = std::make_shared<Symbol>(SymbolKind::Variable, "cast", expr.targetType, expr.location);
     }
 
     void BinderExpressionVisitor::visit(const AwaitExpression& expr)

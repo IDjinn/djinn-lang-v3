@@ -37,7 +37,7 @@ struct map<Key, Value>
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
             i8 state = this.states[idx];
 
-            if (state == 0) {
+            if (state == (i8)0) {
                 if (insert_idx == this.capacity) {
                     insert_idx = idx + 0u;
                 }
@@ -48,13 +48,13 @@ struct map<Key, Value>
                 return;
             }
 
-            if (state == 2) {
+            if (state == (i8)2) {
                 if (insert_idx == this.capacity) {
                     insert_idx = idx + 0u;
                 }
             }
 
-            if (state == 1) {
+            if (state == (i8)1) {
                 if (this.keys[idx] == key) {
                     this.values[idx] = value;
                     return;
@@ -77,12 +77,9 @@ struct map<Key, Value>
 
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
             i8 state = this.states[idx];
+            Debug.assert(state == (i8)0, "map::get - key not found");
 
-            if (state == 0) {
-                Debug.assert(1 == 0, "map::get - key not found");
-            }
-
-            if (state == 1) {
+            if (state == (i8)1) {
                 if (this.keys[idx] == key) {
                     return this.values[idx];
                 }
@@ -91,7 +88,7 @@ struct map<Key, Value>
             idx = (idx + 1u) % this.capacity;
         }
 
-        Debug.assert(1 == 0, "map::get - key not found");
+        Debug.assert(false, "map::get - key not found");
         return this.values[0];
     }
 
@@ -101,20 +98,20 @@ struct map<Key, Value>
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
             i8 state = this.states[idx];
 
-            if (state == 0) {
-                return 0 == 1;
+            if (state == (i8)0) {
+                return false;
             }
 
-            if (state == 1) {
+            if (state == (i8)1) {
                 if (this.keys[idx] == key) {
-                    return 1 == 1;
+                    return true;
                 }
             }
 
             idx = (idx + 1u) % this.capacity;
         }
 
-        return 0 == 1;
+        return false;
     }
 
     public bool remove(Key key) {
@@ -123,22 +120,22 @@ struct map<Key, Value>
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
             i8 state = this.states[idx];
 
-            if (state == 0) {
-                return 0 == 1;
+            if (state == (i8)0) {
+                return false;
             }
 
-            if (state == 1) {
+            if (state == (i8)1) {
                 if (this.keys[idx] == key) {
-                    this.states[idx] = 2;
+                    this.states[idx] = (i8)2;
                     this.count = this.count - 1u;
-                    return 1 == 1;
+                    return true;
                 }
             }
 
             idx = (idx + 1u) % this.capacity;
         }
 
-        return 0 == 1;
+        return false;
     }
 
     public size length() {
@@ -148,7 +145,7 @@ struct map<Key, Value>
     public i32 hash() {
         mut i32 hash_result = 1;
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
-            if (this.states[i] == 1) {
+            if (this.states[i] == (i8)1) {
                 hash_result = 31 * hash_result + this.keys[i]; // TODO: does not support non-integer generic types
             }
         }
@@ -162,7 +159,7 @@ struct map<Key, Value>
     }
 
     size _hash_index(Key key) {
-        mut i32 h = key;
+        mut u32 h = key;
         if (h < 0) {
             h = 0 - h;
         }
@@ -186,7 +183,7 @@ struct map<Key, Value>
         }
 
         for (mut size i = 0u; i < old_capacity; i = i + 1u) {
-            if (old_states[i] == 1) {
+            if (old_states[i] == (i8)1) {
                 this.set(old_keys[i], old_values[i]);
             }
         }

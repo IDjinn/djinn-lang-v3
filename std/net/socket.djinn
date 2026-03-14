@@ -20,7 +20,7 @@ struct Socket {
 
     Socket() {
         this.fd = __djinn_socket_create();
-        Debug.assert(this.fd >= 0, "socket_create failed");
+        Debug.assert(this.fd >= (i8)0, "socket_create failed");
 
         this.connected = true;
     }
@@ -39,7 +39,7 @@ struct Socket {
         __djinn_async_accept(this.fd, &client_fd, handle);
         std::builtin::coro.suspend();
 
-        Debug.assert(client_fd >= 0, "async_accept failed");
+        Debug.assert(client_fd >= (i8)0, "async_accept failed");
         return { .fd = client_fd, .connected = true };
     }
 
@@ -71,7 +71,7 @@ struct Socket {
         __djinn_async_recv(this.fd, buf, count, &result, handle);
         std::builtin::coro.suspend();
 
-        if(result <= 0){
+        if(result <= (i64)0){
             this.connected = false;
         }
 

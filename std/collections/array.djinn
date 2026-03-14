@@ -46,7 +46,7 @@ struct array<T> : Hashable {
     public i32 hash() {
         mut i32 hash_result = 1;
         for (mut size i = 0u; i < this.length; i = i + 1u) {
-          hash_result = 31 * hash_result + this.data[i]; // TODO: THIS DOES NOT SUPPORT GENERIC TYPES!
+          hash_result = 31 * hash_result + this.data[i].hash(); // TODO: THIS DOES NOT SUPPORT GENERIC TYPES!
         }
         return hash_result;
     }

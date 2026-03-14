@@ -36,6 +36,14 @@ extern "C" {
 #define DJINN_API
 #endif
 
+
+DJINN_API uint32_t __djinn_compare_strings(
+    char* leftData,
+    char* rightData,
+    size_t leftLen,
+    size_t rightLen
+);
+
 // ════════════════════════════════════════════════════════════════════
 // Memory
 // ════════════════════════════════════════════════════════════════════

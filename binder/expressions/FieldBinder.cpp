@@ -2,14 +2,53 @@
 // Field access, assignment and brace initializer binding
 //
 
+#include <memory>
+
 #include "../Binder.h"
 
 std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess& access)
 {
-    return bindExpression(*access.object);
+    const auto object_symbol = bindExpression(*access.object);
 
-    // TODO: Type checking would validate the field exists on the struct type
-    // For now, we just bind the expression - field validation happens in type checking
+    std::string structName;
+    if (object_symbol->type.kind == TypeKind::POINTER)
+    {
+        structName = object_symbol->type.elementType->structName;
+    }
+    else if (object_symbol->type.kind == TypeKind::STRUCT)
+    {
+        structName = object_symbol->type.structName;
+    }
+
+    if (!structName.empty())
+    {
+        const auto object_structure = _current_scope->lookupStruct(structName);
+        if (!object_structure)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::UNDEFINED_STRUCT,
+                "struct with name '"+ structName + "' could not be located!",
+                object_symbol,
+                object_symbol->location
+            );
+        }
+
+        const auto field = object_structure->findField(access.fieldName.token_name);
+        if (!field)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::UNDEFINED_FIELD,
+                "field with name '"+ access.fieldName.token_name + "' could not be located inside struct '" +structName+
+                "'!",
+                object_symbol,
+                object_symbol->location
+            );
+        }
+
+        return std::make_shared<Symbol>(field.value());
+    }
+
+    return object_symbol;
 }
 
 std::shared_ptr<Symbol> Binder::bindFieldAssignment(const FieldAssignment& assign)
@@ -80,4 +119,20 @@ std::shared_ptr<Symbol> Binder::bindBraceInitializer(const BraceInitializer& ini
     }
 
     return nullptr;
+}
+
+std::shared_ptr<Symbol> Binder::bindIndexAccess(const IndexAccess& expr)
+{
+    auto object = bindExpression(*expr.object);
+    bindExpression(*expr.index);
+
+    // Index access on pointer/array dereferences to the element type
+    if (object && (object->type.kind == TypeKind::POINTER || object->type.kind == TypeKind::ARRAY)
+        && object->type.elementType)
+    {
+        return std::make_shared<Symbol>(
+            SymbolKind::Variable, object->name, *object->type.elementType, expr.location);
+    }
+
+    return object;
 }

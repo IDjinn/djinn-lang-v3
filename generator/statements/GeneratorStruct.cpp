@@ -409,7 +409,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 }
 
 void Generator::generate_async_method_body(const StructSymbol& struc, const MethodSymbol& method,
-                                           llvm::Function* llvmFunc, StructDef* def)
+                                           llvm::Function* llvmFunc, StructDef*)
 {
     hasAsyncFunctions = true;
     ensure_malloc_free_declared();
