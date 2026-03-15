@@ -57,35 +57,61 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         return true; // not found = generic type parameter
     };
 
+    bool hasEqualsOverride = false;
     // Structs (non-transparent) cannot be used directly in binary expressions
     // Exception: structs implementing Equatable can use == and !=
     // Skip check for generic type params (validated at monomorphization)
     if ((leftResolved.kind == TypeKind::STRUCT || rightResolved.kind == TypeKind::STRUCT)
         && !isGenericParam(leftResolved) && !isGenericParam(rightResolved))
     {
-        bool allowed = false;
-
         // Check if struct implements Equatable for == and !=
         if (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL)
         {
             const auto& structType = leftResolved.kind == TypeKind::STRUCT ? leftResolved : rightResolved;
             if (const auto structSym = _global_scope->lookupStruct(structType.structName))
             {
-                allowed = structSym->hasConstraint("Equatable");
-            }
-        }
+                if (!structSym->hasConstraint("Equatable"))
+                {
+                    BINDER_ERROR(
+                        DiagnosticCode::TYPE_MISMATCH,
+                        "invalid types for binary expression: structs cannot be compared directly"
+                        "\n\tleft: " + left->type.toHumanString() +
+                        "\n\tright: " + right->type.toHumanString() +
+                        "\n\thint: implement 'Equatable' to enable == and != operators",
+                        left,
+                        location
+                    );
+                }
 
-        if (!allowed)
-        {
-            BINDER_ERROR(
-                DiagnosticCode::TYPE_MISMATCH,
-                "invalid types for binary expression: structs cannot be compared directly"
-                "\n\tleft: " + left->type.toHumanString() +
-                "\n\tright: " + right->type.toHumanString() +
-                "\n\thint: implement 'Equatable' to enable == and != operators",
-                left,
-                location
-            );
+                // Equatable interface accepts first argument as target comparison to this, we need look for best overload of it
+                for (const auto& method_symbol : structSym->methods)
+                {
+                    if (method_symbol->arity() != 1) continue;
+                    if (method_symbol->name != "equals") continue;
+
+                    assert(method_symbol && !method_symbol->paramTypes[0].structName.empty());
+                    // TODO: VALID FUNCTION FOR TYPE COMPARISON
+                    const auto firstParamTypeQualifiedName = _current_scope->lookupStruct(
+                        method_symbol->paramTypes[0].structName);
+                    const auto leftHasOperator = firstParamTypeQualifiedName->name == leftResolved.structName;
+                    const auto rightHasOperator = firstParamTypeQualifiedName->name == rightResolved.structName;
+                    if (!leftHasOperator && !rightHasOperator)
+                    {
+                        BINDER_ERROR(
+                            DiagnosticCode::TYPE_MISMATCH,
+                            "invalid types for binary expression: structs cannot be compared directly"
+                            "\n\tleft: " + left->type.toHumanString() +
+                            "\n\tright: " + right->type.toHumanString() +
+                            "\n\thint: implement 'Equatable' to enable == and != operators",
+                            left,
+                            location
+                        );
+                    }
+
+                    hasEqualsOverride = true;
+                    break;
+                }
+            }
         }
     }
 
@@ -101,7 +127,7 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
 
     // Type mismatch check (allow integer width differences - generator handles widening)
     // Skip for generic types (validated at monomorphization)
-    if (leftResolved != rightResolved && !hasGeneric)
+    if (leftResolved != rightResolved && !hasGeneric && !hasEqualsOverride)
     {
         const bool bothIntegers = leftResolved.kind == TypeKind::INTEGER && rightResolved.kind == TypeKind::INTEGER;
         const bool bothFloats =

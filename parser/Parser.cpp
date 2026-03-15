@@ -48,7 +48,6 @@ Parser::Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics) : token
 
 void Parser::registerKnownType(const std::string& name)
 {
-    LOG_DEBUG("[parser] registerKnownType: '%s'", name.c_str());
     currentScope->define_struct(name, Type::struct_type(name));
 }
 

@@ -79,6 +79,10 @@ impl Hashable, Equatable for str {
     bool equals(str other) {
         return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
     }
+
+    bool equals(string other) {
+        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
+    }
 }
 
 impl Hashable, Equatable for string {
@@ -87,6 +91,10 @@ impl Hashable, Equatable for string {
     }
 
     bool equals(string other) {
+        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
+    }
+
+    bool equals(str other) {
         return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
     }
 }
