@@ -19,6 +19,11 @@ std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess& access)
     {
         structName = object_symbol->type.structName;
     }
+    else if (object_symbol->type.kind == TypeKind::ARRAY)
+    {
+        // Arrays use the arr<T> backing struct
+        structName = "arr";
+    }
 
     if (!structName.empty())
     {
@@ -27,7 +32,7 @@ std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess& access)
         {
             BINDER_ERROR(
                 DiagnosticCode::UNDEFINED_STRUCT,
-                "struct with name '"+ structName + "' could not be located!",
+                "struct with name '" + structName + "' could not be located!",
                 object_symbol,
                 object_symbol->location
             );
@@ -38,7 +43,8 @@ std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess& access)
         {
             BINDER_ERROR(
                 DiagnosticCode::UNDEFINED_FIELD,
-                "field with name '"+ access.fieldName.token_name + "' could not be located inside struct '" +structName+
+                "field with name '" + access.fieldName.token_name + "' could not be located inside struct '" +
+                structName +
                 "'!",
                 object_symbol,
                 object_symbol->location

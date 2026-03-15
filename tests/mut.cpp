@@ -43,7 +43,7 @@ TEST(Mutable, InvalidImmutableAssingment) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
-    EXPECT_EQ(result.diagnostics.size(), 1);
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 2);
     EXPECT_EQ(result.returnCode, 1);
 }

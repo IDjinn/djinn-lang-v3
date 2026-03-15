@@ -664,6 +664,37 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                 LOG_DEBUG("[generator]   primitive type name: '%s'", structName.c_str());
             }
         }
+        else
+        {
+            // For complex receivers (e.g., this.data[i]), generate the expression
+            // and infer the type from the resulting LLVM value
+            llvm::Value* receiverVal = generate_expression(*call.receiver);
+            if (receiverVal)
+            {
+                llvm::Type* recvType = receiverVal->getType();
+                // If it's a pointer, check if it points to a struct
+                if (recvType->isPointerTy())
+                {
+                    // Check if there's a loaded struct type
+                    if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(receiverVal))
+                    {
+                        if (auto* structTy = llvm::dyn_cast<llvm::StructType>(loadInst->getType()))
+                        {
+                            structName = structTy->getName().str();
+                        }
+                    }
+                }
+                else if (auto* structTy = llvm::dyn_cast<llvm::StructType>(recvType))
+                {
+                    structName = structTy->getName().str();
+                }
+                else
+                {
+                    structName = get_primitive_type_name(recvType);
+                }
+                LOG_DEBUG("[generator]   complex receiver type resolved: '%s'", structName.c_str());
+            }
+        }
     }
 
     if (structName.empty())

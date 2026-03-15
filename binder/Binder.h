@@ -26,7 +26,9 @@
 } while (false)
 
 #define BINDER_WARNING(code, msg, location) do { \
-    _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+    if (!_bindingStdLib) { \
+        _diagnostics.emitAndPrint(Diagnostic(Severity::Warning, code, msg, location)); \
+    } \
 } while (false)
 
 struct Program;
@@ -94,6 +96,7 @@ private:
     std::shared_ptr<ScopedSymbolTable> _global_scope;
 
     std::string currentFunction_;
+    bool _bindingStdLib = false;
     djinn::binder::ControlFlowContext _controlFlow;
     djinn::ownership::OwnershipTracker _ownership;
 

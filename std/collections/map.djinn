@@ -160,8 +160,8 @@ struct map<Key, Value>
 
     size _hash_index(Key key) {
         mut u32 h = key;
-        if (h < 0) {
-            h = 0 - h;
+        if (h < 0u) {
+            h = 0u - h;
         }
         return h % this.capacity;
     }

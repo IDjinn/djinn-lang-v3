@@ -381,7 +381,7 @@ struct InitializerElement : Location
     explicit InitializerElement(std::unique_ptr<Expression> value)
         : fieldName(), value(std::move(value))
     {
-        location = value->location;
+        if (this->value) location = this->value->location;
     }
 
     [[nodiscard]] bool isDesignated() const { return !fieldName.token_name.empty(); }

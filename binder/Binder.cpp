@@ -148,7 +148,9 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
     for (const auto& program : programs)
     {
         LOG_TRACE("binding program %s", program->name.c_str());
+        _bindingStdLib = program->fileNamespace.starts_with("std::");
         bindProgram(*program);
+        _bindingStdLib = false;
         LOG_TRACE("end of binding program");
     }
 

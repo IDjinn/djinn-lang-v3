@@ -93,10 +93,10 @@ TEST(Method, StaticMethod) {
 
 TEST(Method, VoidMethodWithBlock) {
     const auto source = R"(
-        struct Logger {
+        struct Calculator {
             i32 count;
 
-            void log() {
+            void foo() {
                 this.count = this.count + 1;
             }
         }

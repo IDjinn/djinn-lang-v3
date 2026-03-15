@@ -418,7 +418,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         // Parse user source
-        diagnostics.registerSource("main", source);
+        diagnostics.registerSource("main.djinn", source);
 
         Lexer lexer(source);
         const auto tokens = lexer.tokenize();
