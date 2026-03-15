@@ -17,7 +17,7 @@ TEST(Ownership, CopyTypesDoNotMove)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 84);
 }
@@ -33,7 +33,7 @@ TEST(Ownership, FloatCopyTypes)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -49,7 +49,7 @@ TEST(Ownership, PointerCopyTypes)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 20);
 }
@@ -73,7 +73,7 @@ TEST(Ownership, StructMoveSemantics)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 100);
 }
@@ -93,7 +93,7 @@ TEST(Ownership, UseAfterMove)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -113,7 +113,7 @@ TEST(Ownership, DoubleMoveError)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -137,7 +137,7 @@ TEST(Ownership, ReinitializeAfterMove)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
 }
@@ -159,7 +159,7 @@ TEST(Ownership, ScopeOwnership)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -180,7 +180,7 @@ TEST(Ownership, NestedScopeOwnership)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -203,7 +203,7 @@ TEST(Ownership, FunctionParameterCopyType)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 21);
 }
@@ -225,7 +225,7 @@ TEST(Ownership, IfStatementOwnership)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -244,7 +244,7 @@ TEST(Ownership, WhileLoopOwnership)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10); // 0+1+2+3+4
 }
@@ -261,7 +261,7 @@ TEST(Ownership, ForLoopOwnership)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }

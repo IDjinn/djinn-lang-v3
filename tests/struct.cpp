@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Struct, Definition) {
+TEST(Struct, Definition)
+{
     const auto source = R"(
         struct Result {
             i32 value;
@@ -13,14 +14,15 @@ TEST(Struct, Definition) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
     EXPECT_EQ(result.program->structs.size(), 1);
 }
 
-TEST(Struct, BraceInitializerPositional) {
+TEST(Struct, BraceInitializerPositional)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -33,13 +35,14 @@ TEST(Struct, BraceInitializerPositional) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->structs.size(), 1);
 }
 
-TEST(Struct, BraceInitializerDesignated) {
+TEST(Struct, BraceInitializerDesignated)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -52,13 +55,14 @@ TEST(Struct, BraceInitializerDesignated) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->structs.size(), 1);
 }
 
-TEST(Struct, FieldAccess) {
+TEST(Struct, FieldAccess)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -71,11 +75,12 @@ TEST(Struct, FieldAccess) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.returnCode, 42);
 }
 
-TEST(Struct, FieldAccessSecondField) {
+TEST(Struct, FieldAccessSecondField)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -93,7 +98,8 @@ TEST(Struct, FieldAccessSecondField) {
     EXPECT_EQ(result.returnCode, 99);
 }
 
-TEST(Struct, MethodReturnWithBraceInit) {
+TEST(Struct, MethodReturnWithBraceInit)
+{
     const auto source = R"(
         struct Result {
             i32 value;
@@ -109,12 +115,13 @@ TEST(Struct, MethodReturnWithBraceInit) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
 }
 
-TEST(Struct, AutoInferStructType) {
+TEST(Struct, AutoInferStructType)
+{
     const auto source = R"(
         struct Data {
             i32 num;
@@ -130,11 +137,12 @@ TEST(Struct, AutoInferStructType) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.returnCode, 77);
 }
 
-TEST(Struct, MultipleFieldsPositional) {
+TEST(Struct, MultipleFieldsPositional)
+{
     const auto source = R"(
         struct Vec3 {
             i32 x;
@@ -148,12 +156,13 @@ TEST(Struct, MultipleFieldsPositional) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6);
 }
 
-TEST(Struct, FieldAccessInExpression) {
+TEST(Struct, FieldAccessInExpression)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -166,12 +175,13 @@ TEST(Struct, FieldAccessInExpression) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(Struct, StructAsParameter) {
+TEST(Struct, StructAsParameter)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -188,12 +198,13 @@ TEST(Struct, StructAsParameter) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 123);
 }
 
-TEST(Struct, SimpleBraceInitScalar) {
+TEST(Struct, SimpleBraceInitScalar)
+{
     const auto source = R"(
         i32 main() {
             i32 x = { 42 };
@@ -201,7 +212,7 @@ TEST(Struct, SimpleBraceInitScalar) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }

@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Namespace, BasicDefinition) {
+TEST(Namespace, BasicDefinition)
+{
     const auto source = R"(
         namespace math {
             i32 add(i32 a, i32 b) {
@@ -15,14 +16,15 @@ TEST(Namespace, BasicDefinition) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
     EXPECT_EQ(result.program->namespaces[0]->name.token_name, "math");
 }
 
-TEST(Namespace, StructInNamespace) {
+TEST(Namespace, StructInNamespace)
+{
     const auto source = R"(
         namespace geom {
             struct Point {
@@ -36,14 +38,15 @@ TEST(Namespace, StructInNamespace) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
     EXPECT_EQ(result.program->namespaces[0]->structs.size(), 1);
 }
 
-TEST(Namespace, NestedNamespace) {
+TEST(Namespace, NestedNamespace)
+{
     const auto source = R"(
         namespace std {
             namespace io {
@@ -58,7 +61,7 @@ TEST(Namespace, NestedNamespace) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
@@ -66,7 +69,8 @@ TEST(Namespace, NestedNamespace) {
     EXPECT_EQ(result.program->namespaces[0]->namespaces[0]->name.token_name, "io");
 }
 
-TEST(Namespace, MultipleFunctionsInNamespace) {
+TEST(Namespace, MultipleFunctionsInNamespace)
+{
     const auto source = R"(
         namespace math {
             i32 add(i32 a, i32 b) {
@@ -87,13 +91,14 @@ TEST(Namespace, MultipleFunctionsInNamespace) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces[0]->functions.size(), 3);
 }
 
-TEST(Namespace, StructAndFunctionInNamespace) {
+TEST(Namespace, StructAndFunctionInNamespace)
+{
     const auto source = R"(
         namespace geom {
             struct Vector {
@@ -111,14 +116,15 @@ TEST(Namespace, StructAndFunctionInNamespace) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces[0]->structs.size(), 1);
     EXPECT_EQ(result.program->namespaces[0]->functions.size(), 1);
 }
 
-TEST(Namespace, FileScopedNamespace) {
+TEST(Namespace, FileScopedNamespace)
+{
     const auto source = R"(
         namespace myapp;
 
@@ -131,14 +137,15 @@ TEST(Namespace, FileScopedNamespace) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->fileNamespace, "myapp");
     EXPECT_TRUE(result.program->hasFileNamespace());
 }
 
-TEST(Namespace, FileScopedQualifiedNamespace) {
+TEST(Namespace, FileScopedQualifiedNamespace)
+{
     const auto source = R"(
         namespace myapp::utils;
 
@@ -151,20 +158,21 @@ TEST(Namespace, FileScopedQualifiedNamespace) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->fileNamespace, "myapp::utils");
 }
 
-TEST(Namespace, NoNamespaceIsGlobal) {
+TEST(Namespace, NoNamespaceIsGlobal)
+{
     const auto source = R"(
         i32 main() {
             return 0;
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_FALSE(result.program->hasFileNamespace());

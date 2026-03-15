@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 #include "../DjinnCompiler.h"
 
-TEST(Extern, PrintfHelloWorld) {
+TEST(Extern, PrintfHelloWorld)
+{
     const std::string source = R"(
         extern i32 printf(i8* format, ...);
 
@@ -14,7 +15,8 @@ TEST(Extern, PrintfHelloWorld) {
     EXPECT_EQ(result.program->externFunctions.size(), 1);
 }
 
-TEST(Extern, BlockSyntax) {
+TEST(Extern, BlockSyntax)
+{
     const std::string source = R"(
         extern "C" {
             i32 printf(i8* format, ...);
@@ -31,7 +33,8 @@ TEST(Extern, BlockSyntax) {
     EXPECT_EQ(result.program->externFunctions.size(), 2);
 }
 
-TEST(Extern, MultipleExternBlocks) {
+TEST(Extern, MultipleExternBlocks)
+{
     const std::string source = R"(
         extern i32 printf(i8* format, ...);
 
@@ -65,20 +68,20 @@ TEST(Extern, StdImportNoDuplicateExternSymbols)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
 
     // Verify no numeric suffixes on extern functions in the IR (e.g., printf.50, malloc.51)
     EXPECT_EQ(result.ir.find("@printf."), std::string::npos) <<
- "printf has numeric suffix in IR — duplicate extern declaration";
+        "printf has numeric suffix in IR — duplicate extern declaration";
     EXPECT_EQ(result.ir.find("@malloc."), std::string::npos) <<
- "malloc has numeric suffix in IR — duplicate extern declaration";
+        "malloc has numeric suffix in IR — duplicate extern declaration";
     EXPECT_EQ(result.ir.find("@free."), std::string::npos) <<
- "free has numeric suffix in IR — duplicate extern declaration";
+        "free has numeric suffix in IR — duplicate extern declaration";
     EXPECT_EQ(result.ir.find("@strlen."), std::string::npos) <<
- "strlen has numeric suffix in IR — duplicate extern declaration";
+        "strlen has numeric suffix in IR — duplicate extern declaration";
     EXPECT_EQ(result.ir.find("@realloc."), std::string::npos) <<
- "realloc has numeric suffix in IR — duplicate extern declaration";
+        "realloc has numeric suffix in IR — duplicate extern declaration";
 
     // Verify the correct names exist
     EXPECT_NE(result.ir.find("@printf"), std::string::npos) << "printf should be declared in IR";
@@ -103,7 +106,7 @@ TEST(Extern, ArrayWithStdImportsLinksCorrectly)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
 
     // No suffixed extern names

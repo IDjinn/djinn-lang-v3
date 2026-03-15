@@ -10,7 +10,8 @@
 // Basic Enum Tests
 // ============================================================================
 
-TEST(Enum, SimpleDefinition) {
+TEST(Enum, SimpleDefinition)
+{
     const auto source = R"(
         enum Color {
             Red(),
@@ -29,7 +30,8 @@ TEST(Enum, SimpleDefinition) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, VariantConstruction) {
+TEST(Enum, VariantConstruction)
+{
     const auto source = R"(
         enum Status {
             Active(),
@@ -47,7 +49,8 @@ TEST(Enum, VariantConstruction) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, VariantWithPayload) {
+TEST(Enum, VariantWithPayload)
+{
     const auto source = R"(
         enum Result {
             Ok(i32),
@@ -65,7 +68,8 @@ TEST(Enum, VariantWithPayload) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, MultiplePayloadTypes) {
+TEST(Enum, MultiplePayloadTypes)
+{
     const auto source = R"(
         enum Message {
             Empty(),
@@ -86,7 +90,8 @@ TEST(Enum, MultiplePayloadTypes) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, VariantWithMultipleFields) {
+TEST(Enum, VariantWithMultipleFields)
+{
     const auto source = R"(
         enum Event {
             Click(i32, i32),
@@ -110,7 +115,8 @@ TEST(Enum, VariantWithMultipleFields) {
 // Generic Enum Tests
 // ============================================================================
 
-TEST(Enum, GenericOptional) {
+TEST(Enum, GenericOptional)
+{
     const auto source = R"(
         enum optional<T> {
             Empty(),
@@ -129,7 +135,8 @@ TEST(Enum, GenericOptional) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, GenericResult) {
+TEST(Enum, GenericResult)
+{
     const auto source = R"(
         enum result<T, E> {
             Ok(T),
@@ -148,7 +155,8 @@ TEST(Enum, GenericResult) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, GenericWithPointerType) {
+TEST(Enum, GenericWithPointerType)
+{
     const auto source = R"(
         enum opt<T> {
             Empty(),
@@ -161,12 +169,13 @@ TEST(Enum, GenericWithPointerType) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, GenericWithFloatType) {
+TEST(Enum, GenericWithFloatType)
+{
     const auto source = R"(
         enum optional<T> {
             Empty(),
@@ -184,7 +193,8 @@ TEST(Enum, GenericWithFloatType) {
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(Enum, GenericMultipleInstantiations) {
+TEST(Enum, GenericMultipleInstantiations)
+{
     const auto source = R"(
         enum optional<T> {
             Empty(),

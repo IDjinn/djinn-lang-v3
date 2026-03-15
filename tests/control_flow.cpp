@@ -4,7 +4,8 @@
 
 // ==================== IF STATEMENT TESTS ====================
 
-TEST(ControlFlow, IfStatementTrueBranch) {
+TEST(ControlFlow, IfStatementTrueBranch)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 10;
@@ -15,12 +16,13 @@ TEST(ControlFlow, IfStatementTrueBranch) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(ControlFlow, IfStatementFalseBranch) {
+TEST(ControlFlow, IfStatementFalseBranch)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 3;
@@ -31,12 +33,13 @@ TEST(ControlFlow, IfStatementFalseBranch) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(ControlFlow, IfElseStatementTrueBranch) {
+TEST(ControlFlow, IfElseStatementTrueBranch)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 10;
@@ -48,12 +51,13 @@ TEST(ControlFlow, IfElseStatementTrueBranch) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(ControlFlow, IfElseStatementFalseBranch) {
+TEST(ControlFlow, IfElseStatementFalseBranch)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 3;
@@ -65,12 +69,13 @@ TEST(ControlFlow, IfElseStatementFalseBranch) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
 
-TEST(ControlFlow, IfElseIfElseStatement) {
+TEST(ControlFlow, IfElseIfElseStatement)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 5;
@@ -84,12 +89,13 @@ TEST(ControlFlow, IfElseIfElseStatement) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
 
-TEST(ControlFlow, NestedIfStatements) {
+TEST(ControlFlow, NestedIfStatements)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 10;
@@ -104,12 +110,13 @@ TEST(ControlFlow, NestedIfStatements) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(ControlFlow, IfWithEquality) {
+TEST(ControlFlow, IfWithEquality)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 5;
@@ -120,12 +127,13 @@ TEST(ControlFlow, IfWithEquality) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(ControlFlow, IfWithNotEqual) {
+TEST(ControlFlow, IfWithNotEqual)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 5;
@@ -136,12 +144,13 @@ TEST(ControlFlow, IfWithNotEqual) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(ControlFlow, IfWithLogicalAnd) {
+TEST(ControlFlow, IfWithLogicalAnd)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 10;
@@ -153,12 +162,13 @@ TEST(ControlFlow, IfWithLogicalAnd) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(ControlFlow, IfWithLogicalOr) {
+TEST(ControlFlow, IfWithLogicalOr)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 3;
@@ -170,14 +180,15 @@ TEST(ControlFlow, IfWithLogicalOr) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 
 // ==================== WHILE STATEMENT TESTS ====================
 
-TEST(ControlFlow, WhileLoopSimple) {
+TEST(ControlFlow, WhileLoopSimple)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 0;
@@ -188,12 +199,13 @@ TEST(ControlFlow, WhileLoopSimple) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(ControlFlow, WhileLoopSum) {
+TEST(ControlFlow, WhileLoopSum)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -206,12 +218,13 @@ TEST(ControlFlow, WhileLoopSum) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15); // 1 + 2 + 3 + 4 + 5 = 15
 }
 
-TEST(ControlFlow, WhileLoopWithBreak) {
+TEST(ControlFlow, WhileLoopWithBreak)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 0;
@@ -225,12 +238,13 @@ TEST(ControlFlow, WhileLoopWithBreak) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(ControlFlow, WhileLoopWithContinue) {
+TEST(ControlFlow, WhileLoopWithContinue)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -246,12 +260,13 @@ TEST(ControlFlow, WhileLoopWithContinue) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 10 iterations - 1 skipped = 9
 }
 
-TEST(ControlFlow, WhileLoopNeverExecutes) {
+TEST(ControlFlow, WhileLoopNeverExecutes)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 10;
@@ -262,14 +277,15 @@ TEST(ControlFlow, WhileLoopNeverExecutes) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
 
 // ==================== DO-WHILE STATEMENT TESTS ====================
 
-TEST(ControlFlow, DoWhileLoopSimple) {
+TEST(ControlFlow, DoWhileLoopSimple)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 0;
@@ -280,12 +296,13 @@ TEST(ControlFlow, DoWhileLoopSimple) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(ControlFlow, DoWhileExecutesAtLeastOnce) {
+TEST(ControlFlow, DoWhileExecutesAtLeastOnce)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 10;
@@ -296,12 +313,13 @@ TEST(ControlFlow, DoWhileExecutesAtLeastOnce) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 11); // Executes once even though condition is false
 }
 
-TEST(ControlFlow, DoWhileWithBreak) {
+TEST(ControlFlow, DoWhileWithBreak)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 0;
@@ -315,14 +333,15 @@ TEST(ControlFlow, DoWhileWithBreak) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
 
 // ==================== FOR STATEMENT TESTS ====================
 
-TEST(ControlFlow, ForLoopSimple) {
+TEST(ControlFlow, ForLoopSimple)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -333,12 +352,13 @@ TEST(ControlFlow, ForLoopSimple) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(ControlFlow, ForLoopSum) {
+TEST(ControlFlow, ForLoopSum)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -349,12 +369,13 @@ TEST(ControlFlow, ForLoopSum) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // 1 + 2 + ... + 10 = 55
 }
 
-TEST(ControlFlow, ForLoopWithBreak) {
+TEST(ControlFlow, ForLoopWithBreak)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -368,12 +389,13 @@ TEST(ControlFlow, ForLoopWithBreak) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(ControlFlow, ForLoopWithContinue) {
+TEST(ControlFlow, ForLoopWithContinue)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -387,12 +409,13 @@ TEST(ControlFlow, ForLoopWithContinue) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 10 iterations - 1 skipped = 9
 }
 
-TEST(ControlFlow, ForLoopNested) {
+TEST(ControlFlow, ForLoopNested)
+{
     const auto source = R"(
         i32 main() {
             i32 mut sum = 0;
@@ -405,14 +428,15 @@ TEST(ControlFlow, ForLoopNested) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 3 * 3 = 9
 }
 
 // ==================== SWITCH STATEMENT TESTS ====================
 
-TEST(ControlFlow, SwitchStatementCase1) {
+TEST(ControlFlow, SwitchStatementCase1)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 1;
@@ -427,12 +451,13 @@ TEST(ControlFlow, SwitchStatementCase1) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
 
-TEST(ControlFlow, SwitchStatementCase2) {
+TEST(ControlFlow, SwitchStatementCase2)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 2;
@@ -447,12 +472,13 @@ TEST(ControlFlow, SwitchStatementCase2) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 20);
 }
 
-TEST(ControlFlow, SwitchStatementDefault) {
+TEST(ControlFlow, SwitchStatementDefault)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 99;
@@ -467,12 +493,13 @@ TEST(ControlFlow, SwitchStatementDefault) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(ControlFlow, SwitchStatementWithBreak) {
+TEST(ControlFlow, SwitchStatementWithBreak)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 1;
@@ -491,12 +518,13 @@ TEST(ControlFlow, SwitchStatementWithBreak) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
 
-TEST(ControlFlow, SwitchStatementWithoutDefault) {
+TEST(ControlFlow, SwitchStatementWithoutDefault)
+{
     const auto source = R"(
         i32 main() {
             i32 x = 1;
@@ -513,14 +541,15 @@ TEST(ControlFlow, SwitchStatementWithoutDefault) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
 
 // ==================== COMPLEX CONTROL FLOW TESTS ====================
 
-TEST(ControlFlow, FibonacciIterative) {
+TEST(ControlFlow, FibonacciIterative)
+{
     const auto source = R"(
         i32 main() {
             i32 n = 10;
@@ -535,12 +564,13 @@ TEST(ControlFlow, FibonacciIterative) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // Fib(10) = 55
 }
 
-TEST(ControlFlow, FactorialIterative) {
+TEST(ControlFlow, FactorialIterative)
+{
     const auto source = R"(
         i32 main() {
             i32 n = 5;
@@ -552,12 +582,13 @@ TEST(ControlFlow, FactorialIterative) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 120); // 5! = 120
 }
 
-TEST(ControlFlow, NestedLoopsWithBreak) {
+TEST(ControlFlow, NestedLoopsWithBreak)
+{
     const auto source = R"(
         i32 main() {
             i32 mut count = 0;
@@ -573,12 +604,13 @@ TEST(ControlFlow, NestedLoopsWithBreak) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15); // 5 outer iterations * 3 inner iterations = 15
 }
 
-TEST(ControlFlow, WhileWithMultipleConditions) {
+TEST(ControlFlow, WhileWithMultipleConditions)
+{
     const auto source = R"(
         i32 main() {
             i32 mut x = 0;
@@ -591,7 +623,7 @@ TEST(ControlFlow, WhileWithMultipleConditions) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10); // x = 5, y = 5, sum = 10
 }

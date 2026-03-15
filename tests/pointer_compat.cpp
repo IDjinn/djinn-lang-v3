@@ -14,7 +14,7 @@ TEST(PointerCompat, VoidToTyped)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -29,7 +29,7 @@ TEST(PointerCompat, TypedToVoid)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -47,7 +47,7 @@ TEST(PointerCompat, IncompatibleTypes)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -61,7 +61,7 @@ TEST(PointerCompat, IncompatibleTypesHumanReadableMessage)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     ASSERT_GE(result.diagnostics.size(), 1);
 }
 
@@ -76,6 +76,6 @@ TEST(PointerCompat, SameType)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
 }

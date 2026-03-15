@@ -9,7 +9,8 @@
 #include "../generator/Mangler.h"
 
 
-TEST(FullCompilation, StructGeneric) {
+TEST(FullCompilation, StructGeneric)
+{
     const std::string source = R"(
         struct Array<T> { T data; i32 size; }
 
@@ -19,6 +20,6 @@ TEST(FullCompilation, StructGeneric) {
         }
 )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.returnCode, 0);
 }

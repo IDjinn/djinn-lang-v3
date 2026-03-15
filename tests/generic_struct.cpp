@@ -10,7 +10,8 @@
 // Multi-Parameter Generic Struct Tests
 // ============================================================================
 
-TEST(GenericStruct, TwoParameters) {
+TEST(GenericStruct, TwoParameters)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -23,12 +24,13 @@ TEST(GenericStruct, TwoParameters) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, ThreeParameters) {
+TEST(GenericStruct, ThreeParameters)
+{
     const auto source = R"(
         struct Triple<A, B, C> {
             A first;
@@ -42,12 +44,13 @@ TEST(GenericStruct, ThreeParameters) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, FourParameters) {
+TEST(GenericStruct, FourParameters)
+{
     const auto source = R"(
         struct Quad<A, B, C, D> {
             A a;
@@ -62,12 +65,13 @@ TEST(GenericStruct, FourParameters) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, MapEntry) {
+TEST(GenericStruct, MapEntry)
+{
     const auto source = R"(
         struct MapEntry<K, V> {
             K key;
@@ -81,12 +85,13 @@ TEST(GenericStruct, MapEntry) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, TwoParametersWithInit) {
+TEST(GenericStruct, TwoParametersWithInit)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -99,12 +104,13 @@ TEST(GenericStruct, TwoParametersWithInit) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, TwoParametersFieldAccess) {
+TEST(GenericStruct, TwoParametersFieldAccess)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -117,12 +123,13 @@ TEST(GenericStruct, TwoParametersFieldAccess) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
 
-TEST(GenericStruct, TwoParametersSecondFieldAccess) {
+TEST(GenericStruct, TwoParametersSecondFieldAccess)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -135,12 +142,13 @@ TEST(GenericStruct, TwoParametersSecondFieldAccess) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
 
-TEST(GenericStruct, MixedTypes) {
+TEST(GenericStruct, MixedTypes)
+{
     const auto source = R"(
         struct Mixed<A, B> {
             A a;
@@ -153,12 +161,13 @@ TEST(GenericStruct, MixedTypes) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 50);
 }
 
-TEST(GenericStruct, PointerTypes) {
+TEST(GenericStruct, PointerTypes)
+{
     const auto source = R"(
         struct Container<T, U> {
             T* first;
@@ -171,12 +180,13 @@ TEST(GenericStruct, PointerTypes) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, MultipleInstantiations) {
+TEST(GenericStruct, MultipleInstantiations)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -193,12 +203,13 @@ TEST(GenericStruct, MultipleInstantiations) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, NestedGenericStruct) {
+TEST(GenericStruct, NestedGenericStruct)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -216,12 +227,13 @@ TEST(GenericStruct, NestedGenericStruct) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
 
-TEST(GenericStruct, FunctionReturningGenericStruct) {
+TEST(GenericStruct, FunctionReturningGenericStruct)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -238,12 +250,13 @@ TEST(GenericStruct, FunctionReturningGenericStruct) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15);
 }
 
-TEST(GenericStruct, GenericStructAsParameter) {
+TEST(GenericStruct, GenericStructAsParameter)
+{
     const auto source = R"(
         struct Pair<K, V> {
             K key;
@@ -260,12 +273,13 @@ TEST(GenericStruct, GenericStructAsParameter) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 77);
 }
 
-TEST(GenericStruct, ThreeParametersFieldSum) {
+TEST(GenericStruct, ThreeParametersFieldSum)
+{
     const auto source = R"(
         struct Triple<A, B, C> {
             A first;
@@ -279,7 +293,7 @@ TEST(GenericStruct, ThreeParametersFieldSum) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 60);
 }

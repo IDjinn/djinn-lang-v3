@@ -10,7 +10,8 @@
 // Math Library Tests - Using libc math functions
 // ============================================================================
 
-TEST(Math, Sqrt) {
+TEST(Math, Sqrt)
+{
     const auto source = R"(
         extern "C" {
             f64 sqrt(f64 x);
@@ -27,7 +28,8 @@ TEST(Math, Sqrt) {
     EXPECT_EQ(result.returnCode, 4);
 }
 
-TEST(Math, SqrtFloat) {
+TEST(Math, SqrtFloat)
+{
     const auto source = R"(
         extern "C" {
             f32 sqrtf(f32 x);
@@ -44,7 +46,8 @@ TEST(Math, SqrtFloat) {
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(Math, Pow) {
+TEST(Math, Pow)
+{
     const auto source = R"(
         extern "C" {
             f64 pow(f64 base, f64 exponent);
@@ -61,7 +64,8 @@ TEST(Math, Pow) {
     EXPECT_EQ(result.returnCode, 8);
 }
 
-TEST(Math, Floor) {
+TEST(Math, Floor)
+{
     const auto source = R"(
         extern "C" {
             f64 floor(f64 x);
@@ -78,7 +82,8 @@ TEST(Math, Floor) {
     EXPECT_EQ(result.returnCode, 3);
 }
 
-TEST(Math, Ceil) {
+TEST(Math, Ceil)
+{
     const auto source = R"(
         extern "C" {
             f64 ceil(f64 x);
@@ -95,7 +100,8 @@ TEST(Math, Ceil) {
     EXPECT_EQ(result.returnCode, 4);
 }
 
-TEST(Math, Round) {
+TEST(Math, Round)
+{
     const auto source = R"(
         extern "C" {
             f64 round(f64 x);
@@ -112,7 +118,8 @@ TEST(Math, Round) {
     EXPECT_EQ(result.returnCode, 4);
 }
 
-TEST(Math, Fabs) {
+TEST(Math, Fabs)
+{
     const auto source = R"(
         extern "C" {
             f64 fabs(f64 x);
@@ -129,7 +136,8 @@ TEST(Math, Fabs) {
     EXPECT_EQ(result.returnCode, 42);
 }
 
-TEST(Math, Fmax) {
+TEST(Math, Fmax)
+{
     const auto source = R"(
         extern "C" {
             f64 fmax(f64 x, f64 y);
@@ -146,7 +154,8 @@ TEST(Math, Fmax) {
     EXPECT_EQ(result.returnCode, 20);
 }
 
-TEST(Math, Fmin) {
+TEST(Math, Fmin)
+{
     const auto source = R"(
         extern "C" {
             f64 fmin(f64 x, f64 y);
@@ -163,7 +172,8 @@ TEST(Math, Fmin) {
     EXPECT_EQ(result.returnCode, 5);
 }
 
-TEST(Math, Cbrt) {
+TEST(Math, Cbrt)
+{
     const auto source = R"(
         extern "C" {
             f64 cbrt(f64 x);
@@ -180,7 +190,8 @@ TEST(Math, Cbrt) {
     EXPECT_EQ(result.returnCode, 3);
 }
 
-TEST(Math, Exp) {
+TEST(Math, Exp)
+{
     const auto source = R"(
         extern "C" {
             f64 exp(f64 x);
@@ -198,7 +209,8 @@ TEST(Math, Exp) {
     EXPECT_EQ(result.returnCode, 7); // floor(e^2) = floor(7.389...) = 7
 }
 
-TEST(Math, Log) {
+TEST(Math, Log)
+{
     const auto source = R"(
         extern "C" {
             f64 log(f64 x);
@@ -218,7 +230,8 @@ TEST(Math, Log) {
     EXPECT_EQ(result.returnCode, 1); // ln(e) = 1
 }
 
-TEST(Math, Log10) {
+TEST(Math, Log10)
+{
     const auto source = R"(
         extern "C" {
             f64 log10(f64 x);
@@ -235,7 +248,8 @@ TEST(Math, Log10) {
     EXPECT_EQ(result.returnCode, 3); // log10(1000) = 3
 }
 
-TEST(Math, Log2) {
+TEST(Math, Log2)
+{
     const auto source = R"(
         extern "C" {
             f64 log2(f64 x);
@@ -252,7 +266,8 @@ TEST(Math, Log2) {
     EXPECT_EQ(result.returnCode, 3); // log2(8) = 3
 }
 
-TEST(Math, Fmod) {
+TEST(Math, Fmod)
+{
     const auto source = R"(
         extern "C" {
             f64 fmod(f64 x, f64 y);
@@ -269,7 +284,8 @@ TEST(Math, Fmod) {
     EXPECT_EQ(result.returnCode, 1); // 10 mod 3 = 1
 }
 
-TEST(Math, Hypot) {
+TEST(Math, Hypot)
+{
     const auto source = R"(
         extern "C" {
             f64 hypot(f64 x, f64 y);
@@ -286,7 +302,8 @@ TEST(Math, Hypot) {
     EXPECT_EQ(result.returnCode, 5); // sqrt(3^2 + 4^2) = 5
 }
 
-TEST(Math, Trunc) {
+TEST(Math, Trunc)
+{
     const auto source = R"(
         extern "C" {
             f64 trunc(f64 x);
@@ -303,7 +320,8 @@ TEST(Math, Trunc) {
     EXPECT_EQ(result.returnCode, 7);
 }
 
-TEST(Math, Exp2) {
+TEST(Math, Exp2)
+{
     const auto source = R"(
         extern "C" {
             f64 exp2(f64 x);
@@ -324,7 +342,8 @@ TEST(Math, Exp2) {
 // Math Library Import Tests - Using std::math
 // ============================================================================
 
-TEST(Math, ImportMathSqrt) {
+TEST(Math, ImportMathSqrt)
+{
     const auto source = R"(
         import std::math;
 
@@ -334,12 +353,13 @@ TEST(Math, ImportMathSqrt) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7);
 }
 
-TEST(Math, ImportMathPow) {
+TEST(Math, ImportMathPow)
+{
     const auto source = R"(
         import std::math;
 
@@ -349,12 +369,13 @@ TEST(Math, ImportMathPow) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9);
 }
 
-TEST(Math, ImportMathMultipleFunctions) {
+TEST(Math, ImportMathMultipleFunctions)
+{
     const auto source = R"(
         import std::math;
 
@@ -366,12 +387,13 @@ TEST(Math, ImportMathMultipleFunctions) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10); // 4 + 4 + 2 = 10
 }
 
-TEST(Math, ImportMathFloatFunctions) {
+TEST(Math, ImportMathFloatFunctions)
+{
     const auto source = R"(
         import std::math;
 
@@ -381,12 +403,13 @@ TEST(Math, ImportMathFloatFunctions) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6);
 }
 
-TEST(Math, CombinedMathOperations) {
+TEST(Math, CombinedMathOperations)
+{
     const auto source = R"(
         import std::math;
 
@@ -400,7 +423,7 @@ TEST(Math, CombinedMathOperations) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }

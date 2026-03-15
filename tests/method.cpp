@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Method, BasicMethodWithBlock) {
+TEST(Method, BasicMethodWithBlock)
+{
     const auto source = R"(
         struct Counter {
             i32 value;
@@ -13,13 +14,14 @@ TEST(Method, BasicMethodWithBlock) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs.size(), 1);
     EXPECT_EQ(result.program->structs[0]->methods.size(), 1);
 }
 
-TEST(Method, ExpressionBodyArrow) {
+TEST(Method, ExpressionBodyArrow)
+{
     const auto source = R"(
         struct Point {
             i32 x;
@@ -30,14 +32,15 @@ TEST(Method, ExpressionBodyArrow) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs[0]->methods.size(), 2);
     EXPECT_TRUE(result.program->structs[0]->methods[0]->isExpressionBody());
     EXPECT_TRUE(result.program->structs[0]->methods[1]->isExpressionBody());
 }
 
-TEST(Method, MethodWithParameters) {
+TEST(Method, MethodWithParameters)
+{
     const auto source = R"(
         struct Calculator {
             i32 result;
@@ -50,13 +53,14 @@ TEST(Method, MethodWithParameters) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs[0]->methods.size(), 2);
     EXPECT_EQ(result.program->structs[0]->methods[0]->parameters.size(), 2);
 }
 
-TEST(Method, PublicPrivateModifiers) {
+TEST(Method, PublicPrivateModifiers)
+{
     const auto source = R"(
         struct Person {
             i32 age;
@@ -69,12 +73,13 @@ TEST(Method, PublicPrivateModifiers) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs[0]->methods.size(), 2);
 }
 
-TEST(Method, StaticMethod) {
+TEST(Method, StaticMethod)
+{
     const auto source = R"(
         struct Math {
             static i32 abs(i32 x) {
@@ -86,12 +91,13 @@ TEST(Method, StaticMethod) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs[0]->methods.size(), 1);
 }
 
-TEST(Method, VoidMethodWithBlock) {
+TEST(Method, VoidMethodWithBlock)
+{
     const auto source = R"(
         struct Calculator {
             i32 count;
@@ -102,11 +108,12 @@ TEST(Method, VoidMethodWithBlock) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
-TEST(Method, MixedFieldsAndMethods) {
+TEST(Method, MixedFieldsAndMethods)
+{
     const auto source = R"(
         struct User {
             i32 id;
@@ -124,7 +131,7 @@ TEST(Method, MixedFieldsAndMethods) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs[0]->fields.size(), 2);
     EXPECT_EQ(result.program->structs[0]->methods.size(), 3);

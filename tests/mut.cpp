@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Mutable, BasicMutableVariables) {
+TEST(Mutable, BasicMutableVariables)
+{
     const auto source = R"(
         namespace math {
             i32 add(i32 a, i32 b) {
@@ -20,12 +21,13 @@ TEST(Mutable, BasicMutableVariables) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
 
-TEST(Mutable, InvalidImmutableAssingment) {
+TEST(Mutable, InvalidImmutableAssingment)
+{
     const auto source = R"(
         namespace math {
             i32 add(i32 a, i32 b) {

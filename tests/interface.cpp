@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Interface, BasicDefinition) {
+TEST(Interface, BasicDefinition)
+{
     const auto source = R"(
         interface ICounter {
             i32 getCount();
@@ -10,7 +11,7 @@ TEST(Interface, BasicDefinition) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->interfaces.size(), 1);
 }
@@ -28,24 +29,26 @@ TEST(Interface, SameNameInterfaceDefinition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->interfaces.size(), 1);
 }
 
-TEST(Interface, GenericInterface) {
+TEST(Interface, GenericInterface)
+{
     const auto source = R"(
         interface IComparable<T> {
             i32 compareTo(T other);
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->interfaces.size(), 1);
 }
 
-TEST(Interface, StructImplementsInterface) {
+TEST(Interface, StructImplementsInterface)
+{
     const auto source = R"(
         interface IValue {
             i32 getValue();
@@ -60,7 +63,7 @@ TEST(Interface, StructImplementsInterface) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->interfaces.size(), 1);
     EXPECT_EQ(result.program->structs.size(), 1);
@@ -68,7 +71,8 @@ TEST(Interface, StructImplementsInterface) {
     EXPECT_EQ(result.program->structs[0]->implements[0], "IValue");
 }
 
-TEST(Interface, StructImplementsMultipleInterfaces) {
+TEST(Interface, StructImplementsMultipleInterfaces)
+{
     const auto source = R"(
         interface IReadable {
             i32 read();
@@ -91,7 +95,7 @@ TEST(Interface, StructImplementsMultipleInterfaces) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->interfaces.size(), 2);
     EXPECT_EQ(result.program->structs[0]->implements.size(), 2);

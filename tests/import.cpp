@@ -2,7 +2,8 @@
 
 #include "../DjinnCompiler.h"
 
-TEST(Import, BasicImport) {
+TEST(Import, BasicImport)
+{
     const auto source = R"(
         import math;
 
@@ -13,14 +14,15 @@ TEST(Import, BasicImport) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports.size(), 1);
     EXPECT_EQ(result.program->imports[0]->namespacePath.toString(), "math");
 }
 
-TEST(Import, QualifiedImport) {
+TEST(Import, QualifiedImport)
+{
     const auto source = R"(
         import std::io;
 
@@ -33,14 +35,15 @@ TEST(Import, QualifiedImport) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports.size(), 1);
     EXPECT_EQ(result.program->imports[0]->namespacePath.toString(), "std::io");
 }
 
-TEST(Import, MultipleImports) {
+TEST(Import, MultipleImports)
+{
     const auto source = R"(
         import math;
         import utils;
@@ -58,18 +61,19 @@ TEST(Import, MultipleImports) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports.size(), 2);
 }
 
-TEST(Import, ImportParsesQualifiedName) {
+TEST(Import, ImportParsesQualifiedName)
+{
     const auto source = R"(
         import a::b::c;
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false});
+    const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports[0]->namespacePath.parts.size(), 3);
