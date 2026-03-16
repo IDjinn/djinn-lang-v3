@@ -49,7 +49,9 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
     if (funcSym->isAsync && (funcSym->constEval || funcSym->constExpr))
     {
         const auto invalidModifierStr = funcSym->constEval ? "consteval" : "constexpr";
-        BINDER_ERROR(DiagnosticCode::INVALID_MODIFIERS, "function '" + decl.name.token_name +"' cannot have 'async' and '"+invalidModifierStr+"'!", decl, decl.name.location);
+        BINDER_ERROR(DiagnosticCode::INVALID_MODIFIERS,
+                     "function '" + decl.name.token_name +"' cannot have 'async' and '"+invalidModifierStr+"'!", decl,
+                     decl.name.location);
     }
 
     for (const auto& param : decl.parameters)
