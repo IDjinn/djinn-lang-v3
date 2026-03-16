@@ -36,6 +36,7 @@ extern "C" {
 #define DJINN_API
 #endif
 
+DJINN_API int64_t __djinn_unix_timestamp_ms(void);
 
 DJINN_API uint32_t __djinn_compare_strings(
     char* leftData,

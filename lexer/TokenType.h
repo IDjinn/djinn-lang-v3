@@ -42,6 +42,8 @@ enum class TokenType
     FLOAT,
     STRING,
     AUTO,
+    FALSE, // true
+    TRUE, // false
     // -------- //
 
     IDENTIFIER,
@@ -95,17 +97,20 @@ enum class TokenType
     DOT_DOT, // ..
     DOT_DOT_DOT, // ...
     AT, // @
-    UNION,
-    ENUM,
-    NEW,
-    IMPL,
-    WHERE,
-    ASYNC,
-    AWAIT,
-    YIELD,
-    SPAWN,
-    FALSE,
-    TRUE,
+
+    // SPECIAL TYPES
+    ENUM, // enum
+    NEW, // new
+    IMPL, // impl
+    WHERE, // where (for generics)
+    ASYNC, // async
+    AWAIT, // await
+    YIELD, // yield
+    SPAWN, // spawn (threading)
+
+    // COMPILE TIME
+    CONST_EXPR, // constexpr
+    CONST_EVAL // consteval
 };
 
 

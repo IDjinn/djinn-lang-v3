@@ -5,6 +5,8 @@
 #include "./Lexer.h"
 #include <unordered_map>
 
+#include "../utils/Logger.h"
+
 static std::unordered_map<std::string, TokenType> keywords = {
     {"void", TokenType::VOID},
     {"return", TokenType::RETURN},
@@ -14,7 +16,6 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"namespace", TokenType::NAMESPACE},
     {"import", TokenType::IMPORT},
     {"mut", TokenType::MUT},
-    // Control flow
     {"if", TokenType::IF},
     {"else", TokenType::ELSE},
     {"for", TokenType::FOR},
@@ -30,7 +31,6 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"private", TokenType::PRIVATE},
     {"static", TokenType::STATIC},
     {"this", TokenType::THIS},
-    {"union", TokenType::UNION},
     {"enum", TokenType::ENUM},
     {"new", TokenType::NEW},
     {"impl", TokenType::IMPL},
@@ -41,6 +41,8 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"spawn", TokenType::SPAWN},
     {"true", TokenType::TRUE},
     {"false", TokenType::FALSE},
+    {"constexpr", TokenType::CONST_EXPR},
+    {"consteval", TokenType::CONST_EVAL},
 };
 
 Lexer::Lexer(std::string source, std::string fileId)
@@ -140,41 +142,70 @@ Token Lexer::read_string()
     return make_token(TokenType::STRING_LITERAL, value, startLine, startColumn);
 }
 
+bool is_valid_number_token_slice(char c, size_t index, char prev)
+{
+    if (isdigit(c))
+        return true;
+
+    if ((c == '_' || c == '\'') && index > 0 && isdigit(prev))
+        return true;
+
+    return false;
+}
+
 Token Lexer::read_number()
 {
     const uint32_t startLine = line;
     const uint32_t startColumn = column;
+
     std::string value;
-    while (isdigit(peek()))
+
+    while (isdigit(peek()) || peek() == '_' || peek() == '\'')
     {
         value += advance();
     }
 
-    // Check for floating point
+    bool isFloat = false;
+
     if (peek() == '.' && isdigit(peekNext()))
     {
-        value += advance(); // consume '.'
+        isFloat = true;
+        value += advance();
+
+        while (isdigit(peek()) || peek() == '_' || peek() == '\'')
+        {
+            value += advance();
+        }
+    }
+
+    // 1e9 or 1.5e9
+    if (peek() == 'e' || peek() == 'E')
+    {
+        isFloat = true;
+        value += advance();
+
+        if (peek() == '+' || peek() == '-')
+        {
+            value += advance();
+        }
+
+        if (!isdigit(peek()))
+        {
+            LOG_ERROR("invalid exponent");
+            throw std::runtime_error("invalid exponent");
+        }
+
         while (isdigit(peek()))
         {
             value += advance();
         }
-        // Optional exponent: 1.5e10, 1.5E-10
-        if (peek() == 'e' || peek() == 'E')
-        {
-            value += advance();
-            if (peek() == '+' || peek() == '-')
-            {
-                value += advance();
-            }
-            while (isdigit(peek()))
-            {
-                value += advance();
-            }
-        }
+    }
+
+    if (isFloat)
+    {
         return make_token(TokenType::FLOAT_LITERAL, value, startLine, startColumn);
     }
 
-    // Check for integer suffix: u (unsigned) or i (signed)
     if (peek() == 'u' || peek() == 'i')
     {
         value += advance();

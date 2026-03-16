@@ -19,8 +19,8 @@
 ## Fase 3: Std Basica - ~15%
 
 - [x] array\<T\> - generic collection (push, get, set, grow, destroy)
-- [ ] String - dynamic string
-- [~] I/O basico - funciona via extern printf/puts, sem wrapper proprio
+- [x] String - dynamic string
+- [x] I/O basico - funciona via extern printf/puts, sem wrapper proprio
 - [x] HashMap\<K,V\> - hash table
 
 ## Fase 4: Features Avancadas - ~50%

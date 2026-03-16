@@ -48,7 +48,7 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
     Type rightResolved = resolveTransparent(right->type);
 
     // Check if a STRUCT type is a generic param (not registered as struct/enum)
-    auto isGenericParam = [this](const Type& type) -> bool
+    auto isGenericParam = [this](const Type& type) -> bool // TODO: VALID FUNCTION FOR TYPE GENERIC CHECK
     {
         if (type.kind != TypeKind::STRUCT) return false;
         if (type.structName.empty()) return false;
@@ -63,6 +63,7 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
     // Skip check for generic type params (validated at monomorphization)
     if ((leftResolved.kind == TypeKind::STRUCT || rightResolved.kind == TypeKind::STRUCT)
         && !isGenericParam(leftResolved) && !isGenericParam(rightResolved))
+    // TODO: THIS NEED TO BE HANDLED AS DIAGNOSTIC PLUGIN-EXTENSION SOMETHING. ITS NOT MAINTAINABLE FOR FUTURE TIME
     {
         // Check if struct implements Equatable for == and !=
         if (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL)
@@ -116,7 +117,7 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
     }
 
     // Check if either side involves a generic type (including pointers to generics)
-    auto involvesGeneric = [&isGenericParam](const Type& type) -> bool
+    auto involvesGeneric = [&isGenericParam](const Type& type) -> bool // TODO: VALID FUNCTION FOR TYPE GENERIC CHECK
     {
         if (isGenericParam(type)) return true;
         if (type.kind == TypeKind::POINTER && type.elementType && isGenericParam(*type.elementType)) return true;

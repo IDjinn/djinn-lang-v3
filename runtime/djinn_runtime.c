@@ -8,8 +8,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
 #include "logger.h"
+
+#define _POSIX_C_SOURCE 199309L
+#include <time.h>
+#include <stdint.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -49,6 +52,13 @@ Logger* logger;
 #define DJINN_TRACE(message, ...) do {} while (0)
 #endif
 
+
+int64_t __djinn_unix_timestamp_ms(void)
+{
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+}
 
 uint32_t __djinn_compare_strings(
     char* leftData,
@@ -333,6 +343,7 @@ void __djinn_await(void* child_handle, void* parent_handle)
 static DWORD WINAPI file_io_thread_func(LPVOID arg)
 {
 
+
 #else
 static void* file_io_thread_func(void* arg)
 {
@@ -441,11 +452,14 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
 
         DJINN_TRACE("IOCP completion: type=%d, ok=%d, bytes=%lu", req->type, (int)ok, bytes_transferred);
 
-        if (!ok)
+        DWORD err = ok ? 0 : GetLastError();
+        if (err == ERROR_NETNAME_DELETED || err == ERROR_CONNECTION_ABORTED)
         {
-            // I/O error
+            req->result = 0; // treat as closed
+        }
+        else if (err != 0)
+        {
             req->result = -1;
-            DJINN_TRACE("IOCP error on type=%d, err=%lu", req->type, GetLastError());
         }
         else
         {
@@ -472,10 +486,21 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
                 break;
 
             case DJINN_IO_RECV:
-                req->result = (int64_t)bytes_transferred;
-                DJINN_TRACE("recv completed: bytes=%lld, socket=%lld", (long long)req->result,
-                            (long long)req->socket);
-                break;
+                {
+                    if (bytes_transferred == 0)
+                    {
+                        req->result = 0;
+                        DJINN_TRACE("socket closed by peer: %lld", (long long)req->socket);
+                    }
+                    else
+                    {
+                        req->result = (int64_t)bytes_transferred;
+                        DJINN_TRACE("recv completed: bytes=%lld socket=%lld",
+                                    (long long)req->result,
+                                    (long long)req->socket);
+                    }
+                    break;
+                }
 
             case DJINN_IO_SEND:
                 req->result = (int64_t)bytes_transferred;
@@ -622,6 +647,7 @@ static void* socket_poller_thread_func(void* arg)
 #ifdef _WIN32
 static DWORD WINAPI worker_thread(LPVOID arg)
 {
+
 
 #else
 static void* worker_thread(void* arg)
