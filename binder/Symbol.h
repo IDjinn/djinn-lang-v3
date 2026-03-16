@@ -112,6 +112,8 @@ struct FunctionSymbol : Symbol
     bool isVariadic = false;
     bool isAsync = false;
     std::unique_ptr<Block> body;
+    bool constEval;
+    bool constExpr;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
         : Symbol(SymbolKind::Function, std::move(name), Type::voided(), loc),

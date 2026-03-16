@@ -820,6 +820,20 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                     program->functions.push_back(parse_function_with_type(std::move(returnType)));
                 }
             }
+            else if (check(TokenType::CONST_EVAL))
+            {
+                advance(); // consume 'consteval'
+                auto func = parse_function();
+                func->constEval = true;
+                program->functions.push_back(std::move(func));
+            }
+            else if (check(TokenType::CONST_EXPR))
+            {
+                advance(); // consume 'constexpr'
+                auto func = parse_function();
+                func->constExpr = true;
+                program->functions.push_back(std::move(func));
+            }
             else if (check(TokenType::ASYNC))
             {
                 advance(); // consume 'async'

@@ -366,6 +366,8 @@ struct FunctionDeclaration : Location
     std::vector<Parameter> parameters;
     std::unique_ptr<Block> body;
     bool isAsync = false;
+    bool constExpr = false;
+    bool constEval = false;
 
     FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)
@@ -383,6 +385,8 @@ struct FunctionDeclaration : Location
     {
         writeIndent(os, indent);
         if (isAsync) os << "async ";
+        if (constExpr) os << "constexpr ";
+        if (constEval) os << "consteval ";
         os << "Function " << name.token_name << "<" << returnType << ">(";
         for (size_t i = 0; i < parameters.size(); ++i)
         {

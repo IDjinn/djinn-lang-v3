@@ -63,6 +63,7 @@ namespace DiagnosticCode
     constexpr uint32_t UNSUPPORTED_OPERATOR = 4003;
     constexpr uint32_t IMMUTABLE_MODIFICATION = 4004;
     constexpr uint32_t INVALID_ARGUMENT_COUNT = 4005;
+    constexpr uint32_t INVALID_MODIFIERS = 4006;
 
     // Ownership errors (5xxx)
     constexpr uint32_t USE_AFTER_MOVE = 5001;

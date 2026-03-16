@@ -42,6 +42,15 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
                                           : prefix + "::" + decl.name.token_name;
     const auto funcSym = std::make_shared<FunctionSymbol>(qualifiedName, *decl.returnType);
     funcSym->isAsync = decl.isAsync;
+    funcSym->constEval = decl.constEval;
+    funcSym->constExpr = decl.constExpr;
+
+    // function cannot be async and compile time constraint
+    if (funcSym->isAsync && (funcSym->constEval || funcSym->constExpr))
+    {
+        const auto invalidModifierStr = funcSym->constEval ? "consteval" : "constexpr";
+        BINDER_ERROR(DiagnosticCode::INVALID_MODIFIERS, "function '" + decl.name.token_name +"' cannot have 'async' and '"+invalidModifierStr+"'!", decl, decl.name.location);
+    }
 
     for (const auto& param : decl.parameters)
     {

@@ -134,7 +134,7 @@ void Generator::generate()
     // PASS 7: Always generate coro wrappers + runtime support (async by default)
     // All programs use the runtime for memory tracing (__djinn_malloc/__djinn_free)
     // and async infrastructure
-    hasAsyncFunctions = true;
+    hasAsyncFunctions = true; // we set program as async by default!
     ensure_malloc_free_declared();
     generate_coro_wrappers();
     generate_runtime_declarations();
