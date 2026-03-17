@@ -591,25 +591,26 @@ struct EnumDeclaration : Location
 
 struct ImplDeclaration : Location
 {
-    std::unique_ptr<Type> targetType;
-    std::vector<std::string> interfaceNames; // empty for inherent impl, filled for "impl Interface for Type"
+    std::vector<Type> targetTypes{};
+    std::vector<std::string> interfaceNames{}; // empty for inherent impl, filled for "impl Interface for Type"
     std::vector<std::unique_ptr<StructMethodDeclaration>> methods;
 
     [[nodiscard]] bool isInterfaceImpl() const { return !interfaceNames.empty(); }
 
-    [[nodiscard]] std::string targetTypeName() const
+    [[nodiscard]] std::string targetTypeName(const size_t index) const
     {
-        if (targetType->kind == TypeKind::STRUCT) return targetType->structName;
+        const auto targetType = targetTypes.at(index);
+        if (targetType.kind == TypeKind::STRUCT) return targetType.structName;
         // For primitive types, build the name from kind+size
-        if (targetType->kind == TypeKind::INTEGER)
+        if (targetType.kind == TypeKind::INTEGER)
         {
-            return (targetType->sign ? "i" : "u") + std::to_string(targetType->size);
+            return (targetType.sign ? "i" : "u") + std::to_string(targetType.size);
         }
-        if (targetType->kind == TypeKind::F32) return "f32";
-        if (targetType->kind == TypeKind::F64) return "f64";
-        if (targetType->kind == TypeKind::F16) return "f16";
-        if (targetType->kind == TypeKind::F128) return "f128";
-        return targetType->toHumanString();
+        if (targetType.kind == TypeKind::F32) return "f32";
+        if (targetType.kind == TypeKind::F64) return "f64";
+        if (targetType.kind == TypeKind::F16) return "f16";
+        if (targetType.kind == TypeKind::F128) return "f128";
+        return targetType.toHumanString();
     }
 
     void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
@@ -630,7 +631,13 @@ struct ImplDeclaration : Location
             }
             os << " for ";
         }
-        os << targetTypeName() << ")\n";
+
+        for (int i = 0; i < this->targetTypes.size(); ++i)
+        {
+            os << targetTypeName(i);
+        }
+        os << ")\n";
+
         for (const auto& method : methods)
         {
             method->print(os, indent + 2);

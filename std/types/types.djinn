@@ -7,6 +7,8 @@ extern "C" {
         i32 leftLen,
         i32 rightLen
     );
+
+    u32 __djinn_hash_string(i8* data, u32 length);
 }
 
 struct size : u32;
@@ -26,8 +28,8 @@ enum result<T, E> {
     Error(E)
 }
 
-struct str {
-    i8* data;
+struct arr<T> {
+    T* data;
     size len;
 
     public bool is_empty() {
@@ -39,8 +41,8 @@ struct str {
     }
 }
 
-struct arr<T> {
-    T* data;
+struct str {
+    i8* data;
     size len;
 
     public bool is_empty() {
@@ -71,11 +73,13 @@ struct string {
 }
 
 
-impl Hashable, Equatable for str {
-    i32 hash() {
-        return 0;
+impl Hashable for str, string {
+    u32 hash() {
+        return __djinn_hash_string(this.data, this.len);
     }
+}
 
+impl Equatable for str {
     bool equals(str other) {
         return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
     }
@@ -85,11 +89,7 @@ impl Hashable, Equatable for str {
     }
 }
 
-impl Hashable, Equatable for string {
-    i32 hash() {
-        return 0;
-    }
-
+impl Equatable for string {
     bool equals(string other) {
         return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
     }
@@ -99,18 +99,26 @@ impl Hashable, Equatable for string {
     }
 }
 
-impl Hashable, Equatable for i32 {
-    i32 hash() {
+impl Hashable for i8, i16, i32, i64, i128 {
+    u32 hash() {
         return this;
     }
+}
 
+impl Hashable for u8, u16, u32, u64, u128 {
+    u32 hash() {
+        return this;
+    }
+}
+
+impl Equatable for i32 {
     bool equals(i32 other) {
         return this == other;
     }
 }
 
 impl Hashable, Equatable for i8* {
-    i32 hash() {
+    u32 hash() {
         return 0;
     }
 

@@ -2076,12 +2076,16 @@ std::unique_ptr<ImplDeclaration> Parser::parse_impl()
         }
 
         expect("Esperado 'for' após interface(s) no impl", TokenType::FOR);
-        impl->targetType = parse_type();
+        do
+        {
+            impl->targetTypes.push_back(*parse_type());
+        }
+        while (match(TokenType::COMMA));
     }
     else
     {
         // "impl Type { methods }" form
-        impl->targetType = std::move(firstType);
+        impl->targetTypes.emplace_back(*firstType);
     }
 
     expect("Esperado '{' após tipo no impl", TokenType::LBRACE);

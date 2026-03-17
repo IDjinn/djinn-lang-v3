@@ -11,10 +11,12 @@ See `todo.md` for full roadmap. Summary:
 - **Fase 2 (Estruturas)**: ~65% - enums, methods, constructors (incl. generic), array\<T\>. Faltam slices e string
   robusto
 - **Fase 3 (Std)**: ~15% - I/O parcial via extern, array\<T\> collection. Faltam String, HashMap
-- **Fase 4 (Avancado)**: ~50% - interfaces, async/await feitos. Faltam pattern matching, closures
+- **Fase 4 (Avancado)**: ~50% - interfaces, async/await feitos. Faltam pattern matching, closures, constexpr
 
 Extras ja implementados: control flow, aritmetica, mutabilidade, ownership/copy semantics,
-name mangling, binder/scope, diagnostics, imports, namespaces, LSP server.
+name mangling, binder/scope, diagnostics, imports, namespaces, LSP server, intrinsics (sizeof, alignof, typeof,
+likely/unlikely, expect), type casting, pointer compatibility, number literals (separators, scientific notation),
+generic constraints (where clauses), slices (str, i32[]).
 
 ## Architecture
 
@@ -22,16 +24,50 @@ name mangling, binder/scope, diagnostics, imports, namespaces, LSP server.
 lexer/          Lexer, Token, TokenType
 parser/         AST nodes (Declaration, Statement, Type, Generic, Scope)
 binder/         Symbol table, scope resolution, ownership tracking, type validation
-generator/      LLVM IR generation, intrinsics (sizeof), name mangling
+generator/      LLVM IR generation, intrinsics (sizeof, alignof, typeof), name mangling
 visitor/        Statement/Declaration visitors
-diagnostics/    Error reporting with suggestions
+diagnostics/    Error reporting with suggestions and error codes
 lsp/            Language Server Protocol (JsonRpc, LspTypes, LspServer)
 utils/          Logger, StopWatch, string_utils
 std/            Standard library definitions (.djinn files)
-tests/          GoogleTest unit tests
+tests/          GoogleTest unit tests (~200+ cases across 31 files)
 playground/     Test files for manual testing
 examples/       Example .djinn programs
+runtime/        C runtime for async (event loop, thread pool, coroutine wrappers)
+docs/           Fumadocs (Next.js) documentation site
 ```
+
+## Build & Test
+
+- **Build system**: CMake with GLOB_RECURSE (new .cpp files in existing dirs auto-included)
+- **Test framework**: GoogleTest
+- **Test helper**: `DjinnCompiler::run()` — accepts source code + flags (.optimize, .includeStd, .generateBinary, etc.)
+- **Test pattern**: Compile djinn source → verify diagnostics count, return code, or IR output
+
+## Implemented Features (verified by tests)
+
+- **Arithmetic**: sum, sub, mult, div (integer/float)
+- **Control flow**: if/else/else if, while, do-while, for, switch/case, break/continue
+- **Structs**: definition, brace init (positional + designated), field access, methods (block + arrow =>), static
+  methods, properties (get/set), transparent types (struct size : u32)
+- **Generics**: single/multi param structs, generic enums (optional\<T\>, result\<T,E\>), generic constructors (stack +
+  heap), monomorphization, nested generics, where clause constraints
+- **Enums**: tagged unions/ADTs, variant payloads, generic enums
+- **Interfaces**: definition, struct implements, multiple interface implementation, generic interfaces
+- **Functions**: regular, async, extern "C" (single + block syntax), variadic (...)
+- **Ownership**: move semantics for structs, copy for primitives/pointers, use-after-move detection, reinitialize after
+  move, scope tracking
+- **Mutability**: mut keyword, immutable-by-default, error on immutable reassignment
+- **Type system**: casting (truncation, widening, float<->int, pointer), auto type inference, pointer compatibility (
+  void* coercion)
+- **Intrinsics**: sizeof, alignof, typeof, likely/unlikely, expect
+- **Async/Await**: LLVM coroutines, yield, spawn, event loop runtime, await in sync (busy-loop fallback)
+- **Imports/Namespaces**: import qualified names, file-scoped namespaces, nested namespaces
+- **Slices**: str (string slices), typed array slices (i32[]), index access, len field
+- **Constructors**: stack + heap (new), generic constructors, forward references (two-pass)
+- **Name mangling**: C++ compatible, demangling support
+- **Diagnostics**: error codes, suggestions, multiple concurrent errors
+- **Number literals**: underscore separators (420_000), tick separators (800'000'000), scientific notation (1e9)
 
 ## Quick Examples
 

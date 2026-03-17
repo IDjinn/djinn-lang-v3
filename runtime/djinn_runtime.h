@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -28,6 +29,8 @@
 
 #ifdef __cplusplus
 extern "C" {
+
+
 #endif
 
 #ifdef _WIN32
@@ -35,6 +38,23 @@ extern "C" {
 #else
 #define DJINN_API
 #endif
+
+DJINN_API uint32_t __djinn_hash_string(const char* data, uint32_t length)
+{
+    printf("C hash: data=%s len=%u\n", data, length);
+
+    uint32_t hash = 2166136261u;
+    // FNV offset basis
+    for (uint32_t i = 0; i < length; ++i)
+    {
+        hash ^= (uint8_t)data[i];
+        hash *= 16777619u;
+        // FNV prime
+    }
+    printf("C hash result: %u\n", hash);
+
+    return hash;
+}
 
 DJINN_API int64_t __djinn_unix_timestamp_ms(void);
 
