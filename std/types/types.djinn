@@ -11,12 +11,12 @@ extern "C" {
     u64 __djinn_hash_string(i8* data, u32 length);
 }
 
-struct size : u32;
+struct size : u32; // TODO: MAYBE UNIQUE TYPE FOR THAT
 struct size_long : u64;
 
 struct c_result : i32;
 
-struct bool : i1;
+struct bool : u1;
 
 enum optional<T> {
     Empty(),
@@ -83,12 +83,6 @@ impl Hashable for i8, i16, i32, u8, u16, u32 {
     }
 }
 
-impl Equatable for i32 {
-    operator ==(i32 left, i32 right) -> bool {
-        return left == right;
-    }
-}
-
 impl Hashable, Equatable for i8* {
     u64 hash() {
         return 0;
@@ -113,7 +107,7 @@ struct str {
 }
 
 struct string {
-    i8* data;
+    mut i8* data;
     size len;
     size capacity;
 
@@ -138,34 +132,47 @@ impl Hashable for str, string {
     u64 hash() {
         return __djinn_hash_string(this.data, this.len);
     }
+
+    str slice(size start, size length) {
+        Debug.assert(start <= this.len, "start out of bounds");
+        Debug.assert(start + length <= this.len, "length out of bounds");
+
+        return { .data = this.data + start, .len = length };
+    }
+
+    string substring(size start, size length) {
+        Debug.assert(start <= this.len, "start out of bounds");
+        Debug.assert(start + length <= this.len, "length out of bounds");
+
+        size new_size = length - start;
+        u32 new_capacity = (u32)((f64)new_size * 1.5);
+        void* data_buffer = __djinn_malloc(new_capacity);
+        memcpy(data_buffer, (this.data + start), length);
+        return { .data = data_buffer, .len = new_size, .capacity = new_capacity };
+    }
+
+    string concat(string left, string right) {
+        return left + right;
+    }
+
+    operator +(string left, string right) -> string { // TODO: THIS DOESNT APPEND IF HAS CAPACITY!
+        u32 new_len = left.len + right.len;
+        u64 alloc_size = (u64)((f64)new_len * 1.5);
+        i8* new_data = __djinn_malloc(alloc_size);
+        memcpy(new_data, left.data, left.len);
+        memcpy(new_data + left.len, right.data, right.len);
+        return { .data = new_data, .len = new_len, .capacity = new_len };
+    }
 }
 
 impl Equatable for str {
     operator ==(str left, str right) -> bool {
         return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
     }
-
-    operator +(str left, str right) -> string {
-        u32 new_len = left.len + right.len;
-        u64 alloc_size = (u64)((f64)new_len * 1.5);
-        i8* new_data = __djinn_malloc(alloc_size);
-        memcpy(new_data, left.data, left.len);
-        memcpy(new_data + left.len, right.data, right.len);
-        return { .data = new_data, .len = new_len, .capacity = new_len };
-    }
 }
 
 impl Equatable for string {
     operator ==(string left, string right) -> bool {
         return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
-    }
-
-    operator +(string left, string right) -> string {
-        u32 new_len = left.len + right.len;
-        u64 alloc_size = (u64)((f64)new_len * 1.5);
-        i8* new_data = __djinn_malloc(alloc_size);
-        memcpy(new_data, left.data, left.len);
-        memcpy(new_data + left.len, right.data, right.len);
-        return { .data = new_data, .len = new_len, .capacity = new_len };
     }
 }
