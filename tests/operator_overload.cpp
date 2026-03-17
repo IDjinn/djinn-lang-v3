@@ -55,7 +55,7 @@ TEST(OperatorOverload, StructAddition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .runAfterCompile = true});
+    const auto result = DjinnCompiler::run(source, {.runAfterCompile = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -85,7 +85,7 @@ TEST(OperatorOverload, StructEquality)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .runAfterCompile = true});
+    const auto result = DjinnCompiler::run(source, {.runAfterCompile = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -114,7 +114,7 @@ TEST(OperatorOverload, NotEqualDerivedFromEqual)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .runAfterCompile = true});
+    const auto result = DjinnCompiler::run(source, {.runAfterCompile = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -140,7 +140,7 @@ TEST(OperatorOverload, BitwiseOperatorsOnPrimitives)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .runAfterCompile = true});
+    const auto result = DjinnCompiler::run(source, {.runAfterCompile = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 40);
 }
@@ -165,7 +165,7 @@ TEST(OperatorOverload, OperatorInStructBody)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .runAfterCompile = true});
+    const auto result = DjinnCompiler::run(source, {.includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -173,6 +173,7 @@ TEST(OperatorOverload, OperatorInStructBody)
 TEST(OperatorOverload, MultipleOperatorsOnSameStruct)
 {
     const auto source = R"(
+        struct bool : i1;
         struct Vec2 {
             i32 x;
             i32 y;
@@ -198,7 +199,7 @@ TEST(OperatorOverload, MultipleOperatorsOnSameStruct)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .runAfterCompile = true});
+    const auto result = DjinnCompiler::run(source, {.includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }

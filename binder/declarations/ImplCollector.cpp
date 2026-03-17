@@ -51,6 +51,12 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             methodSym->operatorCanonicalName = method->operatorCanonicalName;
             methodSym->variadicForwardTarget = method->variadicForwardTarget;
 
+            // Copy attributes from AST
+            for (const auto& attr : method->attributes)
+            {
+                methodSym->attributes.push_back(attr.name.token_name);
+            }
+
             // Store pointers to AST body (AST owns the memory)
             methodSym->body = method->body.get();
             methodSym->expressionBody = method->expression.get();

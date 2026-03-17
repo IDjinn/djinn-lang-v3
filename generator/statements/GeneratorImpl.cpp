@@ -52,6 +52,11 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
     auto* funcType = llvm::FunctionType::get(returnType, paramTypes, method.isVariadic);
     auto* llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
+    if (method.hasAttribute("force-inline"))
+    {
+        llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
+    }
+
     functions[mangledName] = llvmFunc;
 
     // Also register in StructDef if it exists
@@ -74,6 +79,7 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
         auto* thisAlloca = builder->CreateAlloca(thisType, nullptr, "this");
         builder->CreateStore(&*argIt, thisAlloca);
         currentScope->define_variable("this", thisAlloca, struc.name);
+        currentScope->set_variable_signed("this", struc.baseType->sign);
         ++argIt;
     }
 
@@ -88,6 +94,10 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
         builder->CreateStore(&*argIt, alloca);
         std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
         currentScope->define_variable(paramName, alloca, paramStructType);
+        if (paramType.kind == TypeKind::INTEGER)
+        {
+            currentScope->set_variable_signed(paramName, paramType.sign);
+        }
 
         ++argIt;
         ++paramIdx;

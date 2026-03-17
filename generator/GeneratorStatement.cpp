@@ -68,6 +68,16 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
                 }
             }
         }
+        // Determine signedness from source expression for correct cast instruction
+        bool sourceSigned = true; // default to signed
+        if (const auto* ident = dynamic_cast<const Identifier*>(stmt.value.get()))
+        {
+            if (auto sign = currentScope->lookup_variable_signed(ident->name()))
+            {
+                sourceSigned = *sign;
+            }
+        }
+
         auto val = generate_expression(*stmt.value);
         llvm::Type* returnType = currentFunction->getReturnType();
         // Load struct from alloca for return (e.g., string literal returning str)
@@ -78,7 +88,7 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
                 val = builder->CreateLoad(returnType, alloca, "ret_load");
             }
         }
-        val = cast_value(val, returnType);
+        val = cast_value(val, returnType, sourceSigned);
         emit_all_scope_cleanup();
         builder->CreateRet(val);
     }

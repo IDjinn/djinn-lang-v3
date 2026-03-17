@@ -255,6 +255,11 @@ void Generator::forward_declare_monomorphized_method(const MethodSymbol& method,
         *module
     );
 
+    if (method.hasAttribute("force-inline"))
+    {
+        llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
+    }
+
     functions[mangledMethodName] = llvmFunc;
     if (StructDef* monoDef = currentScope->lookup_struct(mangledStructName))
     {
@@ -307,6 +312,10 @@ void Generator::monomorphize_method(const MethodSymbol& method,
                                           ? substitutedParam.structName
                                           : "";
         currentScope->define_variable(paramName, alloca, paramStructType);
+        if (substitutedParam.kind == TypeKind::INTEGER)
+        {
+            currentScope->set_variable_signed(paramName, substitutedParam.sign);
+        }
 
         ++argIt;
         ++paramIdx;
@@ -598,7 +607,7 @@ llvm::Type* Generator::generate_type(const Type& type)
     }
 }
 
-llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) const
+llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType, bool isSigned) const
 {
     if (!value || !targetType) return value;
 
@@ -612,12 +621,10 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
 
         if (srcBits < dstBits)
         {
-            // Use ZExt for i1 (bool) to avoid sign extension issues (i1 true = 1, not -1)
-            if (srcBits == 1)
-            {
-                return builder->CreateZExt(value, targetType, "zext");
-            }
-            return builder->CreateSExt(value, targetType, "sext");
+            if (isSigned)
+                return builder->CreateSExt(value, targetType);
+            else
+                return builder->CreateZExt(value, targetType);
         }
         if (srcBits > dstBits)
         {
@@ -636,12 +643,16 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType) c
 
     if (srcType->isIntegerTy() && targetType->isFloatingPointTy())
     {
-        return builder->CreateSIToFP(value, targetType, "sitofp");
+        return isSigned
+                   ? builder->CreateSIToFP(value, targetType, "sitofp")
+                   : builder->CreateUIToFP(value, targetType, "uitofp");
     }
 
     if (srcType->isFloatingPointTy() && targetType->isIntegerTy())
     {
-        return builder->CreateFPToSI(value, targetType, "fptosi");
+        return isSigned
+                   ? builder->CreateFPToSI(value, targetType, "fptosi")
+                   : builder->CreateFPToUI(value, targetType, "fptoui");
     }
 
     // Load struct from alloca when target expects struct by value

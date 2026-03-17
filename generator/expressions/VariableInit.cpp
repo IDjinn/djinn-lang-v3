@@ -85,7 +85,7 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
             }
 
             llvm::Type* type = generate_type(expr.type);
-            initVal = cast_value(initVal, type);
+            initVal = cast_value(initVal, type, expr.type.sign);
 
             auto* alloca = builder->CreateAlloca(type, nullptr, expr.name.token_name);
             currentScope->define_variable(expr.name.token_name, alloca);
@@ -208,7 +208,7 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     else
     {
         type = generate_type(expr.type);
-        initVal = cast_value(initVal, type);
+        initVal = cast_value(initVal, type, expr.type.sign);
 
         // Track pointee type for pointer/array variables
         if ((expr.type.kind == TypeKind::POINTER || expr.type.kind == TypeKind::ARRAY) && expr.type.elementType)
@@ -231,6 +231,10 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     }
 
     currentScope->define_variable(expr.name.token_name, alloca, structTypeName, pointeeType);
+    if (expr.type.kind == TypeKind::INTEGER)
+    {
+        currentScope->set_variable_signed(expr.name.token_name, expr.type.sign);
+    }
     builder->CreateStore(initVal, alloca);
     return alloca;
 }

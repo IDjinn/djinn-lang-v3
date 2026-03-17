@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include "llvm/IR/DerivedTypes.h"
@@ -223,6 +224,7 @@ struct GeneratorScope
     std::unordered_map<std::string, llvm::AllocaInst*> namedValues;
     std::unordered_map<std::string, std::string> variableStructTypes;
     std::unordered_map<std::string, llvm::Type*> variablePointeeTypes;
+    std::unordered_map<std::string, bool> variableSigned; // tracks signedness for integer variables
     // For pointer variables, stores the element type
 
     std::unordered_map<std::string, llvm::Function*> localFunctions;
@@ -459,6 +461,24 @@ struct GeneratorScope
             return parent->lookup_variable_pointee_type(name);
         }
         return nullptr;
+    }
+
+    void set_variable_signed(const std::string& name, bool isSigned)
+    {
+        variableSigned[name] = isSigned;
+    }
+
+    [[nodiscard]] std::optional<bool> lookup_variable_signed(const std::string& name) const
+    {
+        if (const auto it = variableSigned.find(name); it != variableSigned.end())
+        {
+            return it->second;
+        }
+        if (parent)
+        {
+            return parent->lookup_variable_signed(name);
+        }
+        return std::nullopt;
     }
 
     [[nodiscard]] bool has_variable_in_current_scope(const std::string& name) const

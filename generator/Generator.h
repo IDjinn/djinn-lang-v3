@@ -208,7 +208,7 @@ private:
     llvm::Value* generate_brace_init_for_struct(const BraceInitializer& braceInit, llvm::StructType* structType,
                                                 const std::string& structName);
 
-    llvm::Value* cast_value(llvm::Value* value, llvm::Type* targetType) const;
+    llvm::Value* cast_value(llvm::Value* value, llvm::Type* targetType, bool isSigned = true) const;
 
     const GenericContext* _currentGenericCtx = nullptr;
 

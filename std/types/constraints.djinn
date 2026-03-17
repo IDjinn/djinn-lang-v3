@@ -1,7 +1,7 @@
 namespace std::types::constraints;
 
 interface Hashable {
-    u32 hash();
+    u64 hash();
 }
 
 interface Comparable<T> {

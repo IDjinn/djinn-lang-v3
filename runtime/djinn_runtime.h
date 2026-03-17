@@ -40,9 +40,9 @@ extern "C" {
 #define DJINN_API
 #endif
 
-DJINN_API uint32_t __djinn_hash_string(const char* data, uint32_t length)
+DJINN_API uint64_t __djinn_hash_string(const char* data, uint32_t length)
 {
-    uint32_t hash = 2166136261u;
+    uint64_t hash = 2166136261u;
     // FNV offset basis
     for (uint32_t i = 0; i < length; ++i)
     {

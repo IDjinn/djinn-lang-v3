@@ -282,6 +282,11 @@ void Generator::forward_declare_method(const StructSymbol& struc, const MethodSy
     const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
     const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
+    if (method.hasAttribute("force-inline"))
+    {
+        llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
+    }
+
     functions[mangledName] = llvmFunc;
     def->methodFunctions[method.name] = llvmFunc;
 }
@@ -325,6 +330,11 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
         llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
+        if (method.hasAttribute("force-inline"))
+        {
+            llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
+        }
+
         functions[mangledName] = llvmFunc;
         def->methodFunctions[method.name] = llvmFunc;
     }
@@ -366,6 +376,10 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         builder->CreateStore(&*argIt, alloca);
         std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
         currentScope->define_variable(paramName, alloca, paramStructType);
+        if (paramType.kind == TypeKind::INTEGER)
+        {
+            currentScope->set_variable_signed(paramName, paramType.sign);
+        }
 
         ++argIt;
         ++paramIdx;

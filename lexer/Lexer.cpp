@@ -161,6 +161,29 @@ Token Lexer::read_number()
 
     std::string value;
 
+    // Check for hex (0x) or binary (0b) prefix
+    if (peek() == '0' && (peekNext() == 'x' || peekNext() == 'X'))
+    {
+        value += advance(); // '0'
+        value += advance(); // 'x'
+        while (isxdigit(peek()) || peek() == '_' || peek() == '\'')
+        {
+            value += advance();
+        }
+        return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
+    }
+
+    if (peek() == '0' && (peekNext() == 'b' || peekNext() == 'B'))
+    {
+        value += advance(); // '0'
+        value += advance(); // 'b'
+        while (peek() == '0' || peek() == '1' || peek() == '_' || peek() == '\'')
+        {
+            value += advance();
+        }
+        return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
+    }
+
     while (isdigit(peek()) || peek() == '_' || peek() == '\'')
     {
         value += advance();

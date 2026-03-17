@@ -69,7 +69,8 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
         {
             llvm::Value* idx = builder->getInt64(i);
             llvm::Value* elemPtr = builder->CreateGEP(elemType, dataPtr, idx, "arr_elem");
-            builder->CreateStore(cast_value(elementValues[i], elemType), elemPtr);
+            const bool elemSigned = expr.elementType ? expr.elementType->sign : true;
+            builder->CreateStore(cast_value(elementValues[i], elemType, elemSigned), elemPtr);
         }
     }
     else
@@ -80,7 +81,8 @@ llvm::Value* Generator::generate_array_literal(const ArrayLiteral& expr)
         {
             llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(i)};
             llvm::Value* elemPtr = builder->CreateGEP(arrayType, arrAlloca, indices, "arr_elem");
-            builder->CreateStore(cast_value(elementValues[i], elemType), elemPtr);
+            const bool elemSigned = expr.elementType ? expr.elementType->sign : true;
+            builder->CreateStore(cast_value(elementValues[i], elemType, elemSigned), elemPtr);
         }
         // Decay to pointer to first element
         llvm::Value* indices[] = {builder->getInt32(0), builder->getInt32(0)};

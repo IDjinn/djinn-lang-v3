@@ -171,6 +171,7 @@ struct MethodSymbol : Symbol
     bool isOperator = false; // True if this is an operator overload
     std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq"
     std::string structName; // Name of the struct this constructor belongs to (for constructors only)
+    std::vector<std::string> attributes;
 
     // Variadic forwarding: if this method forwards variadic args to another function
     // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
@@ -205,6 +206,11 @@ struct MethodSymbol : Symbol
     [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
     [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
+
+    [[nodiscard]] bool hasAttribute(const std::string& attr) const
+    {
+        return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
+    }
 };
 
 struct PropertySymbol

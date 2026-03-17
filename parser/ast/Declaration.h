@@ -16,6 +16,21 @@
 
 struct EnumDeclaration;
 
+struct AttributeUsageDeclaration : Location
+{
+    SourceIdentifier name;
+
+    AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name))
+    {
+    }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "AttributeUsageDeclaration(" << name.token_name << ")";
+    }
+};
+
 enum class VisibilityModifier
 {
     PUBLIC,
@@ -53,8 +68,18 @@ struct StructMethodDeclaration : Location
     // Variadic forwarding: if this method forwards its variadic args to another function
     // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
     std::string variadicForwardTarget;
+    std::vector<AttributeUsageDeclaration> attributes;
 
     [[nodiscard]] bool isVariadicForwarder() const { return !variadicForwardTarget.empty(); }
+
+    [[nodiscard]] bool hasAttribute(const std::string& attr) const
+    {
+        for (const auto& a : attributes)
+        {
+            if (a.name.token_name == attr) return true;
+        }
+        return false;
+    }
 
     [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
@@ -200,21 +225,6 @@ struct StructProperty : Location
             else os << ";";
         }
         os << " })";
-    }
-};
-
-struct AttributeUsageDeclaration : Location
-{
-    SourceIdentifier name;
-
-    AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name))
-    {
-    }
-
-    void print(std::ostream& os, const int indent = 0) const override
-    {
-        writeIndent(os, indent);
-        os << "AttributeUsageDeclaration(" << name.token_name << ")";
     }
 };
 

@@ -8,7 +8,7 @@ extern "C" {
         i32 rightLen
     );
 
-    u32 __djinn_hash_string(i8* data, u32 length);
+    u64 __djinn_hash_string(i8* data, u32 length);
 }
 
 struct size : u32;
@@ -41,14 +41,44 @@ struct arr<T> {
     }
 }
 
-impl Hashable for i8, i16, i32, i64, i128 {
-    u32 hash() {
-        return this;
+impl Hashable, Equatable for arr<T> {
+    u64 hash() {
+        return 0u;
+    }
+
+    operator ==(arr<T> left, arr<T> right) -> bool {
+        return left.hash() == right.hash();
     }
 }
 
-impl Hashable for u8, u16, u32, u64, u128 {
-    u32 hash() {
+impl Hashable for i128, u128 {
+    [force-inline] u64 hash() {
+        u64 hi = this >> 64;
+        u64 lo = (u64)this;
+        mut u64 x = hi ^ (lo * 0x9e3779b97f4a7c15);
+
+        x = x + 0x9e3779b97f4a7c15;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
+        x = x ^ (x >> 31);
+
+        return (u64)(x ^ (x >> 32));
+    }
+}
+
+impl Hashable for i64, u64 {
+    [force-inline] u64 hash() {
+        mut u64 x = (u64)this + 0x9e3779b97f4a7c15;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
+        x = x ^ (x >> 31);
+
+        return (u64)(x ^ (x >> 32));
+    }
+}
+
+impl Hashable for i8, i16, i32, u8, u16, u32 {
+     [force-inline] u64 hash() {
         return this;
     }
 }
@@ -60,7 +90,7 @@ impl Equatable for i32 {
 }
 
 impl Hashable, Equatable for i8* {
-    u32 hash() {
+    u64 hash() {
         return 0;
     }
 
@@ -105,7 +135,7 @@ struct string {
 }
 
 impl Hashable for str, string {
-    u32 hash() {
+    u64 hash() {
         return __djinn_hash_string(this.data, this.len);
     }
 }

@@ -25,12 +25,12 @@ struct array<T> : Hashable {
     }
 
     public T get(size index) {
-        Debug.assert(index < this.length, "array::get - index out of bounds");
+        Debug.assert(index < this.length || index < 0, "array::get - index out of bounds");
         return this.data[index];
     }
 
     public void set(size index, T value) {
-        Debug.assert(index < this.length, "array::set - index out of bounds");
+        Debug.assert(index < this.length || index < 0, "array::set - index out of bounds");
         this.data[index] = value;
     }
 
@@ -43,8 +43,8 @@ struct array<T> : Hashable {
         this.data = realloc(this.data, this.capacity * sizeof(T));
     }
 
-    public i32 hash() {
-        mut i32 hash_result = 1;
+    public u64 hash() {
+        mut u64 hash_result = 1;
         for (mut size i = 0u; i < this.length; i = i + 1u) {
           hash_result = 31 * hash_result + this.data[i].hash(); // TODO: THIS DOES NOT SUPPORT GENERIC TYPES!
         }
@@ -53,5 +53,9 @@ struct array<T> : Hashable {
 
     public void destroy() {
         free(this.data);
+    }
+
+    operator ==(array<T> left, array<T> right) -> bool {
+        return left.hash() == right.hash();
     }
 }

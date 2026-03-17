@@ -142,8 +142,8 @@ struct map<Key, Value>
         return this.count;
     }
 
-    public i32 hash() {
-        mut i32 hash_result = 1;
+    public u64 hash() {
+        mut u64 hash_result = 1;
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
             if (this.states[i] == (i8)1) {
                 hash_result = 31 * hash_result + this.keys[i]; // TODO: does not support non-integer generic types

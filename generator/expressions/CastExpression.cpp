@@ -11,5 +11,5 @@ llvm::Value* Generator::generate_cast_expression(const CastExpression& expr)
                                  ? generate_type_with_context(expr.targetType, _currentGenericCtx)
                                  : generate_type(expr.targetType);
 
-    return cast_value(value, targetType);
+    return cast_value(value, targetType, expr.targetType.sign);
 }

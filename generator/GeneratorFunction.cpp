@@ -58,6 +58,10 @@ void Generator::generate_function_body(const FunctionSymbol& func)
         builder->CreateStore(&arg, alloca);
         std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
         currentScope->define_variable(paramName, alloca, structTypeName);
+        if (paramType.kind == TypeKind::INTEGER)
+        {
+            currentScope->set_variable_signed(paramName, paramType.sign);
+        }
         idx++;
     }
 
@@ -257,6 +261,10 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
         builder->CreateStore(&arg, alloca);
         std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
         currentScope->define_variable(paramName, alloca, structTypeName);
+        if (paramType.kind == TypeKind::INTEGER)
+        {
+            currentScope->set_variable_signed(paramName, paramType.sign);
+        }
         idx++;
     }
 

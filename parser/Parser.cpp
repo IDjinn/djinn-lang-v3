@@ -580,17 +580,24 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     {
         while (!check(TokenType::RBRACE) && !isAtEnd())
         {
+            // Parse attributes before methods: [force-inline] public void foo() { ... }
+            auto methodAttributes = parse_attributes();
+
             // Check for operator declaration
             if (match(TokenType::OPERATOR))
             {
-                methods.push_back(parse_operator(true));
+                auto op = parse_operator(true);
+                op->attributes = std::move(methodAttributes);
+                methods.push_back(std::move(op));
                 continue;
             }
 
             // Check for modifiers first (indicates a method)
             if (check(TokenType::PUBLIC) || check(TokenType::PRIVATE) || check(TokenType::STATIC))
             {
-                methods.push_back(parse_method(true));
+                auto m = parse_method(true);
+                m->attributes = std::move(methodAttributes);
+                methods.push_back(std::move(m));
                 continue;
             }
 
@@ -782,7 +789,16 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes()
     {
         expect("Esperado '[' no uso de Atributos", TokenType::LBRACKET);
         const Token& identifier = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
-        attributes.emplace_back(makeSourceIdentifier(identifier));
+        // Support hyphenated attribute names: [force-inline] -> "force-inline"
+        std::string attrName = identifier.value;
+        auto loc = makeSourceIdentifier(identifier);
+        while (match(TokenType::MINUS))
+        {
+            const Token& next = expect("Esperado continuação do nome do atributo", TokenType::IDENTIFIER);
+            attrName += "-" + next.value;
+        }
+        loc.token_name = attrName;
+        attributes.emplace_back(loc);
         expect("Esperado ']' no uso de Atributos", TokenType::RBRACKET);
     }
 
@@ -2215,13 +2231,19 @@ std::unique_ptr<ImplDeclaration> Parser::parse_impl()
 
     while (!check(TokenType::RBRACE) && !isAtEnd())
     {
+        auto methodAttributes = parse_attributes();
+
         if (match(TokenType::OPERATOR))
         {
-            impl->methods.push_back(parse_operator(true));
+            auto op = parse_operator(true);
+            op->attributes = std::move(methodAttributes);
+            impl->methods.push_back(std::move(op));
         }
         else
         {
-            impl->methods.push_back(parse_method(true));
+            auto m = parse_method(true);
+            m->attributes = std::move(methodAttributes);
+            impl->methods.push_back(std::move(m));
         }
     }
 
