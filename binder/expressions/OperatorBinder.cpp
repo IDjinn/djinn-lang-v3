@@ -159,7 +159,13 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
             (leftResolved.kind == TypeKind::F32 || leftResolved.kind == TypeKind::F64) &&
             (rightResolved.kind == TypeKind::F32 || rightResolved.kind == TypeKind::F64);
 
-        if (!bothIntegers && !bothFloats)
+        // Pointer arithmetic: ptr + int or int + ptr (for +, -)
+        const bool isPointerArithmetic =
+            (expr.op == TokenType::PLUS || expr.op == TokenType::MINUS) &&
+            ((leftResolved.kind == TypeKind::POINTER && rightResolved.kind == TypeKind::INTEGER) ||
+                (leftResolved.kind == TypeKind::INTEGER && rightResolved.kind == TypeKind::POINTER));
+
+        if (!bothIntegers && !bothFloats && !isPointerArithmetic)
         {
             BINDER_ERROR(
                 DiagnosticCode::TYPE_MISMATCH,

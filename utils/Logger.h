@@ -19,7 +19,7 @@
 #include <unistd.h>
 #endif
 
-#define LOGGER_LEVEL Level::WARN
+#define LOGGER_LEVEL Level::TRACE
 #define ENABLE_COLOR 0
 #define ENABLE_STACKTRACE_ON_ERROR 1
 

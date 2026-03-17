@@ -98,6 +98,10 @@ struct string {
     public i32 len() {
         return this.len;
     }
+
+    public i32 capacity() {
+        return this.capacity;
+    }
 }
 
 impl Hashable for str, string {
@@ -110,10 +114,28 @@ impl Equatable for str {
     operator ==(str left, str right) -> bool {
         return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
     }
+
+    operator +(str left, str right) -> string {
+        u32 new_len = left.len + right.len;
+        u64 alloc_size = (u64)((f64)new_len * 1.5);
+        i8* new_data = __djinn_malloc(alloc_size);
+        memcpy(new_data, left.data, left.len);
+        memcpy(new_data + left.len, right.data, right.len);
+        return { .data = new_data, .len = new_len, .capacity = new_len };
+    }
 }
 
 impl Equatable for string {
     operator ==(string left, string right) -> bool {
         return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
+    }
+
+    operator +(string left, string right) -> string {
+        u32 new_len = left.len + right.len;
+        u64 alloc_size = (u64)((f64)new_len * 1.5);
+        i8* new_data = __djinn_malloc(alloc_size);
+        memcpy(new_data, left.data, left.len);
+        memcpy(new_data + left.len, right.data, right.len);
+        return { .data = new_data, .len = new_len, .capacity = new_len };
     }
 }

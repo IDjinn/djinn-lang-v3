@@ -106,6 +106,13 @@ DJINN_API void __djinn_free(void* pointer)
     DJINN_TRACE("de-allocating heap memory at %p", pointer);
     free(pointer);
 }
+DJINN_API void* __djinn_realloc(void* pointer, size_t new_size)
+{
+    void* chunk = realloc(pointer, new_size);
+    DJINN_ASSERT(chunk, "Out of memory");
+    DJINN_TRACE("re-allocated size %zu on heap at %p", new_size, &chunk);
+    return chunk;
+}
 
 DJINN_API void* __djinn_malloc(size_t size)
 {

@@ -48,6 +48,21 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
                 }
             }
         }
+        // Pointer arithmetic: ptr +/- int
+        else if ((leftType->isPointerTy() && rightType->isIntegerTy()) &&
+            (expr.op == TokenType::PLUS || expr.op == TokenType::MINUS))
+        {
+            llvm::Value* offset = right;
+            if (expr.op == TokenType::MINUS)
+            {
+                offset = builder->CreateNeg(right, "neg_offset");
+            }
+            return builder->CreateGEP(builder->getInt8Ty(), left, offset, "ptr_arith");
+        }
+        else if ((rightType->isPointerTy() && leftType->isIntegerTy()) && expr.op == TokenType::PLUS)
+        {
+            return builder->CreateGEP(builder->getInt8Ty(), right, left, "ptr_arith");
+        }
         else
         {
             // Unhandled type mismatch — log before LLVM asserts

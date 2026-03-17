@@ -31,6 +31,7 @@
 extern "C" {
 
 
+
 #endif
 
 #ifdef _WIN32
@@ -41,8 +42,6 @@ extern "C" {
 
 DJINN_API uint32_t __djinn_hash_string(const char* data, uint32_t length)
 {
-    printf("C hash: data=%s len=%u\n", data, length);
-
     uint32_t hash = 2166136261u;
     // FNV offset basis
     for (uint32_t i = 0; i < length; ++i)
@@ -51,8 +50,6 @@ DJINN_API uint32_t __djinn_hash_string(const char* data, uint32_t length)
         hash *= 16777619u;
         // FNV prime
     }
-    printf("C hash result: %u\n", hash);
-
     return hash;
 }
 
@@ -69,6 +66,7 @@ DJINN_API uint32_t __djinn_compare_strings(
 // Memory
 // ════════════════════════════════════════════════════════════════════
 
+DJINN_API void* __djinn_realloc(void* pointer, size_t new_size);
 DJINN_API void* __djinn_malloc(size_t size);
 DJINN_API void __djinn_free(void* pointer);
 

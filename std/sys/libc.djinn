@@ -13,6 +13,7 @@ extern "C" {
   void exit(i32 code);
 
 
-  void*  __djinn_malloc      (size_long size);
-  void   __djinn_free        (void* pointer);
+  void*  __djinn_malloc    (size_long size);
+  void   __djinn_free      (void* pointer);
+  void*  __djinn_realloc   (void* pointer, size_long new_size);
 }
