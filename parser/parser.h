@@ -26,6 +26,7 @@ public:
 private:
     std::vector<Token> tokens;
     size_t current = 0;
+    int pendingGreater = 0; // For splitting >> into two > tokens
 
     std::shared_ptr<Scope> currentScope = std::make_shared<Scope>();
     DiagnosticEngine& _diagnostics;
@@ -98,9 +99,17 @@ private:
 
     std::unique_ptr<Expression> parse_and();
 
+    std::unique_ptr<Expression> parse_bitor();
+
+    std::unique_ptr<Expression> parse_bitxor();
+
+    std::unique_ptr<Expression> parse_bitand();
+
     std::unique_ptr<Expression> parse_equality();
 
     std::unique_ptr<Expression> parse_comparison();
+
+    std::unique_ptr<Expression> parse_shift();
 
     std::unique_ptr<Expression> parse_term();
 
@@ -129,6 +138,10 @@ private:
     std::unique_ptr<EnumDeclaration> parse_enum();
 
     std::unique_ptr<ImplDeclaration> parse_impl();
+
+    std::unique_ptr<StructMethodDeclaration> parse_operator(bool allowBody = true);
+
+    static std::string operator_token_to_canonical_name(TokenType op);
 
     void parse_where_clause(GenericParams& params);
 

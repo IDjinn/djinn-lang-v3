@@ -41,6 +41,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"spawn", TokenType::SPAWN},
     {"true", TokenType::TRUE},
     {"false", TokenType::FALSE},
+    {"operator", TokenType::OPERATOR},
     {"constexpr", TokenType::CONST_EXPR},
     {"consteval", TokenType::CONST_EVAL},
 };
@@ -309,13 +310,29 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                 }
                 break;
-            case '+': tokens.push_back(make_token(TokenType::PLUS, "+"));
-                advance();
+            case '+':
+                if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::PLUS_EQUAL, "+="));
+                    advance();
+                    advance();
+                }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::PLUS, "+"));
+                    advance();
+                }
                 break;
             case '-':
                 if (peekNext() == '>')
                 {
                     tokens.push_back(make_token(TokenType::THIN_ARROW, "->"));
+                    advance();
+                    advance();
+                }
+                else if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::MINUS_EQUAL, "-="));
                     advance();
                     advance();
                 }
@@ -325,17 +342,47 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                 }
                 break;
-            case '*': tokens.push_back(make_token(TokenType::STAR, "*"));
-                advance();
+            case '*':
+                if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::STAR_EQUAL, "*="));
+                    advance();
+                    advance();
+                }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::STAR, "*"));
+                    advance();
+                }
                 break;
-            case '/': tokens.push_back(make_token(TokenType::SLASH, "/"));
-                advance();
+            case '/':
+                if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::SLASH_EQUAL, "/="));
+                    advance();
+                    advance();
+                }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::SLASH, "/"));
+                    advance();
+                }
                 break;
             case '@': tokens.push_back(make_token(TokenType::AT, "@"));
                 advance();
                 break;
-            case '%': tokens.push_back(make_token(TokenType::PERCENT, "%"));
-                advance();
+            case '%':
+                if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::PERCENT_EQUAL, "%="));
+                    advance();
+                    advance();
+                }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::PERCENT, "%"));
+                    advance();
+                }
                 break;
             case '=':
                 if (peekNext() == '=')
@@ -376,6 +423,20 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                     advance();
                 }
+                else if (peekNext() == '<')
+                {
+                    advance();
+                    advance(); // consume <<
+                    if (peek() == '=')
+                    {
+                        tokens.push_back(make_token(TokenType::LESS_LESS_EQUAL, "<<="));
+                        advance();
+                    }
+                    else
+                    {
+                        tokens.push_back(make_token(TokenType::LESS_LESS, "<<"));
+                    }
+                }
                 else
                 {
                     tokens.push_back(make_token(TokenType::LESS, "<"));
@@ -389,6 +450,20 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                     advance();
                 }
+                else if (peekNext() == '>')
+                {
+                    advance();
+                    advance(); // consume >>
+                    if (peek() == '=')
+                    {
+                        tokens.push_back(make_token(TokenType::GREATER_GREATER_EQUAL, ">>="));
+                        advance();
+                    }
+                    else
+                    {
+                        tokens.push_back(make_token(TokenType::GREATER_GREATER, ">>"));
+                    }
+                }
                 else
                 {
                     tokens.push_back(make_token(TokenType::GREATER, ">"));
@@ -399,6 +474,12 @@ std::vector<Token> Lexer::tokenize()
                 if (peekNext() == '&')
                 {
                     tokens.push_back(make_token(TokenType::AND_AND, "&&"));
+                    advance();
+                    advance();
+                }
+                else if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::AMPERSAND_EQUAL, "&="));
                     advance();
                     advance();
                 }
@@ -415,11 +496,33 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                     advance();
                 }
-                else
+                else if (peekNext() == '=')
                 {
-                    tokens.push_back(make_token(TokenType::UNKNOWN, std::string(1, c)));
+                    tokens.push_back(make_token(TokenType::PIPE_EQUAL, "|="));
+                    advance();
                     advance();
                 }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::PIPE, "|"));
+                    advance();
+                }
+                break;
+            case '^':
+                if (peekNext() == '=')
+                {
+                    tokens.push_back(make_token(TokenType::CARET_EQUAL, "^="));
+                    advance();
+                    advance();
+                }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::CARET, "^"));
+                    advance();
+                }
+                break;
+            case '~': tokens.push_back(make_token(TokenType::TILDE, "~"));
+                advance();
                 break;
             default:
                 tokens.push_back(make_token(TokenType::UNKNOWN, std::string(1, c)));

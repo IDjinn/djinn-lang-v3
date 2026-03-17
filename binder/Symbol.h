@@ -168,6 +168,8 @@ struct MethodSymbol : Symbol
     bool isVariadic = false; // True if method has variadic parameters (...)
     bool isConstructor = false; // True if this is a constructor (name == struct name)
     bool isAsync = false; // True if this is an async method
+    bool isOperator = false; // True if this is an operator overload
+    std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq"
     std::string structName; // Name of the struct this constructor belongs to (for constructors only)
 
     // Variadic forwarding: if this method forwards variadic args to another function

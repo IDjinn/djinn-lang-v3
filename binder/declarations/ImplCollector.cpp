@@ -44,9 +44,11 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
 
             const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, methodReturnType);
             methodSym->isAbstract = method->isAbstract();
-            methodSym->isStatic = method->isStatic();
+            methodSym->isStatic = method->isStatic() || method->isOperatorMethod;
             methodSym->isVariadic = method->isVariadic;
             methodSym->isAsync = method->isAsync;
+            methodSym->isOperator = method->isOperatorMethod;
+            methodSym->operatorCanonicalName = method->operatorCanonicalName;
             methodSym->variadicForwardTarget = method->variadicForwardTarget;
 
             // Store pointers to AST body (AST owns the memory)
@@ -92,6 +94,10 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
                     const auto it = std::ranges::find_if(structSym->methods,
                                                          [&](const auto& m)
                                                          {
+                                                             // Match by canonical name for operators, by name for regular methods
+                                                             if (ifaceMethod->isOperator && m->isOperator)
+                                                                 return m->operatorCanonicalName == ifaceMethod->
+                                                                     operatorCanonicalName;
                                                              return m->name == ifaceMethod->name;
                                                          });
 

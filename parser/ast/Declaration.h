@@ -47,6 +47,8 @@ struct StructMethodDeclaration : Location
     bool isConstructorMethod = false; // True if this is a constructor (name == struct name)
     bool isVariadic = false; // True if method has variadic parameters (...)
     bool isAsync = false; // True if this is an async method
+    bool isOperatorMethod = false; // True if this is an operator overload
+    std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq", "__op_index_get"
 
     // Variadic forwarding: if this method forwards its variadic args to another function
     // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"

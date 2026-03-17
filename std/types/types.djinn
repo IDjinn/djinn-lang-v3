@@ -41,6 +41,34 @@ struct arr<T> {
     }
 }
 
+impl Hashable for i8, i16, i32, i64, i128 {
+    u32 hash() {
+        return this;
+    }
+}
+
+impl Hashable for u8, u16, u32, u64, u128 {
+    u32 hash() {
+        return this;
+    }
+}
+
+impl Equatable for i32 {
+    operator ==(i32 left, i32 right) -> bool {
+        return left == right;
+    }
+}
+
+impl Hashable, Equatable for i8* {
+    u32 hash() {
+        return 0;
+    }
+
+    operator ==(i8* left, i8* right) -> bool {
+        return left == right;
+    }
+}
+
 struct str {
     i8* data;
     size len;
@@ -72,7 +100,6 @@ struct string {
     }
 }
 
-
 impl Hashable for str, string {
     u32 hash() {
         return __djinn_hash_string(this.data, this.len);
@@ -80,49 +107,13 @@ impl Hashable for str, string {
 }
 
 impl Equatable for str {
-    bool equals(str other) {
-        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
-    }
-
-    bool equals(string other) {
-        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
+    operator ==(str left, str right) -> bool {
+        return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
     }
 }
 
 impl Equatable for string {
-    bool equals(string other) {
-        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
-    }
-
-    bool equals(str other) {
-        return __djinn_compare_strings(this.data, other.data, this.len, other.len) == 1;
-    }
-}
-
-impl Hashable for i8, i16, i32, i64, i128 {
-    u32 hash() {
-        return this;
-    }
-}
-
-impl Hashable for u8, u16, u32, u64, u128 {
-    u32 hash() {
-        return this;
-    }
-}
-
-impl Equatable for i32 {
-    bool equals(i32 other) {
-        return this == other;
-    }
-}
-
-impl Hashable, Equatable for i8* {
-    u32 hash() {
-        return 0;
-    }
-
-    bool equals(i8* other) {
-        return this == other;
+    operator ==(string left, string right) -> bool {
+        return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
     }
 }

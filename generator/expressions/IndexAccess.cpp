@@ -70,17 +70,37 @@ llvm::Value* Generator::extract_slice_data_ptr(llvm::Value* value)
 
 llvm::Value* Generator::generate_index_access(const IndexAccess& expr)
 {
-    llvm::Value* ptr = generate_expression(*expr.object);
+    llvm::Value* obj = generate_expression(*expr.object);
     llvm::Value* index = generate_expression(*expr.index);
 
-    // Extract data pointer from slice structs (arr<T>, str)
-    ptr = extract_slice_data_ptr(ptr);
+    // Check if object is a struct with operator get[]
+    if (obj->getType()->isStructTy() || (llvm::isa<llvm::AllocaInst>(obj) &&
+        llvm::cast<llvm::AllocaInst>(obj)->getAllocatedType()->isStructTy()))
+    {
+        llvm::Type* structTy = obj->getType()->isStructTy()
+                                   ? obj->getType()
+                                   : llvm::cast<llvm::AllocaInst>(obj)->getAllocatedType();
+        auto* st = llvm::dyn_cast<llvm::StructType>(structTy);
+        if (st && !is_slice_struct(st))
+        {
+            const std::string mangledName = st->getName().str() + "____op_index_get";
+            auto it = functions.find(mangledName);
+            if (it != functions.end())
+            {
+                // Call operator get[](collection, index)
+                std::vector<llvm::Value*> args = {obj, index};
+                return builder->CreateCall(it->second, args, "idx_get");
+            }
+        }
+    }
+
+    // Default: pointer/slice indexing
+    llvm::Value* ptr = extract_slice_data_ptr(obj);
 
     llvm::Type* elementType = resolve_index_element_type(*expr.object);
 
     if (!elementType)
     {
-        // Fallback to i8 for untyped pointers (void*, i8*)
         elementType = builder->getInt8Ty();
     }
 
@@ -90,11 +110,33 @@ llvm::Value* Generator::generate_index_access(const IndexAccess& expr)
 
 llvm::Value* Generator::generate_index_assignment(const IndexAssignment& expr)
 {
-    llvm::Value* ptr = generate_expression(*expr.object);
+    llvm::Value* obj = generate_expression(*expr.object);
     llvm::Value* index = generate_expression(*expr.index);
 
-    // Extract data pointer from slice structs (arr<T>, str)
-    ptr = extract_slice_data_ptr(ptr);
+    // Check if object is a struct with operator set[]
+    if (obj->getType()->isStructTy() || (llvm::isa<llvm::AllocaInst>(obj) &&
+        llvm::cast<llvm::AllocaInst>(obj)->getAllocatedType()->isStructTy()))
+    {
+        llvm::Type* structTy = obj->getType()->isStructTy()
+                                   ? obj->getType()
+                                   : llvm::cast<llvm::AllocaInst>(obj)->getAllocatedType();
+        auto* st = llvm::dyn_cast<llvm::StructType>(structTy);
+        if (st && !is_slice_struct(st))
+        {
+            const std::string mangledName = st->getName().str() + "____op_index_set";
+            auto it = functions.find(mangledName);
+            if (it != functions.end())
+            {
+                llvm::Value* val = generate_expression(*expr.value);
+                // Call operator set[](collection*, index, value)
+                std::vector<llvm::Value*> args = {obj, index, val};
+                return builder->CreateCall(it->second, args, "idx_set");
+            }
+        }
+    }
+
+    // Default: pointer/slice indexing
+    llvm::Value* ptr = extract_slice_data_ptr(obj);
 
     llvm::Type* elementType = resolve_index_element_type(*expr.object);
 

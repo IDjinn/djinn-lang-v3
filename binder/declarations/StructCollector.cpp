@@ -71,9 +71,11 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
 
         const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, methodReturnType);
         methodSym->isAbstract = method->isAbstract();
-        methodSym->isStatic = method->isStatic();
+        methodSym->isStatic = method->isStatic() || method->isOperatorMethod;
         methodSym->isVariadic = method->isVariadic;
         methodSym->isAsync = method->isAsync;
+        methodSym->isOperator = method->isOperatorMethod;
+        methodSym->operatorCanonicalName = method->operatorCanonicalName;
         methodSym->variadicForwardTarget = method->variadicForwardTarget;
         methodSym->isConstructor = isCtorMethod;
         if (isCtorMethod)

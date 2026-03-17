@@ -61,38 +61,110 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
     const bool isFloat = left->getType()->isFloatingPointTy();
     const bool isStruct = left->getType()->isStructTy();
 
-    // For struct types with Equatable, dispatch == and != to the equals() method
-    if (isStruct && (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL))
+    // For struct types, look up operator overloads
+    if (isStruct)
     {
         const auto* structType = llvm::dyn_cast<llvm::StructType>(left->getType());
         const std::string structTypeName = structType->getName().str();
 
-        // Find the equals method: structName__equals
-        const auto mangledName = structTypeName + "__equals";
-        const auto it = functions.find(mangledName);
-        if (it == functions.end())
+        // Map TokenType to canonical operator name
+        std::string opCanonical;
+        switch (expr.op)
         {
+        case TokenType::PLUS: opCanonical = "__op_add";
+            break;
+        case TokenType::MINUS: opCanonical = "__op_sub";
+            break;
+        case TokenType::STAR: opCanonical = "__op_mul";
+            break;
+        case TokenType::SLASH: opCanonical = "__op_div";
+            break;
+        case TokenType::PERCENT: opCanonical = "__op_mod";
+            break;
+        case TokenType::EQUAL_EQUAL: opCanonical = "__op_eq";
+            break;
+        case TokenType::BANG_EQUAL: opCanonical = "__op_neq";
+            break;
+        case TokenType::LESS: opCanonical = "__op_lt";
+            break;
+        case TokenType::LESS_EQUAL: opCanonical = "__op_lte";
+            break;
+        case TokenType::GREATER: opCanonical = "__op_gt";
+            break;
+        case TokenType::GREATER_EQUAL: opCanonical = "__op_gte";
+            break;
+        case TokenType::AMPERSAND: opCanonical = "__op_bitand";
+            break;
+        case TokenType::PIPE: opCanonical = "__op_bitor";
+            break;
+        case TokenType::CARET: opCanonical = "__op_bitxor";
+            break;
+        case TokenType::LESS_LESS: opCanonical = "__op_shl";
+            break;
+        case TokenType::GREATER_GREATER: opCanonical = "__op_shr";
+            break;
+        case TokenType::AND_AND: opCanonical = "__op_and";
+            break;
+        case TokenType::OR_OR: opCanonical = "__op_or";
+            break;
+        default: break;
+        }
+
+        if (!opCanonical.empty())
+        {
+            auto mangledName = structTypeName + "__" + opCanonical;
+            auto it = functions.find(mangledName);
+
+            // For !=, fallback to negating ==
+            bool negateResult = false;
+            if (it == functions.end() && expr.op == TokenType::BANG_EQUAL)
+            {
+                mangledName = structTypeName + "__" + "__op_eq";
+                it = functions.find(mangledName);
+                negateResult = true;
+            }
+
+            // Also try legacy equals method for backwards compatibility
+            if (it == functions.end() && (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL))
+            {
+                mangledName = structTypeName + "__equals";
+                it = functions.find(mangledName);
+                negateResult = (expr.op == TokenType::BANG_EQUAL);
+            }
+
+            if (it != functions.end())
+            {
+                llvm::Function* opFunc = it->second;
+
+                // Operators are static: both operands passed as args
+                // Check if first param is a pointer (this*) for backwards compat with equals
+                std::vector<llvm::Value*> args;
+                if (opFunc->arg_size() >= 1 && opFunc->getArg(0)->getType()->isPointerTy())
+                {
+                    auto* leftAlloca = builder->CreateAlloca(left->getType(), nullptr, "op_left");
+                    builder->CreateStore(left, leftAlloca);
+                    args.push_back(leftAlloca);
+                    args.push_back(right);
+                }
+                else
+                {
+                    args.push_back(left);
+                    args.push_back(right);
+                }
+
+                llvm::Value* result = builder->CreateCall(opFunc, args, "op_result");
+
+                if (negateResult)
+                {
+                    result = builder->CreateNot(result, "neq_result");
+                }
+                return result;
+            }
+
             throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                               "struct '" + structTypeName + "' does not have an 'equals' method (implement Equatable)",
+                               "struct '" + structTypeName + "' does not implement operator '" + opCanonical + "'",
                                expr.location);
         }
-
-        llvm::Function* equalsFunc = it->second;
-
-        // equals(this*, other) -> bool
-        // Store left in alloca so we can pass pointer as 'this'
-        auto* leftAlloca = builder->CreateAlloca(left->getType(), nullptr, "eq_left");
-        builder->CreateStore(left, leftAlloca);
-
-        std::vector<llvm::Value*> args = {leftAlloca, right};
-        llvm::Value* result = builder->CreateCall(equalsFunc, args, "equals_result");
-
-        // For !=, negate the result
-        if (expr.op == TokenType::BANG_EQUAL)
-        {
-            result = builder->CreateNot(result, "neq_result");
-        }
-        return result;
     }
 
     switch (expr.op)
@@ -147,6 +219,18 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
         return builder->CreateAnd(left, right, "andtmp");
     case TokenType::OR_OR:
         return builder->CreateOr(left, right, "ortmp");
+
+    // Bitwise operators (primitives only — struct dispatch handled above)
+    case TokenType::AMPERSAND:
+        return builder->CreateAnd(left, right, "bitandtmp");
+    case TokenType::PIPE:
+        return builder->CreateOr(left, right, "bitortmp");
+    case TokenType::CARET:
+        return builder->CreateXor(left, right, "bitxortmp");
+    case TokenType::LESS_LESS:
+        return builder->CreateShl(left, right, "shltmp");
+    case TokenType::GREATER_GREATER:
+        return builder->CreateAShr(left, right, "shrtmp");
 
     default:
         throw CompileError(DiagnosticCode::UNSUPPORTED_OPERATOR, "operador binário não suportado");

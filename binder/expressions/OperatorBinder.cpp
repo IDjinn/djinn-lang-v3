@@ -57,61 +57,85 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         return true; // not found = generic type parameter
     };
 
-    bool hasEqualsOverride = false;
+    bool hasOperatorOverride = false;
     // Structs (non-transparent) cannot be used directly in binary expressions
-    // Exception: structs implementing Equatable can use == and !=
+    // unless they have an operator overload for that operation.
     // Skip check for generic type params (validated at monomorphization)
     if ((leftResolved.kind == TypeKind::STRUCT || rightResolved.kind == TypeKind::STRUCT)
         && !isGenericParam(leftResolved) && !isGenericParam(rightResolved))
-    // TODO: THIS NEED TO BE HANDLED AS DIAGNOSTIC PLUGIN-EXTENSION SOMETHING. ITS NOT MAINTAINABLE FOR FUTURE TIME
     {
-        // Check if struct implements Equatable for == and !=
-        if (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL)
+        const auto& structType = leftResolved.kind == TypeKind::STRUCT ? leftResolved : rightResolved;
+        if (const auto structSym = _global_scope->lookupStruct(structType.structName))
         {
-            const auto& structType = leftResolved.kind == TypeKind::STRUCT ? leftResolved : rightResolved;
-            if (const auto structSym = _global_scope->lookupStruct(structType.structName))
+            // Look for operator overload by canonical name
+            auto findOperator = [&](const std::string& canonicalName) -> bool
             {
-                if (!structSym->hasConstraint("Equatable"))
+                for (const auto& m : structSym->methods)
                 {
-                    BINDER_ERROR(
-                        DiagnosticCode::TYPE_MISMATCH,
-                        "invalid types for binary expression: structs cannot be compared directly"
-                        "\n\tleft: " + left->type.toHumanString() +
-                        "\n\tright: " + right->type.toHumanString() +
-                        "\n\thint: implement 'Equatable' to enable == and != operators",
-                        left,
-                        location
-                    );
+                    if (m->isOperator && m->operatorCanonicalName == canonicalName) return true;
+                    // Legacy support: equals method counts as __op_eq
+                    if (canonicalName == "__op_eq" && m->name == "equals") return true;
                 }
+                return false;
+            };
 
-                // Equatable interface accepts first argument as target comparison to this, we need look for best overload of it
-                for (const auto& method_symbol : structSym->methods)
-                {
-                    if (method_symbol->arity() != 1) continue;
-                    if (method_symbol->name != "equals") continue;
+            std::string opCanonical;
+            switch (expr.op)
+            {
+            case TokenType::PLUS: opCanonical = "__op_add";
+                break;
+            case TokenType::MINUS: opCanonical = "__op_sub";
+                break;
+            case TokenType::STAR: opCanonical = "__op_mul";
+                break;
+            case TokenType::SLASH: opCanonical = "__op_div";
+                break;
+            case TokenType::PERCENT: opCanonical = "__op_mod";
+                break;
+            case TokenType::EQUAL_EQUAL: opCanonical = "__op_eq";
+                break;
+            case TokenType::BANG_EQUAL: opCanonical = "__op_eq";
+                break; // != derived from ==
+            case TokenType::LESS: opCanonical = "__op_lt";
+                break;
+            case TokenType::LESS_EQUAL: opCanonical = "__op_lte";
+                break;
+            case TokenType::GREATER: opCanonical = "__op_gt";
+                break;
+            case TokenType::GREATER_EQUAL: opCanonical = "__op_gte";
+                break;
+            case TokenType::AMPERSAND: opCanonical = "__op_bitand";
+                break;
+            case TokenType::PIPE: opCanonical = "__op_bitor";
+                break;
+            case TokenType::CARET: opCanonical = "__op_bitxor";
+                break;
+            case TokenType::LESS_LESS: opCanonical = "__op_shl";
+                break;
+            case TokenType::GREATER_GREATER: opCanonical = "__op_shr";
+                break;
+            case TokenType::AND_AND: opCanonical = "__op_and";
+                break;
+            case TokenType::OR_OR: opCanonical = "__op_or";
+                break;
+            default: break;
+            }
 
-                    assert(method_symbol && !method_symbol->paramTypes[0].structName.empty());
-                    // TODO: VALID FUNCTION FOR TYPE COMPARISON
-                    const auto firstParamTypeQualifiedName = _current_scope->lookupStruct(
-                        method_symbol->paramTypes[0].structName);
-                    const auto leftHasOperator = firstParamTypeQualifiedName->name == leftResolved.structName;
-                    const auto rightHasOperator = firstParamTypeQualifiedName->name == rightResolved.structName;
-                    if (!leftHasOperator && !rightHasOperator)
-                    {
-                        BINDER_ERROR(
-                            DiagnosticCode::TYPE_MISMATCH,
-                            "invalid types for binary expression: structs cannot be compared directly"
-                            "\n\tleft: " + left->type.toHumanString() +
-                            "\n\tright: " + right->type.toHumanString() +
-                            "\n\thint: implement 'Equatable' to enable == and != operators",
-                            left,
-                            location
-                        );
-                    }
-
-                    hasEqualsOverride = true;
-                    break;
-                }
+            if (!opCanonical.empty() && findOperator(opCanonical))
+            {
+                hasOperatorOverride = true;
+            }
+            else if (!opCanonical.empty())
+            {
+                BINDER_ERROR(
+                    DiagnosticCode::TYPE_MISMATCH,
+                    "invalid types for binary expression: struct '" + structType.structName +
+                    "' does not implement operator '" + opCanonical + "'"
+                    "\n\tleft: " + left->type.toHumanString() +
+                    "\n\tright: " + right->type.toHumanString(),
+                    left,
+                    location
+                );
             }
         }
     }
@@ -128,7 +152,7 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
 
     // Type mismatch check (allow integer width differences - generator handles widening)
     // Skip for generic types (validated at monomorphization)
-    if (leftResolved != rightResolved && !hasGeneric && !hasEqualsOverride)
+    if (leftResolved != rightResolved && !hasGeneric && !hasOperatorOverride)
     {
         const bool bothIntegers = leftResolved.kind == TypeKind::INTEGER && rightResolved.kind == TypeKind::INTEGER;
         const bool bothFloats =

@@ -8,10 +8,16 @@ interface Comparable<T> {
     i32 compare<O>(O other);
 }
 
-interface Equatable<T> {
-    bool equals<T>(T other);
-}
-
 interface Serializable<TOut> {
     TOut serialize();
+}
+
+// OPERATORS CONSTRAINTS //
+
+interface Equatable<T> {
+    operator == (T left, T right) -> bool;
+}
+
+interface Addition<T> {
+    operator + (T left, T right) -> T;
 }

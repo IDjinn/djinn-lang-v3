@@ -83,13 +83,31 @@ enum class TokenType
     BANG, // !
     AND_AND, // &&
     OR_OR, // ||
-    AMPERSAND, // & (address-of)
+    AMPERSAND, // & (address-of / bitwise-and)
+    // -------- //
+
+    // OPERADORES BITWISE //
+    PIPE, // |
+    CARET, // ^
+    TILDE, // ~
+    LESS_LESS, // <<
+    GREATER_GREATER, // >>
     // -------- //
 
     // ATRIBUIÇÃO //
     EQUAL, // =
     ARROW, // =>
     THIN_ARROW, // ->
+    PLUS_EQUAL, // +=
+    MINUS_EQUAL, // -=
+    STAR_EQUAL, // *=
+    SLASH_EQUAL, // /=
+    PERCENT_EQUAL, // %=
+    AMPERSAND_EQUAL, // &=
+    PIPE_EQUAL, // |=
+    CARET_EQUAL, // ^=
+    LESS_LESS_EQUAL, // <<=
+    GREATER_GREATER_EQUAL, // >>=
     // -------- //
     COLON, // :
     COLON_COLON, // ::
@@ -107,6 +125,9 @@ enum class TokenType
     AWAIT, // await
     YIELD, // yield
     SPAWN, // spawn (threading)
+
+    // OPERATOR OVERLOADING
+    OPERATOR, // operator
 
     // COMPILE TIME
     CONST_EXPR, // constexpr

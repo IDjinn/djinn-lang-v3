@@ -89,12 +89,20 @@ bool Parser::check(const std::vector<TokenType>& types)
 
 bool Parser::check(const TokenType type)
 {
+    // Handle pending > from >> split
+    if (type == TokenType::GREATER && pendingGreater > 0) return true;
     if (isAtEnd()) return false;
     return peek().type == type;
 }
 
 bool Parser::match(const TokenType type)
 {
+    // Handle pending > from >> split
+    if (type == TokenType::GREATER && pendingGreater > 0)
+    {
+        pendingGreater--;
+        return true;
+    }
     if (check(type))
     {
         advance();
@@ -141,7 +149,22 @@ bool Parser::isType(const Token& token) const
 
 Token& Parser::expect(const std::string& message, const TokenType type)
 {
+    // Check pending > from a previous >> split
+    if (type == TokenType::GREATER && pendingGreater > 0)
+    {
+        pendingGreater--;
+        return previous(); // return the same token position (it was the >>)
+    }
+
     if (check(type)) return advance();
+
+    // Split >> into two > tokens when expecting > (for nested generics like Array<Array<i32>>)
+    if (type == TokenType::GREATER && check(TokenType::GREATER_GREATER))
+    {
+        pendingGreater++; // leave one > pending for the next expect
+        return advance(); // consume the >> token
+    }
+
     const auto& token = previous();
     const uint32_t col = token.position.column + token.value.length();
     PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message,
@@ -443,10 +466,17 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface()
 
     expect("Esperado '{'", TokenType::LBRACE);
 
-    // Parse method signatures (no body)
+    // Parse method signatures (no body) or operator signatures
     while (!check(TokenType::RBRACE) && !isAtEnd())
     {
-        iface->methods.push_back(parse_method(false));
+        if (match(TokenType::OPERATOR))
+        {
+            iface->methods.push_back(parse_operator(false));
+        }
+        else
+        {
+            iface->methods.push_back(parse_method(false));
+        }
     }
 
     expect("Esperado '}'", TokenType::RBRACE);
@@ -550,6 +580,13 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     {
         while (!check(TokenType::RBRACE) && !isAtEnd())
         {
+            // Check for operator declaration
+            if (match(TokenType::OPERATOR))
+            {
+                methods.push_back(parse_operator(true));
+                continue;
+            }
+
             // Check for modifiers first (indicates a method)
             if (check(TokenType::PUBLIC) || check(TokenType::PRIVATE) || check(TokenType::STATIC))
             {
@@ -1190,9 +1227,55 @@ std::unique_ptr<Expression> Parser::parse_or()
 
 std::unique_ptr<Expression> Parser::parse_and()
 {
-    auto left = parse_equality();
+    auto left = parse_bitor();
 
     while (match(TokenType::AND_AND))
+    {
+        TokenType op = previous().type;
+        auto right = parse_bitor();
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
+    }
+
+    return left;
+}
+
+std::unique_ptr<Expression> Parser::parse_bitor()
+{
+    auto left = parse_bitxor();
+
+    while (match(TokenType::PIPE))
+    {
+        TokenType op = previous().type;
+        auto right = parse_bitxor();
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
+    }
+
+    return left;
+}
+
+std::unique_ptr<Expression> Parser::parse_bitxor()
+{
+    auto left = parse_bitand();
+
+    while (match(TokenType::CARET))
+    {
+        TokenType op = previous().type;
+        auto right = parse_bitand();
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
+    }
+
+    return left;
+}
+
+std::unique_ptr<Expression> Parser::parse_bitand()
+{
+    auto left = parse_equality();
+
+    // AMPERSAND as infix bitwise-and (& is already tokenized separately from &&)
+    while (match(TokenType::AMPERSAND))
     {
         TokenType op = previous().type;
         auto right = parse_equality();
@@ -1220,10 +1303,25 @@ std::unique_ptr<Expression> Parser::parse_equality()
 
 std::unique_ptr<Expression> Parser::parse_comparison()
 {
-    auto left = parse_term();
+    auto left = parse_shift();
 
     while (match(TokenType::LESS) || match(TokenType::LESS_EQUAL) ||
         match(TokenType::GREATER) || match(TokenType::GREATER_EQUAL))
+    {
+        TokenType op = previous().type;
+        auto right = parse_shift();
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
+    }
+
+    return left;
+}
+
+std::unique_ptr<Expression> Parser::parse_shift()
+{
+    auto left = parse_term();
+
+    while (match(TokenType::LESS_LESS) || match(TokenType::GREATER_GREATER))
     {
         TokenType op = previous().type;
         auto right = parse_term();
@@ -1317,7 +1415,8 @@ std::unique_ptr<Expression> Parser::parse_unary()
     }
 
     if (match(TokenType::BANG) || match(TokenType::MINUS) ||
-        match(TokenType::AMPERSAND) || match(TokenType::STAR))
+        match(TokenType::AMPERSAND) || match(TokenType::STAR) ||
+        match(TokenType::TILDE))
     {
         TokenType op = previous().type;
         const auto opLocation = SourceLocation(previous().position, previous().value.length());
@@ -1634,6 +1733,30 @@ std::unique_ptr<Expression> Parser::parse_primary()
         {
             auto value = parse_expression();
             return std::make_unique<Assignment>(std::move(nameIdentifier), std::move(value));
+        }
+
+        // Compound assignment: name += expr → name = name + expr
+        {
+            TokenType compoundOp = TokenType::UNKNOWN;
+            if (match(TokenType::PLUS_EQUAL)) compoundOp = TokenType::PLUS;
+            else if (match(TokenType::MINUS_EQUAL)) compoundOp = TokenType::MINUS;
+            else if (match(TokenType::STAR_EQUAL)) compoundOp = TokenType::STAR;
+            else if (match(TokenType::SLASH_EQUAL)) compoundOp = TokenType::SLASH;
+            else if (match(TokenType::PERCENT_EQUAL)) compoundOp = TokenType::PERCENT;
+            else if (match(TokenType::AMPERSAND_EQUAL)) compoundOp = TokenType::AMPERSAND;
+            else if (match(TokenType::PIPE_EQUAL)) compoundOp = TokenType::PIPE;
+            else if (match(TokenType::CARET_EQUAL)) compoundOp = TokenType::CARET;
+            else if (match(TokenType::LESS_LESS_EQUAL)) compoundOp = TokenType::LESS_LESS;
+            else if (match(TokenType::GREATER_GREATER_EQUAL)) compoundOp = TokenType::GREATER_GREATER;
+
+            if (compoundOp != TokenType::UNKNOWN)
+            {
+                auto rhs = parse_expression();
+                auto lhsCopy = std::make_unique<Identifier>(nameIdentifier);
+                auto binExpr = std::make_unique<BinaryExpression>(
+                    std::move(lhsCopy), compoundOp, std::move(rhs), nameIdentifier.location);
+                return std::make_unique<Assignment>(std::move(nameIdentifier), std::move(binExpr));
+            }
         }
 
         // Simple identifier reference
@@ -2092,10 +2215,133 @@ std::unique_ptr<ImplDeclaration> Parser::parse_impl()
 
     while (!check(TokenType::RBRACE) && !isAtEnd())
     {
-        impl->methods.push_back(parse_method(true));
+        if (match(TokenType::OPERATOR))
+        {
+            impl->methods.push_back(parse_operator(true));
+        }
+        else
+        {
+            impl->methods.push_back(parse_method(true));
+        }
     }
 
     expect("Esperado '}' no impl", TokenType::RBRACE);
 
     return impl;
+}
+
+std::string Parser::operator_token_to_canonical_name(const TokenType op)
+{
+    switch (op)
+    {
+    case TokenType::PLUS: return "__op_add";
+    case TokenType::MINUS: return "__op_sub";
+    case TokenType::STAR: return "__op_mul";
+    case TokenType::SLASH: return "__op_div";
+    case TokenType::PERCENT: return "__op_mod";
+    case TokenType::EQUAL_EQUAL: return "__op_eq";
+    case TokenType::BANG_EQUAL: return "__op_neq";
+    case TokenType::LESS: return "__op_lt";
+    case TokenType::LESS_EQUAL: return "__op_lte";
+    case TokenType::GREATER: return "__op_gt";
+    case TokenType::GREATER_EQUAL: return "__op_gte";
+    case TokenType::AMPERSAND: return "__op_bitand";
+    case TokenType::PIPE: return "__op_bitor";
+    case TokenType::CARET: return "__op_bitxor";
+    case TokenType::TILDE: return "__op_bitnot";
+    case TokenType::LESS_LESS: return "__op_shl";
+    case TokenType::GREATER_GREATER: return "__op_shr";
+    case TokenType::AND_AND: return "__op_and";
+    case TokenType::OR_OR: return "__op_or";
+    case TokenType::BANG: return "__op_not";
+    default: return "";
+    }
+}
+
+std::unique_ptr<StructMethodDeclaration> Parser::parse_operator(const bool allowBody)
+{
+    auto method = std::make_unique<StructMethodDeclaration>();
+    method->isOperatorMethod = true;
+
+    // operator keyword already consumed
+    // Operators are implicitly public and static
+    method->modifiers.push_back(VisibilityModifier::PUBLIC);
+    method->modifiers.push_back(VisibilityModifier::STATIC);
+
+    // Check for get[] or set[]
+    if (check(TokenType::IDENTIFIER) && (peek().value == "get" || peek().value == "set"))
+    {
+        const std::string indexKind = peek().value;
+        advance(); // consume get/set
+        expect("Esperado '[' após '" + indexKind + "'", TokenType::LBRACKET);
+        expect("Esperado ']' após '['", TokenType::RBRACKET);
+        method->operatorCanonicalName = "__op_index_" + indexKind;
+        method->name = SourceIdentifier(method->operatorCanonicalName);
+    }
+    else
+    {
+        // Parse operator symbol: +, -, *, /, %, ==, !=, <, >, <=, >=, &, |, ^, ~, <<, >>, &&, ||, !
+        static const std::vector<TokenType> operatorTokens = {
+            TokenType::PLUS, TokenType::MINUS, TokenType::STAR, TokenType::SLASH, TokenType::PERCENT,
+            TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL,
+            TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL,
+            TokenType::AMPERSAND, TokenType::PIPE, TokenType::CARET, TokenType::TILDE,
+            TokenType::LESS_LESS, TokenType::GREATER_GREATER,
+            TokenType::AND_AND, TokenType::OR_OR, TokenType::BANG,
+        };
+
+        const Token& opToken = expect("Esperado operador (+, -, *, /, ==, etc.)", operatorTokens);
+        method->operatorCanonicalName = operator_token_to_canonical_name(opToken.type);
+        method->name = SourceIdentifier(method->operatorCanonicalName);
+    }
+
+    // Parse parameters: (Type left, Type right) or (Type operand) for unary
+    expect("Esperado '(' após operador", TokenType::LPAREN);
+    if (!check(TokenType::RPAREN))
+    {
+        do
+        {
+            auto paramType = parse_type();
+            const Token& paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+            bool isMutable = match(TokenType::MUT);
+            method->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken), isMutable);
+        }
+        while (match(TokenType::COMMA));
+    }
+    expect("Esperado ')'", TokenType::RPAREN);
+
+    // Parse return type: -> Type
+    expect("Esperado '->' para tipo de retorno do operador", TokenType::THIN_ARROW);
+    method->returnType = parse_type();
+
+    if (!allowBody)
+    {
+        // Interface operator signature - just semicolon
+        expect("Esperado ';' após assinatura do operador", TokenType::SEMICOLON);
+        return method;
+    }
+
+    // Parse body
+    pushScope();
+    for (const auto& param : method->parameters)
+    {
+        currentScope->define_variable(param.name.token_name, *param.type);
+    }
+
+    if (match(TokenType::ARROW))
+    {
+        method->expression = parse_expression();
+        expect("Esperado ';' após expressão", TokenType::SEMICOLON);
+    }
+    else if (check(TokenType::LBRACE))
+    {
+        method->body = parse_block();
+    }
+    else
+    {
+        expect("Esperado '{' ou '=>' para corpo do operador", TokenType::LBRACE);
+    }
+
+    popScope();
+    return method;
 }

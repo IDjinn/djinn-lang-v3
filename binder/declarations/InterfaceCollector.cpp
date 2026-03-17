@@ -27,6 +27,8 @@ void Binder::collectInterfaceWithPrefix(const InterfaceDeclaration& decl, const 
     {
         const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, *method->returnType);
         methodSym->isAbstract = true;
+        methodSym->isOperator = method->isOperatorMethod;
+        methodSym->operatorCanonicalName = method->operatorCanonicalName;
 
         for (const auto& param : method->parameters)
         {
