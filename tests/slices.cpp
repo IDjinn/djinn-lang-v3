@@ -15,7 +15,7 @@ TEST(Str, LiteralCreatesStrStruct)
     const auto source = R"(
         i32 main() {
             str s = "hello";
-            return s.len;
+            return s.length;
         }
     )";
 
@@ -30,7 +30,7 @@ TEST(Str, EmptyLiteral)
 
         i32 main() {
             str s = "";
-            return s.len;
+            return s.length;
         }
     )";
 
@@ -74,7 +74,7 @@ TEST(Str, LenField)
 
         i32 main() {
             str s = "abcdefghij";
-            return s.len;
+            return s.length;
         }
     )";
 
@@ -140,7 +140,7 @@ TEST(Str, PassAsParameter)
     const auto source = R"(
 
         i32 getLen(str s) {
-            return s.len;
+            return s.length;
         }
 
         i32 main() {
@@ -164,7 +164,7 @@ TEST(Arr, LiteralCreatesArrStruct)
 
         i32 main() {
             i32[] nums = [10, 20, 30];
-            return nums.len;
+            return nums.length;
         }
     )";
 
@@ -210,7 +210,7 @@ TEST(Arr, LenField)
 
         i32 main() {
             i32[] nums = [1, 2, 3, 4, 5];
-            return nums.len;
+            return nums.length;
         }
     )";
 
@@ -244,7 +244,7 @@ TEST(Arr, SumElements)
         i32 main() {
             i32[] nums = [10, 20, 30, 40];
             mut i32 sum = 0;
-            for (mut u32 i = 0; i < nums.len; i = i + 1u) {
+            for (mut u32 i = 0; i < nums.length; i = i + 1u) {
                 sum = sum + nums[i];
             }
             return sum;
@@ -261,7 +261,7 @@ TEST(Arr, WithPrintf)
     const auto source = R"(
         i32 main() {
             i32[] nums = [5, 10, 15];
-            printf("len: %d\n", nums.len);
+            printf("len: %d\n", nums.length);
             return nums[2];
         }
     )";
@@ -280,8 +280,8 @@ TEST(String, StructDefinition)
     const auto source = R"(
 
         i32 main() {
-            string s = { .data = 0, .len = 0, .capacity = 0 };
-            return s.len;
+            string s = { .data = 0, .length = 0, .capacity = 0 };
+            return s.length;
         }
     )";
 
@@ -295,7 +295,7 @@ TEST(String, IsEmptyMethod)
     const auto source = R"(
 
         i32 main() {
-            string s = { .data = 0, .len = 0, .capacity = 0 };
+            string s = { .data = 0, .length = 0, .capacity = 0 };
             if (s.is_empty()) {
                 return 1;
             }
@@ -313,7 +313,7 @@ TEST(String, CapacityField)
     const auto source = R"(
 
         i32 main() {
-            string s = { .data = 0, .len = 5, .capacity = 16 };
+            string s = { .data = 0, .length = 5, .capacity = 16 };
             return s.capacity;
         }
     )";

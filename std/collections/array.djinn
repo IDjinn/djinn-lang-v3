@@ -5,7 +5,8 @@ import std::types::constraints;
 
 namespace std::collections;
 
-struct array<T> : Hashable {
+struct array<T> : Hashable
+where T : Hashable {
     T* data;
     size length;
     size capacity;
@@ -14,6 +15,15 @@ struct array<T> : Hashable {
         this.data = malloc(0);
         this.length = 0u;
         this.capacity = 0u;
+    }
+
+    public u64 hash() {
+        mut u64 result = 1;
+        for (mut size i = 0; i < this.length; i = i + 1) {
+            u64 item_hash = this.data[i].hash();
+            result = 31 * result + (u32)(item_hash ^ (item_hash >> 32));
+        }
+        return result;
     }
 
     public void push(T value) {
@@ -41,14 +51,6 @@ struct array<T> : Hashable {
     public void grow() {
         this.capacity = this.capacity * 2u;
         this.data = realloc(this.data, this.capacity * sizeof(T));
-    }
-
-    public u64 hash() {
-        mut u64 hash_result = 1;
-        for (mut size i = 0u; i < this.length; i = i + 1u) {
-          hash_result = 31 * hash_result + this.data[i].hash(); // TODO: THIS DOES NOT SUPPORT GENERIC TYPES!
-        }
-        return hash_result;
     }
 
     public void destroy() {

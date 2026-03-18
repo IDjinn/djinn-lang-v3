@@ -253,7 +253,7 @@ TEST(Intrinsics, TypeofI32)
         i32 main() {
             i32 x = 42;
             str t = typeof(x);
-            return t.len;
+            return t.length;
         }
     )";
 
@@ -270,7 +270,7 @@ TEST(Intrinsics, TypeofF64)
         i32 main() {
             f64 x = 3.14;
             str t = typeof(x);
-            return t.len;
+            return t.length;
         }
     )";
 
@@ -292,7 +292,7 @@ TEST(Intrinsics, TypeofStruct)
         i32 main() {
             Point p = { 10, 20 };
             str t = typeof(p);
-            return t.len;
+            return t.length;
         }
     )";
 

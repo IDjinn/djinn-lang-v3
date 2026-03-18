@@ -28,19 +28,6 @@ enum result<T, E> {
     Error(E)
 }
 
-struct arr<T> {
-    T* data;
-    size len;
-
-    public bool is_empty() {
-        return this.len == 0u;
-    }
-
-    public i8* ptr() {
-        return this.data;
-    }
-}
-
 impl Hashable, Equatable for arr<T> {
     u64 hash() {
         return 0u;
@@ -95,10 +82,33 @@ impl Hashable, Equatable for i8* {
 
 struct str {
     i8* data;
-    size len;
+    size length;
 
     public bool is_empty() {
-        return this.len == 0u;
+        return this.length == 0u;
+    }
+
+    public i8* ptr() {
+        return this.data;
+    }
+}
+
+struct arr<T> : Hashable
+where T : Hashable {
+    T* data;
+    size length;
+
+    public u64 hash() {
+        mut u64 result = 1;
+        for (mut size i = 0; i < this.length; i = i + 1) {
+            u64 item_hash = this.data[i].hash();
+            result = 31 * result + (u32)(item_hash ^ (item_hash >> 32));
+        }
+        return result;
+    }
+
+    public bool is_empty() {
+        return this.length == 0u;
     }
 
     public i8* ptr() {
@@ -108,19 +118,19 @@ struct str {
 
 struct string {
     mut i8* data;
-    size len;
+    size length;
     size capacity;
 
     public bool is_empty() {
-        return this.len == 0u;
+        return this.length == 0u;
     }
 
     public i8* ptr() {
         return this.data;
     }
 
-    public i32 len() {
-        return this.len;
+    public i32 length() {
+        return this.length;
     }
 
     public i32 capacity() {
@@ -130,25 +140,25 @@ struct string {
 
 impl Hashable for str, string {
     u64 hash() {
-        return __djinn_hash_string(this.data, this.len);
+        return __djinn_hash_string(this.data, this.length);
     }
 
     str slice(size start, size length) {
-        Debug.assert(start <= this.len, "start out of bounds");
-        Debug.assert(start + length <= this.len, "length out of bounds");
+        Debug.assert(start <= this.length, "start out of bounds");
+        Debug.assert(start + length <= this.length, "length out of bounds");
 
-        return { .data = this.data + start, .len = length };
+        return { .data = this.data + start, .length = length };
     }
 
     string substring(size start, size length) {
-        Debug.assert(start <= this.len, "start out of bounds");
-        Debug.assert(start + length <= this.len, "length out of bounds");
+        Debug.assert(start <= this.length, "start out of bounds");
+        Debug.assert(start + length <= this.length, "length out of bounds");
 
         size new_size = length - start;
         u32 new_capacity = (u32)((f64)new_size * 1.5);
         void* data_buffer = __djinn_malloc(new_capacity);
         memcpy(data_buffer, (this.data + start), length);
-        return { .data = data_buffer, .len = new_size, .capacity = new_capacity };
+        return { .data = data_buffer, .length = new_size, .capacity = new_capacity };
     }
 
     string concat(string left, string right) {
@@ -156,23 +166,23 @@ impl Hashable for str, string {
     }
 
     operator +(string left, string right) -> string { // TODO: THIS DOESNT APPEND IF HAS CAPACITY!
-        u32 new_len = left.len + right.len;
+        u32 new_len = left.length + right.length;
         u64 alloc_size = (u64)((f64)new_len * 1.5);
         i8* new_data = __djinn_malloc(alloc_size);
-        memcpy(new_data, left.data, left.len);
-        memcpy(new_data + left.len, right.data, right.len);
-        return { .data = new_data, .len = new_len, .capacity = new_len };
+        memcpy(new_data, left.data, left.length);
+        memcpy(new_data + left.length, right.data, right.length);
+        return { .data = new_data, .length = new_len, .capacity = new_len };
     }
 }
 
 impl Equatable for str {
     operator ==(str left, str right) -> bool {
-        return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
+        return __djinn_compare_strings(left.data, right.data, left.length, right.length) == 1;
     }
 }
 
 impl Equatable for string {
     operator ==(string left, string right) -> bool {
-        return __djinn_compare_strings(left.data, right.data, left.len, right.len) == 1;
+        return __djinn_compare_strings(left.data, right.data, left.length, right.length) == 1;
     }
 }
