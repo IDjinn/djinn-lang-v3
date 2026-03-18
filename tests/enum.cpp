@@ -214,3 +214,191 @@ TEST(Enum, GenericMultipleInstantiations)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
+
+// ============================================================================
+// Pattern Matching (Switch Expression) Tests
+// ============================================================================
+
+TEST(Enum, PatternMatchBasic)
+{
+    const auto source = R"(
+        enum optional<T> {
+            Empty(),
+            Value(T)
+        }
+
+        i32 main() {
+            auto opt = optional<i32>::Value(69);
+
+            i32 result = switch opt {
+                Value val -> val,
+                Empty -> -1
+            };
+
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 69);
+}
+
+TEST(Enum, PatternMatchEmpty)
+{
+    const auto source = R"(
+        enum optional<T> {
+            Empty(),
+            Value(T)
+        }
+
+        i32 main() {
+            auto opt = optional<i32>::Empty();
+
+            i32 result = switch opt {
+                Value val -> val,
+                Empty -> -1
+            };
+
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    // -1 as i32 return code wraps to 255 on most systems
+    EXPECT_EQ(result.returnCode, 255);
+}
+
+TEST(Enum, PatternMatchResult)
+{
+    const auto source = R"(
+        enum result<T, E> {
+            Ok(T),
+            Error(E)
+        }
+
+        i32 main() {
+            auto r = result<i32, i32>::Ok(42);
+
+            i32 val = switch r {
+                Ok v -> v,
+                Error e -> e
+            };
+
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Enum, PatternMatchResultError)
+{
+    const auto source = R"(
+        enum result<T, E> {
+            Ok(T),
+            Error(E)
+        }
+
+        i32 main() {
+            auto r = result<i32, i32>::Error(7);
+
+            i32 val = switch r {
+                Ok v -> v,
+                Error e -> e
+            };
+
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 7);
+}
+
+TEST(Enum, PatternMatchWithComputation)
+{
+    const auto source = R"(
+        enum optional<T> {
+            Empty(),
+            Value(T)
+        }
+
+        i32 main() {
+            auto opt = optional<i32>::Value(10);
+
+            i32 result = switch opt {
+                Value val -> val * 2 + 1,
+                Empty -> 0
+            };
+
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 21);
+}
+
+TEST(Enum, PatternMatchNoPayload)
+{
+    const auto source = R"(
+        enum Color {
+            Red(),
+            Green(),
+            Blue()
+        }
+
+        i32 main() {
+            Color c = Color::Green();
+
+            i32 result = switch c {
+                Red -> 1,
+                Green -> 2,
+                Blue -> 3
+            };
+
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 2);
+}
+
+TEST(Enum, PatternMatchInFunction)
+{
+    const auto source = R"(
+        enum optional<T> {
+            Empty(),
+            Value(T)
+        }
+
+        i32 unwrap_or(optional<i32> opt, i32 default_val) {
+            return switch opt {
+                Value val -> val,
+                Empty -> default_val
+            };
+        }
+
+        i32 main() {
+            auto a = optional<i32>::Value(50);
+            auto b = optional<i32>::Empty();
+
+            i32 x = unwrap_or(a, 0);
+            i32 y = unwrap_or(b, 99);
+
+            return x + y;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 149);
+}

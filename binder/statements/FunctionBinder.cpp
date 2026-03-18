@@ -108,6 +108,14 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
         }
     }
 
+    // Define variadic parameter as arr<object> in scope
+    if (method.variadic)
+    {
+        Type objectType = Type::struct_type("object");
+        Type arrObjectType = Type::array(objectType);
+        _current_scope->defineParameter(method.variadic->token_name, arrObjectType, false);
+    }
+
     auto returnType = resolveType(*method.returnType);
     if (!returnType)
     {

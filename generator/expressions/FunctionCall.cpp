@@ -779,14 +779,12 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         if (structDef)
         {
             bool methodIsStatic = false;
-            std::string variadicForwardTarget;
 
             for (const auto& method : structDef->methods)
             {
                 if (method->name == call.name.token_name)
                 {
                     methodIsStatic = method->isStatic;
-                    variadicForwardTarget = method->variadicForwardTarget;
                     break;
                 }
             }
@@ -796,49 +794,6 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                 throw CompileError(DiagnosticCode::TYPE_MISMATCH,
                                    "cannot call instance method '" + call.name.token_name +
                                    "' without an instance of " + structName);
-            }
-
-            // Handle variadic forwarding: Console.printf(fmt, a, b) -> printf(fmt, a, b)
-            if (!variadicForwardTarget.empty())
-            {
-                // Find the target function
-                auto targetIt = functions.find(variadicForwardTarget);
-                if (targetIt == functions.end())
-                {
-                    throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                                       "variadic forward target not found: " + variadicForwardTarget);
-                }
-
-                llvm::Function* targetFunc = targetIt->second;
-                const llvm::FunctionType* targetFuncType = targetFunc->getFunctionType();
-
-                // Generate all arguments and call target function directly
-                std::vector<llvm::Value*> targetArgs;
-                size_t targetArgIdx = 0;
-                for (const auto& arg : call.arguments)
-                {
-                    llvm::Value* argVal = generate_expression(*arg);
-
-                    if (targetArgIdx < targetFuncType->getNumParams())
-                    {
-                        argVal = cast_value(argVal, targetFuncType->getParamType(targetArgIdx));
-                    }
-                    else if (targetFuncType->isVarArg())
-                    {
-                        // Promote small integers for variadic functions (C ABI requirement)
-                        if (argVal->getType()->isIntegerTy() &&
-                            argVal->getType()->getIntegerBitWidth() < 32)
-                        {
-                            argVal = argVal->getType()->getIntegerBitWidth() == 1
-                                         ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
-                                         : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
-                        }
-                    }
-                    targetArgs.push_back(argVal);
-                    targetArgIdx++;
-                }
-
-                return builder->CreateCall(targetFunc, targetArgs);
             }
         }
         // No self argument for static methods
@@ -902,37 +857,141 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     }
 
     const llvm::FunctionType* funcType = func->getFunctionType();
-    size_t argIdx = isStaticCall ? 0 : 1; // Account for 'this' parameter in instance methods
-    for (const auto& arg : call.arguments)
+
+    // Check if this method is a Djinn variadic (uses ...args auto-boxing)
+    const MethodSymbol* variadicMethod = nullptr;
+    if (structDef)
     {
-        llvm::Value* argVal = generate_expression(*arg);
-
-        // Only coerce str/slice -> ptr when the target parameter expects a pointer
-        const bool targetIsPtr = argIdx < funcType->getNumParams()
-                                     ? funcType->getParamType(argIdx)->isPointerTy()
-                                     : funcType->isVarArg();
-        if (targetIsPtr)
+        for (const auto& method : structDef->methods)
         {
-            argVal = coerce_str_to_ptr(argVal);
-        }
-
-        if (argIdx < funcType->getNumParams())
-        {
-            argVal = cast_value(argVal, funcType->getParamType(argIdx));
-        }
-        else if (funcType->isVarArg())
-        {
-            // Promote small integers for variadic functions (C ABI requirement)
-            if (argVal->getType()->isIntegerTy() &&
-                argVal->getType()->getIntegerBitWidth() < 32)
+            if (method->name == call.name.token_name && method->isVariadic())
             {
-                argVal = argVal->getType()->getIntegerBitWidth() == 1
-                             ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
-                             : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                variadicMethod = method.get();
+                break;
             }
         }
-        args.push_back(argVal);
-        argIdx++;
+    }
+
+    if (variadicMethod)
+    {
+        // Djinn variadic: auto-box extra arguments into arr<object>
+        // Non-variadic params come first (excluding the synthesized arr<object> param)
+        const size_t normalParamCount = variadicMethod->paramTypes.size() - 1; // last param is arr<object>
+        size_t argIdx = isStaticCall ? 0 : 1;
+
+        // Generate normal (non-variadic) arguments
+        for (size_t i = 0; i < normalParamCount && i < call.arguments.size(); ++i)
+        {
+            llvm::Value* argVal = generate_expression(*call.arguments[i]);
+            if (argIdx < funcType->getNumParams())
+            {
+                llvm::Type* expectedType = funcType->getParamType(argIdx);
+                // Load struct value if we have a pointer (alloca) but function expects value
+                if (argVal->getType()->isPointerTy() && expectedType->isStructTy())
+                {
+                    argVal = builder->CreateLoad(expectedType, argVal, "arg_load");
+                }
+                else
+                {
+                    argVal = cast_value(argVal, expectedType);
+                }
+            }
+            args.push_back(argVal);
+            argIdx++;
+        }
+
+        // Box remaining arguments into arr<object>
+        const std::string resolvedObject = currentScope->resolve_alias("object");
+        StructDef* objectDef = currentScope->lookup_struct(resolvedObject);
+
+        const size_t numVariadicArgs = call.arguments.size() > normalParamCount
+                                           ? call.arguments.size() - normalParamCount
+                                           : 0;
+
+        // Monomorphize arr<object>
+        Type objectType = Type::struct_type("object");
+        std::vector<Type> typeArgs = {objectType};
+        llvm::StructType* arrObjectType = monomorphize_struct("arr", typeArgs);
+        StructDef* arrDef = currentScope->lookup_struct(arrObjectType->getName().str());
+
+        if (numVariadicArgs > 0)
+        {
+            // Stack-allocate array of objects
+            auto* arrayData = builder->CreateAlloca(
+                objectDef->llvmType,
+                builder->getInt32(static_cast<uint32_t>(numVariadicArgs)),
+                "varargs_data"
+            );
+
+            // Box each variadic argument
+            for (size_t i = 0; i < numVariadicArgs; ++i)
+            {
+                llvm::Value* argVal = generate_expression(*call.arguments[normalParamCount + i]);
+                std::string typeName = get_type_name_for_value(argVal);
+                llvm::Value* boxed = box_value(argVal, typeName);
+
+                auto* gep = builder->CreateGEP(objectDef->llvmType, arrayData,
+                                               builder->getInt32(static_cast<uint32_t>(i)), "vararg_slot");
+                builder->CreateStore(boxed, gep);
+            }
+
+            // Build arr<object> struct: { object* data, size length }
+            auto* arrAlloca = builder->CreateAlloca(arrObjectType, nullptr, "varargs_arr");
+            auto* dataField = builder->CreateStructGEP(arrObjectType, arrAlloca, 0, "arr.data");
+            builder->CreateStore(arrayData, dataField);
+            auto* lenField = builder->CreateStructGEP(arrObjectType, arrAlloca, 1, "arr.len");
+            builder->CreateStore(builder->getInt32(static_cast<uint32_t>(numVariadicArgs)), lenField);
+
+            // Load and pass the arr<object> value
+            llvm::Value* arrVal = builder->CreateLoad(arrObjectType, arrAlloca, "varargs");
+            args.push_back(arrVal);
+        }
+        else
+        {
+            // Empty varargs: pass empty arr<object>
+            auto* arrAlloca = builder->CreateAlloca(arrObjectType, nullptr, "varargs_arr");
+            auto* dataField = builder->CreateStructGEP(arrObjectType, arrAlloca, 0, "arr.data");
+            builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()), dataField);
+            auto* lenField = builder->CreateStructGEP(arrObjectType, arrAlloca, 1, "arr.len");
+            builder->CreateStore(builder->getInt32(0), lenField);
+
+            llvm::Value* arrVal = builder->CreateLoad(arrObjectType, arrAlloca, "varargs");
+            args.push_back(arrVal);
+        }
+    }
+    else
+    {
+        // Normal (non-variadic) argument generation
+        size_t argIdx = isStaticCall ? 0 : 1;
+        for (const auto& arg : call.arguments)
+        {
+            llvm::Value* argVal = generate_expression(*arg);
+
+            const bool targetIsPtr = argIdx < funcType->getNumParams()
+                                         ? funcType->getParamType(argIdx)->isPointerTy()
+                                         : funcType->isVarArg();
+            if (targetIsPtr)
+            {
+                argVal = coerce_str_to_ptr(argVal);
+            }
+
+            if (argIdx < funcType->getNumParams())
+            {
+                argVal = cast_value(argVal, funcType->getParamType(argIdx));
+            }
+            else if (funcType->isVarArg())
+            {
+                if (argVal->getType()->isIntegerTy() &&
+                    argVal->getType()->getIntegerBitWidth() < 32)
+                {
+                    argVal = argVal->getType()->getIntegerBitWidth() == 1
+                                 ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
+                                 : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                }
+            }
+            args.push_back(argVal);
+            argIdx++;
+        }
     }
 
     // Inject caller file and line for Debug::assert calls

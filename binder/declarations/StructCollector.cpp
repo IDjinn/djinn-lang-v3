@@ -60,42 +60,46 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
     // Methods
     for (const auto& method : decl.methods)
     {
-        // Check if this is a constructor (marked by parser or method name == struct name)
-        const bool isCtorMethod = method->isConstructor() ||
+        const bool isConstructorMethod = method->isConstructor() ||
             (method->name.token_name == decl.name.token_name);
 
-        // For constructors, return type is implicitly the struct type
-        Type methodReturnType = isCtorMethod
-                                    ? Type::struct_type(qualifiedName)
-                                    : *method->returnType;
+        const auto methodReturnType = isConstructorMethod
+                                          ? Type::struct_type(qualifiedName)
+                                          : *method->returnType;
 
         const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, methodReturnType);
         methodSym->isAbstract = method->isAbstract();
         methodSym->isStatic = method->isStatic() || method->isOperatorMethod;
-        methodSym->isVariadic = method->isVariadic;
+        if (method->variadic)
+            methodSym->variadicName = method->variadic->token_name;
         methodSym->isAsync = method->isAsync;
         methodSym->isOperator = method->isOperatorMethod;
         methodSym->operatorCanonicalName = method->operatorCanonicalName;
-        methodSym->variadicForwardTarget = method->variadicForwardTarget;
-        methodSym->isConstructor = isCtorMethod;
-        if (isCtorMethod)
+        methodSym->isConstructor = isConstructorMethod;
+        if (isConstructorMethod)
         {
             methodSym->structName = qualifiedName;
         }
 
-        // Copy attributes from AST
         for (const auto& attr : method->attributes)
         {
             methodSym->attributes.push_back(attr.name.token_name);
         }
 
-        // Store pointers to AST body (AST owns the memory)
         methodSym->body = method->body.get();
         methodSym->expressionBody = method->expression.get();
 
         for (const auto& param : method->parameters)
         {
             methodSym->addParameter(param.name.token_name, *param.type);
+        }
+
+        // Add variadic arr<object> parameter AFTER normal params
+        if (method->variadic)
+        {
+            Type objectType = Type::struct_type("object");
+            Type arrObjectType = Type::array(objectType);
+            methodSym->addParameter(method->variadic->token_name, arrObjectType);
         }
 
         for (const auto& genParam : method->genericParams.params)

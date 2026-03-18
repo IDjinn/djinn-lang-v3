@@ -42,6 +42,7 @@ struct Type : Location
     bool sign = false;
     bool nullable = false;
     bool readOnly = false;
+    bool isTransparent = false; // true for transparent types (struct size : u32) — copy semantics
     std::unique_ptr<Type> elementType;
     std::string structName;
     std::vector<Type> genericArgs;
@@ -61,6 +62,7 @@ struct Type : Location
           kind(other.kind),
           sign(other.sign),
           nullable(other.nullable),
+          isTransparent(other.isTransparent),
           elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr),
           structName(other.structName),
           genericArgs(other.genericArgs)
@@ -76,6 +78,7 @@ struct Type : Location
             size = other.size;
             sign = other.sign;
             nullable = other.nullable;
+            isTransparent = other.isTransparent;
             elementType = other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr;
             structName = other.structName;
             genericArgs = other.genericArgs;

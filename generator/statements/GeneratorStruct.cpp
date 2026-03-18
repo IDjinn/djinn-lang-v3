@@ -279,7 +279,7 @@ void Generator::forward_declare_method(const StructSymbol& struc, const MethodSy
         paramTypes.push_back(generate_type(paramType));
     }
 
-    const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
+    const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, false);
     const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
     if (method.hasAttribute("force-inline"))
@@ -327,7 +327,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
             paramTypes.push_back(generate_type(paramType));
         }
 
-        const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, method.isVariadic);
+        const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, false);
         llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
         if (method.hasAttribute("force-inline"))

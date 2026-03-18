@@ -59,18 +59,13 @@ struct StructMethodDeclaration : Location
     std::vector<VisibilityModifier> modifiers;
     std::unique_ptr<Block> body;
     std::unique_ptr<Expression> expression;
-    bool isConstructorMethod = false; // True if this is a constructor (name == struct name)
-    bool isVariadic = false; // True if method has variadic parameters (...)
-    bool isAsync = false; // True if this is an async method
-    bool isOperatorMethod = false; // True if this is an operator overload
-    std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq", "__op_index_get"
+    std::unique_ptr<SourceIdentifier> variadic;
 
-    // Variadic forwarding: if this method forwards its variadic args to another function
-    // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
-    std::string variadicForwardTarget;
+    bool isConstructorMethod = false; // constructor (name == struct name)
+    bool isAsync = false;
+    bool isOperatorMethod = false;
+    std::string operatorCanonicalName; // "__op_add", "__op_eq", "__op_index_get"
     std::vector<AttributeUsageDeclaration> attributes;
-
-    [[nodiscard]] bool isVariadicForwarder() const { return !variadicForwardTarget.empty(); }
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
@@ -81,6 +76,7 @@ struct StructMethodDeclaration : Location
         return false;
     }
 
+    [[nodiscard]] bool isVariadic() const { return this->variadic != nullptr; }
     [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
     [[nodiscard]] bool isConstructor() const { return isConstructorMethod; }
@@ -144,7 +140,7 @@ struct StructMethodDeclaration : Location
             if (i > 0) os << ", ";
             os << *parameters[i].type << " " << parameters[i].name;
         }
-        if (isVariadic) os << ", ...";
+        if (isVariadic()) os << ", ..." << variadic->token_name;
         os << ")";
         if (isExpressionBody())
         {

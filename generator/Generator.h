@@ -264,10 +264,21 @@ private:
                                            const std::string& methodName);
     llvm::Value* generate_coro_intrinsic(const FunctionCall& call, const std::string& method);
 
+    // Temporary state for propagating pointee type info from field access to variable init
+    llvm::Type* _lastFieldAccessPointeeType = nullptr;
+    std::string _lastFieldAccessStructName;
+
     size_t generatedFunctions = 0;
     size_t generatedExternFunctions = 0;
     size_t generatedStructs = 0;
     size_t generatedMethods = 0;
+
+    // TypeInfo constants for object boxing (variadics)
+    std::unordered_map<std::string, llvm::GlobalVariable*> typeInfoConstants;
+    llvm::GlobalVariable* get_or_create_typeinfo(const std::string& typeName, llvm::Type* llvmType);
+    static int32_t compute_type_id(const std::string& typeName);
+    llvm::Value* box_value(llvm::Value* value, const std::string& typeName);
+    std::string get_type_name_for_value(llvm::Value* value);
 };
 
 #endif //DJINN_GENERATOR_H

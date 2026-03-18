@@ -45,4 +45,50 @@ struct Console {
         Debug.assert(ret == (i64)0, "async_read call got invalid return");
         return buffer;
     }
+
+
+  public static async i64 write(str format, ...args) {
+      i32 stdout = 1;
+      void* handle = std::builtin::coro.handle();
+
+      mut size pos = 0u;
+      mut size written = 0u;
+
+      while (pos < format.length) {
+          if (format.data[pos] == 123) {  // '{'
+              // Flush text before the placeholder
+              if (pos > written) {
+                  __djinn_async_write(stdout, format.data + written, (i64)(pos - written), handle);
+                  std::builtin::coro.suspend();
+              }
+
+              // Parse index: {0}, {1}, etc.
+              pos = pos + 1u;
+              mut i32 idx = 0;
+              while (pos < format.length && format.data[pos] != 125) {  // '}'
+                  idx = idx * 10 + ((i32)format.data[pos] - 48);  // '0' = 48
+                  pos = pos + 1u;
+              }
+              pos = pos + 1u;  // skip '}'
+              written = pos;
+
+              // Get the arg and write based on type
+              if (idx < (i32)args.length) {
+                  i8* placeholder = "[arg]";
+                  __djinn_async_write(stdout, placeholder, 5, handle);
+                  std::builtin::coro.suspend();
+              }
+          } else {
+              pos = pos + 1u;
+          }
+      }
+
+      // Flush remaining text
+      if (written < format.length) {
+          __djinn_async_write(stdout, format.data + written, (i64)(format.length - written), handle);
+          std::builtin::coro.suspend();
+      }
+
+      return 0;
+  }
 }

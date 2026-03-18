@@ -208,6 +208,9 @@ namespace djinn::ownership {
     }
 
     bool OwnershipTracker::isCopyType(const Type &type) {
+        // Transparent types (struct size : u32) have copy semantics
+        if (type.isTransparent) return true;
+
         switch (type.kind) {
             case TypeKind::F16:
             case TypeKind::F32:

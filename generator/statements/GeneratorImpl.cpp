@@ -49,7 +49,7 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
         paramTypes.push_back(generate_type(paramType));
     }
 
-    auto* funcType = llvm::FunctionType::get(returnType, paramTypes, method.isVariadic);
+    auto* funcType = llvm::FunctionType::get(returnType, paramTypes, false);
     auto* llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
     if (method.hasAttribute("force-inline"))

@@ -230,6 +230,29 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
         }
     }
 
+    // For auto type, infer struct type name and pointee type from the expression
+    if (expr.type.kind == TypeKind::AUTO && structTypeName.empty())
+    {
+        if (type->isStructTy())
+        {
+            if (auto* st = llvm::dyn_cast<llvm::StructType>(type))
+            {
+                structTypeName = st->getName().str();
+            }
+        }
+        else if (type->isPointerTy())
+        {
+            // Use pointee type info propagated from field access
+            if (_lastFieldAccessPointeeType && !_lastFieldAccessStructName.empty())
+            {
+                pointeeType = _lastFieldAccessPointeeType;
+                structTypeName = _lastFieldAccessStructName;
+                _lastFieldAccessPointeeType = nullptr;
+                _lastFieldAccessStructName.clear();
+            }
+        }
+    }
+
     currentScope->define_variable(expr.name.token_name, alloca, structTypeName, pointeeType);
     if (expr.type.kind == TypeKind::INTEGER)
     {

@@ -41,11 +41,27 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
             }
             if (const auto allocatedType = alloca->getAllocatedType(); allocatedType->isPointerTy())
             {
+                // Pointer to struct: load the pointer and try to resolve the pointee struct type
                 basePtr = builder->CreateLoad(allocatedType, alloca, ident->identifier.token_name);
-                LOG_DEBUG("[generator]   FAILED: pointer type, throwing NOT_A_STRUCT for '%s'",
-                          ident->identifier.token_name.c_str());
-                throw CompileError(DiagnosticCode::NOT_A_STRUCT,
-                                   "variável não é uma struct: " + ident->identifier.token_name);
+
+                // Check if we have a tracked pointee type for this variable
+                if (llvm::Type* pointeeType = currentScope->lookup_variable_pointee_type(ident->identifier.token_name))
+                {
+                    if (auto* st = llvm::dyn_cast<llvm::StructType>(pointeeType))
+                    {
+                        structType = st;
+                        structName = st->getName().str();
+                        LOG_DEBUG("[generator]   resolved pointer-to-struct: '%s'", structName.c_str());
+                    }
+                }
+
+                if (!structType)
+                {
+                    LOG_DEBUG("[generator]   FAILED: pointer type, throwing NOT_A_STRUCT for '%s'",
+                              ident->identifier.token_name.c_str());
+                    throw CompileError(DiagnosticCode::NOT_A_STRUCT,
+                                       "variável não é uma struct: " + ident->identifier.token_name);
+                }
             }
             else if (auto* llvmStructType = llvm::dyn_cast<llvm::StructType>(allocatedType))
             {
@@ -115,7 +131,34 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
         const unsigned fieldIdx = fieldIt->second;
         auto* fieldPtr = builder->CreateStructGEP(structType, basePtr, fieldIdx, expr.fieldName.token_name + "_ptr");
         llvm::Type* fieldType = structType->getElementType(fieldIdx);
-        return builder->CreateLoad(fieldType, fieldPtr, expr.fieldName.token_name);
+        llvm::Value* result = builder->CreateLoad(fieldType, fieldPtr, expr.fieldName.token_name);
+
+        // Track pointee type for pointer fields (e.g., TypeInfo* type in object struct)
+        _lastFieldAccessPointeeType = nullptr;
+        _lastFieldAccessStructName.clear();
+        if (fieldType->isPointerTy())
+        {
+            if (const StructDef* srcDef = currentScope->lookup_struct(fieldIndicesName))
+            {
+                if (fieldIdx < srcDef->fields.size())
+                {
+                    const Type& djinnFieldType = srcDef->fields[fieldIdx].second;
+                    if (djinnFieldType.kind == TypeKind::POINTER && djinnFieldType.elementType &&
+                        djinnFieldType.elementType->kind == TypeKind::STRUCT)
+                    {
+                        std::string resolved = currentScope->resolve_alias(djinnFieldType.elementType->structName);
+                        llvm::StructType* pointeeSt = currentScope->get_llvm_struct(resolved);
+                        if (pointeeSt)
+                        {
+                            _lastFieldAccessPointeeType = pointeeSt;
+                            _lastFieldAccessStructName = resolved;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     throw CompileError(DiagnosticCode::INVALID_OPERATION, "acesso a campo só suportado em identificadores simples");

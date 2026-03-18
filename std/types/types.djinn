@@ -80,6 +80,23 @@ impl Hashable, Equatable for i8* {
     }
 }
 
+struct TypeInfo {
+    i32 id;
+    i32 size;
+    i8* name;
+}
+
+struct object {
+    void* data;
+    TypeInfo* type;
+}
+
+impl Hashable for object {
+    [force-inline] u64 hash() {
+        return (u64)this.data;
+    }
+}
+
 struct str {
     i8* data;
     size length;

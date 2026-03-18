@@ -45,11 +45,11 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, methodReturnType);
             methodSym->isAbstract = method->isAbstract();
             methodSym->isStatic = method->isStatic() || method->isOperatorMethod;
-            methodSym->isVariadic = method->isVariadic;
+            if (method->variadic)
+                methodSym->variadicName = method->variadic->token_name;
             methodSym->isAsync = method->isAsync;
             methodSym->isOperator = method->isOperatorMethod;
             methodSym->operatorCanonicalName = method->operatorCanonicalName;
-            methodSym->variadicForwardTarget = method->variadicForwardTarget;
 
             // Copy attributes from AST
             for (const auto& attr : method->attributes)
@@ -64,6 +64,14 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             for (const auto& param : method->parameters)
             {
                 methodSym->addParameter(param.name.token_name, *param.type);
+            }
+
+            // Add variadic arr<object> parameter AFTER normal params
+            if (method->variadic)
+            {
+                Type objectType = Type::struct_type("object");
+                Type arrObjectType = Type::array(objectType);
+                methodSym->addParameter(method->variadic->token_name, arrObjectType);
             }
 
             for (const auto& genParam : method->genericParams.params)

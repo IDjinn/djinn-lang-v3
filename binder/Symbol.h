@@ -163,19 +163,15 @@ struct MethodSymbol : Symbol
     std::vector<Type> paramTypes;
     std::vector<std::string> paramNames;
     std::vector<GenericParamInfo> genericParams;
+    std::string variadicName;
     bool isAbstract = false;
     bool isStatic = false;
-    bool isVariadic = false; // True if method has variadic parameters (...)
     bool isConstructor = false; // True if this is a constructor (name == struct name)
     bool isAsync = false; // True if this is an async method
     bool isOperator = false; // True if this is an operator overload
     std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq"
     std::string structName; // Name of the struct this constructor belongs to (for constructors only)
     std::vector<std::string> attributes;
-
-    // Variadic forwarding: if this method forwards variadic args to another function
-    // e.g., "return printf(msg, ...)" -> variadicForwardTarget = "printf"
-    std::string variadicForwardTarget;
 
     // Raw pointers to AST nodes (AST owns the memory)
     Block* body = nullptr;
@@ -203,6 +199,7 @@ struct MethodSymbol : Symbol
         genericParams.emplace_back(param, constraints);
     }
 
+    [[nodiscard]] bool isVariadic() const { return this->variadicName.length() > 0; }
     [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
     [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }

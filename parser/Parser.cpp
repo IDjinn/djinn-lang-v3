@@ -345,8 +345,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         {
             if (match(TokenType::DOT_DOT_DOT))
             {
-                method->isVariadic = true;
-                break; // variadic marker comes after parameters
+                const auto identifier = expect("Expected variadic args identifier name", TokenType::IDENTIFIER);
+                method->variadic = std::make_unique<SourceIdentifier>(makeSourceIdentifier(identifier));
+                break;
             }
             auto paramType = parse_type();
             const Token& paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
@@ -378,37 +379,11 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         method->expression = parse_expression();
         expect("Esperado ';' após expressão", TokenType::SEMICOLON);
 
-        // Check if expression is variadic forwarding: => funcCall(args, ...)
-        if (auto* call = dynamic_cast<FunctionCall*>(method->expression.get()))
-        {
-            if (call->hasVariadicForward && method->isVariadic)
-            {
-                method->variadicForwardTarget = call->name.token_name;
-            }
-        }
     }
     else if (check(TokenType::LBRACE))
     {
         // Block body: { ... }
         method->body = parse_block();
-
-        // Check if body is single return with variadic forwarding: { return funcCall(args, ...); }
-        if (method->body && method->body->statements.size() == 1)
-        {
-            if (auto* retStmt = dynamic_cast<ReturnStatement*>(method->body->statements[0].get()))
-            {
-                if (retStmt->value)
-                {
-                    if (auto* call = dynamic_cast<FunctionCall*>(retStmt->value.get()))
-                    {
-                        if (call->hasVariadicForward && method->isVariadic)
-                        {
-                            method->variadicForwardTarget = call->name.token_name;
-                        }
-                    }
-                }
-            }
-        }
     }
     else
     {
