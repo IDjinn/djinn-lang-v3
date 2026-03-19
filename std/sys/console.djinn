@@ -47,6 +47,74 @@ struct Console {
     }
 
 
+  public static void writeSync(str format, ...args) {
+      mut size pos = 0u;
+      mut size written = 0u;
+
+      while (pos < format.length) {
+          if (format.data[pos] == 123) {
+              // Flush text before placeholder
+              if (pos > written) {
+                  size len = pos - written;
+                  write(1, format.data + written, len);
+              }
+
+              // Parse index
+              pos = pos + 1u;
+              mut i32 idx = 0;
+              while (pos < format.length && format.data[pos] != 125) {
+                  idx = idx * 10 + ((i32)format.data[pos] - 48);
+                  pos = pos + 1u;
+              }
+              pos = pos + 1u;
+              written = pos;
+
+              if (idx < (i32)args.length) {
+                  object arg = args[idx];
+                  u8 kind = arg.type.kind;
+                  i32 tsize = arg.type.size;
+
+                  if (kind == 0) {
+                      i8* buf = __djinn_malloc(32);
+                      if (tsize <= 4) {
+                          i32* ip = (i32*)arg.data;
+                          itoa(*ip, buf, 10);
+                      } else {
+                          i64* lp = (i64*)arg.data;
+                          snprintf(buf, 32, "%lld", *lp);
+                      }
+                      i32 slen = strlen(buf);
+                      write(1, buf, slen);
+                      __djinn_free(buf);
+                  } else if (kind == 1) {
+                      i8* buf = __djinn_malloc(32);
+                      mut i32 len = 0;
+                      if (tsize <= 4) {
+                          f32* fp = (f32*)arg.data;
+                          len = snprintf(buf, 32, "%g", *fp);
+                      } else {
+                          f64* dp = (f64*)arg.data;
+                          len = snprintf(buf, 32, "%g", *dp);
+                      }
+                      write(1, buf, len);
+                      __djinn_free(buf);
+                  } else if (kind == 2) {
+                      i8* s = (i8*)arg.data;
+                      i32 slen = strlen(s);
+                      write(1, s, slen);
+                  }
+              }
+          } else {
+              pos = pos + 1u;
+          }
+      }
+
+      if (written < format.length) {
+          size rem = format.length - written;
+          write(1, format.data + written, rem);
+      }
+  }
+
   public static async i64 write(str format, ...args) {
       i32 stdout = 1;
       void* handle = std::builtin::coro.handle();
@@ -74,9 +142,49 @@ struct Console {
 
               // Get the arg and write based on type
               if (idx < (i32)args.length) {
-                  i8* placeholder = "[arg]";
-                  __djinn_async_write(stdout, placeholder, 5, handle);
-                  std::builtin::coro.suspend();
+                  object arg = args[idx];
+                  u8 kind = arg.type.kind;
+
+                  if (kind == 0) {
+                      // int: convert with itoa (i32) or snprintf (i64)
+                      i8* buf = __djinn_malloc(32);
+                      if (arg.type.size <= 4) {
+                          i32* ip = (i32*)arg.data;
+                          itoa(*ip, buf, 10);
+                      } else {
+                          i64* lp = (i64*)arg.data;
+                          snprintf(buf, 32, "%lld", *lp);
+                      }
+                      i32 slen = strlen(buf);
+                      i64 slen64 = (i64)slen;
+                      __djinn_async_write(stdout, buf, slen64, handle);
+                      std::builtin::coro.suspend();
+                      __djinn_free(buf);
+                  } else if (kind == 1) {
+                      // float: snprintf
+                      i8* buf = __djinn_malloc(32);
+                      mut i32 len = 0;
+                      if (arg.type.size <= 4) {
+                          f32* fp = (f32*)arg.data;
+                          len = snprintf(buf, 32, "%g", *fp);
+                      } else {
+                          f64* dp = (f64*)arg.data;
+                          len = snprintf(buf, 32, "%g", *dp);
+                      }
+                      i64 len64 = (i64)len;
+                      __djinn_async_write(stdout, buf, len64, handle);
+                      std::builtin::coro.suspend();
+                      __djinn_free(buf);
+                  } else if (kind == 2) {
+                      // pointer (i8*): data is the pointer itself
+                      i8* s = (i8*)arg.data;
+                      i32 slen = strlen(s);
+                      i64 slen64 = (i64)slen;
+                      __djinn_async_write(stdout, s, slen64, handle);
+                      std::builtin::coro.suspend();
+                  }
+                  // TODO: kind 5 (str) and kind 6 (string) require cast to str*/string*
+                  // which the parser doesn't support yet
               }
           } else {
               pos = pos + 1u;
@@ -85,7 +193,9 @@ struct Console {
 
       // Flush remaining text
       if (written < format.length) {
-          __djinn_async_write(stdout, format.data + written, (i64)(format.length - written), handle);
+          size rem = format.length - written;
+          i64 rem64 = (i64)rem;
+          __djinn_async_write(stdout, format.data + written, rem64, handle);
           std::builtin::coro.suspend();
       }
 

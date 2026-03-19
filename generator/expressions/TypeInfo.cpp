@@ -15,6 +15,18 @@ int32_t Generator::compute_type_id(const std::string& typeName)
     return static_cast<int32_t>(hash);
 }
 
+uint8_t Generator::compute_type_kind(llvm::Type* type, const std::string& typeName)
+{
+    // Check name-based kinds first (handles fully qualified names like std::types::str)
+    if (typeName == "str" || typeName.ends_with("::str")) return 5;
+    if (typeName == "string" || typeName.ends_with("::string")) return 6;
+    if (type->isIntegerTy()) return 0;
+    if (type->isFloatingPointTy()) return 1;
+    if (type->isPointerTy()) return 2;
+    if (type->isStructTy()) return 3;
+    return 0; // default to int
+}
+
 llvm::GlobalVariable* Generator::get_or_create_typeinfo(const std::string& typeName, llvm::Type* llvmType)
 {
     if (const auto it = typeInfoConstants.find(typeName); it != typeInfoConstants.end())
@@ -38,13 +50,17 @@ llvm::GlobalVariable* Generator::get_or_create_typeinfo(const std::string& typeN
     // Compute deterministic ID (FNV-1a)
     const int32_t id = compute_type_id(typeName);
 
-    // Create constant struct: { i32 id, i32 size, i8* name }
+    // Compute kind
+    const uint8_t kind = compute_type_kind(llvmType, typeName);
+
+    // Create constant struct: { i32 id, i32 size, i8* name, u8 kind }
     auto* constStruct = llvm::ConstantStruct::get(
         typeInfoDef->llvmType,
         {
             builder->getInt32(static_cast<uint32_t>(id)),
             builder->getInt32(static_cast<uint32_t>(size)),
-            nameStr
+            nameStr,
+            builder->getInt8(kind)
         }
     );
 
@@ -117,16 +133,16 @@ llvm::Value* Generator::box_value(llvm::Value* value, const std::string& typeNam
     // Get or create TypeInfo constant
     llvm::GlobalVariable* typeInfo = get_or_create_typeinfo(typeName, valType);
 
-    // Create object struct on stack: { void* data, TypeInfo* type }
+    // Create object struct on stack: { TypeInfo* type, void* data }
     auto* objAlloca = builder->CreateAlloca(objectDef->llvmType, nullptr, "boxed");
 
-    // Store data pointer (field 0)
-    auto* dataField = builder->CreateStructGEP(objectDef->llvmType, objAlloca, 0, "obj.data");
-    builder->CreateStore(dataPtr, dataField);
-
-    // Store TypeInfo pointer (field 1)
-    auto* typeField = builder->CreateStructGEP(objectDef->llvmType, objAlloca, 1, "obj.type");
+    // Store TypeInfo pointer (field 0)
+    auto* typeField = builder->CreateStructGEP(objectDef->llvmType, objAlloca, 0, "obj.type");
     builder->CreateStore(typeInfo, typeField);
+
+    // Store data pointer (field 1)
+    auto* dataField = builder->CreateStructGEP(objectDef->llvmType, objAlloca, 1, "obj.data");
+    builder->CreateStore(dataPtr, dataField);
 
     // Load and return the object value
     return builder->CreateLoad(objectDef->llvmType, objAlloca, "boxed_val");

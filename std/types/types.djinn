@@ -84,16 +84,26 @@ struct TypeInfo {
     i32 id;
     i32 size;
     i8* name;
-}
+    u8 kind;
 
-struct object {
-    void* data;
-    TypeInfo* type;
-}
-
-impl Hashable for object {
     [force-inline] u64 hash() {
-        return (u64)this.data;
+        mut u64 x = (u64)this.id;
+        x = x * 31 + (u64)this.size;
+        x = x * 31 + (u64)this.kind;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
+        x = x ^ (x >> 31);
+
+        return (u64)(x ^ (x >> 32));
+    }
+}
+
+struct object : Hashable {
+    TypeInfo* type;
+    void* data;
+
+    [force-inline] u64 hash() {
+        return this.type.hash();
     }
 }
 

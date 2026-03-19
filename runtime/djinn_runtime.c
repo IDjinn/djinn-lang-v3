@@ -42,7 +42,7 @@ do {                                                                   \
 } while (0)
 
 Logger* logger;
-#define DJINN_ENABLE_TRACE
+// #define DJINN_ENABLE_TRACE
 #ifdef DJINN_ENABLE_TRACE
 #define DJINN_TRACE(message, ...) do {                         \
     DJINN_ASSERT(logger, "Logger not initlizatied properly!"); \
@@ -106,6 +106,7 @@ DJINN_API void __djinn_free(void* pointer)
     DJINN_TRACE("de-allocating heap memory at %p", pointer);
     free(pointer);
 }
+
 DJINN_API void* __djinn_realloc(void* pointer, size_t new_size)
 {
     void* chunk = realloc(pointer, new_size);
@@ -349,6 +350,7 @@ void __djinn_await(void* child_handle, void* parent_handle)
 #ifdef _WIN32
 static DWORD WINAPI file_io_thread_func(LPVOID arg)
 {
+
 
 
 #else
@@ -654,6 +656,7 @@ static void* socket_poller_thread_func(void* arg)
 #ifdef _WIN32
 static DWORD WINAPI worker_thread(LPVOID arg)
 {
+
 
 
 #else

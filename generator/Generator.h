@@ -22,6 +22,7 @@
 #define GENERATOR_ERROR(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
 throw CompileError(code, msg); \
+assert(false); \
 } while (false)
 
 #define GENERATOR_WARN(code, msg, location) do { \
@@ -277,6 +278,7 @@ private:
     std::unordered_map<std::string, llvm::GlobalVariable*> typeInfoConstants;
     llvm::GlobalVariable* get_or_create_typeinfo(const std::string& typeName, llvm::Type* llvmType);
     static int32_t compute_type_id(const std::string& typeName);
+    static uint8_t compute_type_kind(llvm::Type* type, const std::string& typeName);
     llvm::Value* box_value(llvm::Value* value, const std::string& typeName);
     std::string get_type_name_for_value(llvm::Value* value);
 };

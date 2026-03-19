@@ -16,4 +16,6 @@ extern "C" {
   void*  __djinn_malloc    (size_long size);
   void   __djinn_free      (void* pointer);
   void*  __djinn_realloc   (void* pointer, size_long new_size);
+
+  i8* itoa(i32 value, i8* str, i32 base);
 }

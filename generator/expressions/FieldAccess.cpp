@@ -161,7 +161,114 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
         return result;
     }
 
-    throw CompileError(DiagnosticCode::INVALID_OPERATION, "acesso a campo só suportado em identificadores simples");
+    // Handle nested field access: e.g., arg.type.kind
+    // Generate the inner expression and resolve the struct type from it
+    if (auto* innerField = dynamic_cast<const FieldAccess*>(expr.object.get()))
+    {
+        llvm::Value* innerVal = generate_field_access(*innerField);
+
+        // After generating the inner field access, check if it returned a pointer-to-struct
+        llvm::StructType* innerStructType = nullptr;
+        std::string innerStructName;
+        llvm::Value* basePtr = innerVal;
+
+        if (_lastFieldAccessPointeeType)
+        {
+            // The inner access returned a pointer to a known struct (e.g., TypeInfo*)
+            innerStructType = llvm::dyn_cast<llvm::StructType>(_lastFieldAccessPointeeType);
+            innerStructName = _lastFieldAccessStructName;
+        }
+        else if (innerVal->getType()->isPointerTy())
+        {
+            // Try to resolve from the loaded value if it's a struct pointer
+            // This case shouldn't normally happen since _lastFieldAccess* should be set
+        }
+
+        if (!innerStructType)
+        {
+            // The inner value is a struct value directly (not a pointer)
+            if (auto* st = llvm::dyn_cast<llvm::StructType>(innerVal->getType()))
+            {
+                innerStructType = st;
+                innerStructName = st->getName().str();
+                // Need to store it to get a pointer for GEP
+                auto* tmpAlloca = builder->CreateAlloca(st, nullptr, "nested_tmp");
+                builder->CreateStore(innerVal, tmpAlloca);
+                basePtr = tmpAlloca;
+            }
+        }
+
+        if (!innerStructType)
+        {
+            throw CompileError(DiagnosticCode::NOT_A_STRUCT,
+                               "acesso a campo em expressão que não é struct");
+        }
+
+        // Check for property getter
+        if (const auto propInfo = currentScope->get_property(innerStructName, expr.fieldName.token_name))
+        {
+            if (!propInfo->hasGetter)
+            {
+                throw CompileError(DiagnosticCode::INVALID_OPERATION,
+                                   "property '" + expr.fieldName.token_name + "' does not have a getter (write-only)");
+            }
+
+            const std::string getterName = innerStructName + "__get_" + expr.fieldName.token_name;
+            if (const auto it = functions.find(getterName); it != functions.end())
+            {
+                return builder->CreateCall(it->second, {basePtr}, expr.fieldName.token_name);
+            }
+        }
+
+        // Look up field index
+        const auto* fieldIndices = currentScope->get_field_indices(innerStructName);
+        if (!fieldIndices)
+        {
+            throw CompileError(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + innerStructName);
+        }
+
+        const auto fieldIt = fieldIndices->find(expr.fieldName.token_name);
+        if (fieldIt == fieldIndices->end())
+        {
+            throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + expr.fieldName.token_name);
+        }
+
+        const unsigned fieldIdx = fieldIt->second;
+        auto* fieldPtr = builder->CreateStructGEP(innerStructType, basePtr, fieldIdx,
+                                                  expr.fieldName.token_name + "_ptr");
+        llvm::Type* fieldType = innerStructType->getElementType(fieldIdx);
+        llvm::Value* result = builder->CreateLoad(fieldType, fieldPtr, expr.fieldName.token_name);
+
+        // Track pointee type for further chaining
+        _lastFieldAccessPointeeType = nullptr;
+        _lastFieldAccessStructName.clear();
+        if (fieldType->isPointerTy())
+        {
+            if (const StructDef* srcDef = currentScope->lookup_struct(innerStructName))
+            {
+                if (fieldIdx < srcDef->fields.size())
+                {
+                    const Type& djinnFieldType = srcDef->fields[fieldIdx].second;
+                    if (djinnFieldType.kind == TypeKind::POINTER && djinnFieldType.elementType &&
+                        djinnFieldType.elementType->kind == TypeKind::STRUCT)
+                    {
+                        std::string resolved = currentScope->resolve_alias(djinnFieldType.elementType->structName);
+                        llvm::StructType* pointeeSt = currentScope->get_llvm_struct(resolved);
+                        if (pointeeSt)
+                        {
+                            _lastFieldAccessPointeeType = pointeeSt;
+                            _lastFieldAccessStructName = resolved;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    GENERATOR_ERROR(DiagnosticCode::INVALID_OPERATION, "acesso a campo só suportado em identificadores simples",
+                    expr.fieldName.location);
 }
 
 llvm::Value* Generator::generate_field_assignment(const FieldAssignment& expr)

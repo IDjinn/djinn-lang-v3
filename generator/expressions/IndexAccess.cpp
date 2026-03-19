@@ -9,7 +9,52 @@ llvm::Type* Generator::resolve_index_element_type(const Expression& objectExpr)
     // Case 1: Simple identifier — lookup from scope's pointee type tracking
     if (const auto* ident = dynamic_cast<const Identifier*>(&objectExpr))
     {
-        return currentScope->lookup_variable_pointee_type(ident->identifier.token_name);
+        // First try direct pointee type tracking
+        if (auto* pointeeType = currentScope->lookup_variable_pointee_type(ident->identifier.token_name))
+        {
+            return pointeeType;
+        }
+
+        // Try struct type from scope metadata
+        std::string structName = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
+
+        // If no struct type metadata, try to resolve from the alloca's LLVM type directly
+        if (structName.empty())
+        {
+            if (auto* alloca = currentScope->lookup_variable(ident->identifier.token_name))
+            {
+                if (auto* st = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
+                {
+                    if (is_slice_struct(st) && st->hasName())
+                    {
+                        structName = st->getName().str();
+                    }
+                }
+            }
+        }
+
+        // For slice types (arr<T>, str), resolve element type from struct definition's first field
+        if (!structName.empty())
+        {
+            if (const StructDef* structDef = currentScope->lookup_struct(structName))
+            {
+                if (auto* st = currentScope->get_llvm_struct(structName))
+                {
+                    if (is_slice_struct(st) && !structDef->fields.empty())
+                    {
+                        // First field is T* data — get the element type
+                        const Type& dataFieldType = structDef->fields[0].second;
+                        if ((dataFieldType.kind == TypeKind::POINTER || dataFieldType.kind == TypeKind::ARRAY)
+                            && dataFieldType.elementType)
+                        {
+                            return generate_type(*dataFieldType.elementType);
+                        }
+                    }
+                }
+            }
+        }
+
+        return nullptr;
     }
 
     // Case 2: Field access (e.g., this.data) — lookup from struct definition

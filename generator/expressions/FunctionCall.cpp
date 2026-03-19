@@ -622,12 +622,12 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                       ident->identifier.token_name.c_str(), structName.c_str());
             LOG_DEBUG("[generator]   alloca type: '%s'",
                       alloca->getAllocatedType()->isStructTy()
-                          ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
-                          : alloca->getAllocatedType()->isPointerTy()
-                          ? "pointer"
-                          : alloca->getAllocatedType()->isIntegerTy()
-                          ? "integer"
-                          : "other");
+                      ? llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType())->getName().str().c_str()
+                      : alloca->getAllocatedType()->isPointerTy()
+                      ? "pointer"
+                      : alloca->getAllocatedType()->isIntegerTy()
+                      ? "integer"
+                      : "other");
             if (const auto* structType = llvm::dyn_cast<llvm::StructType>(alloca->getAllocatedType()))
             {
                 llvmStructName = structType->getName().str();
@@ -666,17 +666,27 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         }
         else
         {
-            // For complex receivers (e.g., this.data[i]), generate the expression
+            // For complex receivers (e.g., this.type.hash()), generate the expression
             // and infer the type from the resulting LLVM value
             llvm::Value* receiverVal = generate_expression(*call.receiver);
             if (receiverVal)
             {
                 llvm::Type* recvType = receiverVal->getType();
-                // If it's a pointer, check if it points to a struct
+                // If it's a pointer, check tracked pointee type from field access
                 if (recvType->isPointerTy())
                 {
-                    // Check if there's a loaded struct type
-                    if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(receiverVal))
+                    // Use _lastFieldAccessPointeeType set by generate_field_access
+                    if (_lastFieldAccessPointeeType)
+                    {
+                        if (auto* structTy = llvm::dyn_cast<llvm::StructType>(_lastFieldAccessPointeeType))
+                        {
+                            structName = _lastFieldAccessStructName.empty()
+                                             ? structTy->getName().str()
+                                             : _lastFieldAccessStructName;
+                        }
+                    }
+                    // Fallback: check if it's a loaded struct type
+                    else if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(receiverVal))
                     {
                         if (auto* structTy = llvm::dyn_cast<llvm::StructType>(loadInst->getType()))
                         {
@@ -766,8 +776,11 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
 
     if (const auto it = functions.find(mangledName); it == functions.end())
     {
-        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                           "method not found: " + structName + "." + call.name.token_name);
+        GENERATOR_ERROR(
+            DiagnosticCode::UNDEFINED_FUNCTION,
+            "method not found: " + structName + "." + call.name.token_name,
+            call.name.location
+        );
     }
 
     llvm::Function* func = functions[mangledName];
