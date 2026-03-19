@@ -264,6 +264,7 @@ void Generator::forward_declare_monomorphized_method(const MethodSymbol& method,
     if (StructDef* monoDef = currentScope->lookup_struct(mangledStructName))
     {
         monoDef->methodFunctions[method.name] = llvmFunc;
+        monoDef->methodFunctions[mangledMethodName] = llvmFunc;
     }
 }
 

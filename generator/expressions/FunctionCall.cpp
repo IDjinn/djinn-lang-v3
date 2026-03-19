@@ -773,8 +773,62 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     }
 
     const auto mangledName = methodStructName + "__" + call.name.token_name;
+    llvm::Function* func = nullptr;
 
-    if (const auto it = functions.find(mangledName); it == functions.end())
+    // First try the global functions map
+    if (const auto it = functions.find(mangledName); it != functions.end())
+    {
+        func = it->second;
+    }
+    // Fallback: check struct's methodFunctions (handles ordering when method not yet in global map)
+    if (!func)
+    {
+        if (StructDef* def = currentScope->lookup_struct(methodStructName))
+        {
+            // First check already-generated methods
+            if (const auto it = def->methodFunctions.find(call.name.token_name); it != def->methodFunctions.end())
+            {
+                func = it->second;
+            }
+            // If method exists in symbol but not yet generated, forward-declare it on demand
+            if (!func)
+            {
+                for (const auto& method : def->methods)
+                {
+                    if (method->name == call.name.token_name)
+                    {
+                        // Create function prototype on the fly
+                        llvm::Type* retType = method->isAsync
+                                                  ? llvm::PointerType::getUnqual(*context)
+                                                  : generate_type(method->returnType);
+
+                        std::vector<llvm::Type*> paramTypes;
+                        if (!method->isStatic)
+                        {
+                            paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
+                        }
+                        for (const auto& pt : method->paramTypes)
+                        {
+                            paramTypes.push_back(generate_type(pt));
+                        }
+
+                        auto* funcType = llvm::FunctionType::get(retType, paramTypes, false);
+                        func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
+
+                        if (method->hasAttribute("force-inline"))
+                        {
+                            func->addFnAttr(llvm::Attribute::AlwaysInline);
+                        }
+
+                        functions[mangledName] = func;
+                        def->methodFunctions[call.name.token_name] = func;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (!func)
     {
         GENERATOR_ERROR(
             DiagnosticCode::UNDEFINED_FUNCTION,
@@ -782,8 +836,6 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             call.name.location
         );
     }
-
-    llvm::Function* func = functions[mangledName];
     std::vector<llvm::Value*> args;
 
     if (isStaticCall)
