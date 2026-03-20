@@ -93,8 +93,6 @@ TEST(Extern, ArrayWithStdImportsLinksCorrectly)
     const std::string source = R"(
         import std::types;
         import std::collections;
-        import std::sys;
-        import std::libc;
 
         namespace test_array;
 

@@ -386,15 +386,15 @@ std::string Generator::print() const
     std::string errorStr;
     llvm::raw_string_ostream errorStream(errorStr);
 
+    std::string str;
+    llvm::raw_string_ostream stream(str);
+    module->print(stream, nullptr);
+
     if (llvm::verifyModule(*module, &errorStream))
     {
         LOG_ERROR("LLVM module verification failed:\n%s", errorStr.c_str());
         return "Erro: módulo inválido\n" + errorStr;
     }
-
-    std::string str;
-    llvm::raw_string_ostream stream(str);
-    module->print(stream, nullptr);
     return str;
 }
 

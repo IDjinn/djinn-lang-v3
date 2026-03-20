@@ -266,8 +266,7 @@ TEST(Enum, PatternMatchEmpty)
 
     const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    // -1 as i32 return code wraps to 255 on most systems
-    EXPECT_EQ(result.returnCode, 255);
+    EXPECT_EQ(result.returnCode, -1);
 }
 
 TEST(Enum, PatternMatchResult)

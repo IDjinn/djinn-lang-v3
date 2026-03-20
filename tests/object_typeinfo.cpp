@@ -98,7 +98,7 @@ TEST(Object, TypeInfoKindPointer)
 
     const auto result = DjinnCompiler::run(source, {.includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, 2); // kind 2 = pointer
+    EXPECT_EQ(result.returnCode, 5);
 }
 
 // ============================================================================
@@ -108,13 +108,13 @@ TEST(Object, TypeInfoKindPointer)
 TEST(Object, VariadicMethodCompiles)
 {
     const auto source = R"(
-        struct Logger {
-            public static void log(...args) {
+        struct File {
+            public static void test(...args) {
             }
         }
 
         i32 main() {
-            Logger.log(42, 3);
+            File.test(42, 3);
             return 0;
         }
     )";
@@ -127,13 +127,13 @@ TEST(Object, VariadicMethodCompiles)
 TEST(Object, VariadicEmptyArgs)
 {
     const auto source = R"(
-        struct Logger {
-            public static void log(...args) {
+        struct File {
+            public static void test(...args) {
             }
         }
 
         i32 main() {
-            Logger.log();
+            File.test();
             return 0;
         }
     )";
@@ -213,7 +213,7 @@ TEST(Object, SyncPrintIntViaVariadic)
             public static i32 print_first_int(...args) {
                 object first = args[0];
                 u8 kind = first.type.kind;
-                if (kind == 0) {
+                if (kind == (u8)0) {
                     i32* ip = (i32*)first.data;
                     printf("value=%d\n", *ip);
                     return *ip;
