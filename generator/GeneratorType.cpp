@@ -91,6 +91,26 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     llvm::BasicBlock* savedBlock = builder->GetInsertBlock();
     llvm::Function* savedFunction = currentFunction;
 
+    // Save async/coroutine state — monomorphized method bodies must not
+    // inherit the async state of the calling function (e.g., Console.write)
+    const bool savedInAsync = inAsyncFunction;
+    llvm::Value* savedAsyncCoroId = asyncCoroId;
+    llvm::Value* savedAsyncCoroHandle = asyncCoroHandle;
+    llvm::Value* savedAsyncPromisePtr = asyncPromisePtr;
+    llvm::BasicBlock* savedAsyncFinalSuspendBB = asyncFinalSuspendBB;
+    llvm::BasicBlock* savedAsyncCleanupBB = asyncCleanupBB;
+    llvm::BasicBlock* savedAsyncSuspendBB = asyncSuspendBB;
+    llvm::Type* savedAsyncReturnType = asyncReturnType;
+
+    inAsyncFunction = false;
+    asyncCoroId = nullptr;
+    asyncCoroHandle = nullptr;
+    asyncPromisePtr = nullptr;
+    asyncFinalSuspendBB = nullptr;
+    asyncCleanupBB = nullptr;
+    asyncSuspendBB = nullptr;
+    asyncReturnType = nullptr;
+
     LOG_DEBUG("[monomorphize_struct] starting properties (%zu)", properties.size());
     for (const auto& prop : properties)
     {
@@ -120,6 +140,17 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
         builder->SetInsertPoint(savedBlock);
     }
     currentFunction = savedFunction;
+
+    // Restore async/coroutine state
+    inAsyncFunction = savedInAsync;
+    asyncCoroId = savedAsyncCoroId;
+    asyncCoroHandle = savedAsyncCoroHandle;
+    asyncPromisePtr = savedAsyncPromisePtr;
+    asyncFinalSuspendBB = savedAsyncFinalSuspendBB;
+    asyncCleanupBB = savedAsyncCleanupBB;
+    asyncSuspendBB = savedAsyncSuspendBB;
+    asyncReturnType = savedAsyncReturnType;
+
     LOG_DEBUG("[monomorphize_struct] restoring ctx: %p -> %p (was processing '%s')",
               (void*)_currentGenericCtx, (void*)savedGenericCtx, qualifiedName.c_str());
     _currentGenericCtx = savedGenericCtx;

@@ -362,6 +362,18 @@ void Generator::run_passes(bool optimize) const
 {
     if (!optimize) return;
 
+    // Verify module before running optimization passes
+    {
+        std::string errorStr;
+        llvm::raw_string_ostream errorStream(errorStr);
+        if (llvm::verifyModule(*module, &errorStream))
+        {
+            LOG_ERROR("[run_passes] LLVM module verification FAILED before passes:\n%s", errorStr.c_str());
+            return;
+        }
+        LOG_DEBUG("[run_passes] module verification passed, running optimization passes");
+    }
+
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;

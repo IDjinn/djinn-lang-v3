@@ -104,6 +104,13 @@ struct Console {
                       write(1, s, slen);
                   }
               }
+          } else if (format.data[pos] == 10) {  // '\n' — flush on newline
+              pos = pos + 1u;
+              if (pos > written) {
+                  size len = pos - written;
+                  write(1, format.data + written, len);
+                  written = pos;
+              }
           } else {
               pos = pos + 1u;
           }
@@ -117,12 +124,15 @@ struct Console {
 
   public static async i64 write(str format, ...args) {
       i32 stdout = 1;
+      array<i8> buffer = array<i8>();
+      buffer.reserve(1024 * 8);
       void* handle = std::builtin::coro.handle();
 
       mut size pos = 0u;
       mut size written = 0u;
 
       while (pos < format.length) {
+          buffer.push(format.data[pos]);
           if (format.data[pos] == 123) {  // '{'
               // Flush text before the placeholder
               if (pos > written) {
@@ -185,6 +195,15 @@ struct Console {
                   }
                   // TODO: kind 5 (str) and kind 6 (string) require cast to str*/string*
                   // which the parser doesn't support yet
+              }
+          } else if (format.data[pos] == 10) {  // '\n' — flush on newline (line-buffered, like std)
+              pos = pos + 1u;
+              if (pos > written) {
+                  size len = pos - written;
+                  i64 len64 = (i64)len;
+                  __djinn_async_write(stdout, format.data + written, len64, handle);
+                  std::builtin::coro.suspend();
+                  written = pos;
               }
           } else {
               pos = pos + 1u;

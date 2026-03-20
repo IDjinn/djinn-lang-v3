@@ -48,8 +48,12 @@ where T : Hashable {
         return this.length;
     }
 
-    public void grow() {
-        this.capacity = this.capacity * 2u;
+    private void grow() {
+        this.reserve(this.capacity * 2u);
+    }
+
+    public void reserve(size capacity) {
+        this.capacity = capacity;
         this.data = realloc(this.data, this.capacity * sizeof(T));
     }
 
