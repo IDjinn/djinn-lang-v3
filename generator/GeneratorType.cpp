@@ -5,6 +5,7 @@
 #include <llvm/Pass.h>
 
 #include "Generator.h"
+#include "../utils/Logger.h"
 
 
 llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, const std::vector<Type>& typeArgs)
@@ -28,6 +29,24 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
         args.add(argType);
     }
     const GenericContext ctx = GenericContext::create(genericDef->genericParams, args);
+    const GenericContext* savedGenericCtx = _currentGenericCtx;
+    _currentGenericCtx = &ctx;
+
+    LOG_DEBUG("[monomorphize_struct] '%s' — ctx params: {", qualifiedName.c_str());
+    for (const auto& [paramName, paramType] : ctx.substitutions)
+    {
+        LOG_DEBUG("[monomorphize_struct]   '%s' -> '%s'", paramName.c_str(), paramType.toHumanString().c_str());
+    }
+    LOG_DEBUG("[monomorphize_struct] } savedCtx=%p newCtx=%p", (void*)savedGenericCtx, (void*)&ctx);
+
+    LOG_DEBUG("[monomorphize_struct] genericDef=%p fields=%zu methods=%zu", (void*)genericDef,
+              genericDef->fields.size(), genericDef->methods.size());
+    for (size_t fi = 0; fi < genericDef->fields.size(); ++fi)
+    {
+        LOG_DEBUG("[monomorphize_struct]   field[%zu]: name='%s' type='%s'", fi,
+                  genericDef->fields[fi].first.c_str(),
+                  genericDef->fields[fi].second.toHumanString().c_str());
+    }
 
     // Validate generic constraints
     validate_generic_constraints(genericDef->genericParams, args, baseName);
@@ -43,6 +62,8 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
         fieldIndices[fieldName] = idx++;
     }
 
+    LOG_DEBUG("[monomorphize_struct] field loop done, building monoDef");
+
     const std::string mangledName = Mangler::mangle_generic_struct(qualifiedName, typeArgs);
     llvm::StructType* structType = llvm::StructType::create(*context, fieldTypes, mangledName);
 
@@ -57,12 +78,21 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
         monoDef.fields.emplace_back(fieldName, ctx.substitute(fieldType));
     }
 
+    // Copy properties and methods BEFORE define_struct, because inserting into
+    // the unordered_map can trigger a rehash that invalidates the genericDef pointer.
+    auto properties = genericDef->properties;
+    auto methods = genericDef->methods;
+
+    LOG_DEBUG("[monomorphize_struct] about to define_struct '%s'", mangledName.c_str());
     currentScope->define_struct(mangledName, std::move(monoDef));
+    LOG_DEBUG("[monomorphize_struct] define_struct done");
+    // NOTE: genericDef is potentially INVALID after this point due to unordered_map rehash!
 
     llvm::BasicBlock* savedBlock = builder->GetInsertBlock();
     llvm::Function* savedFunction = currentFunction;
 
-    for (const auto& prop : genericDef->properties)
+    LOG_DEBUG("[monomorphize_struct] starting properties (%zu)", properties.size());
+    for (const auto& prop : properties)
     {
         monomorphize_property(*prop, structType, ctx, mangledName);
     }
@@ -71,13 +101,16 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     // This allows methods to call each other regardless of declaration order.
 
     // Pass 1: Forward-declare all method functions
-    for (const auto& method : genericDef->methods)
+    LOG_DEBUG("[monomorphize_struct] starting forward_declare for %zu methods", methods.size());
+    for (const auto& method : methods)
     {
+        LOG_DEBUG("[monomorphize_struct]   forward_declare method '%s' ret='%s' params=%zu",
+                  method->name.c_str(), method->returnType.toHumanString().c_str(), method->paramTypes.size());
         forward_declare_monomorphized_method(*method, structType, ctx, mangledName);
     }
 
     // Pass 2: Generate method bodies
-    for (const auto& method : genericDef->methods)
+    for (const auto& method : methods)
     {
         monomorphize_method(*method, structType, ctx, mangledName);
     }
@@ -87,6 +120,9 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
         builder->SetInsertPoint(savedBlock);
     }
     currentFunction = savedFunction;
+    LOG_DEBUG("[monomorphize_struct] restoring ctx: %p -> %p (was processing '%s')",
+              (void*)_currentGenericCtx, (void*)savedGenericCtx, qualifiedName.c_str());
+    _currentGenericCtx = savedGenericCtx;
 
     return structType;
 }
@@ -322,7 +358,15 @@ void Generator::monomorphize_method(const MethodSymbol& method,
         ++paramIdx;
     }
 
+    const GenericContext* savedGenericCtx = _currentGenericCtx;
     _currentGenericCtx = &ctx;
+
+    LOG_DEBUG("[monomorphize_method] '%s' on '%s' — ctx params: {", method.name.c_str(), mangledStructName.c_str());
+    for (const auto& [paramName, paramType] : ctx.substitutions)
+    {
+        LOG_DEBUG("[monomorphize_method]   '%s' -> '%s'", paramName.c_str(), paramType.toHumanString().c_str());
+    }
+    LOG_DEBUG("[monomorphize_method] } savedCtx=%p newCtx=%p", (void*)savedGenericCtx, (void*)&ctx);
 
     if (method.body)
     {
@@ -344,7 +388,9 @@ void Generator::monomorphize_method(const MethodSymbol& method,
         }
     }
 
-    _currentGenericCtx = nullptr;
+    LOG_DEBUG("[monomorphize_method] restoring ctx: %p -> %p (was method '%s')",
+              (void*)_currentGenericCtx, (void*)savedGenericCtx, method.name.c_str());
+    _currentGenericCtx = savedGenericCtx;
 
     if (!builder->GetInsertBlock()->getTerminator())
     {
@@ -386,6 +432,9 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
 
     monoDef->propertyInfos[prop.name] = propInfo;
     Type substitutedType = ctx.substitute(prop.type);
+
+    const GenericContext* savedGenericCtx = _currentGenericCtx;
+    _currentGenericCtx = &ctx;
 
     if (prop.hasGetter && (prop.getterBody || prop.getterExpr))
     {
@@ -496,6 +545,8 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
 
         pop_scope();
     }
+
+    _currentGenericCtx = savedGenericCtx;
 }
 
 llvm::Type* Generator::generate_type_with_context(const Type& type, const GenericContext* ctx)
@@ -555,8 +606,24 @@ llvm::Type* Generator::generate_type(const Type& type)
             {
                 if (const Type* resolved = _currentGenericCtx->resolve(type.structName))
                 {
+                    LOG_DEBUG("[generate_type] STRUCT '%s' resolved via ctx to '%s'",
+                              type.structName.c_str(), resolved->toHumanString().c_str());
                     return generate_type(*resolved);
                 }
+                else
+                {
+                    LOG_DEBUG("[generate_type] STRUCT '%s' NOT in ctx (ctx=%p, has %zu entries)",
+                              type.structName.c_str(), (void*)_currentGenericCtx,
+                              _currentGenericCtx->substitutions.size());
+                    for (const auto& [k, v] : _currentGenericCtx->substitutions)
+                    {
+                        LOG_DEBUG("[generate_type]   ctx entry: '%s' -> '%s'", k.c_str(), v.toHumanString().c_str());
+                    }
+                }
+            }
+            else
+            {
+                LOG_DEBUG("[generate_type] STRUCT '%s' — no ctx active", type.structName.c_str());
             }
 
             if (llvm::Type* transparentType = currentScope->get_transparent_type(type.structName))
@@ -597,6 +664,8 @@ llvm::Type* Generator::generate_type(const Type& type)
             llvm::StructType* structType = currentScope->get_llvm_struct(type.structName);
             if (!structType)
             {
+                LOG_DEBUG("[generate_type] STRUCT NOT FOUND: '%s' — _currentGenericCtx=%p",
+                          type.structName.c_str(), (void*)_currentGenericCtx);
                 GENERATOR_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "struct not found: " + type.structName,
                                 type.location);
             }

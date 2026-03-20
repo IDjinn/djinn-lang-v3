@@ -143,9 +143,21 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
         bindExpression(*method.expression);
     }
 
-    const auto methodSymbol = _current_scope->lookupMethod(method.name.token_name);
-    assert(methodSymbol && "Method symbol not found in scope table");
-    methodSymbol->returnType = *method.returnType.get();
+    // Look up the method in the SPECIFIC struct, not across all structs in scope.
+    // lookupMethod searches all structs by name, which causes collisions when two structs
+    // in the same namespace have methods with the same name (e.g., array.get vs map.get).
+    const auto structSym = _current_scope->lookupStruct(struc.name.token_name);
+    if (structSym)
+    {
+        for (auto& m : structSym->methods)
+        {
+            if (m->name == method.name.token_name)
+            {
+                m->returnType = *method.returnType.get();
+                break;
+            }
+        }
+    }
 
     popScope();
     currentFunction_.clear();
