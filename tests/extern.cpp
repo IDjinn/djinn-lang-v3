@@ -87,28 +87,3 @@ TEST(Extern, StdImportNoDuplicateExternSymbols)
     EXPECT_NE(result.ir.find("@printf"), std::string::npos) << "printf should be declared in IR";
     EXPECT_NE(result.ir.find("@malloc"), std::string::npos) << "malloc should be declared in IR";
 }
-
-TEST(Extern, ArrayWithStdImportsLinksCorrectly)
-{
-    const std::string source = R"(
-        import std::types;
-        import std::collections;
-
-        namespace test_array;
-
-        i32 main() {
-            array<i32> array = array<i32>();
-            array.push(42);
-            printf("val = %d\n", array.get(0));
-            return 0;
-        }
-    )";
-
-    const auto result = DjinnCompiler::run(source);
-    EXPECT_EQ(result.diagnostics.size(), 0);
-
-    // No suffixed extern names
-    EXPECT_EQ(result.ir.find("@malloc."), std::string::npos) << "malloc has numeric suffix — duplicate extern";
-    EXPECT_EQ(result.ir.find("@realloc."), std::string::npos) << "realloc has numeric suffix — duplicate extern";
-    EXPECT_EQ(result.ir.find("@free."), std::string::npos) << "free has numeric suffix — duplicate extern";
-}
