@@ -13,7 +13,7 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
 
     // Resolve transparent types (e.g., size : u32 -> u32) for type checking
     // Also handles POINTER types by resolving the element type
-    auto resolveTransparent = [this](Type type) -> Type
+    auto resolveTransparent = [this](const Type& type) -> Type
     {
         // For pointer types, resolve the pointed-to type
         if (type.kind == TypeKind::POINTER && type.elementType)

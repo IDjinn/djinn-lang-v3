@@ -23,6 +23,7 @@ void printUsage(const char* programName)
         << "  -O0           Disable optimizations\n"
         << "  -c            Compile only, do not execute\n"
         << "  -r            Recursively search directories for .djinn files\n"
+        << "  -run          Auto run generated exe file\n"
         << "  --lib         Compile as library (no main required)\n"
         << "  --bundle      Bundle all into single .ll (default: per namespace)\n"
         << "  -l <file.ll>  Link external .ll module (can be used multiple times)\n"
@@ -107,6 +108,10 @@ int main(int argc, char* argv[])
         else if (arg == "-out" && i + 1 < argc)
         {
             options.outputDirectory = argv[++i];
+        }
+        else if (arg == "-run")
+        {
+            options.runAfterCompile = true;
         }
         else if (arg == "-o3")
         {

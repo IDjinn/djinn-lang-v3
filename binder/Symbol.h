@@ -115,8 +115,8 @@ struct FunctionSymbol : Symbol
     bool constEval;
     bool constExpr;
 
-    FunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
-        : Symbol(SymbolKind::Function, std::move(name), Type::voided(), loc),
+    FunctionSymbol(std::string name, Type retType, const SourceLocation& loc = {})
+        : Symbol(SymbolKind::Function, std::move(name), retType, loc),
           returnType(std::move(retType))
     {
     }
@@ -141,7 +141,7 @@ struct ExternFunctionSymbol : FunctionSymbol
 {
     std::string abi = "C";
 
-    ExternFunctionSymbol(std::string name, Type retType, const SourceLocation loc = {})
+    ExternFunctionSymbol(std::string name, const Type& retType, const SourceLocation& loc = {})
         : FunctionSymbol(std::move(name), retType, loc)
     {
         kind = SymbolKind::ExternFunction;

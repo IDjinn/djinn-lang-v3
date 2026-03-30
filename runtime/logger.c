@@ -3,6 +3,8 @@
 #include <stdarg.h>
 #include <time.h>
 
+#include "djinn_runtime.h"
+
 static const char* level_names[] = {
     "TRACE",
     "DEBUG",
@@ -14,9 +16,13 @@ static const char* level_names[] = {
 
 static void get_timestamp(char* buffer, size_t size)
 {
-    const time_t now = time(NULL);
-    const struct tm* t = localtime(&now);
-    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", t);
+    time_t now = time(NULL);
+    struct tm t;
+
+    const errno_t err = localtime_s(&t, &now);
+    DJINN_ASSERT(err == 0, "Failed get current time");
+
+    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", &t);
 }
 
 static void log_internal(Logger* logger, LogLevel level, const char* fmt, va_list args)

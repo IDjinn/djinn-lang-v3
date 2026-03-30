@@ -27,7 +27,7 @@
 // NOTE: -fsanitize=address is incompatible with LLVM coroutines (false positives
 // on coro frame access after resume). Use __djinn_malloc/__djinn_free runtime
 // tracing instead for memory debugging.
-#define CLANG_ARGS "-O2 "
+#define CLANG_ARGS "-O2"
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
@@ -39,8 +39,8 @@ const std::string preludes[] = {
 
 const std::filesystem::path runtimePaths[] = {
     "runtime/djinn_runtime.c",
-    // "runtime/djinn_runtime.h",
-    // "runtime/logger.h",
+    "runtime/djinn_runtime.h",
+    "runtime/logger.h",
     "runtime/logger.c",
 };
 
@@ -266,6 +266,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         outFile << generatedIr;
         outFile.close();
 
+        auto exePath = out_file_path + ".exe";
         if (options.generateBinary)
         {
             // Always link runtime (async by default — runtime needed for memory tracing and async infra)
@@ -275,15 +276,25 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 runtimeArg += " " + runtime_path.string();
             }
 
-            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " +
-                out_file_path +
-                ".exe";
+            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
             system(cmdString.c_str());
         }
 
+        int programReturnCode = 0;
+        if (options.runAfterCompile)
+        {
+            programReturnCode = system(exePath.c_str());
+#ifndef _WIN32
+            // On Unix, need to extract exit code with WEXITSTATUS
+            if (WIFEXITED(programReturnCode))
+            {
+                programReturnCode = WEXITSTATUS(programReturnCode);
+            }
+#endif
+        }
 
-        return {.returnCode = 0, .diagnostics = diagnostics.get_diagnostics()};
+        return {.returnCode = programReturnCode, .diagnostics = diagnostics.get_diagnostics()};
     }
     catch (const CompileError& e)
     {

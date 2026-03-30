@@ -30,28 +30,16 @@
 // Macros
 // ════════════════════════════════════════════════════════════════════
 
-#define DJINN_ASSERT(condition, message)                               \
-do {                                                                   \
-    if (!(condition)) {                                                \
-        fprintf(stderr,                                                \
-            "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n",     \
-            message, __FILE__, __LINE__                                \
-        );                                                             \
-        abort();                                                       \
-    }                                                                  \
-} while (0)
-
 Logger* logger;
 // #define DJINN_ENABLE_TRACE
 #ifdef DJINN_ENABLE_TRACE
 #define DJINN_TRACE(message, ...) do {                         \
-    DJINN_ASSERT(logger, "Logger not initlizatied properly!"); \
-    logger_trace(logger, message, ##__VA_ARGS__);              \
+DJINN_ASSERT(logger, "Logger not initlizatied properly!"); \
+logger_trace(logger, message, ##__VA_ARGS__);              \
 } while(0)
 #else
 #define DJINN_TRACE(message, ...) do {} while (0)
 #endif
-
 
 int64_t __djinn_unix_timestamp_ms(void)
 {
@@ -101,25 +89,40 @@ static LPFN_CONNECTEX pfnConnectEx = NULL;
 // Memory
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API void __djinn_free(void* pointer)
+__attribute__((nonnull(1)))
+static inline void __djinn_free(void* pointer)
 {
     DJINN_TRACE("de-allocating heap memory at %p", pointer);
     free(pointer);
 }
 
-DJINN_API void* __djinn_realloc(void* pointer, size_t new_size)
+__attribute__((
+                  alloc_size(2),
+              warn_unused_result
+)
+)
+static inline void* __djinn_realloc(void* pointer, size_t new_size)
 {
     void* chunk = realloc(pointer, new_size);
     DJINN_ASSERT(chunk, "Out of memory");
-    DJINN_TRACE("re-allocated size %zu on heap at %p", new_size, &chunk);
+    DJINN_TRACE("re-allocated size %zu on heap at %p", new_size, chunk);
     return chunk;
 }
 
-DJINN_API void* __djinn_malloc(size_t size)
+__attribute__((
+                  always_inline,
+              malloc,
+              alloc_size(1),
+              returns_nonnull
+)
+
+)
+static inline void* __djinn_malloc(size_t size)
 {
+    DJINN_ASSERT(size > 0, "Size need be greater than zero!");
     void* chunk = calloc(1, size);
     DJINN_ASSERT(chunk, "Out of memory");
-    DJINN_TRACE("allocated size %zu on heap at %p", size, &chunk);
+    DJINN_TRACE("allocated size %zu on heap at %p", size, chunk);
     return chunk;
 }
 
