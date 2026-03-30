@@ -268,7 +268,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #ifdef _WIN32
             ".exe";
 #else
-            "";
+        "";
 #endif
         if (options.generateBinary)
         {
@@ -498,7 +498,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 #ifdef _WIN32
             ".exe";
 #else
-            "";
+        "";
 #endif
 
         // Run coroutine lowering + optional optimization in a single pass

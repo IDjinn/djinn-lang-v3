@@ -108,9 +108,10 @@ void __djinn_free(void* pointer)
 }
 
 __attribute__((
-    alloc_size(2),
-    warn_unused_result
-))
+                  alloc_size(2),
+              warn_unused_result
+)
+)
 void* __djinn_realloc(void* pointer, size_t new_size)
 {
     void* chunk = realloc(pointer, new_size);
@@ -120,10 +121,11 @@ void* __djinn_realloc(void* pointer, size_t new_size)
 }
 
 __attribute__((
-    malloc,
-    alloc_size(1),
-    returns_nonnull
-))
+                  malloc,
+              alloc_size(1),
+              returns_nonnull
+)
+)
 void* __djinn_malloc(size_t size)
 {
     DJINN_ASSERT(size > 0, "Size need be greater than zero!");

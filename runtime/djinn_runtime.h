@@ -40,6 +40,7 @@ extern "C" {
 #define assume(x) __builtin_assume((x))
 
 __attribute__((cold, __noreturn__)
+
 )
 static void djinn_assert_fail(const char* msg, const char* file, const int line)
 {
