@@ -27,7 +27,7 @@
 // NOTE: -fsanitize=address is incompatible with LLVM coroutines (false positives
 // on coro frame access after resume). Use __djinn_malloc/__djinn_free runtime
 // tracing instead for memory debugging.
-#define CLANG_ARGS "-O2"
+#define CLANG_ARGS "-O3 -flto -fuse-ld=lld"
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
@@ -39,8 +39,6 @@ const std::string preludes[] = {
 
 const std::filesystem::path runtimePaths[] = {
     "runtime/djinn_runtime.c",
-    "runtime/djinn_runtime.h",
-    "runtime/logger.h",
     "runtime/logger.c",
 };
 
@@ -266,19 +264,25 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         outFile << generatedIr;
         outFile.close();
 
-        auto exePath = out_file_path + ".exe";
+        auto exePath = out_file_path +
+#ifdef _WIN32
+            ".exe";
+#else
+            "";
+#endif
         if (options.generateBinary)
         {
-            // Always link runtime (async by default — runtime needed for memory tracing and async infra)
+            // Link runtime sources + LLVM IR into a single executable
             std::string runtimeArg;
             for (auto& runtime_path : runtimePaths)
             {
                 runtimeArg += " " + runtime_path.string();
             }
 
-            const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;
+            auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
-            system(cmdString.c_str());
+            const auto compile_result = system(cmdString.c_str());
+            LOG_DEBUG("Compile return: %d", compile_result);
         }
 
         int programReturnCode = 0;
@@ -490,7 +494,12 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         const std::string llPath = outputDir + "\\" + outputFileName + ".ll";
-        const std::string exePath = outputDir + "\\" + outputFileName + ".exe";
+        const std::string exePath = outputDir + "\\" + outputFileName +
+#ifdef _WIN32
+            ".exe";
+#else
+            "";
+#endif
 
         // Run coroutine lowering + optional optimization in a single pass
         {

@@ -41,6 +41,17 @@ logger_trace(logger, message, ##__VA_ARGS__);              \
 #define DJINN_TRACE(message, ...) do {} while (0)
 #endif
 
+uint64_t __djinn_hash_string(const char* data, uint32_t length)
+{
+    uint64_t hash = 2166136261u;
+    for (uint32_t i = 0; i < length; ++i)
+    {
+        hash ^= (uint8_t)data[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
 int64_t __djinn_unix_timestamp_ms(void)
 {
     struct timespec ts;
@@ -90,18 +101,17 @@ static LPFN_CONNECTEX pfnConnectEx = NULL;
 // ════════════════════════════════════════════════════════════════════
 
 __attribute__((nonnull(1)))
-static inline void __djinn_free(void* pointer)
+void __djinn_free(void* pointer)
 {
     DJINN_TRACE("de-allocating heap memory at %p", pointer);
     free(pointer);
 }
 
 __attribute__((
-                  alloc_size(2),
-              warn_unused_result
-)
-)
-static inline void* __djinn_realloc(void* pointer, size_t new_size)
+    alloc_size(2),
+    warn_unused_result
+))
+void* __djinn_realloc(void* pointer, size_t new_size)
 {
     void* chunk = realloc(pointer, new_size);
     DJINN_ASSERT(chunk, "Out of memory");
@@ -110,14 +120,11 @@ static inline void* __djinn_realloc(void* pointer, size_t new_size)
 }
 
 __attribute__((
-                  always_inline,
-              malloc,
-              alloc_size(1),
-              returns_nonnull
-)
-
-)
-static inline void* __djinn_malloc(size_t size)
+    malloc,
+    alloc_size(1),
+    returns_nonnull
+))
+void* __djinn_malloc(size_t size)
 {
     DJINN_ASSERT(size > 0, "Size need be greater than zero!");
     void* chunk = calloc(1, size);
