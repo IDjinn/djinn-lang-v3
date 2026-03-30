@@ -1,14 +1,9 @@
-//
-// Djinn Runtime v2 — Implementation
-// Event loop, thread pool, task queue, non-blocking I/O (IOCP/epoll),
-// TCP sockets, threading primitives, console I/O
-//
-
 #include "djinn_runtime.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "logger.h"
+Logger* logger;
 
 #define _POSIX_C_SOURCE 199309L
 #include <time.h>
@@ -26,11 +21,6 @@
 #include <netinet/tcp.h>
 #endif
 
-// ════════════════════════════════════════════════════════════════════
-// Macros
-// ════════════════════════════════════════════════════════════════════
-
-Logger* logger;
 // #define DJINN_ENABLE_TRACE
 #ifdef DJINN_ENABLE_TRACE
 #define DJINN_TRACE(message, ...) do {                         \
@@ -77,28 +67,15 @@ uint32_t __djinn_compare_strings(
     return memcmp(leftData, rightData, leftLen) == 0;
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Global State
-// ════════════════════════════════════════════════════════════════════
-
 static djinn_runtime_t runtime;
-
-// Waiting set: coroutines suspended for I/O or child completion
 static void* waiting_handles[DJINN_MAX_WAITING];
 static int waiting_count = 0;
-
-// Continuation list: child -> parent mappings
 static djinn_continuation_t* continuations = NULL;
 
 #ifdef _WIN32
-// Function pointers loaded at runtime (not all Winsock versions export these directly)
 static LPFN_ACCEPTEX pfnAcceptEx = NULL;
 static LPFN_CONNECTEX pfnConnectEx = NULL;
 #endif
-
-// ════════════════════════════════════════════════════════════════════
-// Memory
-// ════════════════════════════════════════════════════════════════════
 
 __attribute__((nonnull(1)))
 void __djinn_free(void* pointer)
@@ -107,10 +84,8 @@ void __djinn_free(void* pointer)
     free(pointer);
 }
 
-__attribute__((
-                  alloc_size(2),
-              warn_unused_result
-)
+__attribute__((alloc_size(2), warn_unused_result)
+
 )
 void* __djinn_realloc(void* pointer, size_t new_size)
 {
@@ -120,11 +95,7 @@ void* __djinn_realloc(void* pointer, size_t new_size)
     return chunk;
 }
 
-__attribute__((
-                  malloc,
-              alloc_size(1),
-              returns_nonnull
-)
+__attribute__((malloc, alloc_size(1), returns_nonnull)
 )
 void* __djinn_malloc(size_t size)
 {
@@ -134,10 +105,6 @@ void* __djinn_malloc(size_t size)
     DJINN_TRACE("allocated size %zu on heap at %p", size, chunk);
     return chunk;
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Queue Operations
-// ════════════════════════════════════════════════════════════════════
 
 static void init_queue(djinn_task_queue_t* q)
 {
@@ -275,10 +242,6 @@ static djinn_task_t* dequeue_task_blocking(djinn_task_queue_t* q, volatile int* 
     return task;
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Waiting Set / Continuation Management
-// ════════════════════════════════════════════════════════════════════
-
 void __djinn_mark_waiting(void* handle)
 {
     if (waiting_count < DJINN_MAX_WAITING)
@@ -297,7 +260,6 @@ static int is_in_waiting_set(void* handle)
     return 0;
 }
 
-// Check if handle is in waiting set; if so, remove it and return 1
 static int is_waiting(void* handle)
 {
     for (int i = 0; i < waiting_count; i++)
@@ -355,19 +317,14 @@ void __djinn_await(void* child_handle, void* parent_handle)
     }
 }
 
-// ════════════════════════════════════════════════════════════════════
-// File I/O Thread (blocking — for fd-based read/write + console)
-// ════════════════════════════════════════════════════════════════════
-
 #ifdef _WIN32
 static DWORD WINAPI file_io_thread_func(LPVOID arg)
 {
-
-
-
 #else
-static void* file_io_thread_func(void* arg)
-{
+    static void* file_io_thread_func(void* arg)
+    {
+
+
 #endif
     (void)arg;
     while (runtime.running)
@@ -433,13 +390,9 @@ static void* file_io_thread_func(void* arg)
 #endif
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Socket Poller Thread (IOCP on Windows, epoll on Linux)
-// ════════════════════════════════════════════════════════════════════
 
 #ifdef _WIN32
 
-// Get the io_request from an OVERLAPPED pointer
 #define REQ_FROM_OVERLAPPED(ovl) \
     ((djinn_io_request_t*)((char*)(ovl) - offsetof(djinn_io_request_t, overlapped)))
 
@@ -464,7 +417,6 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
 
         if (!ovl)
         {
-            // Timeout or shutdown signal
             continue;
         }
 
@@ -476,7 +428,7 @@ static DWORD WINAPI socket_poller_thread_func(LPVOID arg)
         DWORD err = ok ? 0 : GetLastError();
         if (err == ERROR_NETNAME_DELETED || err == ERROR_CONNECTION_ABORTED)
         {
-            req->result = 0; // treat as closed
+            req->result = 0;
         }
         else if (err != 0)
         {
@@ -661,19 +613,13 @@ static void* socket_poller_thread_func(void* arg)
 
 #endif // _WIN32
 
-// ════════════════════════════════════════════════════════════════════
-// Worker Thread
-// ════════════════════════════════════════════════════════════════════
-
 #ifdef _WIN32
 static DWORD WINAPI worker_thread(LPVOID arg)
 {
-
-
-
 #else
-static void* worker_thread(void* arg)
-{
+    static void* worker_thread(void* arg)
+    {
+
 #endif
     djinn_thread_pool_t* pool = (djinn_thread_pool_t*)arg;
 
@@ -703,10 +649,6 @@ static void* worker_thread(void* arg)
     return NULL;
 #endif
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Lifecycle
-// ════════════════════════════════════════════════════════════════════
 
 void __djinn_runtime_init(int num_threads)
 {
@@ -740,12 +682,10 @@ void __djinn_runtime_init(int num_threads)
     runtime.running = 1;
     runtime.pool.shutdown = 0;
 
-    // ── IOCP / epoll ──
 #ifdef _WIN32
     runtime.iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
     DJINN_ASSERT(runtime.iocp != NULL, "CreateIoCompletionPort failed");
 
-    // Load AcceptEx / ConnectEx function pointers
     {
         const SOCKET tmp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (tmp != INVALID_SOCKET)
@@ -769,7 +709,6 @@ void __djinn_runtime_init(int num_threads)
     DJINN_ASSERT(runtime.epoll_fd >= 0, "epoll_create1 failed");
 #endif
 
-    // ── Create worker threads ──
     if (num_threads > 0)
     {
         runtime.pool.thread_count = num_threads;
@@ -788,7 +727,6 @@ void __djinn_runtime_init(int num_threads)
 #endif
     }
 
-    // ── Create file I/O thread ──
 #ifdef _WIN32
     runtime.file_io_thread = CreateThread(NULL, 0, file_io_thread_func, NULL, 0, NULL);
 #else
@@ -811,7 +749,6 @@ void __djinn_runtime_shutdown(void)
     runtime.running = 0;
     runtime.pool.shutdown = 1;
 
-    // Wake all worker threads
     for (int i = 0; i < runtime.pool.thread_count; i++)
     {
 #ifdef _WIN32
@@ -821,7 +758,6 @@ void __djinn_runtime_shutdown(void)
 #endif
     }
 
-    // Join worker threads
     for (int i = 0; i < runtime.pool.thread_count; i++)
     {
 #ifdef _WIN32
@@ -834,7 +770,6 @@ void __djinn_runtime_shutdown(void)
     free(runtime.pool.threads);
     runtime.pool.threads = NULL;
 
-    // Join file I/O thread
 #ifdef _WIN32
     WaitForSingleObject(runtime.file_io_thread, 5000);
     CloseHandle(runtime.file_io_thread);
@@ -842,9 +777,7 @@ void __djinn_runtime_shutdown(void)
     pthread_join(runtime.file_io_thread, NULL);
 #endif
 
-    // Signal socket poller to stop and join
 #ifdef _WIN32
-    // Post a dummy completion to wake the poller
     PostQueuedCompletionStatus(runtime.iocp, 0, 0, NULL);
     WaitForSingleObject(runtime.socket_poller_thread, 5000);
     CloseHandle(runtime.socket_poller_thread);
@@ -854,11 +787,9 @@ void __djinn_runtime_shutdown(void)
     close(runtime.epoll_fd);
 #endif
 
-    // Cleanup queues
     destroy_queue(&runtime.ready_queue);
     destroy_queue(&runtime.pool.queue);
 
-    // Free pending file I/O requests
 #ifdef _WIN32
     EnterCriticalSection(&runtime.file_io_mutex);
 #else
@@ -889,21 +820,12 @@ void __djinn_runtime_shutdown(void)
     DJINN_TRACE("runtime shut down");
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Task Management
-// ════════════════════════════════════════════════════════════════════
-
 void __djinn_spawn(void* coro_handle)
 {
     DJINN_ASSERT(coro_handle, "coro handle is NULL");
     enqueue_task(&runtime.ready_queue, coro_handle);
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Event Loop
-// ════════════════════════════════════════════════════════════════════
-
-// Process a single task from the ready queue. Returns 1 if a task was processed.
 static void process_completed_coro(void* handle, void* main_handle)
 {
     remove_from_waiting(handle);
@@ -986,14 +908,12 @@ static void run_event_loop_core(void* main_handle)
             free(task);
         }
 
-        // Check if main coroutine is done
         if (__djinn_coro_done(main_handle))
         {
             drain_ready_queue(main_handle);
             break;
         }
 
-        // Brief yield if no tasks available to avoid busy-spinning
         if (!runtime.ready_queue.head)
         {
 #ifdef _WIN32
@@ -1018,13 +938,8 @@ int __djinn_event_loop(void* main_handle)
 void __djinn_event_loop_run(void* main_handle)
 {
     run_event_loop_core(main_handle);
-    // NOTE: does NOT extract result or destroy main_handle
-    // Caller (LLVM IR) does that via @llvm.coro.promise + @llvm.coro.destroy
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Async File I/O (routed to blocking file I/O thread)
-// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro)
 {
@@ -1091,10 +1006,6 @@ int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro)
 
     return 0;
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Socket API — Sync Helpers
-// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_socket_create(void)
 {
@@ -1193,10 +1104,6 @@ int64_t __djinn_socket_listen(int64_t socket_fd, int backlog)
     return 0;
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Socket API — Async Operations (coroutine-aware)
-// ════════════════════════════════════════════════════════════════════
-
 int64_t __djinn_async_accept(int64_t server_sock, int64_t* out_result, void* coro)
 {
     DJINN_ASSERT(coro, "coro handle is NULL");
@@ -1239,15 +1146,12 @@ int64_t __djinn_async_accept(int64_t server_sock, int64_t* out_result, void* cor
         free(req);
         return -1;
     }
-    // IOCP will deliver the completion
 #else
-    // Register interest in EPOLLIN on the server socket
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLONESHOT;
     ev.data.ptr = req;
     if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_ADD, (int)server_sock, &ev) < 0)
     {
-        // Might already be registered, try MOD
         if (epoll_ctl(runtime.epoll_fd, EPOLL_CTL_MOD, (int)server_sock, &ev) < 0)
         {
             DJINN_TRACE("epoll_ctl for accept failed: %d", errno);
@@ -1320,7 +1224,6 @@ int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, 
 
     if (ret == 0)
     {
-        // Connected immediately
         req->result = 0;
         req->completed = 1;
         enqueue_task(&runtime.ready_queue, coro);
@@ -1328,7 +1231,6 @@ int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, 
         return 0;
     }
 
-    // EINPROGRESS — register for EPOLLOUT
     struct epoll_event ev;
     ev.events = EPOLLOUT | EPOLLONESHOT;
     ev.data.ptr = req;
@@ -1440,10 +1342,6 @@ int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, int64
     DJINN_TRACE("recv done");
     return 0;
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Threading API (C# style)
-// ════════════════════════════════════════════════════════════════════
 
 #ifdef _WIN32
 static DWORD WINAPI djinn_thread_entry(LPVOID arg)
@@ -1588,10 +1486,6 @@ void __djinn_mutex_destroy(djinn_mutex_t* mutex)
 #endif
     free(mutex);
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Console I/O (async wrappers over file I/O thread)
-// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_console_write(const char* str, void* coro)
 {

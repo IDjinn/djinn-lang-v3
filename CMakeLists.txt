@@ -9,32 +9,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ========================
-# Warnings & Best Practices
-# ========================
-
 if (MSVC)
     set(DJINN_WARNINGS
-            /W4                 # High warning level
-            /permissive-        # Strict standards conformance
-            /w14242             # Narrowing conversion
-            /w14254             # Operator conversion larger bitfield
-            /w14263             # Member function does not override base virtual
-            /w14265             # Class has virtual functions but no virtual destructor
-            /w14287             # Unsigned/negative constant mismatch
-            /w14296             # Expression is always false
-            /w14311             # Pointer truncation
-            /w14545             # Expression before comma evaluates to function
-            /w14546             # Function call before comma missing argument list
-            /w14547             # Operator before comma has no effect
-            /w14549             # Operator before comma has no effect
-            /w14555             # Expression has no effect
-            /w14619             # Pragma warning: nonexistent warning number
-            /w14640             # Thread-unsafe static local initialization
-            /w14826             # Conversion is sign-extended
-            /w14905             # Wide string literal cast to LPSTR
-            /w14906             # String literal cast to LPWSTR
-            /w14928             # Illegal copy-initialization
+            /W4
+            /permissive-
+            /w14242
+            /w14254
+            /w14263
+            /w14265
+            /w14287
+            /w14296
+            /w14311
+            /w14545
+            /w14546
+            /w14547
+            /w14549
+            /w14555
+            /w14619
+            /w14640
+            /w14826
+            /w14905
+            /w14906
+            /w14928
     )
 else ()
     set(DJINN_WARNINGS
@@ -64,10 +60,6 @@ else ()
         )
     endif ()
 endif ()
-
-# ========================
-# Sanitizers (Debug only)
-# ========================
 
 if (MSVC)
     # MSVC: only ASan is supported
@@ -127,8 +119,6 @@ file(GLOB_RECURSE DJINN_HEADERS
         visitor/*.h
 )
 
-# Scoped per-target below instead of global include_directories
-
 
 message(STATUS "LIBXML2_INCLUDE_DIR = ${LIBXML2_INCLUDE_DIR}")
 message(STATUS "LIBXML2_LIBRARY = ${LIBXML2_LIBRARY}")
@@ -165,8 +155,6 @@ llvm_map_components_to_libnames(LLVM_LIBS
         Passes
 )
 
-# Option to disable binder assertions (needed for testing error cases)
-# ON by default so tests work; set to OFF for strict development checks
 option(DJINN_DISABLE_BINDER_ASSERTS "Disable binder debug assertions" ON)
 
 add_library(djinn_lib STATIC
@@ -192,11 +180,6 @@ add_executable(djinn main.cpp)
 target_compile_options(djinn PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(djinn PRIVATE djinn_lib)
 
-# ========================
-# LSP Server
-# ========================
-
-# Fetch dependencies
 include(FetchContent)
 
 FetchContent_Declare(
@@ -226,21 +209,13 @@ target_link_libraries(djinn-lsp PRIVATE
         nlohmann_json::nlohmann_json
 )
 
-# Link Windows socket library
 if (WIN32)
     target_link_libraries(djinn-lsp PRIVATE ws2_32)
 endif ()
 
 target_compile_features(djinn-lsp PRIVATE cxx_std_23)
-
-# ========================
-# Google Test
-# ========================
-
-# Force gtest to use shared CRT to match our runtime library setting
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
-# Try submodule first, fallback to FetchContent download
 if (EXISTS "${CMAKE_SOURCE_DIR}/external/googletest/CMakeLists.txt")
     message(STATUS "Using GoogleTest from submodule")
     add_subdirectory(external/googletest)
@@ -251,7 +226,6 @@ else ()
             GIT_REPOSITORY https://github.com/google/googletest.git
             GIT_TAG v1.14.0
     )
-    # For Windows: Prevent overriding the parent project's compiler/linker settings
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 endif ()
@@ -275,7 +249,6 @@ target_compile_features(tests PRIVATE cxx_std_23)
 include(GoogleTest)
 gtest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-# Clean djinn_build temp directory before running tests
 add_custom_target(clean_djinn_build
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{TEMP}/djinn_build"
         COMMENT "Cleaning djinn_build temp directory"
@@ -283,9 +256,15 @@ add_custom_target(clean_djinn_build
 add_dependencies(tests clean_djinn_build)
 
 # ========================
-# Runtime (C library — not linked into djinn, used by clang at emit time)
+# Runtime
 # ========================
-
+if (MSVC)
+    set(CMAKE_C_STANDARD 17)
+else ()
+    set(CMAKE_C_STANDARD 23)
+endif ()
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 add_library(djinn_runtime STATIC
         runtime/djinn_runtime.c
         runtime/djinn_runtime.h
@@ -295,7 +274,6 @@ add_library(djinn_runtime STATIC
 target_include_directories(djinn_runtime PUBLIC "${CMAKE_SOURCE_DIR}/runtime")
 set_target_properties(djinn_runtime PROPERTIES LINKER_LANGUAGE C)
 
-# Copy runtime directory to build directory for clang linking
 add_custom_command(TARGET djinn_lib POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/runtime"

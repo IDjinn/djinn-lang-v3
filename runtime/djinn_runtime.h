@@ -30,32 +30,31 @@
 
 #ifdef __cplusplus
 extern "C" {
-
-
-
 #endif
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
-#define assume(x) __builtin_assume((x))
+#define assume(x)   __builtin_assume((x))
 
-__attribute__((cold, __noreturn__)
-
+__attribute__ ((cold
+,
+__noreturn__
 )
-static void djinn_assert_fail(const char* msg, const char* file, const int line)
+)
+static void djinn_assert_fail(const char* msg, const char* file, const int line, const char* function_name)
 {
-    fprintf(stderr, "[RUNTIME] ASSERTION ERROR: %s\nFile: %s:%d\n", msg, file, line);
+    fprintf(stderr, "[RUNTIME] ASSERTION ERROR: %s\nFile: %s:%d\nFunction: %s\n", msg, file, line, function_name);
     abort();
 }
 
-#define DJINN_ASSERT(cond, msg)                     \
-do {                                                \
-    if (unlikely(!(cond))) {                        \
-        djinn_assert_fail(msg, __FILE__, __LINE__); \
-        __builtin_trap();                           \
-        __builtin_unreachable();                    \
-    }                                               \
-    assume(cond);                                   \
+#define DJINN_ASSERT(cond, msg)                                   \
+do {                                                              \
+    if (unlikely(!(cond))) {                                      \
+        djinn_assert_fail(msg, __FILE__, __LINE__, __FUNCTION__); \
+        __builtin_trap();                                         \
+        __builtin_unreachable();                                  \
+    }                                                             \
+    assume(cond);                                                 \
 } while (0)
 
 uint64_t __djinn_hash_string(const char* data, uint32_t length);
@@ -69,18 +68,11 @@ uint32_t __djinn_compare_strings(
     size_t rightLen
 );
 
-// ════════════════════════════════════════════════════════════════════
-// Memory
-// ════════════════════════════════════════════════════════════════════
-
 void* __djinn_realloc(void* pointer, size_t new_size);
 
 void __djinn_free(void* pointer);
 
 void* __djinn_malloc(size_t size);
-// ════════════════════════════════════════════════════════════════════
-// I/O Request Types
-// ════════════════════════════════════════════════════════════════════
 
 #define DJINN_IO_FILE_READ   0
 #define DJINN_IO_FILE_WRITE  1
@@ -89,10 +81,6 @@ void* __djinn_malloc(size_t size);
 #define DJINN_IO_RECV        4
 #define DJINN_IO_SEND        5
 
-// ════════════════════════════════════════════════════════════════════
-// Task
-// ════════════════════════════════════════════════════════════════════
-
 typedef struct djinn_task
 {
     void* handle; // coroutine handle
@@ -100,9 +88,6 @@ typedef struct djinn_task
     int priority; // 0 = normal, 1 = high
 } djinn_task_t;
 
-// ════════════════════════════════════════════════════════════════════
-// Task Queue (thread-safe)
-// ════════════════════════════════════════════════════════════════════
 
 typedef struct
 {
@@ -118,10 +103,6 @@ typedef struct
 #endif
 } djinn_task_queue_t;
 
-// ════════════════════════════════════════════════════════════════════
-// Thread Pool
-// ════════════════════════════════════════════════════════════════════
-
 typedef struct
 {
 #ifdef _WIN32
@@ -133,10 +114,6 @@ typedef struct
     djinn_task_queue_t queue;
     volatile int shutdown;
 } djinn_thread_pool_t;
-
-// ════════════════════════════════════════════════════════════════════
-// I/O Request
-// ════════════════════════════════════════════════════════════════════
 
 typedef struct djinn_io_request
 {
@@ -167,9 +144,6 @@ typedef struct djinn_io_request
 #endif
 } djinn_io_request_t;
 
-// ════════════════════════════════════════════════════════════════════
-// Runtime State
-// ════════════════════════════════════════════════════════════════════
 
 typedef struct
 {
@@ -204,10 +178,6 @@ typedef struct
     volatile int running;
 } djinn_runtime_t;
 
-// ════════════════════════════════════════════════════════════════════
-// Continuation: when child completes, resume parent
-// ════════════════════════════════════════════════════════════════════
-
 typedef struct djinn_continuation
 {
     void* child;
@@ -217,47 +187,25 @@ typedef struct djinn_continuation
 
 #define DJINN_MAX_WAITING 256
 
-// ════════════════════════════════════════════════════════════════════
-// Lifecycle
-// ════════════════════════════════════════════════════════════════════
-
 void __djinn_runtime_init(int num_threads);
 void __djinn_runtime_shutdown(void);
-
-// ════════════════════════════════════════════════════════════════════
-// Coro wrappers (defined in LLVM IR, called by runtime)
-// ════════════════════════════════════════════════════════════════════
 
 extern void __djinn_coro_resume(void* handle);
 extern int __djinn_coro_done(void* handle);
 extern void __djinn_coro_destroy(void* handle);
 extern void* __djinn_coro_promise(void* handle, int align);
 
-// ════════════════════════════════════════════════════════════════════
-// Task Management
-// ════════════════════════════════════════════════════════════════════
-
 void __djinn_spawn(void* coro_handle);
 int __djinn_event_loop(void* main_handle);
 void __djinn_event_loop_run(void* main_handle);
 
-// ════════════════════════════════════════════════════════════════════
-// Await / Suspend
-// ════════════════════════════════════════════════════════════════════
-
 void __djinn_mark_waiting(void* handle);
 void __djinn_await(void* child_handle, void* parent_handle);
 
-// ════════════════════════════════════════════════════════════════════
-// Async File I/O (blocking thread)
-// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro);
 int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro);
 
-// ════════════════════════════════════════════════════════════════════
-// Async Socket I/O (IOCP / epoll)
-// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_socket_create(void);
 int64_t __djinn_socket_close(int64_t socket_fd);
@@ -270,10 +218,6 @@ int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, 
 int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result,
                            void* coro);
 int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
-
-// ════════════════════════════════════════════════════════════════════
-// Threading (C# style)
-// ════════════════════════════════════════════════════════════════════
 
 typedef struct djinn_thread
 {
@@ -309,9 +253,6 @@ void __djinn_mutex_unlock(djinn_mutex_t* mutex);
 int __djinn_mutex_trylock(djinn_mutex_t* mutex);
 void __djinn_mutex_destroy(djinn_mutex_t* mutex);
 
-// ════════════════════════════════════════════════════════════════════
-// Console I/O (async wrappers)
-// ════════════════════════════════════════════════════════════════════
 
 int64_t __djinn_console_write(const char* str, void* coro);
 int64_t __djinn_console_error(const char* str, void* coro);
