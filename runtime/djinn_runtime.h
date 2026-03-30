@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -34,13 +35,28 @@ extern "C" {
 
 #endif
 
-#ifdef _WIN32
-#define DJINN_API __declspec(dllexport)
-#else
-#define DJINN_API
-#endif
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#define assume(x) __builtin_assume((x))
 
-DJINN_API uint64_t __djinn_hash_string(const char* data, uint32_t length)
+__attribute__((cold, __noreturn__))
+static void djinn_assert_fail(const char* msg, const char* file, const int line)
+{
+    fprintf(stderr, "[RUNTIME] ASSERTION ERROR: %s\nFile: %s\nLine: %d\n", msg, file, line);
+    abort();
+}
+
+#define DJINN_ASSERT(cond, msg)                     \
+do {                                                \
+    if (unlikely(!(cond))) {                        \
+        djinn_assert_fail(msg, __FILE__, __LINE__); \
+        __builtin_trap();                           \
+        __builtin_unreachable();                    \
+    }                                               \
+    assume(cond);                                   \
+} while (0)
+
+static inline uint64_t __djinn_hash_string(const char* data, uint32_t length)
 {
     uint64_t hash = 2166136261u;
     // FNV offset basis
@@ -53,9 +69,9 @@ DJINN_API uint64_t __djinn_hash_string(const char* data, uint32_t length)
     return hash;
 }
 
-DJINN_API int64_t __djinn_unix_timestamp_ms(void);
+static inline int64_t __djinn_unix_timestamp_ms(void);
 
-DJINN_API uint32_t __djinn_compare_strings(
+static inline uint32_t __djinn_compare_strings(
     char* leftData,
     char* rightData,
     size_t leftLen,
@@ -65,11 +81,19 @@ DJINN_API uint32_t __djinn_compare_strings(
 // ════════════════════════════════════════════════════════════════════
 // Memory
 // ════════════════════════════════════════════════════════════════════
+__attribute__((
+alloc_size(2),
+warn_unused_result
+))  static inline void* __djinn_realloc(void* pointer, size_t new_size);
 
-DJINN_API void* __djinn_realloc(void* pointer, size_t new_size);
-DJINN_API void* __djinn_malloc(size_t size);
-DJINN_API void __djinn_free(void* pointer);
+__attribute__((nonnull(1))) static inline void __djinn_free(void* pointer);
 
+__attribute__((
+always_inline,
+malloc,
+alloc_size(1),
+returns_nonnull
+)) static inline void* __djinn_malloc(size_t size);
 // ════════════════════════════════════════════════════════════════════
 // I/O Request Types
 // ════════════════════════════════════════════════════════════════════
@@ -213,8 +237,8 @@ typedef struct djinn_continuation
 // Lifecycle
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API void __djinn_runtime_init(int num_threads);
-DJINN_API void __djinn_runtime_shutdown(void);
+inline void __djinn_runtime_init(int num_threads);
+inline void __djinn_runtime_shutdown(void);
 
 // ════════════════════════════════════════════════════════════════════
 // Coro wrappers (defined in LLVM IR, called by runtime)
@@ -229,38 +253,38 @@ extern void* __djinn_coro_promise(void* handle, int align);
 // Task Management
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API void __djinn_spawn(void* coro_handle);
-DJINN_API int __djinn_event_loop(void* main_handle);
-DJINN_API void __djinn_event_loop_run(void* main_handle);
+inline void __djinn_spawn(void* coro_handle);
+inline int __djinn_event_loop(void* main_handle);
+inline void __djinn_event_loop_run(void* main_handle);
 
 // ════════════════════════════════════════════════════════════════════
 // Await / Suspend
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API void __djinn_mark_waiting(void* handle);
-DJINN_API void __djinn_await(void* child_handle, void* parent_handle);
+inline void __djinn_mark_waiting(void* handle);
+inline void __djinn_await(void* child_handle, void* parent_handle);
 
 // ════════════════════════════════════════════════════════════════════
 // Async File I/O (blocking thread)
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro);
-DJINN_API int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro);
+static inline int64_t __djinn_async_read(int fd, void* buf, int64_t count, void* coro);
+static inline int64_t __djinn_async_write(int fd, void* buf, int64_t count, void* coro);
 
 // ════════════════════════════════════════════════════════════════════
 // Async Socket I/O (IOCP / epoll)
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API int64_t __djinn_socket_create(void);
-DJINN_API int64_t __djinn_socket_close(int64_t socket_fd);
-DJINN_API int64_t __djinn_socket_bind(int64_t socket_fd, const char* address, int port);
-DJINN_API int64_t __djinn_socket_listen(int64_t socket_fd, int backlog);
+static inline int64_t __djinn_socket_create(void);
+static inline int64_t __djinn_socket_close(int64_t socket_fd);
+static inline int64_t __djinn_socket_bind(int64_t socket_fd, const char* address, int port);
+static inline int64_t __djinn_socket_listen(int64_t socket_fd, int backlog);
 
-DJINN_API int64_t __djinn_async_accept(int64_t server_sock, int64_t* out_result, void* coro);
-DJINN_API int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, int64_t* out_result,
+static inline int64_t __djinn_async_accept(int64_t server_sock, int64_t* out_result, void* coro);
+static inline int64_t __djinn_async_connect(int64_t socket_fd, const char* address, int port, int64_t* out_result,
                                         void* coro);
-DJINN_API int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
-DJINN_API int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
+static inline int64_t __djinn_async_send(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
+static inline int64_t __djinn_async_recv(int64_t socket_fd, void* buffer, int64_t count, int64_t* out_result, void* coro);
 
 // ════════════════════════════════════════════════════════════════════
 // Threading (C# style)
@@ -288,25 +312,25 @@ typedef struct djinn_mutex
 #endif
 } djinn_mutex_t;
 
-DJINN_API djinn_thread_t* __djinn_thread_create(void (*func)(void*), void* arg);
-DJINN_API int __djinn_thread_start(djinn_thread_t* thread);
-DJINN_API void __djinn_thread_join(djinn_thread_t* thread);
-DJINN_API int __djinn_thread_is_alive(djinn_thread_t* thread);
-DJINN_API void __djinn_thread_sleep(int64_t milliseconds);
+inline djinn_thread_t* __djinn_thread_create(void (*func)(void*), void* arg);
+inline int __djinn_thread_start(djinn_thread_t* thread);
+inline void __djinn_thread_join(djinn_thread_t* thread);
+inline int __djinn_thread_is_alive(djinn_thread_t* thread);
+inline void __djinn_thread_sleep(int64_t milliseconds);
 
-DJINN_API djinn_mutex_t* __djinn_mutex_create(void);
-DJINN_API void __djinn_mutex_lock(djinn_mutex_t* mutex);
-DJINN_API void __djinn_mutex_unlock(djinn_mutex_t* mutex);
-DJINN_API int __djinn_mutex_trylock(djinn_mutex_t* mutex);
-DJINN_API void __djinn_mutex_destroy(djinn_mutex_t* mutex);
+inline djinn_mutex_t* __djinn_mutex_create(void);
+inline void __djinn_mutex_lock(djinn_mutex_t* mutex);
+inline void __djinn_mutex_unlock(djinn_mutex_t* mutex);
+inline int __djinn_mutex_trylock(djinn_mutex_t* mutex);
+inline void __djinn_mutex_destroy(djinn_mutex_t* mutex);
 
 // ════════════════════════════════════════════════════════════════════
 // Console I/O (async wrappers)
 // ════════════════════════════════════════════════════════════════════
 
-DJINN_API int64_t __djinn_console_write(const char* str, void* coro);
-DJINN_API int64_t __djinn_console_error(const char* str, void* coro);
-DJINN_API int64_t __djinn_console_read_line(char* buf, int64_t max, void* coro);
+static inline int64_t __djinn_console_write(const char* str, void* coro);
+static inline int64_t __djinn_console_error(const char* str, void* coro);
+static inline int64_t __djinn_console_read_line(char* buf, int64_t max, void* coro);
 
 #ifdef __cplusplus
 }
