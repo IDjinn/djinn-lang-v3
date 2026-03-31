@@ -213,3 +213,49 @@ impl Equatable for string {
         return __djinn_compare_strings(left.data, right.data, left.length, right.length) == 1;
     }
 }
+
+impl i8 {
+    const i8 MAX_VALUE = 127;
+    const i8 MIN_VALUE = -128;
+}
+
+impl i16 {
+    const i16 MAX_VALUE = 32767;
+    const i16 MIN_VALUE = -32768;
+}
+
+impl i32 {
+    const i32 MAX_VALUE = 0x7FFFFFFF;
+    const i32 MIN_VALUE = 0x80000000;
+}
+
+impl i64 {
+    const i64 MAX_VALUE = 0x7FFFFFFFFFFFFFFF;
+    const i64 MIN_VALUE = 0x8000000000000000;
+}
+
+// TODO: i128/u128 const fields disabled — primitive impl for 128-bit types
+// triggers LLVM verification error (this passed as ptr instead of i128 value)
+// impl i128 { const i128 MAX_VALUE = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; }
+
+impl u8 {
+    const u8 MAX_VALUE = 255;
+    const u8 MIN_VALUE = 0;
+}
+
+impl u16 {
+    const u16 MAX_VALUE = 65535;
+    const u16 MIN_VALUE = 0;
+}
+
+impl u32 {
+    const u32 MAX_VALUE = 0xFFFFFFFF;
+    const u32 MIN_VALUE = 0;
+}
+
+impl u64 {
+    const u64 MAX_VALUE = 0xFFFFFFFFFFFFFFFF;
+    const u64 MIN_VALUE = 0;
+}
+
+// impl u128 { const u128 MAX_VALUE = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; }

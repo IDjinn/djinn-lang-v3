@@ -2357,13 +2357,80 @@ std::unique_ptr<ImplDeclaration> Parser::parse_impl()
             auto op = parse_operator(true);
             op->attributes = std::move(methodAttributes);
             impl->methods.push_back(std::move(op));
+            continue;
         }
-        else
+
+        // Parse optional modifiers (public, private, static) and field qualifiers (mut, const)
+        const size_t saved = current;
+        auto fieldModifiers = parse_modifiers();
+        bool isMutable = match(TokenType::MUT);
+        bool isConstant = match(TokenType::CONST);
+        isMutable |= match(TokenType::MUT);
+        isConstant |= match(TokenType::CONST);
+
+        if (isConstant || isMutable)
         {
+            // Definitely a field: const/mut type name [= expr] ;
+            auto fieldType = parse_type();
+            const Token& fieldNameToken = expect("Esperado nome do campo", TokenType::IDENTIFIER);
+            SourceIdentifier fieldName = makeSourceIdentifier(fieldNameToken);
+
+            std::unique_ptr<Expression> initializer;
+            if (match(TokenType::EQUAL))
+            {
+                initializer = parse_expression();
+            }
+            expect("Esperado ';'", TokenType::SEMICOLON);
+            impl->fields.emplace_back(std::move(fieldType), std::move(fieldName),
+                                      isConstant, std::move(initializer), std::move(fieldModifiers));
+            continue;
+        }
+
+        // No const/mut — could be a field (type name ;) or method (type name ( ... ))
+        // Try parsing as type + name, then check what follows
+        if (!fieldModifiers.empty())
+        {
+            // Has visibility modifiers but no const/mut — must be a method
+            current = saved;
             auto m = parse_method(true);
             m->attributes = std::move(methodAttributes);
             impl->methods.push_back(std::move(m));
+            continue;
         }
+
+        // No modifiers at all — try to distinguish field from method
+        // Save position, try to parse type + identifier
+        auto fieldType = parse_type();
+        if (check(TokenType::IDENTIFIER))
+        {
+            const size_t afterType = current;
+            const Token& nameToken = advance();
+
+            if (check(TokenType::SEMICOLON) || check(TokenType::EQUAL))
+            {
+                // It's a field: type name [= expr] ;
+                SourceIdentifier fieldName = makeSourceIdentifier(nameToken);
+                std::unique_ptr<Expression> initializer;
+                if (match(TokenType::EQUAL))
+                {
+                    initializer = parse_expression();
+                }
+                expect("Esperado ';'", TokenType::SEMICOLON);
+                impl->fields.emplace_back(std::move(fieldType), std::move(fieldName),
+                                          false, std::move(initializer));
+                continue;
+            }
+            // Not a field — backtrack to before type and parse as method
+            current = saved;
+        }
+        else
+        {
+            current = saved;
+        }
+
+        auto m = parse_method(true);
+        m->attributes = std::move(methodAttributes);
+        impl->methods.push_back(std::move(m));
     }
 
     expect("Esperado '}' no impl", TokenType::RBRACE);

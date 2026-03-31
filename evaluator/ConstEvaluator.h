@@ -29,6 +29,7 @@ enum class OpCode : uint8_t
 {
     // Stack operations
     PUSH_INT, // operand: index into int constant pool
+    PUSH_INT128, // operand: index into int128 constant pool
     PUSH_FLOAT, // operand: index into float constant pool
     PUSH_BOOL, // operand: 0 or 1
     POP, // discard top of stack
@@ -125,6 +126,7 @@ public:
 
     [[nodiscard]] const std::vector<Instruction>& instructions() const { return _instructions; }
     [[nodiscard]] const std::vector<int64_t>& intPool() const { return _intPool; }
+    [[nodiscard]] const std::vector<Int128>& int128Pool() const { return _int128Pool; }
     [[nodiscard]] const std::vector<double>& floatPool() const { return _floatPool; }
     [[nodiscard]] const std::vector<CompiledFunction>& functionTable() const { return _functionTable; }
 
@@ -133,6 +135,7 @@ public:
 private:
     std::vector<Instruction> _instructions;
     std::vector<int64_t> _intPool;
+    std::vector<Int128> _int128Pool;
     std::vector<double> _floatPool;
     std::vector<CompiledFunction> _functionTable;
     std::unordered_map<std::string, ConstValue> _constants;
@@ -146,6 +149,7 @@ private:
 
     void emit(OpCode op, uint32_t operand = 0);
     uint32_t addIntConstant(int64_t val);
+    uint32_t addInt128Constant(Int128 val);
     uint32_t addFloatConstant(double val);
     uint32_t getOrCreateLocal(const std::string& name);
 
@@ -208,6 +212,7 @@ public:
     ConstValue execute(
         const std::vector<Instruction>& code,
         const std::vector<int64_t>& intPool,
+        const std::vector<Int128>& int128Pool,
         const std::vector<double>& floatPool,
         const std::vector<CompiledFunction>& functions
     );

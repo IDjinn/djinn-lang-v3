@@ -24,6 +24,14 @@ uint32_t BytecodeCompiler::addIntConstant(int64_t val)
     return static_cast<uint32_t>(_intPool.size() - 1);
 }
 
+uint32_t BytecodeCompiler::addInt128Constant(Int128 val)
+{
+    for (uint32_t i = 0; i < _int128Pool.size(); i++)
+        if (_int128Pool[i] == val) return i;
+    _int128Pool.push_back(val);
+    return static_cast<uint32_t>(_int128Pool.size() - 1);
+}
+
 uint32_t BytecodeCompiler::addFloatConstant(double val)
 {
     for (uint32_t i = 0; i < _floatPool.size(); i++)
@@ -61,6 +69,7 @@ bool BytecodeCompiler::compile(const Expression& expr)
 {
     _instructions.clear();
     _intPool.clear();
+    _int128Pool.clear();
     _floatPool.clear();
     _localSlots.clear();
     _nextLocalSlot = 0;
@@ -213,7 +222,40 @@ void BytecodeCompiler::compileIntegerLiteral(const IntegerLiteral& expr)
         }
     }
 
-    emit(OpCode::PUSH_INT, addIntConstant(std::stoll(cleaned, nullptr, radix)));
+    try
+    {
+        int64_t val = std::stoll(cleaned, nullptr, radix);
+        emit(OpCode::PUSH_INT, addIntConstant(val));
+    }
+    catch (const std::out_of_range&)
+    {
+        // Value exceeds 64 bits — parse as 128-bit integer
+        // Parse hex string manually into high:low pair
+        Int128 val128;
+        if (radix == 16)
+        {
+            // Split hex string into high and low 16-char halves
+            if (cleaned.size() <= 16)
+            {
+                val128.low = std::stoull(cleaned, nullptr, 16);
+                val128.high = 0;
+            }
+            else
+            {
+                std::string lowStr = cleaned.substr(cleaned.size() - 16);
+                std::string highStr = cleaned.substr(0, cleaned.size() - 16);
+                val128.low = std::stoull(lowStr, nullptr, 16);
+                val128.high = static_cast<int64_t>(std::stoull(highStr, nullptr, 16));
+            }
+        }
+        else
+        {
+            LOG_DEBUG("[consteval] 128-bit literals only supported in hex: %s", cleaned.c_str());
+            _hadError = true;
+            return;
+        }
+        emit(OpCode::PUSH_INT128, addInt128Constant(val128));
+    }
 }
 
 void BytecodeCompiler::compileFloatLiteral(const FloatLiteral& expr)
@@ -246,6 +288,8 @@ void BytecodeCompiler::compileIdentifier(const Identifier& expr)
         switch (val.kind)
         {
         case ConstValue::Integer: emit(OpCode::PUSH_INT, addIntConstant(val.intVal));
+            break;
+        case ConstValue::Integer128: emit(OpCode::PUSH_INT128, addInt128Constant(val.int128Val));
             break;
         case ConstValue::Float: emit(OpCode::PUSH_FLOAT, addFloatConstant(val.floatVal));
             break;
@@ -545,6 +589,7 @@ ConstValue& ConstVM::top()
 ConstValue ConstVM::execute(
     const std::vector<Instruction>& code,
     const std::vector<int64_t>& intPool,
+    const std::vector<Int128>& int128Pool,
     const std::vector<double>& floatPool,
     const std::vector<CompiledFunction>& functions)
 {
@@ -574,6 +619,8 @@ ConstValue ConstVM::execute(
         switch (instr.op)
         {
         case OpCode::PUSH_INT: push(ConstValue::makeInt(intPool[instr.operand]));
+            break;
+        case OpCode::PUSH_INT128: push(ConstValue::makeInt128(int128Pool[instr.operand]));
             break;
         case OpCode::PUSH_FLOAT: push(ConstValue::makeFloat(floatPool[instr.operand]));
             break;
@@ -983,7 +1030,8 @@ ConstValue ConstEvaluator::evaluate(const Expression& expr)
         return ConstValue::error();
 
     ConstVM vm(_config);
-    return vm.execute(compiler.instructions(), compiler.intPool(), compiler.floatPool(), compiler.functionTable());
+    return vm.execute(compiler.instructions(), compiler.intPool(), compiler.int128Pool(), compiler.floatPool(),
+                      compiler.functionTable());
 }
 
 ConstValue ConstEvaluator::evaluateFunction(const FunctionDeclaration& func, const std::vector<ConstValue>& args)
@@ -1021,12 +1069,19 @@ ConstValue ConstEvaluator::evaluateFunction(const FunctionDeclaration& func, con
     // Actually, let's just build call bytecode manually:
     std::vector<Instruction> callCode;
     std::vector<int64_t> intPool = {compiler.intPool().begin(), compiler.intPool().end()};
+    std::vector<Int128> int128Pool = {compiler.int128Pool().begin(), compiler.int128Pool().end()};
     std::vector<double> floatPool = {compiler.floatPool().begin(), compiler.floatPool().end()};
 
     // Push args
     for (const auto& arg : args)
     {
-        if (arg.kind == ConstValue::Integer)
+        if (arg.kind == ConstValue::Integer128)
+        {
+            uint32_t idx = static_cast<uint32_t>(int128Pool.size());
+            int128Pool.push_back(arg.int128Val);
+            callCode.emplace_back(OpCode::PUSH_INT128, idx);
+        }
+        else if (arg.kind == ConstValue::Integer)
         {
             uint32_t idx = static_cast<uint32_t>(intPool.size());
             intPool.push_back(arg.intVal);
@@ -1063,7 +1118,7 @@ ConstValue ConstEvaluator::evaluateFunction(const FunctionDeclaration& func, con
         fullCode.push_back(instr);
 
     ConstVM vm(_config);
-    return vm.execute(fullCode, intPool, floatPool, funcs);
+    return vm.execute(fullCode, intPool, int128Pool, floatPool, funcs);
 }
 
 void ConstEvaluator::defineConstant(const std::string& name, ConstValue value)

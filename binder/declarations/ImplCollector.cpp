@@ -37,6 +37,18 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             }
         }
 
+        // Add fields from impl block to the struct symbol
+        for (const auto& field : decl.fields)
+        {
+            structSym->addField(
+                field.name.token_name,
+                *field.type,
+                false, // isMutable
+                field.isConstant,
+                field.initializer.get()
+            );
+        }
+
         // Add methods from impl block to the struct symbol
         for (const auto& method : decl.methods)
         {

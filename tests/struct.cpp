@@ -216,3 +216,113 @@ TEST(Struct, SimpleBraceInitScalar)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
+
+// ========================
+// impl blocks
+// ========================
+
+TEST(Impl, ConstFieldOnPrimitive)
+{
+    const auto source = R"(
+        impl i32 {
+            const i32 MAX_VALUE = 0x7FFFFFFF;
+        }
+
+        i32 main() {
+            return i32.MAX_VALUE / 10000000;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 214);
+}
+
+TEST(Impl, ConstFieldWithArithmetic)
+{
+    const auto source = R"(
+        impl i32 {
+            const i32 BITS = 32;
+            const i32 BYTES = 4;
+        }
+
+        i32 main() {
+            return i32.BITS + i32.BYTES;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 36);
+}
+
+TEST(Impl, MethodOnStruct)
+{
+    const auto source = R"(
+        struct Counter {
+            i32 value;
+        }
+
+        impl Counter {
+            i32 get() {
+                return this.value;
+            }
+        }
+
+        i32 main() {
+            Counter c = { 42 };
+            return c.get();
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Impl, ConstAndMethodTogether)
+{
+    const auto source = R"(
+        struct Config {
+            i32 timeout;
+        }
+
+        impl Config {
+            const i32 DEFAULT_TIMEOUT = 30;
+
+            i32 getTimeout() {
+                return this.timeout;
+            }
+        }
+
+        i32 main() {
+            Config c = { Config.DEFAULT_TIMEOUT };
+            return c.getTimeout();
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 30);
+}
+
+TEST(Impl, StaticMethodOnPrimitive)
+{
+    const auto source = R"(
+        impl i32 {
+            public static i32 clamp(i32 val, i32 lo, i32 hi) {
+                if (val < lo) { return lo; }
+                if (val > hi) { return hi; }
+                return val;
+            }
+        }
+
+        i32 main() {
+            return i32.clamp(150, 0, 100);
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 100);
+}

@@ -635,6 +635,7 @@ struct ImplDeclaration : Location
     std::vector<Type> targetTypes{};
     std::vector<std::string> interfaceNames{}; // empty for inherent impl, filled for "impl Interface for Type"
     std::vector<std::unique_ptr<StructMethodDeclaration>> methods;
+    std::vector<StructField> fields; // const fields, regular fields added via impl
 
     [[nodiscard]] bool isInterfaceImpl() const { return !interfaceNames.empty(); }
 

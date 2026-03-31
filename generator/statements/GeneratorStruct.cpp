@@ -60,16 +60,42 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
 
 llvm::Constant* Generator::evaluate_const_initializer(const Expression& expr) const
 {
-    // Use the stack-based VM to evaluate the expression at compile time
-    // We use a local evaluator here because this method is const
+    // Try the stack-based VM first
     ConstEvaluator evaluator;
-
-    // TODO: propagate known constants from struct scope to the evaluator
-
     ConstValue result = evaluator.evaluate(expr);
-    if (result.isError()) return nullptr;
+    if (!result.isError()) return const_value_to_llvm(result);
 
-    return const_value_to_llvm(result);
+    // Fallback for values that exceed 64 bits (i128/u128) — use LLVM APInt directly
+    if (const auto* intLit = dynamic_cast<const IntegerLiteral*>(&expr))
+    {
+        std::string cleaned;
+        cleaned.reserve(intLit->value.size());
+        for (char c : intLit->value)
+            if (c != '_' && c != '\'') cleaned += c;
+
+        unsigned radix = 10;
+        std::string digits = cleaned;
+        if (cleaned.size() > 2 && cleaned[0] == '0')
+        {
+            if (cleaned[1] == 'x' || cleaned[1] == 'X')
+            {
+                radix = 16;
+                digits = cleaned.substr(2);
+            }
+            else if (cleaned[1] == 'b' || cleaned[1] == 'B')
+            {
+                radix = 2;
+                digits = cleaned.substr(2);
+            }
+        }
+
+        const llvm::APInt apVal(128, digits, radix);
+        const unsigned activeBits = apVal.getActiveBits();
+        unsigned bits = activeBits <= 32 ? 32 : activeBits <= 64 ? 64 : 128;
+        return llvm::ConstantInt::get(llvm::IntegerType::get(*context, bits), apVal.trunc(bits));
+    }
+
+    return nullptr;
 }
 
 llvm::Constant* Generator::const_value_to_llvm(const ConstValue& val) const
@@ -80,6 +106,13 @@ llvm::Constant* Generator::const_value_to_llvm(const ConstValue& val) const
         {
             unsigned bits = val.bitWidth > 0 ? val.bitWidth : 32;
             return llvm::ConstantInt::get(llvm::IntegerType::get(*context, bits), val.intVal, val.isSigned);
+        }
+    case ConstValue::Integer128:
+        {
+            // Build 128-bit APInt from high:low pair
+            uint64_t words[2] = {val.int128Val.low, static_cast<uint64_t>(val.int128Val.high)};
+            llvm::APInt apVal(128, llvm::ArrayRef<uint64_t>(words, 2));
+            return llvm::ConstantInt::get(llvm::IntegerType::get(*context, 128), apVal);
         }
     case ConstValue::Float:
         {
