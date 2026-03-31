@@ -16,7 +16,7 @@
 #include "../../lexer/TokenType.h"
 #include "../../visitor/ExpressionVisitor.h"
 
-inline std::string tokenTypeToString(const TokenType type)
+constexpr std::string tokenTypeToString(const TokenType type)
 {
     switch (type)
     {
@@ -34,8 +34,132 @@ inline std::string tokenTypeToString(const TokenType type)
     case TokenType::BANG: return "!";
     case TokenType::AND_AND: return "&&";
     case TokenType::OR_OR: return "||";
+    case TokenType::AMPERSAND: return "&";
+    case TokenType::PIPE: return "|";
+    case TokenType::CARET: return "^";
+    case TokenType::TILDE: return "~";
+    case TokenType::LESS_LESS: return "<<";
+    case TokenType::GREATER_GREATER: return ">>";
     case TokenType::EQUAL: return "=";
+    case TokenType::PLUS_EQUAL: return "+=";
+    case TokenType::MINUS_EQUAL: return "-=";
+    case TokenType::STAR_EQUAL: return "*=";
+    case TokenType::SLASH_EQUAL: return "/=";
+    case TokenType::PERCENT_EQUAL: return "%=";
+    case TokenType::AMPERSAND_EQUAL: return "&=";
+    case TokenType::PIPE_EQUAL: return "|=";
+    case TokenType::CARET_EQUAL: return "^=";
+    case TokenType::LESS_LESS_EQUAL: return "<<=";
+    case TokenType::GREATER_GREATER_EQUAL: return ">>=";
+    case TokenType::ARROW: return "=>";
+    case TokenType::THIN_ARROW: return "->";
+    case TokenType::DOT: return ".";
+    case TokenType::DOT_DOT: return "..";
+    case TokenType::DOT_DOT_DOT: return "...";
+    case TokenType::COLON: return ":";
+    case TokenType::COLON_COLON: return "::";
+    case TokenType::LPAREN: return "(";
+    case TokenType::RPAREN: return ")";
+    case TokenType::LBRACE: return "{";
+    case TokenType::RBRACE: return "}";
+    case TokenType::LBRACKET: return "[";
+    case TokenType::RBRACKET: return "]";
+    case TokenType::SEMICOLON: return ";";
+    case TokenType::COMMA: return ",";
+    case TokenType::AT: return "@";
+    case TokenType::IF: return "if";
+    case TokenType::ELSE: return "else";
+    case TokenType::FOR: return "for";
+    case TokenType::WHILE: return "while";
+    case TokenType::DO: return "do";
+    case TokenType::SWITCH: return "switch";
+    case TokenType::CASE: return "case";
+    case TokenType::DEFAULT: return "default";
+    case TokenType::BREAK: return "break";
+    case TokenType::CONTINUE: return "continue";
+    case TokenType::RETURN: return "return";
+    case TokenType::STRUCT: return "struct";
+    case TokenType::ENUM: return "enum";
+    case TokenType::INTERFACE: return "interface";
+    case TokenType::NAMESPACE: return "namespace";
+    case TokenType::IMPORT: return "import";
+    case TokenType::EXTERN: return "extern";
+    case TokenType::MUT: return "mut";
+    case TokenType::PUBLIC: return "public";
+    case TokenType::PRIVATE: return "private";
+    case TokenType::STATIC: return "static";
+    case TokenType::THIS: return "this";
+    case TokenType::NEW: return "new";
+    case TokenType::IMPL: return "impl";
+    case TokenType::WHERE: return "where";
+    case TokenType::ASYNC: return "async";
+    case TokenType::AWAIT: return "await";
+    case TokenType::YIELD: return "yield";
+    case TokenType::SPAWN: return "spawn";
+    case TokenType::OPERATOR: return "operator";
+    case TokenType::CONST_EXPR: return "constexpr";
+    case TokenType::CONST_EVAL: return "consteval";
+    case TokenType::CONST: return "const";
+    case TokenType::INT: return "int";
+    case TokenType::UINT: return "uint";
+    case TokenType::VOID: return "void";
+    case TokenType::FLOAT: return "float";
+    case TokenType::STRING: return "string";
+    case TokenType::AUTO: return "auto";
+    case TokenType::TRUE: return "true";
+    case TokenType::FALSE: return "false";
+    case TokenType::IDENTIFIER: return "identifier";
+    case TokenType::STRING_LITERAL: return "string_literal";
+    case TokenType::INTEGER_LITERAL: return "integer_literal";
+    case TokenType::FLOAT_LITERAL: return "float_literal";
+    case TokenType::END_OF_FILE: return "EOF";
     default: return "?";
+    }
+}
+
+constexpr std::string tokenTypeToHumanString(const TokenType type)
+{
+    switch (type)
+    {
+    case TokenType::PLUS: return "Plus(+)";
+    case TokenType::MINUS: return "Minus(-)";
+    case TokenType::STAR: return "Star(*)";
+    case TokenType::SLASH: return "Slash(/)";
+    case TokenType::PERCENT: return "Modulo(%)";
+    case TokenType::EQUAL_EQUAL: return "Equal(==)";
+    case TokenType::BANG_EQUAL: return "NotEqual(!=)";
+    case TokenType::LESS: return "LessThan(<)";
+    case TokenType::LESS_EQUAL: return "LessOrEqual(<=)";
+    case TokenType::GREATER: return "GreaterThan(>)";
+    case TokenType::GREATER_EQUAL: return "GreaterOrEqual(>=)";
+    case TokenType::BANG: return "Not(!)";
+    case TokenType::AND_AND: return "LogicalAnd(&&)";
+    case TokenType::OR_OR: return "LogicalOr(||)";
+    case TokenType::AMPERSAND: return "BitwiseAnd(&)";
+    case TokenType::PIPE: return "BitwiseOr(|)";
+    case TokenType::CARET: return "BitwiseXor(^)";
+    case TokenType::TILDE: return "BitwiseNot(~)";
+    case TokenType::LESS_LESS: return "LeftShift(<<)";
+    case TokenType::GREATER_GREATER: return "RightShift(>>)";
+    case TokenType::EQUAL: return "Assign(=)";
+    case TokenType::PLUS_EQUAL: return "PlusAssign(+=)";
+    case TokenType::MINUS_EQUAL: return "MinusAssign(-=)";
+    case TokenType::STAR_EQUAL: return "StarAssign(*=)";
+    case TokenType::SLASH_EQUAL: return "SlashAssign(/=)";
+    case TokenType::PERCENT_EQUAL: return "ModuloAssign(%=)";
+    case TokenType::AMPERSAND_EQUAL: return "AndAssign(&=)";
+    case TokenType::PIPE_EQUAL: return "OrAssign(|=)";
+    case TokenType::CARET_EQUAL: return "XorAssign(^=)";
+    case TokenType::LESS_LESS_EQUAL: return "LeftShiftAssign(<<=)";
+    case TokenType::GREATER_GREATER_EQUAL: return "RightShiftAssign(>>=)";
+    case TokenType::ARROW: return "Arrow(=>)";
+    case TokenType::THIN_ARROW: return "ThinArrow(->)";
+    case TokenType::DOT: return "Dot(.)";
+    case TokenType::DOT_DOT: return "Range(..)";
+    case TokenType::DOT_DOT_DOT: return "Variadics(...)";
+    case TokenType::COLON: return "Colon(:)";
+    case TokenType::COLON_COLON: return "Scope(::)";
+    default: return tokenTypeToString(type);
     }
 }
 
