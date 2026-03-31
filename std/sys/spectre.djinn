@@ -2,6 +2,11 @@ import std::types;
 
 namespace std::sys;
 
+extern "C" {
+    i32 __djinn_terminal_width();
+    i32 __djinn_terminal_height();
+}
+
 struct Spectre {
     const i32 RESET = 0;
     const i32 BOLD = 1;
@@ -30,6 +35,14 @@ struct Spectre {
     const i32 BG_WHITE = 47;
 
     const i32 bufSize = 4096;
+
+    public static i32 width() {
+        return __djinn_terminal_width();
+    }
+
+    public static i32 height() {
+        return __djinn_terminal_height();
+    }
 
     private static i32 escStart(i8* buf, i32 pos) {
         buf[pos] = 27;
@@ -298,10 +311,11 @@ struct Spectre {
     }
 
     public static void rule() {
+        i32 w = Spectre.width();
         i8* buf = i8[512];
         mut i32 pos = 0;
         mut i32 i = 0;
-        while (i < 80) {
+        while (i < w) {
             pos = Spectre.writeBoxH(buf, pos);
             i = i + 1;
         }
@@ -312,7 +326,7 @@ struct Spectre {
 
     public static void ruleTitle(i8* title) {
         i32 titleLen = strlen(title);
-        i32 totalWidth = 80;
+        i32 totalWidth = Spectre.width();
         i32 padding = 2;
         i32 titleSection = titleLen + padding * 2;
         i32 leftDashes = (totalWidth - titleSection) / 2;
@@ -558,5 +572,268 @@ struct Spectre {
             }
         }
         return false;
+    }
+}
+
+struct SpectreTable {
+    const i32 MAX_COLS = 16;
+    const i32 MAX_ROWS = 128;
+    const i32 CELL_WIDTH = 64;
+
+    i8* headers;
+    i8* cells;
+    i8* colWidths;
+    mut i32 numCols;
+    mut i32 numRows;
+    mut i32 headerIdx;
+    mut i32 cellIdx;
+
+    public static SpectreTable create() {
+        i8* h = (i8*)malloc(16 * 64);
+        i8* c = (i8*)malloc(128 * 16 * 64);
+        i8* w = (i8*)malloc(16);
+        memset(h, 0, 16 * 64);
+        memset(c, 0, 128 * 16 * 64);
+        memset(w, 0, 16);
+        SpectreTable t = { .headers = h, .cells = c, .colWidths = w, .numCols = 0, .numRows = 0, .headerIdx = 0, .cellIdx = 0 };
+        return t;
+    }
+
+    public void addHeader(i8* text) {
+        i32 idx = this.headerIdx;
+        if (idx >= MAX_COLS) { return; }
+        i32 offset = idx * CELL_WIDTH;
+        mut i32 len = strlen(text);
+        if (len >= CELL_WIDTH) { len = CELL_WIDTH - 1; }
+        memcpy(this.headers + offset, text, len);
+        this.headers[offset + len] = 0;
+
+        if ((i8)len > this.colWidths[idx]) {
+            this.colWidths[idx] = (i8)len;
+        }
+
+        this.headerIdx = idx + 1;
+        this.numCols = this.headerIdx;
+    }
+
+    public void addRow() {
+        this.numRows = this.numRows + 1;
+        this.cellIdx = 0;
+    }
+
+    public void addCell(i8* text) {
+        i32 col = this.cellIdx;
+        i32 row = this.numRows - 1;
+        if (col >= this.numCols || row < 0) { return; }
+
+        i32 offset = (row * MAX_COLS + col) * CELL_WIDTH;
+        mut i32 len = strlen(text);
+        if (len >= CELL_WIDTH) { len = CELL_WIDTH - 1; }
+        memcpy(this.cells + offset, text, len);
+        this.cells[offset + len] = 0;
+
+        if ((i8)len > this.colWidths[col]) {
+            this.colWidths[col] = (i8)len;
+        }
+
+        this.cellIdx = col + 1;
+    }
+
+    private void renderSeparator(i8* buf) {
+        mut i32 pos = 0;
+        buf[pos] = 43;
+        pos = pos + 1;
+        mut i32 c = 0;
+        while (c < this.numCols) {
+            mut i32 w = (i32)this.colWidths[c] + 2;
+            while (w > 0) {
+                buf[pos] = 45;
+                pos = pos + 1;
+                w = w - 1;
+            }
+            buf[pos] = 43;
+            pos = pos + 1;
+            c = c + 1;
+        }
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    private void renderRow(i8* buf, i8* rowData) {
+        mut i32 pos = 0;
+        buf[pos] = 124;
+        pos = pos + 1;
+        mut i32 c = 0;
+        while (c < this.numCols) {
+            buf[pos] = 32;
+            pos = pos + 1;
+
+            i8* cell = rowData + c * CELL_WIDTH;
+            i32 len = strlen(cell);
+            memcpy(buf + pos, cell, len);
+            pos = pos + len;
+
+            mut i32 pad = (i32)this.colWidths[c] - len;
+            while (pad > 0) {
+                buf[pos] = 32;
+                pos = pos + 1;
+                pad = pad - 1;
+            }
+            buf[pos] = 32;
+            pos = pos + 1;
+            buf[pos] = 124;
+            pos = pos + 1;
+            c = c + 1;
+        }
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public void render() {
+        i8* buf = i8[4096];
+
+        this.renderSeparator(buf);
+        this.renderRow(buf, this.headers);
+        this.renderSeparator(buf);
+
+        mut i32 r = 0;
+        while (r < this.numRows) {
+            i8* rowData = this.cells + r * MAX_COLS * CELL_WIDTH;
+            this.renderRow(buf, rowData);
+            r = r + 1;
+        }
+
+        this.renderSeparator(buf);
+    }
+
+    public void destroy() {
+        __djinn_free(this.headers);
+        __djinn_free(this.cells);
+        __djinn_free(this.colWidths);
+    }
+}
+
+struct SpectreTree {
+    const i32 MAX_NODES = 256;
+    const i32 LABEL_SIZE = 64;
+
+    i8* labels;
+    i8* parentsBuf;
+    i8* depthsBuf;
+    mut i32 count;
+
+    public static SpectreTree create() {
+        i8* l = (i8*)malloc(256 * 64);
+        i8* p = (i8*)malloc(256);
+        i8* d = (i8*)malloc(256);
+        memset(l, 0, 256 * 64);
+        memset(p, 0, 256);
+        memset(d, 0, 256);
+        SpectreTree t = { .labels = l, .parentsBuf = p, .depthsBuf = d, .count = 0 };
+        return t;
+    }
+
+    private i8 encodeParent(i32 parentIdx) {
+        if (parentIdx < 0) { return (i8)255; }
+        return (i8)parentIdx;
+    }
+
+    private i32 decodeParent(i8 val) {
+        if ((u8)val == (u8)255) { return -1; }
+        return (i32)(u8)val;
+    }
+
+    public i32 add(i8* label, i32 parentIdx) {
+        i32 idx = this.count;
+        if (idx >= MAX_NODES) { return -1; }
+
+        i32 offset = idx * LABEL_SIZE;
+        mut i32 len = strlen(label);
+        if (len >= LABEL_SIZE) { len = LABEL_SIZE - 1; }
+        memcpy(this.labels + offset, label, len);
+        this.labels[offset + len] = 0;
+
+        this.parentsBuf[idx] = this.encodeParent(parentIdx);
+
+        if (parentIdx < 0) {
+            this.depthsBuf[idx] = 0;
+        } else {
+            this.depthsBuf[idx] = this.depthsBuf[parentIdx] + 1;
+        }
+
+        this.count = idx + 1;
+        return idx;
+    }
+
+    private bool isLastChild(i32 idx) {
+        i32 myParent = this.decodeParent(this.parentsBuf[idx]);
+        mut i32 j = idx + 1;
+        while (j < this.count) {
+            i32 jParent = this.decodeParent(this.parentsBuf[j]);
+            if (jParent == myParent) {
+                return false;
+            }
+            j = j + 1;
+        }
+        return true;
+    }
+
+    private bool hasChildAtDepth(i32 idx, i32 depth) {
+        mut i32 ancestor = idx;
+        while (ancestor >= 0 && (i32)this.depthsBuf[ancestor] > depth) {
+            ancestor = this.decodeParent(this.parentsBuf[ancestor]);
+        }
+        if (ancestor < 0) { return false; }
+        return !this.isLastChild(ancestor);
+    }
+
+    public void render() {
+        i8* buf = i8[4096];
+
+        mut i32 i = 0;
+        while (i < this.count) {
+            mut i32 pos = 0;
+            i32 depth = (i32)this.depthsBuf[i];
+
+            mut i32 d = 0;
+            while (d < depth) {
+                if (d == depth - 1) {
+                    if (this.isLastChild(i)) {
+                        pos = Spectre.writeText(buf, pos, "  +-- ");
+                    } else {
+                        pos = Spectre.writeText(buf, pos, "  |-- ");
+                    }
+                } else {
+                    if (this.hasChildAtDepth(i, d + 1)) {
+                        pos = Spectre.writeText(buf, pos, "  |   ");
+                    } else {
+                        pos = Spectre.writeText(buf, pos, "      ");
+                    }
+                }
+                d = d + 1;
+            }
+
+            i8* label = this.labels + i * LABEL_SIZE;
+            if (depth == 0) {
+                pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+            }
+            pos = Spectre.writeText(buf, pos, label);
+            if (depth == 0) {
+                pos = Spectre.writeReset(buf, pos);
+            }
+            buf[pos] = 10;
+            pos = pos + 1;
+            write(1, buf, pos);
+
+            i = i + 1;
+        }
+    }
+
+    public void destroy() {
+        free(this.labels);
+        free(this.parentsBuf);
+        free(this.depthsBuf);
     }
 }

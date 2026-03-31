@@ -231,6 +231,18 @@ struct GeneratorScope
         cleanupList.push_back({varName, alloca});
     }
 
+    void unregister_cleanup(const std::string& varName)
+    {
+        cleanupList.erase(
+            std::remove_if(cleanupList.begin(), cleanupList.end(),
+                           [&](const CleanupEntry& e) { return e.varName == varName; }),
+            cleanupList.end());
+        if (parent)
+        {
+            parent->unregister_cleanup(varName);
+        }
+    }
+
     std::unordered_map<std::string, llvm::AllocaInst*> namedValues;
     std::unordered_map<std::string, std::string> variableStructTypes;
     std::unordered_map<std::string, llvm::Type*> variablePointeeTypes;

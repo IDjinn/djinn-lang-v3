@@ -280,6 +280,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #endif
         }
 
+        LOG_DEBUG("exit code %d", programReturnCode);
         return {.returnCode = programReturnCode, .diagnostics = diagnostics.get_diagnostics()};
     }
     catch (const CompileError& e)
@@ -522,6 +523,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 #endif
         }
 
+        LOG_DEBUG("exit code %d", programReturnCode);
         return makeResult(programReturnCode, std::stacktrace::current());
     }
     catch (const CompileError& e)

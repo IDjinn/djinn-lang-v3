@@ -78,6 +78,12 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
             }
         }
 
+        // If returning a variable, exclude it from RAII cleanup (ownership transfers to caller)
+        if (const auto* ident = dynamic_cast<const Identifier*>(stmt.value.get()))
+        {
+            currentScope->unregister_cleanup(ident->name());
+        }
+
         auto val = generate_expression(*stmt.value);
         llvm::Type* returnType = currentFunction->getReturnType();
         // Load struct from alloca for return (e.g., string literal returning str)

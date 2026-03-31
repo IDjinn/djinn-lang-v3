@@ -19,6 +19,7 @@ Logger* logger;
 #include <sched.h>
 #include <time.h>
 #include <netinet/tcp.h>
+#include <sys/ioctl.h>
 #endif
 
 // #define DJINN_ENABLE_TRACE
@@ -1507,4 +1508,34 @@ int64_t __djinn_console_read_line(char* buf, int64_t max, void* coro)
 {
     if (!buf || max <= 0) return 0;
     return __djinn_async_read(0, buf, max, coro);
+}
+
+int32_t __djinn_terminal_width(void)
+{
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    return 80;
+#else
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0)
+        return w.ws_col;
+    return 80;
+#endif
+}
+
+int32_t __djinn_terminal_height(void)
+{
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    return 24;
+#else
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 0)
+        return w.ws_row;
+    return 24;
+#endif
 }

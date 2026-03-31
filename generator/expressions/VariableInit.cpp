@@ -219,9 +219,17 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
 
     auto* alloca = builder->CreateAlloca(type, nullptr, expr.name.token_name);
 
-    // Check if this primitive type has an impl block
+    // Resolve struct type name for method dispatch
     std::string structTypeName;
-    if (expr.type.kind != TypeKind::STRUCT && expr.type.kind != TypeKind::POINTER && expr.type.kind != TypeKind::ARRAY)
+    if (expr.type.kind == TypeKind::STRUCT)
+    {
+        structTypeName = currentScope->resolve_alias(expr.type.structName);
+        if (expr.type.hasGenericArgs())
+        {
+            structTypeName = Mangler::mangle_generic_struct(structTypeName, expr.type.genericArgs);
+        }
+    }
+    else if (expr.type.kind != TypeKind::POINTER && expr.type.kind != TypeKind::ARRAY)
     {
         std::string primName = get_primitive_type_name(type);
         if (!primName.empty() && currentScope->lookup_struct(primName))
