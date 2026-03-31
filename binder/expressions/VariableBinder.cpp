@@ -65,7 +65,16 @@ std::shared_ptr<Symbol> Binder::bindVariableInit(const VariableInit& init)
         }
     }
 
-    const auto symbol = std::make_shared<Symbol>(SymbolKind::Variable, init.name.token_name, init.type,
+    Type resolvedType = init.type;
+    if (resolvedType.kind == TypeKind::AUTO && init.value)
+    {
+        if (auto inferred = inferExpressionType(*init.value))
+        {
+            resolvedType = *inferred;
+        }
+    }
+
+    const auto symbol = std::make_shared<Symbol>(SymbolKind::Variable, init.name.token_name, resolvedType,
                                                  SourceLocation{},
                                                  init.isMutable);
     symbol->isInitialized = true;
@@ -76,7 +85,7 @@ std::shared_ptr<Symbol> Binder::bindVariableInit(const VariableInit& init)
     }
 
     // Track ownership for the new variable
-    trackVariableDefinition(init.name.token_name, init.type, init.name.location);
+    trackVariableDefinition(init.name.token_name, resolvedType, init.name.location);
 
     return symbol;
 }

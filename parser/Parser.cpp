@@ -167,7 +167,7 @@ Token& Parser::expect(const std::string& message, const TokenType type)
 
     const auto& token = previous();
     const uint32_t col = token.position.column + token.value.length();
-    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message+ ", recieved '" + tokenTypeToHumanString(token.type) + "'",
+    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message+ ", recieved '" + tokenTypeToHumanString(peek().type) + "'",
                  SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
@@ -179,7 +179,7 @@ Token& Parser::expect(const std::string& message, const std::vector<TokenType>& 
     }
     const auto& token = previous();
     const uint32_t col = token.position.column + token.value.length();
-    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message+ ", recieved '" + tokenTypeToHumanString(token.type) + "'",
+    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, message+ ", recieved '" + tokenTypeToHumanString(peek().type) + "'",
                  SourceLocation(token.position.fileId, token.position.line, col, 1));
 }
 
