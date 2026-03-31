@@ -1,0 +1,416 @@
+import std::types;
+
+namespace std::sys;
+
+struct Spectre {
+    const i32 RESET = 0;
+    const i32 BOLD = 1;
+    const i32 DIM = 2;
+    const i32 ITALIC = 3;
+    const i32 UNDERLINE = 4;
+    const i32 BLINK = 5;
+    const i32 STRIKETHROUGH = 9;
+
+    const i32 FG_BLACK = 30;
+    const i32 FG_RED = 31;
+    const i32 FG_GREEN = 32;
+    const i32 FG_YELLOW = 33;
+    const i32 FG_BLUE = 34;
+    const i32 FG_MAGENTA = 35;
+    const i32 FG_CYAN = 36;
+    const i32 FG_WHITE = 37;
+
+    const i32 BG_BLACK = 40;
+    const i32 BG_RED = 41;
+    const i32 BG_GREEN = 42;
+    const i32 BG_YELLOW = 43;
+    const i32 BG_BLUE = 44;
+    const i32 BG_MAGENTA = 45;
+    const i32 BG_CYAN = 46;
+    const i32 BG_WHITE = 47;
+
+    const i32 bufSize = 4096;
+
+    private static i32 escStart(i8* buf, i32 pos) {
+        buf[pos] = 27;
+        buf[pos + 1] = 91;
+        return pos + 2;
+    }
+
+    private static i32 writeCode(i8* buf, i32 pos, i32 code) {
+        mut i32 p = pos;
+        p = Spectre.escStart(buf, p);
+        i32 len = snprintf(buf + p, 16, "%d", code);
+        p = p + len;
+        buf[p] = 109;
+        return p + 1;
+    }
+
+    private static i32 writeReset(i8* buf, i32 pos) {
+        return Spectre.writeCode(buf, pos, 0);
+    }
+
+    private static i32 writeCodes2(i8* buf, i32 pos, i32 c1, i32 c2) {
+        mut i32 p = pos;
+        p = Spectre.escStart(buf, p);
+        i32 len = snprintf(buf + p, 16, "%d;%d", c1, c2);
+        p = p + len;
+        buf[p] = 109;
+        return p + 1;
+    }
+
+    private static i32 writeText(i8* buf, i32 pos, i8* text) {
+        i32 len = strlen(text);
+        memcpy(buf + pos, text, len);
+        return pos + len;
+    }
+
+    public static void styled(i8* text, i32 style) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.writeCode(buf, pos, style);
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        write(1, buf, pos);
+    }
+
+    public static void styled2(i8* text, i32 s1, i32 s2) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.writeCodes2(buf, pos, s1, s2);
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        write(1, buf, pos);
+    }
+
+    public static void styledLn(i8* text, i32 style) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.writeCode(buf, pos, style);
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void styled2Ln(i8* text, i32 s1, i32 s2) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.writeCodes2(buf, pos, s1, s2);
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void color256(i8* text, u8 color) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.escStart(buf, pos);
+        i32 len = snprintf(buf + pos, 16, "38;5;%d", (i32)color);
+        pos = pos + len;
+        buf[pos] = 109;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        write(1, buf, pos);
+    }
+
+    public static void color256bg(i8* text, u8 color) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.escStart(buf, pos);
+        i32 len = snprintf(buf + pos, 16, "48;5;%d", (i32)color);
+        pos = pos + len;
+        buf[pos] = 109;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        write(1, buf, pos);
+    }
+
+    public static void rgb(i8* text, u8 r, u8 g, u8 b) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.escStart(buf, pos);
+        i32 len = snprintf(buf + pos, 24, "38;2;%d;%d;%d", (i32)r, (i32)g, (i32)b);
+        pos = pos + len;
+        buf[pos] = 109;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        write(1, buf, pos);
+    }
+
+    public static void rgbBg(i8* text, u8 r, u8 g, u8 b) {
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        pos = Spectre.escStart(buf, pos);
+        i32 len = snprintf(buf + pos, 24, "48;2;%d;%d;%d", (i32)r, (i32)g, (i32)b);
+        pos = pos + len;
+        buf[pos] = 109;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, text);
+        pos = Spectre.writeReset(buf, pos);
+        write(1, buf, pos);
+    }
+
+    public static void reset() {
+        i8* buf = i8[8];
+        i32 pos = Spectre.writeReset(buf, 0);
+        write(1, buf, pos);
+    }
+
+    private static bool tagMatch(i8* tag, i32 tagLen, i8* keyword) {
+        i32 kwLen = strlen(keyword);
+        if (tagLen != kwLen) { return false; }
+        mut i32 i = 0;
+        while (i < tagLen) {
+            if (tag[i] != keyword[i]) { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    private static i32 tagToCode(i8* tag, i32 tagLen) {
+        if (Spectre.tagMatch(tag, tagLen, "bold")) { return 1; }
+        if (Spectre.tagMatch(tag, tagLen, "dim")) { return 2; }
+        if (Spectre.tagMatch(tag, tagLen, "italic")) { return 3; }
+        if (Spectre.tagMatch(tag, tagLen, "underline")) { return 4; }
+        if (Spectre.tagMatch(tag, tagLen, "blink")) { return 5; }
+        if (Spectre.tagMatch(tag, tagLen, "strikethrough")) { return 9; }
+        if (Spectre.tagMatch(tag, tagLen, "black")) { return 30; }
+        if (Spectre.tagMatch(tag, tagLen, "red")) { return 31; }
+        if (Spectre.tagMatch(tag, tagLen, "green")) { return 32; }
+        if (Spectre.tagMatch(tag, tagLen, "yellow")) { return 33; }
+        if (Spectre.tagMatch(tag, tagLen, "blue")) { return 34; }
+        if (Spectre.tagMatch(tag, tagLen, "magenta")) { return 35; }
+        if (Spectre.tagMatch(tag, tagLen, "cyan")) { return 36; }
+        if (Spectre.tagMatch(tag, tagLen, "white")) { return 37; }
+        if (Spectre.tagMatch(tag, tagLen, "on_black")) { return 40; }
+        if (Spectre.tagMatch(tag, tagLen, "on_red")) { return 41; }
+        if (Spectre.tagMatch(tag, tagLen, "on_green")) { return 42; }
+        if (Spectre.tagMatch(tag, tagLen, "on_yellow")) { return 43; }
+        if (Spectre.tagMatch(tag, tagLen, "on_blue")) { return 44; }
+        if (Spectre.tagMatch(tag, tagLen, "on_magenta")) { return 45; }
+        if (Spectre.tagMatch(tag, tagLen, "on_cyan")) { return 46; }
+        if (Spectre.tagMatch(tag, tagLen, "on_white")) { return 47; }
+        return -1;
+    }
+
+    public static void markup(i8* text) {
+        i32 textLen = strlen(text);
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+        mut i32 i = 0;
+
+        while (i < textLen) {
+            if (text[i] == 91) {
+                i = i + 1;
+
+                if (i < textLen && text[i] == 47) {
+                    while (i < textLen && text[i] != 93) {
+                        i = i + 1;
+                    }
+                    if (i < textLen) { i = i + 1; }
+                    pos = Spectre.writeReset(buf, pos);
+                } else {
+                    i8* tagStart = text + i;
+                    mut i32 tagTotalLen = 0;
+                    while (i < textLen && text[i] != 93) {
+                        tagTotalLen = tagTotalLen + 1;
+                        i = i + 1;
+                    }
+                    if (i < textLen) { i = i + 1; }
+
+                    mut i32 tpos = 0;
+                    while (tpos < tagTotalLen) {
+                        while (tpos < tagTotalLen && tagStart[tpos] == 32) {
+                            tpos = tpos + 1;
+                        }
+                        i32 wordStart = tpos;
+                        while (tpos < tagTotalLen && tagStart[tpos] != 32) {
+                            tpos = tpos + 1;
+                        }
+                        i32 wordLen = tpos - wordStart;
+                        if (wordLen > 0) {
+                            i32 code = Spectre.tagToCode(tagStart + wordStart, wordLen);
+                            if (code >= 0) {
+                                pos = Spectre.writeCode(buf, pos, code);
+                            }
+                        }
+                    }
+                }
+            } else {
+                buf[pos] = text[i];
+                pos = pos + 1;
+                i = i + 1;
+            }
+
+            if (pos >= bufSize - 64) {
+                write(1, buf, pos);
+                pos = 0;
+            }
+        }
+
+        if (pos > 0) {
+            write(1, buf, pos);
+        }
+    }
+
+    public static void markupLine(i8* text) {
+        Spectre.markup(text);
+        i8* nl = i8[1];
+        nl[0] = 10;
+        write(1, nl, 1);
+    }
+
+    private static i32 writeBoxH(i8* buf, i32 pos) {
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x94;
+        buf[pos + 2] = (i8)0x80;
+        return pos + 3;
+    }
+
+    private static i32 writeBoxV(i8* buf, i32 pos) {
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x94;
+        buf[pos + 2] = (i8)0x82;
+        return pos + 3;
+    }
+
+    private static i32 writeBoxTL(i8* buf, i32 pos) {
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x94;
+        buf[pos + 2] = (i8)0x8C;
+        return pos + 3;
+    }
+
+    private static i32 writeBoxTR(i8* buf, i32 pos) {
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x94;
+        buf[pos + 2] = (i8)0x90;
+        return pos + 3;
+    }
+
+    private static i32 writeBoxBL(i8* buf, i32 pos) {
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x94;
+        buf[pos + 2] = (i8)0x94;
+        return pos + 3;
+    }
+
+    private static i32 writeBoxBR(i8* buf, i32 pos) {
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x94;
+        buf[pos + 2] = (i8)0x98;
+        return pos + 3;
+    }
+
+    public static void rule() {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        mut i32 i = 0;
+        while (i < 80) {
+            pos = Spectre.writeBoxH(buf, pos);
+            i = i + 1;
+        }
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void ruleTitle(i8* title) {
+        i32 titleLen = strlen(title);
+        i32 totalWidth = 80;
+        i32 padding = 2;
+        i32 titleSection = titleLen + padding * 2;
+        i32 leftDashes = (totalWidth - titleSection) / 2;
+        i32 rightDashes = totalWidth - titleSection - leftDashes;
+
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+
+        mut i32 i = 0;
+        while (i < leftDashes) {
+            pos = Spectre.writeBoxH(buf, pos);
+            i = i + 1;
+        }
+
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, title);
+        buf[pos] = 32;
+        pos = pos + 1;
+
+        i = 0;
+        while (i < rightDashes) {
+            pos = Spectre.writeBoxH(buf, pos);
+            i = i + 1;
+        }
+
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void panel(i8* content, i8* title) {
+        i32 contentLen = strlen(content);
+        i32 titleLen = strlen(title);
+        mut i32 innerWidth = contentLen;
+        if (titleLen > innerWidth) {
+            innerWidth = titleLen;
+        }
+        innerWidth = innerWidth + 2;
+
+        i8* buf = i8[bufSize];
+        mut i32 pos = 0;
+
+        pos = Spectre.writeBoxTL(buf, pos);
+        pos = Spectre.writeBoxH(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, title);
+        buf[pos] = 32;
+        pos = pos + 1;
+        mut i32 remaining = innerWidth - titleLen - 2;
+        while (remaining > 0) {
+            pos = Spectre.writeBoxH(buf, pos);
+            remaining = remaining - 1;
+        }
+        pos = Spectre.writeBoxH(buf, pos);
+        pos = Spectre.writeBoxTR(buf, pos);
+        buf[pos] = 10;
+        pos = pos + 1;
+
+        pos = Spectre.writeBoxV(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, content);
+        remaining = innerWidth - contentLen;
+        while (remaining > 0) {
+            buf[pos] = 32;
+            pos = pos + 1;
+            remaining = remaining - 1;
+        }
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeBoxV(buf, pos);
+        buf[pos] = 10;
+        pos = pos + 1;
+
+        pos = Spectre.writeBoxBL(buf, pos);
+        mut i32 j = 0;
+        while (j < innerWidth + 2) {
+            pos = Spectre.writeBoxH(buf, pos);
+            j = j + 1;
+        }
+        pos = Spectre.writeBoxBR(buf, pos);
+        buf[pos] = 10;
+        pos = pos + 1;
+
+        write(1, buf, pos);
+    }
+}
