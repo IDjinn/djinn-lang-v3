@@ -70,6 +70,30 @@ impl Hashable for i8, i16, i32, u8, u16, u32 {
     }
 }
 
+impl Hashable for f32 {
+    [force-inline] u64 hash() {
+        // Reinterpret f32 bits as u32 via pointer cast, then hash as integer
+        f32* p = &this;
+        u32* ip = (u32*)p;
+        mut u64 x = (u64)*ip + 0x9e3779b97f4a7c15;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
+        return x ^ (x >> 31);
+    }
+}
+
+impl Hashable for f64 {
+    [force-inline] u64 hash() {
+        // Reinterpret f64 bits as u64 via pointer cast, then hash
+        f64* p = &this;
+        u64* ip = (u64*)p;
+        mut u64 x = *ip + 0x9e3779b97f4a7c15;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
+        return x ^ (x >> 31);
+    }
+}
+
 impl Hashable, Equatable for i8* {
     u64 hash() {
         return 0;
@@ -259,3 +283,19 @@ impl u64 {
 }
 
 // impl u128 { const u128 MAX_VALUE = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; }
+
+impl f32 {
+    const f32 MAX_VALUE = 3.40282347e+38;
+    const f32 MIN_VALUE = -3.40282347e+38;
+    const f32 MIN_POSITIVE = 1.17549435e-38;
+    const f32 EPSILON = 1.19209290e-7;
+    // TODO: INFINITY and NAN require intrinsic support (special bit patterns, not literals)
+}
+
+impl f64 {
+    const f64 MAX_VALUE = 1.7976931348623157e+308;
+    const f64 MIN_VALUE = -1.7976931348623157e+308;
+    const f64 MIN_POSITIVE = 2.2250738585072014e-308;
+    const f64 EPSILON = 2.2204460492503131e-16;
+    // TODO: INFINITY and NAN require intrinsic support
+}

@@ -260,7 +260,16 @@ void BytecodeCompiler::compileIntegerLiteral(const IntegerLiteral& expr)
 
 void BytecodeCompiler::compileFloatLiteral(const FloatLiteral& expr)
 {
-    emit(OpCode::PUSH_FLOAT, addFloatConstant(std::stod(expr.value)));
+    try
+    {
+        double val = std::stod(expr.value);
+        emit(OpCode::PUSH_FLOAT, addFloatConstant(val));
+    }
+    catch (const std::out_of_range&)
+    {
+        LOG_DEBUG("[consteval] float literal out of range: %s", expr.value.c_str());
+        _hadError = true;
+    }
 }
 
 void BytecodeCompiler::compileBooleanLiteral(const BooleanLiteral& expr)
