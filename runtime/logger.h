@@ -1,6 +1,7 @@
 //
 // Created by lucas on 07/03/2026.
 //
+#pragma once
 
 #ifndef DJINN_LOGGER_H
 #define DJINN_LOGGER_H

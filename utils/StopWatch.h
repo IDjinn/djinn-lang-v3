@@ -8,35 +8,56 @@
 #include <chrono>
 #include <string>
 #include "Logger.h"
+#include "../runtime/logger.h"
 
-namespace utils {
-    class StopWatch {
+#define INIT_STOPWATCH_WITH_LEVEL(label, log_level) utils::StopWatch((label), __FILE__, __LINE__, (log_level))
+#define INIT_STOPWATCH(label) INIT_STOPWATCH_WITH_LEVEL((label), (logger::Level::DEBUG))
+
+namespace utils
+{
+    class StopWatch
+    {
         using clock = std::chrono::high_resolution_clock;
         using TimePoint = clock::time_point;
+
+        logger::Level _log_level = logger::Level::DEBUG;
+        std::string file;
+        uint32_t line;
 
         std::string _label;
         TimePoint _start;
 
     public:
-        explicit StopWatch(std::string label) : _label(std::move(label)), _start(clock::now()) {
+        explicit StopWatch(std::string label, const std::string& file, const uint32_t line,
+                           const logger::Level logger_level) :
+            _log_level(logger_level),
+            file(file),
+            line(line),
+            _label(std::move(label)),
+            _start(clock::now())
+        {
         }
 
-        ~StopWatch() {
+        ~StopWatch()
+        {
             dump();
         }
 
-        void dump() const {
+        void dump() const
+        {
             const auto end = clock::now();
             const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count();
-            LOG_DEBUG("%s took %lldms", _label.c_str(), ms);
+            logger::log(_log_level, file.c_str(), static_cast<int>(line), "%s took %lldms", _label.c_str(), ms);
         }
 
-        template<typename Duration = std::chrono::milliseconds>
-        Duration elapsed() const {
+        template <typename Duration = std::chrono::milliseconds>
+        Duration elapsed() const
+        {
             return std::chrono::duration_cast<Duration>(clock::now() - _start).count();
         }
 
-        void reset() {
+        void reset()
+        {
             _start = clock::now();
         }
     };

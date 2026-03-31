@@ -24,9 +24,6 @@
 #define DJINN_CLANG_PATH "clang"
 #endif
 
-// NOTE: -fsanitize=address is incompatible with LLVM coroutines (false positives
-// on coro frame access after resume). Use __djinn_malloc/__djinn_free runtime
-// tracing instead for memory debugging.
 #define CLANG_ARGS "-O3 -flto -fuse-ld=lld"
 
 const std::string preludes[] = {
@@ -43,13 +40,11 @@ const std::filesystem::path runtimePaths[] = {
 };
 
 
-// Resolve std library path: try the given path first, then try relative to this source file
 static std::filesystem::path resolve_std_path(const std::filesystem::path& given)
 {
     namespace fs = std::filesystem;
     if (fs::exists(given)) return given;
 
-    // Fallback: resolve relative to this source file's directory (project root)
     const fs::path thisFile(__FILE__);
     const auto projectRoot = thisFile.parent_path();
     const auto candidate = projectRoot / "std";
@@ -61,13 +56,12 @@ static std::filesystem::path resolve_std_path(const std::filesystem::path& given
 
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
 {
-    utils::StopWatch global_watch("build time");
+    auto global_watch = INIT_STOPWATCH_WITH_LEVEL("build time", logger::Level::INFO);
     namespace fs = std::filesystem;
     assert(!options.outputDirectory.empty() && "You need give output directory!");
 
     fs::create_directories(options.outputDirectory);
 
-    // Write runtime.properties for the compiled binary
     {
         std::ofstream props(options.outputDirectory + "/runtime.properties");
         props << "logger.level=" << options.runtimeProperties.loggerLevel << "\n";
@@ -76,7 +70,6 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
     DiagnosticEngine diagnostics;
     std::vector<std::shared_ptr<Program>> programs;
 
-    // Prelude type names (from std::types) available to all parsers
     std::vector<std::string> preludeTypeNames;
     std::vector<std::string> stdTypeNames;
 
@@ -98,13 +91,11 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         Parser parser(tokens, diagnostics);
 
-        // Register prelude types for std lib and user code parsers
         if (registerPrelude)
         {
             for (const auto& name : preludeTypeNames)
                 parser.registerKnownType(name);
         }
-        // Register all std types for user code parsers
         if (isUserCode)
         {
             for (const auto& name : stdTypeNames)
@@ -125,16 +116,13 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         programs.emplace_back(std::move(program));
     };
 
-    // Resolve std path once, canonicalize for comparison
     const auto stdLibPath = resolve_std_path(options.stdLibPath);
     const auto stdCanonical = fs::exists(stdLibPath) ? fs::canonical(stdLibPath) : fs::path{};
 
-    // Track parsed files to avoid duplicates
     std::set<fs::path> parsedFiles;
 
     try
     {
-        // ── Phase 1: Prelude (std/types/types.djinn) ──
         if (options.includeStd && !stdCanonical.empty())
         {
             for (const auto& prelude : preludes)
@@ -163,7 +151,6 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 }
             }
 
-            // ── Phase 2: Remaining std library files ──
             for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
             {
                 try
@@ -184,14 +171,12 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             }
         }
 
-        // Collect all std library type names for user code parsers
         for (const auto& prog : programs)
         {
             for (const auto& s : prog->structs) stdTypeNames.push_back(s->name.token_name);
             for (const auto& e : prog->enums) stdTypeNames.push_back(e->name.token_name);
         }
 
-        // ── Phase 3: User code (skip anything already parsed or inside std) ──
         if (fs::exists(path))
         {
             for (const auto& entry : fs::recursive_directory_iterator(path))
@@ -204,7 +189,6 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                     auto canonical = fs::canonical(entry.path());
                     if (parsedFiles.contains(canonical)) continue;
 
-                    // Skip files inside std library directory
                     if (!stdCanonical.empty())
                     {
                         auto rel = canonical.lexically_relative(stdCanonical);
@@ -253,9 +237,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         const auto out_file_path = options.outputDirectory + "\\" + options.outputFileName;
         const std::string llPath = out_file_path + ".ll";
 
-        // Run coroutine lowering + optional optimization in a single pass
         {
-            utils::StopWatch pass_stop_watch("run passes");
+            auto pass_stop_watch = INIT_STOPWATCH("run passes");
             generator.run_passes(options.optimize);
         }
 
@@ -272,7 +255,6 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #endif
         if (options.generateBinary)
         {
-            // Link runtime sources + LLVM IR into a single executable
             std::string runtimeArg;
             for (auto& runtime_path : runtimePaths)
             {
@@ -310,6 +292,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
 CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptions& options)
 {
+    auto global_watch = INIT_STOPWATCH_WITH_LEVEL("build time", logger::Level::INFO);
     namespace fs = std::filesystem;
 
     DiagnosticEngine diagnostics;
@@ -369,7 +352,6 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                     Parser parser(tokens, diagnostics);
                     auto program = parser.parse(file_id);
 
-                    // Collect prelude type names for subsequent parsers
                     for (const auto& s : program->structs) preludeTypeNames.push_back(s->name.token_name);
                     for (const auto& e : program->enums) preludeTypeNames.push_back(e->name.token_name);
 
@@ -395,7 +377,6 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                     auto canonical = fs::canonical(entry.path());
                     if (parsedFiles.contains(canonical)) continue;
 
-                    // Skip prelude — already parsed
                     // if (fs::equivalent(entry.path(), preludePath)) continue;
 
                     std::ifstream file(entry.path());
@@ -432,7 +413,6 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             }
         }
 
-        // Parse user source
         diagnostics.registerSource("main.djinn", source);
 
         Lexer lexer(source);
@@ -440,7 +420,6 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         Parser parser(tokens, diagnostics);
 
-        // Pre-register prelude + std library types so parser recognizes them
         for (const auto& name : preludeTypeNames)
             parser.registerKnownType(name);
         for (const auto& prog : programs)
@@ -501,9 +480,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         "";
 #endif
 
-        // Run coroutine lowering + optional optimization in a single pass
         {
-            utils::StopWatch pass_stop_watch("run passes");
+            auto pass_stop_watch = INIT_STOPWATCH("run passes");
             generator.run_passes(options.optimize);
         }
 
@@ -517,7 +495,6 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             return makeResult(0, std::stacktrace::current());
         }
 
-        // Always link runtime (async by default — runtime needed for memory tracing and async infra)
         std::string runtimeArg;
         for (const auto& runtime_path : runtimePaths)
         {
