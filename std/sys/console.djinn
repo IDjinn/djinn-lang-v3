@@ -48,7 +48,9 @@ struct Console {
 
 
   public static void writeSync(str format, ...args) {
-      i8* buf = (i8*)__djinn_malloc(8192);
+      i32 bufSize = 8192;
+      i32 flushAt = bufSize - 64;
+      i8* buf = (i8*)__djinn_malloc(bufSize);
       mut i32 bpos = 0;
       mut size pos = 0u;
 
@@ -73,11 +75,12 @@ struct Console {
                       // int
                       if (tsize <= 4) {
                           i32* ip = (i32*)arg.data;
-                          i8  val =  itoa(*ip, buf + bpos, 10);
-                          bpos = bpos + val;
+                          i8* tmp = itoa(*ip, buf + bpos, 10);
+                          i32 len = strlen(buf + bpos);
+                          bpos = bpos + len;
                       } else {
                           i64* lp = (i64*)arg.data;
-                          i32 len =snprintf(buf + bpos, 32, "%lld", *lp);
+                          i32 len = snprintf(buf + bpos, 32, "%lld", *lp);
                           bpos = bpos + len;
                       }
                   } else if (kind == 1) {
@@ -95,8 +98,23 @@ struct Console {
                       // pointer (i8*)
                       i8* s = (i8*)arg.data;
                       i32 slen = strlen(s);
-                      memcpy(buf + bpos, s, slen);
-                      bpos = bpos + slen;
+                      // string maior que o buffer: flush atual + write direto
+                      if (slen > flushAt) {
+                          if (bpos > 0) {
+                              write(1, buf, bpos);
+                              bpos = 0;
+                          }
+                          write(1, s, slen);
+                      } else {
+                          memcpy(buf + bpos, s, slen);
+                          bpos = bpos + slen;
+                      }
+                  }
+
+                  // flush se buffer esta quase cheio
+                  if (bpos >= flushAt) {
+                      write(1, buf, bpos);
+                      bpos = 0;
                   }
               }
           } else {
@@ -121,7 +139,9 @@ struct Console {
 
   public static async i64 write(str format, ...args) {
       i32 stdout = 1;
-      i8* buf = (i8*)__djinn_malloc(8192);
+      i32 bufSize = 8192;
+      i32 flushAt = bufSize - 64;
+      i8* buf = (i8*)__djinn_malloc(bufSize);
       mut i32 bpos = 0;
       mut size pos = 0u;
       void* handle = std::builtin::coro.handle();
@@ -147,18 +167,19 @@ struct Console {
                       // int
                       if (tsize <= 4) {
                           i32* ip = (i32*)arg.data;
-                          i8 ret = itoa(*ip, buf + bpos, 10);
-                          bpos = bpos + ret;
+                          i8* tmp = itoa(*ip, buf + bpos, 10);
+                          i32 len = strlen(buf + bpos);
+                          bpos = bpos + len;
                       } else {
                           i64* lp = (i64*)arg.data;
-                          i32 len =snprintf(buf + bpos, 32, "%lld", *lp);
+                          i32 len = snprintf(buf + bpos, 32, "%lld", *lp);
                           bpos = bpos + len;
                       }
                   } else if (kind == 1) {
                       // float
                       if (tsize <= 4) {
                           f32* fp = (f32*)arg.data;
-                          i32 len =snprintf(buf + bpos, 32, "%g", *fp);
+                          i32 len = snprintf(buf + bpos, 32, "%g", *fp);
                           bpos = bpos + len;
                       } else {
                           f64* dp = (f64*)arg.data;
@@ -169,8 +190,29 @@ struct Console {
                       // pointer (i8*)
                       i8* s = (i8*)arg.data;
                       i32 slen = strlen(s);
-                      memcpy(buf + bpos, s, slen);
-                      bpos = bpos + slen;
+                      // string maior que o buffer: flush atual + write direto
+                      if (slen > flushAt) {
+                          if (bpos > 0) {
+                              i64 bpos64 = (i64)bpos;
+                              __djinn_async_write(stdout, buf, bpos64, handle);
+                              std::builtin::coro.suspend();
+                              bpos = 0;
+                          }
+                          i64 slen64 = (i64)slen;
+                          __djinn_async_write(stdout, s, slen64, handle);
+                          std::builtin::coro.suspend();
+                      } else {
+                          memcpy(buf + bpos, s, slen);
+                          bpos = bpos + slen;
+                      }
+                  }
+
+                  // flush se buffer esta quase cheio
+                  if (bpos >= flushAt) {
+                      i64 bpos64 = (i64)bpos;
+                      __djinn_async_write(stdout, buf, bpos64, handle);
+                      std::builtin::coro.suspend();
+                      bpos = 0;
                   }
               }
           } else {
