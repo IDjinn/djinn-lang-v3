@@ -44,5 +44,12 @@ llvm::Value* Generator::generate_identifier(const Identifier& expr) const
         }
     }
 
+    // Check constexpr constants
+    if (auto constVal = constEvaluator.lookupConstant(expr.identifier.token_name))
+    {
+        llvm::Constant* llvmConst = const_value_to_llvm(*constVal);
+        if (llvmConst) return llvmConst;
+    }
+
     throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + expr.identifier.token_name);
 }

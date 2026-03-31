@@ -686,6 +686,27 @@ struct ImplDeclaration : Location
     }
 };
 
+// Global constexpr variable: constexpr i32 SIZE = 1024;
+struct ConstExprDeclaration : Location
+{
+    Type type;
+    SourceIdentifier name;
+    std::unique_ptr<Expression> value;
+
+    ConstExprDeclaration(Type type, SourceIdentifier name, std::unique_ptr<Expression> value)
+        : type(std::move(type)), name(std::move(name)), value(std::move(value))
+    {
+    }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "ConstExprDeclaration(" << name.token_name << ": " << type << " = ";
+        value->print(os, 0);
+        os << ")";
+    }
+};
+
 struct Program : Location
 {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -701,6 +722,7 @@ struct Program : Location
     std::vector<std::unique_ptr<NamespaceDeclaration>> namespaces;
     std::vector<std::unique_ptr<EnumDeclaration>> enums;
     std::vector<std::unique_ptr<ImplDeclaration>> impls;
+    std::vector<std::unique_ptr<ConstExprDeclaration>> constExprs;
 
     explicit Program(const std::string& name)
     {

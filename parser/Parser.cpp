@@ -896,16 +896,69 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             else if (check(TokenType::CONST_EVAL))
             {
                 advance(); // consume 'consteval'
-                auto func = parse_function();
-                func->constEval = true;
-                program->functions.push_back(std::move(func));
+
+                auto type = parse_type();
+                const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
+
+                if (check(TokenType::LPAREN))
+                {
+                    // consteval function
+                    pushScope();
+                    auto params = parse_parameters();
+                    for (const auto& param : params)
+                    {
+                        currentScope->define_variable(param.name.token_name, *param.type);
+                    }
+                    auto body = parse_block();
+                    popScope();
+                    auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
+                                                                      params, std::move(body));
+                    func->constEval = true;
+                    program->functions.push_back(std::move(func));
+                }
+                else
+                {
+                    // consteval variable: consteval i32 X = expr;
+                    expect("Esperado '=' para consteval", TokenType::EQUAL);
+                    auto value = parse_expression();
+                    expect("Esperado ';'", TokenType::SEMICOLON);
+                    program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
+                        *type, makeSourceIdentifier(nameToken), std::move(value)));
+                }
             }
             else if (check(TokenType::CONST_EXPR))
             {
                 advance(); // consume 'constexpr'
-                auto func = parse_function();
-                func->constExpr = true;
-                program->functions.push_back(std::move(func));
+
+                // Lookahead: parse type + name, then check if '(' (function) or '=' (variable)
+                auto type = parse_type();
+                const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
+
+                if (check(TokenType::LPAREN))
+                {
+                    // constexpr function
+                    pushScope();
+                    auto params = parse_parameters();
+                    for (const auto& param : params)
+                    {
+                        currentScope->define_variable(param.name.token_name, *param.type);
+                    }
+                    auto body = parse_block();
+                    popScope();
+                    auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
+                                                                      params, std::move(body));
+                    func->constExpr = true;
+                    program->functions.push_back(std::move(func));
+                }
+                else
+                {
+                    // constexpr variable: constexpr i32 SIZE = expr;
+                    expect("Esperado '=' para constexpr", TokenType::EQUAL);
+                    auto value = parse_expression();
+                    expect("Esperado ';'", TokenType::SEMICOLON);
+                    program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
+                        *type, makeSourceIdentifier(nameToken), std::move(value)));
+                }
             }
             else if (check(TokenType::ASYNC))
             {
@@ -1606,6 +1659,20 @@ std::unique_ptr<Expression> Parser::parse_primary()
     if (match(TokenType::THIS))
     {
         return std::make_unique<Identifier>(makeSourceIdentifier(previous()));
+    }
+
+    // Local constexpr/consteval variable: constexpr i32 x = expr;
+    if (check(TokenType::CONST_EXPR) || check(TokenType::CONST_EVAL))
+    {
+        advance(); // consume constexpr/consteval
+        auto type = parse_type();
+        const Token& nameToken = expect("Esperado nome da variável constexpr", TokenType::IDENTIFIER);
+        expect("Esperado '='", TokenType::EQUAL);
+        auto value = parse_expression();
+        // Treat as an immutable VariableInit — the generator resolves via constEvaluator
+        currentScope->define_variable(nameToken.value, *type);
+        return std::make_unique<VariableInit>(
+            *type, makeSourceIdentifier(nameToken), std::move(value), false);
     }
 
     if (check(TokenType::AUTO) || check(TokenType::MUT) || check(TokenType::VOID) || check(TokenType::IDENTIFIER))

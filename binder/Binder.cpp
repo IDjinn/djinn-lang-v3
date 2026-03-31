@@ -20,6 +20,26 @@ BindingResult Binder::bind(const Program& program)
 
     collectDeclarations(program);
     processImports(program);
+
+    // Collect constexpr declarations
+    const std::string prefix = program.getNamespacePrefix();
+    for (const auto& ce : program.constExprs)
+    {
+        const std::string qualifiedName = prefix + ce->name.token_name;
+        _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->value.get()};
+        // Also register as a symbol so the binder recognizes it during binding
+        auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, ce->type, ce->name.location);
+        _global_scope->define(sym);
+        // Short name alias (for unqualified access)
+        if (!prefix.empty())
+        {
+            auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, ce->name.token_name, ce->type,
+                                                     ce->name.location);
+            _global_scope->define(shortSym);
+            _global_scope->constExprConstants[ce->name.token_name] = {ce->type, ce->value.get()};
+        }
+    }
+
     bindProgram(program);
 
     result.success = !_diagnostics.hasErrors();
@@ -142,6 +162,27 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
                     _global_scope->defineAlias(shortName, symbol);
                 }
             }
+        }
+    }
+
+    // Collect constexpr declarations into the global scope
+    for (const auto& program : programs)
+    {
+        const std::string prefix = program->getNamespacePrefix();
+        for (const auto& ce : program->constExprs)
+        {
+            const std::string qualifiedName = prefix + ce->name.token_name;
+            _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->value.get()};
+            auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, ce->type, ce->name.location);
+            _global_scope->define(sym);
+            if (!prefix.empty())
+            {
+                auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, ce->name.token_name, ce->type,
+                                                         ce->name.location);
+                _global_scope->define(shortSym);
+                _global_scope->constExprConstants[ce->name.token_name] = {ce->type, ce->value.get()};
+            }
+            LOG_DEBUG("[binder] constexpr registered: '%s'", qualifiedName.c_str());
         }
     }
 

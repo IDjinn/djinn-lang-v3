@@ -58,6 +58,28 @@ void Generator::generate()
         }
     }
 
+    // PASS 0b: Evaluate constexpr declarations and register in the compile-time evaluator
+    for (const auto& [name, entry] : symbols->constExprConstants)
+    {
+        ConstValue val = constEvaluator.evaluate(*entry.value);
+        if (!val.isError())
+        {
+            constEvaluator.defineConstant(name, val);
+            // Also register short name (without namespace prefix)
+            if (const auto pos = name.rfind("::"); pos != std::string::npos)
+            {
+                constEvaluator.defineConstant(name.substr(pos + 2), val);
+            }
+            LOG_DEBUG("[generator] constexpr '%s' evaluated to int=%lld", name.c_str(), val.intVal);
+        }
+        else
+        {
+            GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                            "constexpr '" + name + "' could not be evaluated at compile time",
+                            entry.value->location);
+        }
+    }
+
     // PASS 1: Forward declare all structs (create opaque types)
     const auto allStructs = symbols->get_all_structs();
     LOG_DEBUG("[generator] PASS 1: forward declaring %zu structs", allStructs.size());

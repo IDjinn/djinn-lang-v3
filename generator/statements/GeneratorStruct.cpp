@@ -3,6 +3,7 @@
 //
 #include "../Generator.h"
 #include "../../lexer/TokenType.h"
+#include "../../evaluator/ConstEvaluator.h"
 
 
 void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
@@ -59,71 +60,38 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
 
 llvm::Constant* Generator::evaluate_const_initializer(const Expression& expr) const
 {
-    if (const auto* intLit = dynamic_cast<const IntegerLiteral*>(&expr))
+    // Use the stack-based VM to evaluate the expression at compile time
+    // We use a local evaluator here because this method is const
+    ConstEvaluator evaluator;
+
+    // TODO: propagate known constants from struct scope to the evaluator
+
+    ConstValue result = evaluator.evaluate(expr);
+    if (result.isError()) return nullptr;
+
+    return const_value_to_llvm(result);
+}
+
+llvm::Constant* Generator::const_value_to_llvm(const ConstValue& val) const
+{
+    switch (val.kind)
     {
-        // Reuse same logic as generate_integer_literal
-        std::string cleaned;
-        cleaned.reserve(intLit->value.size());
-        for (char c : intLit->value)
+    case ConstValue::Integer:
         {
-            if (c != '_' && c != '\'') cleaned += c;
+            unsigned bits = val.bitWidth > 0 ? val.bitWidth : 32;
+            return llvm::ConstantInt::get(llvm::IntegerType::get(*context, bits), val.intVal, val.isSigned);
         }
-
-        unsigned radix = 10;
-        std::string digits = cleaned;
-        if (cleaned.size() > 2 && cleaned[0] == '0')
+    case ConstValue::Float:
         {
-            if (cleaned[1] == 'x' || cleaned[1] == 'X')
-            {
-                radix = 16;
-                digits = cleaned.substr(2);
-            }
-            else if (cleaned[1] == 'b' || cleaned[1] == 'B')
-            {
-                radix = 2;
-                digits = cleaned.substr(2);
-            }
+            if (val.bitWidth <= 32)
+                return llvm::ConstantFP::get(builder->getFloatTy(), val.floatVal);
+            return llvm::ConstantFP::get(builder->getDoubleTy(), val.floatVal);
         }
-
-        const llvm::APInt apVal(128, digits, radix);
-        const unsigned activeBits = apVal.getActiveBits();
-        unsigned bits = activeBits <= 32 ? 32 : activeBits <= 64 ? 64 : 128;
-        return llvm::ConstantInt::get(llvm::IntegerType::get(*context, bits), apVal.trunc(bits));
+    case ConstValue::Bool:
+        return llvm::ConstantInt::get(builder->getInt1Ty(), val.boolVal ? 1 : 0);
+    default:
+        return nullptr;
     }
-
-    if (const auto* floatLit = dynamic_cast<const FloatLiteral*>(&expr))
-    {
-        const double value = std::stod(floatLit->value);
-        return llvm::ConstantFP::get(builder->getDoubleTy(), value);
-    }
-
-    if (const auto* boolLit = dynamic_cast<const BooleanLiteral*>(&expr))
-    {
-        const bool value = boolLit->value == "true";
-        return llvm::ConstantInt::get(builder->getInt1Ty(), value ? 1 : 0);
-    }
-
-    if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
-    {
-        if (unary->op == TokenType::MINUS)
-        {
-            if (auto* inner = evaluate_const_initializer(*unary->operand))
-            {
-                if (auto* intConst = llvm::dyn_cast<llvm::ConstantInt>(inner))
-                {
-                    return llvm::ConstantInt::get(intConst->getType(), -intConst->getValue());
-                }
-                if (auto* fpConst = llvm::dyn_cast<llvm::ConstantFP>(inner))
-                {
-                    llvm::APFloat negVal = fpConst->getValueAPF();
-                    negVal.changeSign();
-                    return llvm::ConstantFP::get(*context, negVal);
-                }
-            }
-        }
-    }
-
-    return nullptr;
 }
 
 void Generator::resolve_struct_body(const StructSymbol& struct_symbol)

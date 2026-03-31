@@ -567,14 +567,14 @@ struct FunctionCallSymbol : Symbol
 
     FunctionCallSymbol(std::string name, std::shared_ptr<Symbol> func,
                        std::vector<std::shared_ptr<Symbol>> args, const SourceLocation loc = {})
-        : Symbol(SymbolKind::FunctionCall, std::move(name), Type::voided(), loc),
+        : Symbol(SymbolKind::FunctionCall, std::move(name), func ? func->type : Type::voided(), loc),
           function(std::move(func)), arguments(std::move(args))
     {
     }
 
     FunctionCallSymbol(std::string name, std::shared_ptr<Symbol> recv, std::shared_ptr<Symbol> func,
                        std::vector<std::shared_ptr<Symbol>> args, const SourceLocation loc = {})
-        : Symbol(SymbolKind::FunctionCall, std::move(name), Type::voided(), loc),
+        : Symbol(SymbolKind::FunctionCall, std::move(name), func ? func->type : Type::voided(), loc),
           function(std::move(func)), receiver(std::move(recv)), arguments(std::move(args)), isMethodCall(true)
     {
     }

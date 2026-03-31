@@ -101,6 +101,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         binder/validation/*.cpp
         binder/scope/*.cpp
         binder/ownership/*.cpp
+        evaluator/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -117,6 +118,7 @@ file(GLOB_RECURSE DJINN_HEADERS
         binder/scope/*.h
         binder/ownership/*.h
         visitor/*.h
+        evaluator/*.h
 )
 
 

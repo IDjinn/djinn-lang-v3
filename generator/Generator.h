@@ -17,6 +17,7 @@
 #include "../binder/Symbol.h"
 #include "../binder/SymbolTable.h"
 #include "../diagnostics/Diagnostic.h"
+#include "../evaluator/ConstEvaluator.h"
 
 
 #define GENERATOR_ERROR(code, msg, location) do { \
@@ -62,6 +63,7 @@ private:
     std::vector<llvm::StructType*> declaredTypes;
     std::shared_ptr<GeneratorScope> currentScope;
     const std::shared_ptr<ScopedSymbolTable>& symbols;
+    ConstEvaluator constEvaluator;
 
     void push_scope();
 
@@ -155,6 +157,8 @@ private:
     llvm::Value* generate_expression(const Expression& expr);
 
     llvm::Constant* evaluate_const_initializer(const Expression& expr) const;
+
+    llvm::Constant* const_value_to_llvm(const ConstValue& val) const;
 
     llvm::Value* generate_integer_literal(const IntegerLiteral& expr) const;
 
