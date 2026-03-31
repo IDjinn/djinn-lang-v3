@@ -593,6 +593,31 @@ struct ArrayLiteral : Expression
     }
 };
 
+// Fixed-size array allocation: type[length] e.g. i8[8192]
+struct FixedArrayExpression : Expression
+{
+    Type elementType;
+    std::unique_ptr<Expression> sizeExpr;
+
+    FixedArrayExpression(Type elemType, std::unique_ptr<Expression> size, const SourceLocation& loc)
+        : elementType(std::move(elemType)), sizeExpr(std::move(size))
+    {
+        this->location = loc;
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "FixedArrayExpression(";
+        elementType.print(os, 0);
+        os << "[";
+        sizeExpr->print(os, 0);
+        os << "])";
+    }
+};
+
 // Heap-allocated constructor call: new StructName(args)
 struct NewExpression : Expression
 {

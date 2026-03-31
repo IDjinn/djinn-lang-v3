@@ -68,6 +68,8 @@ namespace djinn
         void visit(const CastExpression& expr) override;
 
         void visit(const AwaitExpression& expr) override;
+
+        void visit(const FixedArrayExpression& expr) override;
     };
 } // namespace djinn
 

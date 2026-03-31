@@ -378,7 +378,6 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         // Expression body: => expr;
         method->expression = parse_expression();
         expect("Esperado ';' após expressão", TokenType::SEMICOLON);
-
     }
     else if (check(TokenType::LBRACE))
     {
@@ -1656,8 +1655,40 @@ std::unique_ptr<Expression> Parser::parse_primary()
             }
             else
             {
-                // i32[1, 2, 3] — typed array literal
-                return parse_typed_array_literal(firstToken);
+                // Parse first expression to distinguish:
+                //   type[length]       — fixed-size array allocation (single expr, no comma)
+                //   type[1, 2, 3]      — typed array literal (comma-separated elements)
+                auto firstExpr = parse_expression();
+                if (check(TokenType::COMMA))
+                {
+                    // type[expr, expr, ...] — typed array literal
+                    std::vector<std::unique_ptr<Expression>> elements;
+                    elements.push_back(std::move(firstExpr));
+                    while (match(TokenType::COMMA))
+                    {
+                        elements.push_back(parse_expression());
+                    }
+                    expect("Esperado ']'", TokenType::RBRACKET);
+
+                    Type elemType = Type::fromToken(firstToken);
+                    if (elemType.kind == TypeKind::VOID && firstToken.value != "void")
+                    {
+                        elemType = Type::struct_type(firstToken.value);
+                    }
+                    return std::make_unique<ArrayLiteral>(std::move(elements), std::move(elemType), SourceLocation{});
+                }
+                else
+                {
+                    // type[length] — fixed-size array allocation
+                    expect("Esperado ']'", TokenType::RBRACKET);
+                    Type elemType = Type::fromToken(firstToken);
+                    if (elemType.kind == TypeKind::VOID && firstToken.value != "void")
+                    {
+                        elemType = Type::struct_type(firstToken.value);
+                    }
+                    const auto loc = SourceLocation(firstToken.position, firstToken.value.length());
+                    return std::make_unique<FixedArrayExpression>(std::move(elemType), std::move(firstExpr), loc);
+                }
             }
         }
 

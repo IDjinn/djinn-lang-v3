@@ -47,10 +47,10 @@ struct Console {
     }
 
 
+  const i32 bufSize = 8192;
+  const i32 flushAt = 8100;
   public static void writeSync(str format, ...args) {
-      i32 bufSize = 8192;
-      i32 flushAt = bufSize - 64;
-      i8* buf = (i8*)__djinn_malloc(bufSize);
+      i8* buf = i8[bufSize];
       mut i32 bpos = 0;
       mut size pos = 0u;
 
@@ -133,15 +133,10 @@ struct Console {
       if (bpos > 0) {
           write(1, buf, bpos);
       }
-
-      free(buf);
   }
 
   public static async i64 write(str format, ...args) {
-      i32 stdout = 1;
-      i32 bufSize = 8192;
-      i32 flushAt = bufSize - 64;
-      i8* buf = (i8*)__djinn_malloc(bufSize);
+      i8* buf = i8[bufSize];
       mut i32 bpos = 0;
       mut size pos = 0u;
       void* handle = std::builtin::coro.handle();
@@ -235,8 +230,6 @@ struct Console {
           __djinn_async_write(stdout, buf, bpos64, handle);
           std::builtin::coro.suspend();
       }
-
-      free(buf);
       return 0;
   }
 }

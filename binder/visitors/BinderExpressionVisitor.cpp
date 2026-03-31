@@ -132,4 +132,10 @@ namespace djinn
         _binder.bindExpression(*expr.operand);
         _result = nullptr;
     }
+
+    void BinderExpressionVisitor::visit(const FixedArrayExpression& expr)
+    {
+        _binder.bindExpression(*expr.sizeExpr);
+        _result = nullptr;
+    }
 } // namespace djinn

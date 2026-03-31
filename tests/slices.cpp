@@ -272,6 +272,91 @@ TEST(Arr, WithPrintf)
 }
 
 // ========================
+// type[length] (fixed-size stack array)
+// ========================
+
+TEST(FixedArray, BasicAllocation)
+{
+    const auto source = R"(
+        i32 main() {
+            i8* buf = i8[64];
+            buf[0] = 42;
+            return (i32)buf[0];
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(FixedArray, WriteAndReadMultiple)
+{
+    const auto source = R"(
+        i32 main() {
+            i32* arr = i32[10];
+            arr[0] = 10;
+            arr[1] = 20;
+            arr[2] = 30;
+            return arr[0] + arr[1] + arr[2];
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 60);
+}
+
+TEST(FixedArray, WithConstSize)
+{
+    const auto source = R"(
+        const i32 SIZE = 8;
+        i32 main() {
+            i32* data = i32[SIZE];
+            data[7] = 77;
+            return data[7];
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 77);
+}
+
+TEST(FixedArray, LoopFill)
+{
+    const auto source = R"(
+        i32 main() {
+            i32* arr = i32[5];
+            for (mut i32 i = 0; i < 5; i = i + 1) {
+                arr[i] = i * 10;
+            }
+            return arr[3];
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 30);
+}
+
+TEST(FixedArray, LargeBuffer)
+{
+    const auto source = R"(
+        i32 main() {
+            i8* buf = i8[8192];
+            buf[0] = 1;
+            buf[8191] = 99;
+            return (i32)buf[8191];
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 99);
+}
+
+// ========================
 // string (heap string struct)
 // ========================
 
