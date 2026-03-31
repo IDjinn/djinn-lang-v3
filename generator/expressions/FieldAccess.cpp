@@ -14,6 +14,16 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
         const auto alloca = currentScope->lookup_variable(ident->identifier.token_name);
         if (!alloca)
         {
+            // Check if this is a static const field access: StructName.CONST_FIELD
+            if (const StructDef* staticDef = currentScope->lookup_struct(ident->identifier.token_name))
+            {
+                if (llvm::Constant* constVal = staticDef->getConstField(expr.fieldName.token_name))
+                {
+                    LOG_DEBUG("[generator]   static const field '%s.%s' resolved",
+                              ident->identifier.token_name.c_str(), expr.fieldName.token_name.c_str());
+                    return constVal;
+                }
+            }
             LOG_DEBUG("[generator]   variable '%s' NOT found in scope", ident->identifier.token_name.c_str());
             throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE,
                                "variável não encontrada: " + ident->identifier.token_name);
@@ -125,6 +135,14 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
         const auto fieldIt = fieldIndices->find(expr.fieldName.token_name);
         if (fieldIt == fieldIndices->end())
         {
+            // Check if it's a const field (not in struct layout but accessible via instance)
+            if (const StructDef* instanceDef = currentScope->lookup_struct(fieldIndicesName))
+            {
+                if (llvm::Constant* constVal = instanceDef->getConstField(expr.fieldName.token_name))
+                {
+                    return constVal;
+                }
+            }
             throw CompileError(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + expr.fieldName.token_name);
         }
 

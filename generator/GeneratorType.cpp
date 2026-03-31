@@ -72,6 +72,7 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     monoDef.llvmType = structType;
     monoDef.fieldIndices = std::move(fieldIndices);
     monoDef.attributes = genericDef->attributes;
+    monoDef.constFields = genericDef->constFields;
 
     for (const auto& [fieldName, fieldType] : genericDef->fields)
     {

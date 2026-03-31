@@ -11,7 +11,12 @@ std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess& access)
     const auto object_symbol = bindExpression(*access.object);
 
     std::string structName;
-    if (object_symbol->type.kind == TypeKind::POINTER)
+    if (std::dynamic_pointer_cast<StructSymbol>(object_symbol))
+    {
+        // Static access: StructName.field (e.g., Constants.NEG)
+        structName = object_symbol->name;
+    }
+    else if (object_symbol->type.kind == TypeKind::POINTER)
     {
         structName = object_symbol->type.elementType->structName;
     }

@@ -2,6 +2,7 @@
 // Created by Luke on 02/01/2026.
 //
 #include "../Generator.h"
+#include "../../lexer/TokenType.h"
 
 
 void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
@@ -13,6 +14,7 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
     unsigned idx = 0;
     for (const auto& field : struct_symbol.fields)
     {
+        if (field.isConstant) continue; // const fields don't occupy struct layout
         def.fields.emplace_back(field.name, field.type);
         def.fieldIndices[field.name] = idx++;
     }
@@ -55,6 +57,75 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
     currentScope->define_struct(struct_symbol.name, std::move(def));
 }
 
+llvm::Constant* Generator::evaluate_const_initializer(const Expression& expr) const
+{
+    if (const auto* intLit = dynamic_cast<const IntegerLiteral*>(&expr))
+    {
+        // Reuse same logic as generate_integer_literal
+        std::string cleaned;
+        cleaned.reserve(intLit->value.size());
+        for (char c : intLit->value)
+        {
+            if (c != '_' && c != '\'') cleaned += c;
+        }
+
+        unsigned radix = 10;
+        std::string digits = cleaned;
+        if (cleaned.size() > 2 && cleaned[0] == '0')
+        {
+            if (cleaned[1] == 'x' || cleaned[1] == 'X')
+            {
+                radix = 16;
+                digits = cleaned.substr(2);
+            }
+            else if (cleaned[1] == 'b' || cleaned[1] == 'B')
+            {
+                radix = 2;
+                digits = cleaned.substr(2);
+            }
+        }
+
+        const llvm::APInt apVal(128, digits, radix);
+        const unsigned activeBits = apVal.getActiveBits();
+        unsigned bits = activeBits <= 32 ? 32 : activeBits <= 64 ? 64 : 128;
+        return llvm::ConstantInt::get(llvm::IntegerType::get(*context, bits), apVal.trunc(bits));
+    }
+
+    if (const auto* floatLit = dynamic_cast<const FloatLiteral*>(&expr))
+    {
+        const double value = std::stod(floatLit->value);
+        return llvm::ConstantFP::get(builder->getDoubleTy(), value);
+    }
+
+    if (const auto* boolLit = dynamic_cast<const BooleanLiteral*>(&expr))
+    {
+        const bool value = boolLit->value == "true";
+        return llvm::ConstantInt::get(builder->getInt1Ty(), value ? 1 : 0);
+    }
+
+    if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
+    {
+        if (unary->op == TokenType::MINUS)
+        {
+            if (auto* inner = evaluate_const_initializer(*unary->operand))
+            {
+                if (auto* intConst = llvm::dyn_cast<llvm::ConstantInt>(inner))
+                {
+                    return llvm::ConstantInt::get(intConst->getType(), -intConst->getValue());
+                }
+                if (auto* fpConst = llvm::dyn_cast<llvm::ConstantFP>(inner))
+                {
+                    llvm::APFloat negVal = fpConst->getValueAPF();
+                    negVal.changeSign();
+                    return llvm::ConstantFP::get(*context, negVal);
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
 {
     StructDef* def = currentScope->lookup_struct(struct_symbol.name);
@@ -80,6 +151,23 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
     std::vector<llvm::Type*> fieldTypes;
     for (const auto& field : struct_symbol.fields)
     {
+        if (field.isConstant)
+        {
+            if (field.initializer)
+            {
+                llvm::Constant* constVal = evaluate_const_initializer(*field.initializer);
+                if (constVal)
+                {
+                    def->constFields[field.name] = constVal;
+                }
+                else
+                {
+                    throw CompileError(DiagnosticCode::TYPE_MISMATCH,
+                                       "const field '" + field.name + "' initializer must be a compile-time constant");
+                }
+            }
+            continue;
+        }
         fieldTypes.push_back(generate_type(field.type));
     }
 
@@ -294,10 +382,13 @@ void Generator::forward_declare_method(const StructSymbol& struc, const MethodSy
 void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& method)
 {
     push_scope();
+    const std::string savedStructName = currentStructName;
+    currentStructName = struc.name;
 
     StructDef* def = currentScope->lookup_struct(struc.name);
     if (!def || !def->llvmType)
     {
+        currentStructName = savedStructName;
         pop_scope();
         throw std::runtime_error("Struct not found for method: " + struc.name);
     }
@@ -347,6 +438,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
     if (method.isAsync)
     {
         generate_async_method_body(struc, method, llvmFunc, def);
+        currentStructName = savedStructName;
         pop_scope();
         return;
     }
@@ -419,6 +511,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         }
     }
 
+    currentStructName = savedStructName;
     pop_scope();
 }
 

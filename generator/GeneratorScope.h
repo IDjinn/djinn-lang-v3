@@ -43,6 +43,7 @@ struct StructDef
 
     std::vector<std::pair<std::string, Type>> fields;
     std::unordered_map<std::string, unsigned> fieldIndices;
+    std::unordered_map<std::string, llvm::Constant*> constFields;
 
     std::vector<std::shared_ptr<MethodSymbol>> methods;
     std::vector<std::shared_ptr<PropertySymbol>> properties;
@@ -96,6 +97,15 @@ struct StructDef
             return it->second;
         }
         return UINT_MAX;
+    }
+
+    [[nodiscard]] llvm::Constant* getConstField(const std::string& fieldName) const
+    {
+        if (const auto it = constFields.find(fieldName); it != constFields.end())
+        {
+            return it->second;
+        }
+        return nullptr;
     }
 
     [[nodiscard]] std::shared_ptr<MethodSymbol> getMethod(const std::string& methodName) const

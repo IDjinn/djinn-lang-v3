@@ -154,6 +154,8 @@ private:
 
     llvm::Value* generate_expression(const Expression& expr);
 
+    llvm::Constant* evaluate_const_initializer(const Expression& expr) const;
+
     llvm::Value* generate_integer_literal(const IntegerLiteral& expr) const;
 
     llvm::Value* generate_float_literal(const FloatLiteral& expr) const;
@@ -214,6 +216,7 @@ private:
     const GenericContext* _currentGenericCtx = nullptr;
 
     llvm::Function* currentFunction = nullptr;
+    std::string currentStructName; // set during struct method generation
 
     std::vector<llvm::BasicBlock*> breakTargets;
     std::vector<llvm::BasicBlock*> continueTargets;

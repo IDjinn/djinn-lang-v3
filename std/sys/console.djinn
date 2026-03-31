@@ -4,18 +4,22 @@ import std::debug;
 namespace std::sys;
 
 extern "C" {
-    i64    __djinn_console_write     (void* str, void* coro_handle);
-    i64    __djinn_console_writeln   (void* str, void* coro_handle);
-    i64    __djinn_console_error     (void* str, void* coro_handle);
-    i64    __djinn_console_read_line (void* str, void* coro_handle);
-    i64    __djinn_async_write       (i32 fd, void* buf, i64 count, void* coro_handle);
-    i64    __djinn_async_read        (i32 fd, void* buf, i64 count, void* coro_handle);
-    i8*    itoa(i32 value, i8* str, i32 base);
+    i64    __djinn_console_write       (void* str, void* coro_handle);
+    i64    __djinn_console_writeln     (void* str, void* coro_handle);
+    i64    __djinn_console_error       (void* str, void* coro_handle);
+    i64    __djinn_console_read_line   (void* str, void* coro_handle);
+    i64    __djinn_async_write         (i32 fd, void* buf, i64 count, void* coro_handle);
+    i64    __djinn_async_read          (i32 fd, void* buf, i64 count, void* coro_handle);
+    i8*    itoa                        (i32 value, i8* str, i32 base);
 }
 
 struct Console {
+    const i32 stdin = 0;
+    const i32 stderr = 2;
+    const i32 stdout = 1;
+    const i32 bufferSize = 1024;
+
     public static c_result error(i8* message) {
-        i32 stderr = 2;
         return write(stderr, message, strlen(message));
     }
 
@@ -24,8 +28,6 @@ struct Console {
     }
 
    public static async i64 print(i8* message, i64 len) {
-        i32 stdout = 1;
-
         void* handle = std::builtin::coro.handle();
         i64 ret = __djinn_async_write(stdout, message, len, handle);
         std::builtin::coro.suspend();
@@ -35,9 +37,6 @@ struct Console {
     }
 
     public static async void* readLine() {
-        i32 stdin = 0;
-        i32 bufferSize = 1024;
-
         void* buffer = __djinn_malloc(bufferSize);
         void* handle = std::builtin::coro.handle();
         i64 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);

@@ -567,9 +567,28 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
                 continue;
             }
 
-            // Check for modifiers first (indicates a method)
+            // Check for modifiers — could be a method OR a const field
             if (check(TokenType::PUBLIC) || check(TokenType::PRIVATE) || check(TokenType::STATIC))
             {
+                // Peek ahead: if modifiers are followed by CONST, it's a const field
+                const size_t modSaved = current;
+                auto fieldModifiers = parse_modifiers();
+                if (check(TokenType::CONST))
+                {
+                    // It's a const field with access modifiers: public const i32 X = 10;
+                    advance(); // consume CONST
+                    auto constFieldType = parse_type();
+                    const Token& constFieldNameToken = expect("expected field name", TokenType::IDENTIFIER);
+                    SourceIdentifier constFieldName = makeSourceIdentifier(constFieldNameToken);
+                    expect("expected '=' for const field initializer", TokenType::EQUAL);
+                    auto constInitializer = parse_expression();
+                    expect("expected ';' after const field", TokenType::SEMICOLON);
+                    fields.emplace_back(std::move(constFieldType), std::move(constFieldName),
+                                        true, std::move(constInitializer), std::move(fieldModifiers));
+                    continue;
+                }
+                // Not a const field — backtrack and parse as method
+                current = modSaved;
                 auto m = parse_method(true);
                 m->attributes = std::move(methodAttributes);
                 methods.push_back(std::move(m));
@@ -579,7 +598,18 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
             // Save position to distinguish field from method
             const size_t saved = current;
 
-            const auto isMutable = match(TokenType::MUT);
+            auto isMutable = match(TokenType::MUT);
+            auto isConstant = match(TokenType::CONST);
+            isMutable |= match(TokenType::MUT);
+            isConstant |= match(TokenType::CONST); // hacky for non ordered modifiers
+            if (isMutable && isConstant)
+            {
+                PARSER_ERROR(DiagnosticCode::INVALID_MODIFIERS, "field cannot be mutable and constant at same time!",
+                             SourceLocation(peek().position.fileId, peek().position.line, peek().position.column, 1));
+                continue;
+                // TODO: WHEN GENERATE THIS ERROR, WE NEED SKIP TOKENS STRUCT CLOSE OR VALID STRUCT PARSING POINT
+            }
+
             auto fieldType = parse_type();
 
             // Check for constructor: StructName(args) - type matches struct name followed by (
@@ -646,9 +676,25 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
                 auto prop = parse_property(std::move(fieldType), std::move(memberName));
                 structDecl_properties.push_back(std::move(prop));
             }
+            else if (isConstant && check(TokenType::EQUAL))
+            {
+                // Const field without modifiers: const i32 X = 10;
+                advance(); // consume '='
+                auto constInitializer = parse_expression();
+                expect("expected ';' after const field", TokenType::SEMICOLON);
+                fields.emplace_back(std::move(fieldType), std::move(memberName),
+                                    true, std::move(constInitializer));
+            }
             else
             {
                 // It's a field
+                if (isConstant)
+                {
+                    PARSER_ERROR(DiagnosticCode::INVALID_MODIFIERS,
+                                 "const field must have an initializer (e.g., const i32 X = 10;)",
+                                 SourceLocation(memberName.location.fileId, memberName.location.line,
+                                     memberName.location.column, 1));
+                }
                 expect("Esperado ';' após campo", TokenType::SEMICOLON);
                 fields.emplace_back(std::move(fieldType), std::move(memberName));
             }

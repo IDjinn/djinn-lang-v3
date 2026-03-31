@@ -131,7 +131,8 @@ enum class TokenType
 
     // COMPILE TIME
     CONST_EXPR, // constexpr
-    CONST_EVAL // consteval
+    CONST_EVAL, // consteval
+    CONST, // constant literal
 };
 
 

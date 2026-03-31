@@ -150,9 +150,12 @@ struct ExternFunctionSymbol : FunctionSymbol
 
 struct FieldSymbol : Symbol
 {
+    bool isConstant = false;
+    Expression* initializer = nullptr; // raw pointer, AST owns the memory
+
     FieldSymbol(const SymbolKind kind, const std::string& name, const Type& type, const SourceLocation& loc,
-                const bool is_mutable)
-        : Symbol(kind, name, type, loc, is_mutable)
+                const bool is_mutable, const bool is_constant = false, Expression* init = nullptr)
+        : Symbol(kind, name, type, loc, is_mutable), isConstant(is_constant), initializer(init)
     {
     }
 };
@@ -291,9 +294,12 @@ struct StructSymbol : Symbol
     {
     }
 
-    void addField(const std::string& fieldName, const Type& fieldType, const bool fieldIsMutable = false)
+    void addField(const std::string& fieldName, const Type& fieldType, const bool fieldIsMutable = false,
+                  const bool fieldIsConstant = false, Expression* fieldInitializer = nullptr)
     {
-        fields.push_back({SymbolKind::Struct, fieldName, fieldType, {}, fieldIsMutable});
+        fields.push_back({
+            SymbolKind::Struct, fieldName, fieldType, {}, fieldIsMutable, fieldIsConstant, fieldInitializer
+        });
     }
 
     void addMethod(std::shared_ptr<MethodSymbol> method)

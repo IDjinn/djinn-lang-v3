@@ -96,6 +96,7 @@ private:
     std::shared_ptr<ScopedSymbolTable> _global_scope;
 
     std::string currentFunction_;
+    std::string currentStructName_;
     bool _bindingStdLib = false;
     djinn::binder::ControlFlowContext _controlFlow;
     djinn::ownership::OwnershipTracker _ownership;

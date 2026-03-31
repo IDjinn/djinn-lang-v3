@@ -42,6 +42,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"true", TokenType::TRUE},
     {"false", TokenType::FALSE},
     {"operator", TokenType::OPERATOR},
+    {"const", TokenType::CONST},
     {"constexpr", TokenType::CONST_EXPR},
     {"consteval", TokenType::CONST_EVAL},
 };

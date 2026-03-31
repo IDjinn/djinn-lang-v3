@@ -80,6 +80,7 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
 void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration& struc)
 {
     currentFunction_ = struc.name.token_name + "::" + method.name.token_name;
+    currentStructName_ = struc.name.token_name;
 
     pushScope();
 
@@ -161,6 +162,7 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
 
     popScope();
     currentFunction_.clear();
+    currentStructName_.clear();
 }
 
 void Binder::bindNamespace(const NamespaceDeclaration& ns, const std::string& prefix)

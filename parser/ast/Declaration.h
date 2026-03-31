@@ -154,16 +154,49 @@ struct StructField : Location
 {
     std::unique_ptr<Type> type;
     SourceIdentifier name;
+    bool isConstant = false;
+    std::unique_ptr<Expression> initializer;
+    std::vector<VisibilityModifier> modifiers;
 
     StructField(std::unique_ptr<Type> type, SourceIdentifier name)
         : type(std::move(type)), name(std::move(name))
     {
     }
 
+    StructField(std::unique_ptr<Type> type, SourceIdentifier name, bool isConstant,
+                std::unique_ptr<Expression> initializer, std::vector<VisibilityModifier> modifiers = {})
+        : type(std::move(type)), name(std::move(name)), isConstant(isConstant),
+          initializer(std::move(initializer)), modifiers(std::move(modifiers))
+    {
+    }
+
+    [[nodiscard]] bool isPublic() const
+    {
+        if (modifiers.empty()) return true; // public by default
+        for (const auto& mod : modifiers)
+        {
+            if (mod == VisibilityModifier::PUBLIC) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool isPrivate() const
+    {
+        for (const auto& mod : modifiers)
+        {
+            if (mod == VisibilityModifier::PRIVATE) return true;
+        }
+        return false;
+    }
+
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
-        os << "StructField(" << name.token_name << ": " << *type << ")";
+        os << "StructField(";
+        if (isConstant) os << "const ";
+        os << name.token_name << ": " << *type;
+        if (initializer) os << " = ...";
+        os << ")";
     }
 };
 
