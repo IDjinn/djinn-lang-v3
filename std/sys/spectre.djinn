@@ -832,8 +832,166 @@ struct SpectreTree {
     }
 
     public void destroy() {
-        free(this.labels);
-        free(this.parentsBuf);
-        free(this.depthsBuf);
+        __djinn_free(this.labels);
+        __djinn_free(this.parentsBuf);
+        __djinn_free(this.depthsBuf);
+    }
+}
+
+struct SpectreSpinner {
+    const i32 FRAME_COUNT = 4;
+
+    i8* message;
+    mut i32 frame;
+
+    public static SpectreSpinner create(i8* message) {
+        SpectreSpinner s = { .message = message, .frame = 0 };
+        return s;
+    }
+
+    public void tick() {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+
+        pos = Spectre.writeCursorErase(buf, pos);
+        pos = Spectre.writeCursorCol1(buf, pos);
+
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_CYAN);
+
+        i32 f = this.frame % FRAME_COUNT;
+        if (f == 0) { buf[pos] = 124; }
+        if (f == 1) { buf[pos] = 47; }
+        if (f == 2) { buf[pos] = 45; }
+        if (f == 3) { buf[pos] = 92; }
+        pos = pos + 1;
+
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, this.message);
+        write(1, buf, pos);
+
+        this.frame = this.frame + 1;
+    }
+
+    public void finish(i8* doneMessage) {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        pos = Spectre.writeCursorErase(buf, pos);
+        pos = Spectre.writeCursorCol1(buf, pos);
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_GREEN);
+        pos = Spectre.writeText(buf, pos, doneMessage);
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+}
+
+struct SpectreBar {
+    public static void bar(i8* label, i32 value, i32 maxValue, i32 width, i32 color) {
+        i32 filled = (value * width) / maxValue;
+        i32 labelLen = strlen(label);
+
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+
+        pos = Spectre.writeText(buf, pos, label);
+
+        mut i32 pad = 12 - labelLen;
+        while (pad > 0) {
+            buf[pos] = 32;
+            pos = pos + 1;
+            pad = pad - 1;
+        }
+
+        pos = Spectre.writeCode(buf, pos, color);
+        mut i32 fi = 0;
+        while (fi < filled) {
+            buf[pos] = 35;
+            pos = pos + 1;
+            fi = fi + 1;
+        }
+        pos = Spectre.writeReset(buf, pos);
+
+        mut i32 ei = 0;
+        i32 empty = width - filled;
+        while (ei < empty) {
+            buf[pos] = 32;
+            pos = pos + 1;
+            ei = ei + 1;
+        }
+
+        buf[pos] = 32;
+        pos = pos + 1;
+        i32 len = snprintf(buf + pos, 16, "%d", value);
+        pos = pos + len;
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void chart(i8* title) {
+        Spectre.styledLn(title, Spectre.BOLD);
+    }
+}
+
+struct SpectreAlign {
+    public static void center(i8* text) {
+        i32 w = Spectre.width();
+        i32 len = strlen(text);
+        i32 pad = (w - len) / 2;
+
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+
+        mut i32 i = 0;
+        while (i < pad) {
+            buf[pos] = 32;
+            pos = pos + 1;
+            i = i + 1;
+        }
+        pos = Spectre.writeText(buf, pos, text);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void right(i8* text) {
+        i32 w = Spectre.width();
+        i32 len = strlen(text);
+        i32 pad = w - len;
+
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+
+        mut i32 i = 0;
+        while (i < pad) {
+            buf[pos] = 32;
+            pos = pos + 1;
+            i = i + 1;
+        }
+        pos = Spectre.writeText(buf, pos, text);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void repeat(i8 ch, i32 count) {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        mut i32 i = 0;
+        while (i < count) {
+            buf[pos] = ch;
+            pos = pos + 1;
+            i = i + 1;
+            if (pos >= 500) {
+                write(1, buf, pos);
+                pos = 0;
+            }
+        }
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
     }
 }

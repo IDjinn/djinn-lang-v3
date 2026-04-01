@@ -283,6 +283,7 @@ private:
     size_t generatedStructs = 0;
     size_t generatedMethods = 0;
 
+
     // TypeInfo constants for object boxing (variadics)
     std::unordered_map<std::string, llvm::GlobalVariable*> typeInfoConstants;
     llvm::GlobalVariable* get_or_create_typeinfo(const std::string& typeName, llvm::Type* llvmType);
