@@ -8,6 +8,7 @@ extern "C" {
     void __djinn_raw_enable();
     void __djinn_raw_disable();
     i32 __djinn_read_key();
+    i32 __djinn_read_line(i8* buf, i32 maxLen);
 }
 
 struct Spectre {
@@ -530,12 +531,7 @@ struct Spectre {
         write(1, buf, pos);
 
         i8* input = i8[1024];
-        i64 bytesRead = read(0, input, 1023);
-        mut i32 len = (i32)bytesRead;
-        if (len > 0 && input[len - 1] == 10) {
-            input[len - 1] = 0;
-            len = len - 1;
-        }
+        i32 len = __djinn_read_line(input, 1023);
         return len;
     }
 
@@ -554,12 +550,7 @@ struct Spectre {
         pos = pos + 1;
         write(1, buf, pos);
 
-        i64 bytesRead = read(0, output, 1023);
-        mut i32 len = (i32)bytesRead;
-        if (len > 0 && output[len - 1] == 10) {
-            output[len - 1] = 0;
-            len = len - 1;
-        }
+        i32 len = __djinn_read_line(output, 1023);
         return len;
     }
 
@@ -578,8 +569,7 @@ struct Spectre {
         write(1, buf, pos);
 
         i8* input = i8[16];
-        i64 bytesRead = read(0, input, 15);
-        i32 len = (i32)bytesRead;
+        i32 len = __djinn_read_line(input, 15);
         if (len > 0) {
             i8 first = input[0];
             if (first == 121 || first == 89) {

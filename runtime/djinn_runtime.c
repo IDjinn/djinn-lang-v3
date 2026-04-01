@@ -1587,6 +1587,31 @@ void __djinn_raw_disable(void)
     __djinn_raw_saved = 0;
 }
 
+int32_t __djinn_read_line(char* buf, int32_t maxLen)
+{
+    if (!buf || maxLen <= 0) return 0;
+#ifdef _WIN32
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode;
+    GetConsoleMode(h, &mode);
+    SetConsoleMode(h, mode | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
+    DWORD bytesRead = 0;
+    ReadConsoleA(h, buf, (DWORD)(maxLen - 1), &bytesRead, NULL);
+    SetConsoleMode(h, mode);
+    buf[bytesRead] = '\0';
+    int32_t len = (int32_t)bytesRead;
+#else
+    if (!fgets(buf, maxLen, stdin)) return 0;
+    int32_t len = (int32_t)strlen(buf);
+#endif
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+    {
+        buf[len - 1] = '\0';
+        len--;
+    }
+    return len;
+}
+
 int32_t __djinn_read_key(void)
 {
 #ifdef _WIN32
