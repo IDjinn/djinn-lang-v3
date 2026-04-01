@@ -1592,33 +1592,49 @@ int32_t __djinn_read_key(void)
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     INPUT_RECORD rec;
     DWORD count;
-    while (1) {
+    while (1)
+    {
         if (!ReadConsoleInputA(h, &rec, 1, &count) || count == 0) continue;
         if (rec.EventType != KEY_EVENT || !rec.Event.KeyEvent.bKeyDown) continue;
         WORD vk = rec.Event.KeyEvent.wVirtualKeyCode;
         char ch = rec.Event.KeyEvent.uChar.AsciiChar;
         DJINN_TRACE("read_key: eventType=%d vk=0x%04X ch=%d('%c') scan=0x%04X",
-            rec.EventType, vk, (int)ch, (ch >= 32 && ch < 127) ? ch : '?',
-            rec.Event.KeyEvent.wVirtualScanCode);
-        switch (vk) {
-            case 0x26: DJINN_TRACE("read_key: -> UP (-1)"); return -1;
-            case 0x28: DJINN_TRACE("read_key: -> DOWN (-2)"); return -2;
-            case 0x0D: DJINN_TRACE("read_key: -> ENTER (-3)"); return -3;
-            case 0x1B: DJINN_TRACE("read_key: -> ESCAPE (-5)"); return -5;
-            default: break;
+                    rec.EventType, vk, (int)ch, (ch >= 32 && ch < 127) ? ch : '?',
+                    rec.Event.KeyEvent.wVirtualScanCode);
+        switch (vk)
+        {
+        case 0x26: DJINN_TRACE("read_key: -> UP (-1)");
+            return -1;
+        case 0x28: DJINN_TRACE("read_key: -> DOWN (-2)");
+            return -2;
+        case 0x0D: DJINN_TRACE("read_key: -> ENTER (-3)");
+            return -3;
+        case 0x1B: DJINN_TRACE("read_key: -> ESCAPE (-5)");
+            return -5;
+        default: break;
         }
-        if (ch == ' ') { DJINN_TRACE("read_key: -> SPACE (-4)"); return -4; }
-        if (ch != 0) { DJINN_TRACE("read_key: -> char %d", (int)ch); return (int32_t)ch; }
+        if (ch == ' ')
+        {
+            DJINN_TRACE("read_key: -> SPACE (-4)");
+            return -4;
+        }
+        if (ch != 0)
+        {
+            DJINN_TRACE("read_key: -> char %d", (int)ch);
+            return (int32_t)ch;
+        }
         DJINN_TRACE("read_key: -> ignored (ch=0, vk=0x%04X)", vk);
     }
 #else
     unsigned char c;
     if (read(STDIN_FILENO, &c, 1) != 1) return -5;
-    if (c == 27) {
+    if (c == 27)
+    {
         unsigned char seq[2];
         if (read(STDIN_FILENO, &seq[0], 1) != 1) return -5;
         if (read(STDIN_FILENO, &seq[1], 1) != 1) return -5;
-        if (seq[0] == '[') {
+        if (seq[0] == '[')
+        {
             if (seq[1] == 'A') return -1;
             if (seq[1] == 'B') return -2;
         }
