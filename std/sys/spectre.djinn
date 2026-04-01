@@ -47,6 +47,18 @@ struct Spectre {
         return __djinn_terminal_height();
     }
 
+    public static void rawEnable() {
+        __djinn_raw_enable();
+    }
+
+    public static void rawDisable() {
+        __djinn_raw_disable();
+    }
+
+    public static i32 readKey() {
+        return __djinn_read_key();
+    }
+
     private static i32 escStart(i8* buf, i32 pos) {
         buf[pos] = 27;
         buf[pos + 1] = 91;
@@ -1348,6 +1360,8 @@ struct SpectreSelect {
     private void renderOptions(i8* buf, i8* prompt, i32 selected) {
         mut i32 pos = 0;
 
+        pos = Spectre.writeCursorErase(buf, pos);
+        pos = Spectre.writeCursorCol1(buf, pos);
         pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
         pos = Spectre.writeCode(buf, pos, Spectre.FG_CYAN);
         pos = Spectre.writeText(buf, pos, "? ");
@@ -1382,6 +1396,8 @@ struct SpectreSelect {
     private void renderMultiOptions(i8* buf, i8* prompt, i32 cursor, i8* selected) {
         mut i32 pos = 0;
 
+        pos = Spectre.writeCursorErase(buf, pos);
+        pos = Spectre.writeCursorCol1(buf, pos);
         pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
         pos = Spectre.writeCode(buf, pos, Spectre.FG_CYAN);
         pos = Spectre.writeText(buf, pos, "? ");
@@ -1423,41 +1439,42 @@ struct SpectreSelect {
         write(1, buf, pos);
     }
 
-    public i32 prompt(i8* prompt) {
-        __djinn_raw_enable();
+    public i32 prompt(i8* promptText) {
+        Spectre.rawEnable();
         i8* buf = i8[4096];
         mut i32 selected = 0;
 
-        this.renderOptions(buf, prompt, selected);
+        this.renderOptions(buf, promptText, selected);
 
         mut bool done = false;
         while (!done) {
-            i32 key = __djinn_read_key();
-            if (key == KEY_UP && selected > 0) {
+            i32 key = Spectre.readKey();
+            if (key == -1 && selected > 0) {
                 selected = selected - 1;
-            } else if (key == KEY_DOWN && selected < this.count - 1) {
+            } else if (key == -2 && selected < this.count - 1) {
                 selected = selected + 1;
-            } else if (key == KEY_ENTER) {
+            } else if (key == -3) {
                 done = true;
-            } else if (key == KEY_ESCAPE) {
+            } else if (key == -5) {
                 selected = -1;
                 done = true;
             }
 
             if (!done) {
-                mut i32 pos = 0;
-                pos = Spectre.escStart(buf, pos);
+                i8* up = i8[16];
+                mut i32 upos = 0;
+                upos = Spectre.escStart(up, upos);
                 i32 lines = this.count + 1;
-                i32 len = snprintf(buf + pos, 8, "%d", lines);
-                pos = pos + len;
-                buf[pos] = 65;
-                pos = pos + 1;
-                write(1, buf, pos);
-                this.renderOptions(buf, prompt, selected);
+                i32 ulen = snprintf(up + upos, 8, "%d", lines);
+                upos = upos + ulen;
+                up[upos] = 65;
+                upos = upos + 1;
+                write(1, up, upos);
+                this.renderOptions(buf, promptText, selected);
             }
         }
 
-        __djinn_raw_disable();
+        Spectre.rawDisable();
 
         i8* clearBuf = i8[512];
         mut i32 cpos = 0;
@@ -1496,46 +1513,47 @@ struct SpectreSelect {
         return selected;
     }
 
-    public void multiPrompt(i8* prompt, i8* results) {
-        __djinn_raw_enable();
+    public void multiPrompt(i8* promptText, i8* results) {
+        Spectre.rawEnable();
         i8* buf = i8[4096];
         mut i32 cursor = 0;
         i8* selected = i8[32];
         memset(selected, 0, 32);
 
-        this.renderMultiOptions(buf, prompt, cursor, selected);
+        this.renderMultiOptions(buf, promptText, cursor, selected);
 
         mut bool done = false;
         while (!done) {
-            i32 key = __djinn_read_key();
-            if (key == KEY_UP && cursor > 0) {
+            i32 key = Spectre.readKey();
+            if (key == -1 && cursor > 0) {
                 cursor = cursor - 1;
-            } else if (key == KEY_DOWN && cursor < this.count - 1) {
+            } else if (key == -2 && cursor < this.count - 1) {
                 cursor = cursor + 1;
-            } else if (key == KEY_SPACE) {
+            } else if (key == -4) {
                 if (selected[cursor] == 0) {
                     selected[cursor] = 1;
                 } else {
                     selected[cursor] = 0;
                 }
-            } else if (key == KEY_ENTER) {
+            } else if (key == -3) {
                 done = true;
             }
 
             if (!done) {
-                mut i32 pos = 0;
-                pos = Spectre.escStart(buf, pos);
+                i8* up = i8[16];
+                mut i32 upos = 0;
+                upos = Spectre.escStart(up, upos);
                 i32 lines = this.count + 1;
-                i32 len = snprintf(buf + pos, 8, "%d", lines);
-                pos = pos + len;
-                buf[pos] = 65;
-                pos = pos + 1;
-                write(1, buf, pos);
-                this.renderMultiOptions(buf, prompt, cursor, selected);
+                i32 ulen = snprintf(up + upos, 8, "%d", lines);
+                upos = upos + ulen;
+                up[upos] = 65;
+                upos = upos + 1;
+                write(1, up, upos);
+                this.renderMultiOptions(buf, promptText, cursor, selected);
             }
         }
 
-        __djinn_raw_disable();
+        Spectre.rawDisable();
 
         memcpy(results, selected, this.count);
 

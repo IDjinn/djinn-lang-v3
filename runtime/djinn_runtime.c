@@ -23,7 +23,7 @@ Logger* logger;
 #include <termios.h>
 #endif
 
-#define DJINN_ENABLE_TRACE
+// #define DJINN_ENABLE_TRACE
 #ifdef DJINN_ENABLE_TRACE
 #define DJINN_TRACE(message, ...) do {                         \
 DJINN_ASSERT(logger, "Logger not initlizatied properly!"); \
@@ -1556,8 +1556,7 @@ void __djinn_raw_enable(void)
     GetConsoleMode(h, &__djinn_original_console_mode);
     __djinn_raw_saved = 1;
     DWORD mode = __djinn_original_console_mode;
-    mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
-    mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+    mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT);
     SetConsoleMode(h, mode);
     HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD outMode;
@@ -1579,8 +1578,10 @@ void __djinn_raw_disable(void)
 {
     if (!__djinn_raw_saved) return;
 #ifdef _WIN32
+    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
     SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), __djinn_original_console_mode);
 #else
+    tcflush(STDIN_FILENO, TCIFLUSH);
     tcsetattr(STDIN_FILENO, TCSANOW, &__djinn_original_termios);
 #endif
     __djinn_raw_saved = 0;
@@ -1601,22 +1602,46 @@ int32_t __djinn_read_key(void)
         DJINN_TRACE("read_key: eventType=%d vk=0x%04X ch=%d('%c') scan=0x%04X",
                     rec.EventType, vk, (int)ch, (ch >= 32 && ch < 127) ? ch : '?',
                     rec.Event.KeyEvent.wVirtualScanCode);
-        switch (vk)
+        if (vk == 0x26)
         {
-        case 0x26: DJINN_TRACE("read_key: -> UP (-1)");
+            DJINN_TRACE("read_key: -> UP (-1)");
             return -1;
-        case 0x28: DJINN_TRACE("read_key: -> DOWN (-2)");
-            return -2;
-        case 0x0D: DJINN_TRACE("read_key: -> ENTER (-3)");
-            return -3;
-        case 0x1B: DJINN_TRACE("read_key: -> ESCAPE (-5)");
-            return -5;
-        default: break;
         }
-        if (ch == ' ')
+        if (vk == 0x28)
+        {
+            DJINN_TRACE("read_key: -> DOWN (-2)");
+            return -2;
+        }
+        if (vk == 0x25)
+        {
+            DJINN_TRACE("read_key: -> LEFT");
+            continue;
+        }
+        if (vk == 0x27)
+        {
+            DJINN_TRACE("read_key: -> RIGHT");
+            continue;
+        }
+        if (vk == 0x0D || ch == 13 || ch == 10)
+        {
+            DJINN_TRACE("read_key: -> ENTER (-3)");
+            return -3;
+        }
+        if (vk == 0x1B || ch == 27)
+        {
+            DJINN_TRACE("read_key: -> ESCAPE (-5)");
+            return -5;
+        }
+        if (vk == 0x20 || ch == 32)
         {
             DJINN_TRACE("read_key: -> SPACE (-4)");
             return -4;
+        }
+        if (ch == 3)
+        {
+            DJINN_TRACE("read_key: -> CTRL+C");
+            __djinn_raw_disable();
+            exit(1);
         }
         if (ch != 0)
         {
@@ -1640,6 +1665,7 @@ int32_t __djinn_read_key(void)
         }
         return -5;
     }
+    if (c == 3) { __djinn_raw_disable(); exit(1); }
     if (c == '\r' || c == '\n') return -3;
     if (c == ' ') return -4;
     return (int32_t)c;
