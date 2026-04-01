@@ -175,7 +175,7 @@ struct ProjectConfig
         config.name = root.get<std::string>("project", "");
         if (config.name.empty())
             LOG_ERROR(" [project] project file '%s' does not have a valid 'project' name declared!",
-                  projFile.string().c_str());
+                      projFile.string().c_str());
         config.version = root.get<std::string>("version", "1.0.0");
 
         config.compiler.logger.level = root.get<std::string>("compiler.logger.level", "TRACE");
@@ -212,7 +212,8 @@ struct ProjectConfig
     {
         const auto& cc = compiler;
 
-        auto applyOpt = [](auto& target, const auto& source) {
+        auto applyOpt = [](auto& target, const auto& source)
+        {
             if (source.has_value()) target = *source;
         };
 

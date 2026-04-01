@@ -285,6 +285,48 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
         return result;
     }
 
+    if (auto* call = dynamic_cast<const FunctionCall*>(expr.object.get()))
+    {
+        llvm::Value* callResult = generate_function_call(*call);
+
+        llvm::StructType* structType = nullptr;
+        std::string structName;
+        llvm::Value* basePtr = callResult;
+
+        if (callResult->getType()->isStructTy())
+        {
+            structType = llvm::cast<llvm::StructType>(callResult->getType());
+            structName = structType->getName().str();
+            auto* tmpAlloca = builder->CreateAlloca(structType, nullptr, "call_tmp");
+            builder->CreateStore(callResult, tmpAlloca);
+            basePtr = tmpAlloca;
+        }
+        else
+        {
+            GENERATOR_ERROR(DiagnosticCode::NOT_A_STRUCT, "acesso a campo em resultado de função que não é struct",
+                            expr.fieldName.location);
+        }
+
+        const auto* fieldIndices = currentScope->get_field_indices(structName);
+        if (!fieldIndices)
+        {
+            GENERATOR_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName,
+                            expr.fieldName.location);
+        }
+
+        const auto fieldIt = fieldIndices->find(expr.fieldName.token_name);
+        if (fieldIt == fieldIndices->end())
+        {
+            GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FIELD, "campo não encontrado: " + expr.fieldName.token_name,
+                            expr.fieldName.location);
+        }
+
+        const unsigned fieldIdx = fieldIt->second;
+        auto* fieldPtr = builder->CreateStructGEP(structType, basePtr, fieldIdx, expr.fieldName.token_name + "_ptr");
+        llvm::Type* fieldType = structType->getElementType(fieldIdx);
+        return builder->CreateLoad(fieldType, fieldPtr, expr.fieldName.token_name);
+    }
+
     GENERATOR_ERROR(DiagnosticCode::INVALID_OPERATION, "acesso a campo só suportado em identificadores simples",
                     expr.fieldName.location);
 }

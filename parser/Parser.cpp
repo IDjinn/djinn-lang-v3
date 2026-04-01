@@ -461,7 +461,9 @@ std::unique_ptr<InterfaceDeclaration> Parser::parse_interface()
 std::unique_ptr<StructDeclaration> Parser::parse_struct()
 {
     std::vector<AttributeUsageDeclaration> attributes = this->parse_attributes();
-    expect("Esperado 'struct'", TokenType::STRUCT);
+    if (check(TokenType::STRUCT))
+        expect("Esperado 'struct'", TokenType::STRUCT);
+
     SourceIdentifier name = match(TokenType::IDENTIFIER)
                                 ? makeSourceIdentifier(previous())
                                 : SourceIdentifier(Type::generate_struct_name());
@@ -877,19 +879,15 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             {
                 program->impls.push_back(parse_impl());
             }
-            else if (check(TokenType::LBRACKET) || check(TokenType::STRUCT))
+            else if (check(TokenType::STRUCT) || check(TokenType::LBRACKET) || check(TokenType::LBRACE))
             {
                 auto structDecl = parse_struct();
+                auto structName = structDecl->name.token_name;
+                program->structs.push_back(std::move(structDecl));
 
-                // struct { ... } func() { ... }
-                if (!check(TokenType::IDENTIFIER) || isType())
+                if (check(TokenType::IDENTIFIER))
                 {
-                    program->structs.push_back(std::move(structDecl));
-                }
-                else
-                {
-                    auto returnType = std::make_unique<Type>(Type::struct_type(structDecl->name.token_name));
-                    program->structs.push_back(std::move(structDecl));
+                    auto returnType = std::make_unique<Type>(Type::struct_type(structName));
                     program->functions.push_back(parse_function_with_type(std::move(returnType)));
                 }
             }
@@ -2132,6 +2130,7 @@ std::unique_ptr<NamespaceDeclaration> Parser::parse_namespace()
         }
         else if (check(TokenType::STRUCT))
         {
+            expect("Esperado 'struct'", TokenType::STRUCT);
             auto structDecl = parse_struct();
 
             if (!check(TokenType::IDENTIFIER) || isType())
