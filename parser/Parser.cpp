@@ -467,8 +467,8 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     SourceIdentifier name = match(TokenType::IDENTIFIER)
                                 ? makeSourceIdentifier(previous())
                                 : SourceIdentifier(Type::generate_struct_name(),
-                                                  SourceLocation(peek().position.fileId, peek().position.line,
-                                                                 peek().position.column, 0));
+                                                   SourceLocation(peek().position.fileId, peek().position.line,
+                                                                  peek().position.column, 0));
 
     // Parse generic parameters: struct Array<T, U> { ... }
     GenericParams genericParams;

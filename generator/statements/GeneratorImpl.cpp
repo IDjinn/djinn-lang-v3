@@ -8,8 +8,12 @@ bool Generator::is_primitive_impl(const StructSymbol& struc) const
 {
     // A primitive impl is a synthetic struct created by the binder
     // for impl blocks on primitive types (i32, f64, etc.)
-    // It has no fields, and its baseType is a primitive type.
-    return struc.fields.empty() && struc.baseType &&
+    // It has no non-const fields, and its baseType is a primitive type.
+    // Const fields (e.g. MAX_VALUE from `impl i32 { const i32 MAX_VALUE = ...; }`)
+    // don't occupy struct layout and should not disqualify primitive impls.
+    const bool hasNonConstFields = std::ranges::any_of(struc.fields,
+                                                       [](const auto& f) { return !f.isConstant; });
+    return !hasNonConstFields && struc.baseType &&
         struc.baseType->kind != TypeKind::STRUCT;
 }
 
