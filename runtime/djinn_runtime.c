@@ -20,9 +20,10 @@ Logger* logger;
 #include <time.h>
 #include <netinet/tcp.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #endif
 
-// #define DJINN_ENABLE_TRACE
+#define DJINN_ENABLE_TRACE
 #ifdef DJINN_ENABLE_TRACE
 #define DJINN_TRACE(message, ...) do {                         \
 DJINN_ASSERT(logger, "Logger not initlizatied properly!"); \
@@ -1537,5 +1538,94 @@ int32_t __djinn_terminal_height(void)
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 0)
         return w.ws_row;
     return 24;
+#endif
+}
+
+#ifdef _WIN32
+static DWORD __djinn_original_console_mode = 0;
+static int __djinn_raw_saved = 0;
+#else
+static struct termios __djinn_original_termios;
+static int __djinn_raw_saved = 0;
+#endif
+
+void __djinn_raw_enable(void)
+{
+#ifdef _WIN32
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    GetConsoleMode(h, &__djinn_original_console_mode);
+    __djinn_raw_saved = 1;
+    DWORD mode = __djinn_original_console_mode;
+    mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
+    mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+    SetConsoleMode(h, mode);
+    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD outMode;
+    GetConsoleMode(out, &outMode);
+    outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(out, outMode);
+#else
+    tcgetattr(STDIN_FILENO, &__djinn_original_termios);
+    __djinn_raw_saved = 1;
+    struct termios raw = __djinn_original_termios;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+#endif
+}
+
+void __djinn_raw_disable(void)
+{
+    if (!__djinn_raw_saved) return;
+#ifdef _WIN32
+    SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), __djinn_original_console_mode);
+#else
+    tcsetattr(STDIN_FILENO, TCSANOW, &__djinn_original_termios);
+#endif
+    __djinn_raw_saved = 0;
+}
+
+int32_t __djinn_read_key(void)
+{
+#ifdef _WIN32
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    INPUT_RECORD rec;
+    DWORD count;
+    while (1) {
+        if (!ReadConsoleInputA(h, &rec, 1, &count) || count == 0) continue;
+        if (rec.EventType != KEY_EVENT || !rec.Event.KeyEvent.bKeyDown) continue;
+        WORD vk = rec.Event.KeyEvent.wVirtualKeyCode;
+        char ch = rec.Event.KeyEvent.uChar.AsciiChar;
+        DJINN_TRACE("read_key: eventType=%d vk=0x%04X ch=%d('%c') scan=0x%04X",
+            rec.EventType, vk, (int)ch, (ch >= 32 && ch < 127) ? ch : '?',
+            rec.Event.KeyEvent.wVirtualScanCode);
+        switch (vk) {
+            case 0x26: DJINN_TRACE("read_key: -> UP (-1)"); return -1;
+            case 0x28: DJINN_TRACE("read_key: -> DOWN (-2)"); return -2;
+            case 0x0D: DJINN_TRACE("read_key: -> ENTER (-3)"); return -3;
+            case 0x1B: DJINN_TRACE("read_key: -> ESCAPE (-5)"); return -5;
+            default: break;
+        }
+        if (ch == ' ') { DJINN_TRACE("read_key: -> SPACE (-4)"); return -4; }
+        if (ch != 0) { DJINN_TRACE("read_key: -> char %d", (int)ch); return (int32_t)ch; }
+        DJINN_TRACE("read_key: -> ignored (ch=0, vk=0x%04X)", vk);
+    }
+#else
+    unsigned char c;
+    if (read(STDIN_FILENO, &c, 1) != 1) return -5;
+    if (c == 27) {
+        unsigned char seq[2];
+        if (read(STDIN_FILENO, &seq[0], 1) != 1) return -5;
+        if (read(STDIN_FILENO, &seq[1], 1) != 1) return -5;
+        if (seq[0] == '[') {
+            if (seq[1] == 'A') return -1;
+            if (seq[1] == 'B') return -2;
+        }
+        return -5;
+    }
+    if (c == '\r' || c == '\n') return -3;
+    if (c == ' ') return -4;
+    return (int32_t)c;
 #endif
 }

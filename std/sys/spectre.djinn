@@ -5,6 +5,9 @@ namespace std::sys;
 extern "C" {
     i32 __djinn_terminal_width();
     i32 __djinn_terminal_height();
+    void __djinn_raw_enable();
+    void __djinn_raw_disable();
+    i32 __djinn_read_key();
 }
 
 struct Spectre {
@@ -993,5 +996,589 @@ struct SpectreAlign {
         buf[pos] = 10;
         pos = pos + 1;
         write(1, buf, pos);
+    }
+}
+
+struct SpectreGrid {
+    const i32 MAX_COLS = 16;
+    const i32 MAX_ROWS = 128;
+    const i32 CELL_WIDTH = 64;
+
+    i8* cells;
+    i8* colWidths;
+    mut i32 numCols;
+    mut i32 numRows;
+    mut i32 cellIdx;
+
+    public static SpectreGrid create(i32 cols) {
+        i8* c = (i8*)__djinn_malloc(128 * 16 * 64);
+        i8* w = (i8*)__djinn_malloc(16);
+        memset(c, 0, 128 * 16 * 64);
+        memset(w, 0, 16);
+        SpectreGrid g = { .cells = c, .colWidths = w, .numCols = cols, .numRows = 0, .cellIdx = 0 };
+        return g;
+    }
+
+    public void addRow() {
+        this.numRows = this.numRows + 1;
+        this.cellIdx = 0;
+    }
+
+    public void addCell(i8* text) {
+        i32 col = this.cellIdx;
+        i32 row = this.numRows - 1;
+        if (col >= this.numCols || row < 0) { return; }
+
+        i32 offset = (row * MAX_COLS + col) * CELL_WIDTH;
+        mut i32 len = strlen(text);
+        if (len >= CELL_WIDTH) { len = CELL_WIDTH - 1; }
+        memcpy(this.cells + offset, text, len);
+        this.cells[offset + len] = 0;
+
+        if ((i8)len > this.colWidths[col]) {
+            this.colWidths[col] = (i8)len;
+        }
+        this.cellIdx = col + 1;
+    }
+
+    public void render() {
+        i8* buf = i8[4096];
+
+        mut i32 r = 0;
+        while (r < this.numRows) {
+            mut i32 pos = 0;
+            mut i32 c = 0;
+            while (c < this.numCols) {
+                i8* cell = this.cells + (r * MAX_COLS + c) * CELL_WIDTH;
+                i32 len = strlen(cell);
+                memcpy(buf + pos, cell, len);
+                pos = pos + len;
+
+                mut i32 pad = (i32)this.colWidths[c] - len + 2;
+                while (pad > 0) {
+                    buf[pos] = 32;
+                    pos = pos + 1;
+                    pad = pad - 1;
+                }
+                c = c + 1;
+            }
+            buf[pos] = 10;
+            pos = pos + 1;
+            write(1, buf, pos);
+            r = r + 1;
+        }
+    }
+
+    public void destroy() {
+        __djinn_free(this.cells);
+        __djinn_free(this.colWidths);
+    }
+}
+
+struct SpectreColumns {
+    public static void render(i8* items, i32 itemCount, i32 itemSize) {
+        i32 termW = Spectre.width();
+        mut i32 maxLen = 0;
+        mut i32 i = 0;
+        while (i < itemCount) {
+            i32 len = strlen(items + i * itemSize);
+            if (len > maxLen) { maxLen = len; }
+            i = i + 1;
+        }
+        i32 colW = maxLen + 2;
+        mut i32 numCols = termW / colW;
+        if (numCols < 1) { numCols = 1; }
+
+        i8* buf = i8[4096];
+        mut i32 pos = 0;
+        i = 0;
+        mut i32 col = 0;
+        while (i < itemCount) {
+            i8* item = items + i * itemSize;
+            i32 len = strlen(item);
+            memcpy(buf + pos, item, len);
+            pos = pos + len;
+
+            mut i32 pad = colW - len;
+            while (pad > 0) {
+                buf[pos] = 32;
+                pos = pos + 1;
+                pad = pad - 1;
+            }
+
+            col = col + 1;
+            if (col >= numCols) {
+                buf[pos] = 10;
+                pos = pos + 1;
+                write(1, buf, pos);
+                pos = 0;
+                col = 0;
+            }
+            i = i + 1;
+        }
+        if (pos > 0) {
+            buf[pos] = 10;
+            pos = pos + 1;
+            write(1, buf, pos);
+        }
+    }
+}
+
+struct SpectreTextPath {
+    public static void render(i8* path) {
+        i32 len = strlen(path);
+        i8* buf = i8[4096];
+        mut i32 pos = 0;
+        mut i32 i = 0;
+        mut i32 lastSep = -1;
+
+        while (i < len) {
+            if (path[i] == 47 || path[i] == 92) {
+                lastSep = i;
+            }
+            i = i + 1;
+        }
+
+        if (lastSep < 0) {
+            pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+            pos = Spectre.writeText(buf, pos, path);
+            pos = Spectre.writeReset(buf, pos);
+        } else {
+            pos = Spectre.writeCode(buf, pos, Spectre.FG_BLUE);
+            i = 0;
+            while (i <= lastSep) {
+                buf[pos] = path[i];
+                pos = pos + 1;
+                i = i + 1;
+            }
+            pos = Spectre.writeReset(buf, pos);
+
+            pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+            while (i < len) {
+                buf[pos] = path[i];
+                pos = pos + 1;
+                i = i + 1;
+            }
+            pos = Spectre.writeReset(buf, pos);
+        }
+
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+}
+
+struct SpectreEmoji {
+    public static void printCheck(i8* message) {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_GREEN);
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x9C;
+        buf[pos + 2] = (i8)0x93;
+        pos = pos + 3;
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, message);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void printCross(i8* message) {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_RED);
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x9C;
+        buf[pos + 2] = (i8)0x97;
+        pos = pos + 3;
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, message);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void printWarning(i8* message) {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_YELLOW);
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x9A;
+        buf[pos + 2] = (i8)0xA0;
+        pos = pos + 3;
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, message);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+
+    public static void printInfo(i8* message) {
+        i8* buf = i8[512];
+        mut i32 pos = 0;
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_BLUE);
+        buf[pos] = (i8)0xE2;
+        buf[pos + 1] = (i8)0x84;
+        buf[pos + 2] = (i8)0xB9;
+        pos = pos + 3;
+        pos = Spectre.writeReset(buf, pos);
+        buf[pos] = 32;
+        pos = pos + 1;
+        pos = Spectre.writeText(buf, pos, message);
+        buf[pos] = 10;
+        pos = pos + 1;
+        write(1, buf, pos);
+    }
+}
+
+struct SpectreLive {
+    mut i32 lineCount;
+
+    public static SpectreLive create() {
+        SpectreLive l = { .lineCount = 0 };
+        return l;
+    }
+
+    private i32 writeCursorUp(i8* buf, i32 pos, i32 n) {
+        mut i32 p = pos;
+        p = Spectre.escStart(buf, p);
+        i32 len = snprintf(buf + p, 8, "%d", n);
+        p = p + len;
+        buf[p] = 65;
+        return p + 1;
+    }
+
+    public void update(i8* content) {
+        i8* buf = i8[4096];
+        mut i32 pos = 0;
+
+        if (this.lineCount > 0) {
+            pos = this.writeCursorUp(buf, pos, this.lineCount);
+        }
+
+        mut i32 lines = 0;
+        mut i32 i = 0;
+        i32 contentLen = strlen(content);
+
+        while (i < contentLen) {
+            pos = Spectre.writeCursorErase(buf, pos);
+            pos = Spectre.writeCursorCol1(buf, pos);
+
+            while (i < contentLen && content[i] != 10) {
+                buf[pos] = content[i];
+                pos = pos + 1;
+                i = i + 1;
+            }
+            buf[pos] = 10;
+            pos = pos + 1;
+            lines = lines + 1;
+
+            if (i < contentLen) {
+                i = i + 1;
+            }
+
+            if (pos >= 3800) {
+                write(1, buf, pos);
+                pos = 0;
+            }
+        }
+
+        if (pos > 0) {
+            write(1, buf, pos);
+        }
+        this.lineCount = lines;
+    }
+
+    public void clear() {
+        if (this.lineCount <= 0) { return; }
+        i8* buf = i8[1024];
+        mut i32 pos = 0;
+        pos = this.writeCursorUp(buf, pos, this.lineCount);
+        mut i32 i = 0;
+        while (i < this.lineCount) {
+            pos = Spectre.writeCursorErase(buf, pos);
+            pos = Spectre.writeCursorCol1(buf, pos);
+            buf[pos] = 10;
+            pos = pos + 1;
+            i = i + 1;
+        }
+        pos = this.writeCursorUp(buf, pos, this.lineCount);
+        write(1, buf, pos);
+        this.lineCount = 0;
+    }
+}
+
+struct SpectreSelect {
+    const i32 MAX_OPTIONS = 32;
+    const i32 OPTION_SIZE = 64;
+    const i32 KEY_UP = -1;
+    const i32 KEY_DOWN = -2;
+    const i32 KEY_ENTER = -3;
+    const i32 KEY_SPACE = -4;
+    const i32 KEY_ESCAPE = -5;
+
+    i8* options;
+    mut i32 count;
+
+    public static SpectreSelect create() {
+        i8* o = (i8*)__djinn_malloc(32 * 64);
+        memset(o, 0, 32 * 64);
+        SpectreSelect s = { .options = o, .count = 0 };
+        return s;
+    }
+
+    public void addOption(i8* text) {
+        i32 idx = this.count;
+        if (idx >= MAX_OPTIONS) { return; }
+        i32 offset = idx * OPTION_SIZE;
+        mut i32 len = strlen(text);
+        if (len >= OPTION_SIZE) { len = OPTION_SIZE - 1; }
+        memcpy(this.options + offset, text, len);
+        this.options[offset + len] = 0;
+        this.count = idx + 1;
+    }
+
+    private void renderOptions(i8* buf, i8* prompt, i32 selected) {
+        mut i32 pos = 0;
+
+        pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_CYAN);
+        pos = Spectre.writeText(buf, pos, "? ");
+        pos = Spectre.writeReset(buf, pos);
+        pos = Spectre.writeText(buf, pos, prompt);
+        buf[pos] = 10;
+        pos = pos + 1;
+
+        mut i32 i = 0;
+        while (i < this.count) {
+            pos = Spectre.writeCursorErase(buf, pos);
+            pos = Spectre.writeCursorCol1(buf, pos);
+
+            if (i == selected) {
+                pos = Spectre.writeCode(buf, pos, Spectre.FG_GREEN);
+                pos = Spectre.writeText(buf, pos, "  > ");
+                pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+            } else {
+                pos = Spectre.writeText(buf, pos, "    ");
+            }
+
+            pos = Spectre.writeText(buf, pos, this.options + i * OPTION_SIZE);
+            pos = Spectre.writeReset(buf, pos);
+            buf[pos] = 10;
+            pos = pos + 1;
+            i = i + 1;
+        }
+
+        write(1, buf, pos);
+    }
+
+    private void renderMultiOptions(i8* buf, i8* prompt, i32 cursor, i8* selected) {
+        mut i32 pos = 0;
+
+        pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+        pos = Spectre.writeCode(buf, pos, Spectre.FG_CYAN);
+        pos = Spectre.writeText(buf, pos, "? ");
+        pos = Spectre.writeReset(buf, pos);
+        pos = Spectre.writeText(buf, pos, prompt);
+        pos = Spectre.writeText(buf, pos, " (space to toggle, enter to confirm)");
+        buf[pos] = 10;
+        pos = pos + 1;
+
+        mut i32 i = 0;
+        while (i < this.count) {
+            pos = Spectre.writeCursorErase(buf, pos);
+            pos = Spectre.writeCursorCol1(buf, pos);
+
+            if (i == cursor) {
+                pos = Spectre.writeCode(buf, pos, Spectre.FG_GREEN);
+                pos = Spectre.writeText(buf, pos, "  > ");
+            } else {
+                pos = Spectre.writeText(buf, pos, "    ");
+            }
+
+            if (selected[i] != 0) {
+                pos = Spectre.writeCode(buf, pos, Spectre.FG_GREEN);
+                pos = Spectre.writeText(buf, pos, "[x] ");
+            } else {
+                pos = Spectre.writeText(buf, pos, "[ ] ");
+            }
+
+            if (i == cursor) {
+                pos = Spectre.writeCode(buf, pos, Spectre.BOLD);
+            }
+            pos = Spectre.writeText(buf, pos, this.options + i * OPTION_SIZE);
+            pos = Spectre.writeReset(buf, pos);
+            buf[pos] = 10;
+            pos = pos + 1;
+            i = i + 1;
+        }
+
+        write(1, buf, pos);
+    }
+
+    public i32 prompt(i8* prompt) {
+        __djinn_raw_enable();
+        i8* buf = i8[4096];
+        mut i32 selected = 0;
+
+        this.renderOptions(buf, prompt, selected);
+
+        mut bool done = false;
+        while (!done) {
+            i32 key = __djinn_read_key();
+            if (key == KEY_UP && selected > 0) {
+                selected = selected - 1;
+            } else if (key == KEY_DOWN && selected < this.count - 1) {
+                selected = selected + 1;
+            } else if (key == KEY_ENTER) {
+                done = true;
+            } else if (key == KEY_ESCAPE) {
+                selected = -1;
+                done = true;
+            }
+
+            if (!done) {
+                mut i32 pos = 0;
+                pos = Spectre.escStart(buf, pos);
+                i32 lines = this.count + 1;
+                i32 len = snprintf(buf + pos, 8, "%d", lines);
+                pos = pos + len;
+                buf[pos] = 65;
+                pos = pos + 1;
+                write(1, buf, pos);
+                this.renderOptions(buf, prompt, selected);
+            }
+        }
+
+        __djinn_raw_disable();
+
+        i8* clearBuf = i8[512];
+        mut i32 cpos = 0;
+        cpos = Spectre.escStart(clearBuf, cpos);
+        i32 clines = this.count + 1;
+        mut i32 clen = snprintf(clearBuf + cpos, 8, "%d", clines);
+        cpos = cpos + clen;
+        clearBuf[cpos] = 65;
+        cpos = cpos + 1;
+        mut i32 cl = 0;
+        while (cl <= this.count) {
+            cpos = Spectre.writeCursorErase(clearBuf, cpos);
+            clearBuf[cpos] = 10;
+            cpos = cpos + 1;
+            cl = cl + 1;
+        }
+        cpos = Spectre.escStart(clearBuf, cpos);
+        clen = snprintf(clearBuf + cpos, 8, "%d", clines + 1);
+        cpos = cpos + clen;
+        clearBuf[cpos] = 65;
+        cpos = cpos + 1;
+        write(1, clearBuf, cpos);
+
+        if (selected >= 0) {
+            i8* result = i8[256];
+            mut i32 rpos = 0;
+            rpos = Spectre.writeCode(result, rpos, Spectre.FG_GREEN);
+            rpos = Spectre.writeText(result, rpos, "  > ");
+            rpos = Spectre.writeText(result, rpos, this.options + selected * OPTION_SIZE);
+            rpos = Spectre.writeReset(result, rpos);
+            result[rpos] = 10;
+            rpos = rpos + 1;
+            write(1, result, rpos);
+        }
+
+        return selected;
+    }
+
+    public void multiPrompt(i8* prompt, i8* results) {
+        __djinn_raw_enable();
+        i8* buf = i8[4096];
+        mut i32 cursor = 0;
+        i8* selected = i8[32];
+        memset(selected, 0, 32);
+
+        this.renderMultiOptions(buf, prompt, cursor, selected);
+
+        mut bool done = false;
+        while (!done) {
+            i32 key = __djinn_read_key();
+            if (key == KEY_UP && cursor > 0) {
+                cursor = cursor - 1;
+            } else if (key == KEY_DOWN && cursor < this.count - 1) {
+                cursor = cursor + 1;
+            } else if (key == KEY_SPACE) {
+                if (selected[cursor] == 0) {
+                    selected[cursor] = 1;
+                } else {
+                    selected[cursor] = 0;
+                }
+            } else if (key == KEY_ENTER) {
+                done = true;
+            }
+
+            if (!done) {
+                mut i32 pos = 0;
+                pos = Spectre.escStart(buf, pos);
+                i32 lines = this.count + 1;
+                i32 len = snprintf(buf + pos, 8, "%d", lines);
+                pos = pos + len;
+                buf[pos] = 65;
+                pos = pos + 1;
+                write(1, buf, pos);
+                this.renderMultiOptions(buf, prompt, cursor, selected);
+            }
+        }
+
+        __djinn_raw_disable();
+
+        memcpy(results, selected, this.count);
+
+        i8* clearBuf = i8[512];
+        mut i32 cpos = 0;
+        cpos = Spectre.escStart(clearBuf, cpos);
+        i32 clines = this.count + 1;
+        mut i32 clen = snprintf(clearBuf + cpos, 8, "%d", clines);
+        cpos = cpos + clen;
+        clearBuf[cpos] = 65;
+        cpos = cpos + 1;
+        mut i32 cl = 0;
+        while (cl <= this.count) {
+            cpos = Spectre.writeCursorErase(clearBuf, cpos);
+            clearBuf[cpos] = 10;
+            cpos = cpos + 1;
+            cl = cl + 1;
+        }
+        cpos = Spectre.escStart(clearBuf, cpos);
+        clen = snprintf(clearBuf + cpos, 8, "%d", clines + 1);
+        cpos = cpos + clen;
+        clearBuf[cpos] = 65;
+        cpos = cpos + 1;
+        write(1, clearBuf, cpos);
+
+        mut i32 si = 0;
+        while (si < this.count) {
+            if (selected[si] != 0) {
+                i8* result = i8[256];
+                mut i32 rpos = 0;
+                rpos = Spectre.writeCode(result, rpos, Spectre.FG_GREEN);
+                rpos = Spectre.writeText(result, rpos, "  [x] ");
+                rpos = Spectre.writeText(result, rpos, this.options + si * OPTION_SIZE);
+                rpos = Spectre.writeReset(result, rpos);
+                result[rpos] = 10;
+                rpos = rpos + 1;
+                write(1, result, rpos);
+            }
+            si = si + 1;
+        }
+    }
+
+    public void destroy() {
+        __djinn_free(this.options);
     }
 }
