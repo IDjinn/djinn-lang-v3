@@ -14,6 +14,7 @@
 #include <ryml_std.hpp>
 
 #include "../utils/Logger.h"
+#include "../DjinnCompiler.h"
 
 class YamlNode
 {
@@ -118,9 +119,9 @@ struct OutputConfig
 
 struct InternalsConfig
 {
-    std::optional<bool> printTokens; // lexer output
-    std::optional<bool> printAst; // parser output
-    std::optional<bool> printIr; // generator output
+    std::optional<bool> printTokens;
+    std::optional<bool> printAst;
+    std::optional<bool> printIr;
 };
 
 struct GeneratorConfig
@@ -171,14 +172,12 @@ struct ProjectConfig
         ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
         YamlNode root(tree.rootref());
 
-        // Project metadata
         config.name = root.get<std::string>("project", "");
         if (config.name.empty())
             LOG_ERROR(" [project] project file '%s' does not have a valid 'project' name declared!",
                   projFile.string().c_str());
         config.version = root.get<std::string>("version", "1.0.0");
 
-        // compiler.logger
         config.compiler.logger.level = root.get<std::string>("compiler.logger.level", "TRACE");
         config.compiler.logger.format = root.get<std::string>("compiler.logger.format", "");
 
@@ -197,7 +196,7 @@ struct ProjectConfig
         // compiler.generator
         config.compiler.generator.optimizationLevel = root.get<int>("compiler.generator.optimization-level", 2);
 
-        // compiler.libs — if declared, replaces default ["std"]
+        // compiler.libs
         if (root.has("compiler.libs"))
             config.compiler.libs = root.get_string_list("compiler.libs");
 
@@ -206,8 +205,40 @@ struct ProjectConfig
 
         // runtime
         config.runtime.logger.level = root.get<std::string>("runtime.logger.level", "INFO");
-
         return config;
+    }
+
+    void applyTo(CompilerOptions& options) const
+    {
+        const auto& cc = compiler;
+
+        auto applyOpt = [](auto& target, const auto& source) {
+            if (source.has_value()) target = *source;
+        };
+
+        applyOpt(options.generateBinary, cc.output.generateBinary);
+        applyOpt(options.runAfterCompile, cc.output.runAfterCompile);
+        applyOpt(options.bundleModules, cc.output.bundleModules);
+        applyOpt(options.libraryMode, cc.libraryMode);
+        applyOpt(options.print_ast, cc.internals.printAst);
+        applyOpt(options.print_ir, cc.internals.printIr);
+
+        if (!cc.output.fileName.empty() && options.outputFileName.empty())
+            options.outputFileName = cc.output.fileName;
+        if (!cc.output.directory.empty() && options.outputDirectory == "build")
+            options.outputDirectory = cc.output.directory;
+
+        bool hasStd = false;
+        for (const auto& lib : cc.libs)
+        {
+            if (lib == "std")
+                hasStd = true;
+            else
+                options.linkLibraries.emplace_back(lib);
+        }
+        options.includeStd = hasStd;
+
+        options.runtimeProperties.loggerLevel = runtime.logger.level;
     }
 };
 

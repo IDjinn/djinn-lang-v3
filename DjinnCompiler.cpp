@@ -64,7 +64,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
     {
         std::ofstream props(options.outputDirectory + "/runtime.properties");
-        props << "logger.level=" << options.runtimeProperties.loggerLevel << "\n";
+        options.runtimeProperties.serialize(props);
     }
 
     DiagnosticEngine diagnostics;

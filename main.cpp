@@ -202,7 +202,6 @@ int main(int argc, char* argv[])
         baseDir = baseDir.parent_path();
     }
 
-    // Load project config if djinn.proj exists (proj = defaults, CLI = overrides)
     const auto projFile = baseDir / "djinn.proj";
     if (fs::exists(projFile))
     {
@@ -211,38 +210,7 @@ int main(int argc, char* argv[])
         if (!config.name.empty())
             LOG_INFO("Project: %s v%s", config.name.c_str(), config.version.c_str());
 
-        // Apply proj config as defaults (CLI flags override)
-        const auto& cc = config.compiler;
-
-        // Output
-        if (cc.output.generateBinary.has_value()) options.generateBinary = *cc.output.generateBinary;
-        if (cc.output.runAfterCompile.has_value()) options.runAfterCompile = *cc.output.runAfterCompile;
-        if (cc.output.bundleModules.has_value()) options.bundleModules = *cc.output.bundleModules;
-        if (!cc.output.fileName.empty() && options.outputFileName.empty())
-            options.outputFileName = cc.output.fileName;
-        if (!cc.output.directory.empty() && options.outputDirectory == "build")
-            options.outputDirectory = cc.output.directory;
-
-        // Internals
-        if (cc.internals.printAst.has_value()) options.print_ast = *cc.internals.printAst;
-        if (cc.internals.printIr.has_value()) options.print_ir = *cc.internals.printIr;
-
-        // Libs — "std" means include djinn stdlib, others are .ll link targets
-        bool hasStd = false;
-        for (const auto& lib : cc.libs)
-        {
-            if (lib == "std")
-                hasStd = true;
-            else
-                options.linkLibraries.emplace_back(lib);
-        }
-        options.includeStd = hasStd;
-
-        // Top-level compiler
-        if (cc.libraryMode.has_value()) options.libraryMode = *cc.libraryMode;
-
-        // Runtime properties
-        options.runtimeProperties.loggerLevel = config.runtime.logger.level;
+        config.applyTo(options);
     }
 
     result = DjinnCompiler::compileFromDirectory(baseDir, options);

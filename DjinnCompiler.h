@@ -17,6 +17,11 @@
 struct RuntimeProperties
 {
     std::string loggerLevel = "INFO";
+
+    void serialize(std::ostream& out) const
+    {
+        out << "logger.level=" << loggerLevel << "\n";
+    }
 };
 
 struct CompilerOptions
