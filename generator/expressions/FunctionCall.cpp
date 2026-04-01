@@ -8,6 +8,8 @@
 #include "../Intrinsics.h"
 #include "llvm/IR/Intrinsics.h"
 #include <unordered_map>
+#include <llvm/IR/InlineAsm.h>
+
 #include "../../utils/Logger.h"
 
 bool Generator::is_intrinsic(const std::string& name)
@@ -432,7 +434,6 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
 
     llvm::Function* func = it->second;
     const llvm::FunctionType* funcType = func->getFunctionType();
-
     std::vector<llvm::Value*> args;
     size_t argIdx = 0;
     for (const auto& arg : expr.arguments)
@@ -466,7 +467,17 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
         argIdx++;
     }
 
-    return builder->CreateCall(func, args);
+    auto call = builder->CreateCall(func, args);
+    auto isExternFunctionDeclaration = func->isDeclaration() && !func->isIntrinsic();
+    if (isExternFunctionDeclaration)
+    // if we are calling a extern function, we flag this call as no-optimize, otherwise llvm could wipe out this entire call.
+    {
+        func->setMemoryEffects(llvm::MemoryEffects::unknown());
+        call->setCannotDuplicate();
+        call->setTailCall(false);
+    }
+
+    return call;
 }
 
 llvm::Value* Generator::generate_new_expression(const NewExpression& expr)
@@ -793,11 +804,19 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             // If method exists in symbol but not yet generated, forward-declare it on demand
             if (!func)
             {
+                func = module->getFunction(mangledName);
+                if (func)
+                {
+                    functions[mangledName] = func;
+                    def->methodFunctions[call.name.token_name] = func;
+                }
+            }
+            if (!func && def->llvmType && !def->fields.empty())
+            {
                 for (const auto& method : def->methods)
                 {
                     if (method->name == call.name.token_name)
                     {
-                        // Create function prototype on the fly
                         llvm::Type* retType = method->isAsync
                                                   ? llvm::PointerType::getUnqual(*context)
                                                   : generate_type(method->returnType);
@@ -874,16 +893,15 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             {
                 if (alloca->getAllocatedType()->isPointerTy())
                 {
-                    // 'this' or pointer variable: alloca holds a ptr to the struct, load it
                     args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "self"));
                 }
-                else if (!alloca->getAllocatedType()->isStructTy())
+                else if (alloca->getAllocatedType()->isStructTy())
                 {
-                    args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "this_val"));
+                    args.push_back(alloca);
                 }
                 else
                 {
-                    args.push_back(alloca);
+                    args.push_back(builder->CreateLoad(alloca->getAllocatedType(), alloca, "this_val"));
                 }
             }
             else

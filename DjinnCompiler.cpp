@@ -251,7 +251,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #ifdef _WIN32
             ".exe";
 #else
-        "";
+            "";
 #endif
         if (options.generateBinary)
         {
@@ -416,7 +416,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         diagnostics.registerSource("main.djinn", source);
 
-        Lexer lexer(source);
+        Lexer lexer(source, "main");
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens, diagnostics);
@@ -478,7 +478,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 #ifdef _WIN32
             ".exe";
 #else
-        "";
+            "";
 #endif
 
         {

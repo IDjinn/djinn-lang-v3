@@ -27,7 +27,7 @@ struct RuntimeProperties
 struct CompilerOptions
 {
     bool print_ast = false;
-    bool print_ir = true;
+    bool print_ir = false;
     bool optimize = true;
     bool generateBinary = true;
     bool includeStd = true;

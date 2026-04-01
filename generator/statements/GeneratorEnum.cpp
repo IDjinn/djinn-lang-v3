@@ -12,7 +12,7 @@ void Generator::generate_enum(const EnumSymbol& enum_symbol)
 
     for (const auto& genParam : enum_symbol.genericParams)
     {
-        auto gp = GenericParam(SourceIdentifier(genParam.name));
+        auto gp = GenericParam(SourceIdentifier(genParam.name, SourceLocation()));
         gp.constraints = genParam.constraints;
         def.genericParams.params.push_back(std::move(gp));
     }

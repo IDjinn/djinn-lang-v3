@@ -34,7 +34,7 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
         def.genericParams = {};
         for (const auto& param : struct_symbol.genericParams)
         {
-            auto gp = GenericParam(SourceIdentifier(param.name));
+            auto gp = GenericParam(SourceIdentifier(param.name, SourceLocation()));
             gp.constraints = param.constraints;
             def.genericParams.params.push_back(std::move(gp));
         }

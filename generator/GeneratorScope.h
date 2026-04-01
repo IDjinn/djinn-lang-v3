@@ -139,7 +139,7 @@ struct EnumVariantDef
     EnumVariantDef() = default;
 
     EnumVariantDef(std::string name, std::vector<Type> types, unsigned tag)
-        : name(std::move(name)), associatedTypes(std::move(types)), tag(tag)
+        : name(std::move(name), SourceLocation()), associatedTypes(std::move(types)), tag(tag)
     {
     }
 

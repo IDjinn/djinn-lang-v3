@@ -87,3 +87,24 @@ TEST(Extern, StdImportNoDuplicateExternSymbols)
     EXPECT_NE(result.ir.find("@printf"), std::string::npos) << "printf should be declared in IR";
     EXPECT_NE(result.ir.find("@malloc"), std::string::npos) << "malloc should be declared in IR";
 }
+
+TEST(Extern, ExternNotRemovedByOptimizer)
+{
+    const std::string source = R"(
+        extern i32 printf(i8* format, ...);
+
+        i32 main() {
+            printf("optimized?\n");
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.optimize = true, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_NE(result.ir.find("declare"), std::string::npos)
+        << "extern declaration should not be removed by optimizer";
+    EXPECT_NE(result.ir.find("@printf"), std::string::npos)
+        << "printf should still be declared after optimization";
+    EXPECT_NE(result.ir.find("call"), std::string::npos)
+        << "call to printf should not be removed by optimizer";
+}

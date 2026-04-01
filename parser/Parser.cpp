@@ -466,7 +466,9 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
 
     SourceIdentifier name = match(TokenType::IDENTIFIER)
                                 ? makeSourceIdentifier(previous())
-                                : SourceIdentifier(Type::generate_struct_name());
+                                : SourceIdentifier(Type::generate_struct_name(),
+                                                  SourceLocation(peek().position.fileId, peek().position.line,
+                                                                 peek().position.column, 0));
 
     // Parse generic parameters: struct Array<T, U> { ... }
     GenericParams genericParams;
@@ -621,7 +623,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
                 // This is a constructor!
                 auto ctor = std::make_unique<StructMethodDeclaration>();
                 ctor->returnType = std::make_unique<Type>(Type::voided()); // void return type placeholder
-                ctor->name = SourceIdentifier(fieldType->structName, fieldType->location);
+                ctor->name = SourceIdentifier(fieldType->structName, name.location);
                 ctor->isConstructorMethod = true;
 
                 // Parse parameters
@@ -885,7 +887,7 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                 auto structName = structDecl->name.token_name;
                 program->structs.push_back(std::move(structDecl));
 
-                if (check(TokenType::IDENTIFIER))
+                if (structName.starts_with("__anon_struct_") && check(TokenType::IDENTIFIER))
                 {
                     auto returnType = std::make_unique<Type>(Type::struct_type(structName));
                     program->functions.push_back(parse_function_with_type(std::move(returnType)));
@@ -957,6 +959,17 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                     program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
                         *type, makeSourceIdentifier(nameToken), std::move(value)));
                 }
+            }
+            else if (check(TokenType::CONST))
+            {
+                advance(); // consume 'const'
+                auto type = parse_type();
+                const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
+                expect("Esperado '=' para constante", TokenType::EQUAL);
+                auto value = parse_expression();
+                expect("Esperado ';'", TokenType::SEMICOLON);
+                program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
+                    *type, makeSourceIdentifier(nameToken), std::move(value)));
             }
             else if (check(TokenType::ASYNC))
             {
@@ -2483,7 +2496,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_operator(const bool allow
         expect("Esperado '[' após '" + indexKind + "'", TokenType::LBRACKET);
         expect("Esperado ']' após '['", TokenType::RBRACKET);
         method->operatorCanonicalName = "__op_index_" + indexKind;
-        method->name = SourceIdentifier(method->operatorCanonicalName);
+        method->name = SourceIdentifier(method->operatorCanonicalName,
+                                        SourceLocation(previous().position.fileId, previous().position.line,
+                                                       previous().position.column, 0));
     }
     else
     {
@@ -2499,7 +2514,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_operator(const bool allow
 
         const Token& opToken = expect("Esperado operador (+, -, *, /, ==, etc.)", operatorTokens);
         method->operatorCanonicalName = operator_token_to_canonical_name(opToken.type);
-        method->name = SourceIdentifier(method->operatorCanonicalName);
+        method->name = SourceIdentifier(method->operatorCanonicalName,
+                                        SourceLocation(opToken.position.fileId, opToken.position.line,
+                                                       opToken.position.column, opToken.value.length()));
     }
 
     // Parse parameters: (Type left, Type right) or (Type operand) for unary

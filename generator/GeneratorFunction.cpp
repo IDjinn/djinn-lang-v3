@@ -367,9 +367,9 @@ void Generator::generate_extern_function(const ExternFunctionSymbol& func)
     );
 
     llvmFunc->addFnAttr(llvm::Attribute::NoInline);
-    llvmFunc->setDoesNotThrow();
     llvmFunc->removeFnAttr(llvm::Attribute::ReadNone);
     llvmFunc->removeFnAttr(llvm::Attribute::ReadOnly);
+    llvmFunc->addFnAttr(llvm::Attribute::NoUnwind);
 
     functions[func.name] = llvmFunc;
     externFunctions.push_back(llvmFunc);
