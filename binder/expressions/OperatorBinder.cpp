@@ -238,3 +238,28 @@ std::shared_ptr<Symbol> Binder::bindUnaryExpression(const UnaryExpression& expr)
         tokenTypeToString(expr.op), std::move(operand), resultType, expr.location
     );
 }
+
+std::shared_ptr<Symbol> Binder::bindPostfixExpression(const PostfixExpression& expr)
+{
+    if (const auto* ident = dynamic_cast<const Identifier*>(expr.operand.get()))
+    {
+        auto var = _current_scope->lookupVariable(ident->identifier.token_name);
+        if (var && !var->isMutable)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::IMMUTABLE_MODIFICATION,
+                "não é possível usar '" + tokenTypeToString(expr.op) + "' em variável imutável '" + ident->identifier.
+                token_name + "'",
+                ident->identifier,
+                expr.location
+            );
+        }
+    }
+
+    auto operand = bindExpression(*expr.operand);
+    Type resultType = operand ? operand->type : Type::voided();
+
+    return std::make_shared<UnaryExpressionSymbol>(
+        tokenTypeToString(expr.op), std::move(operand), resultType, expr.location
+    );
+}

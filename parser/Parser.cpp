@@ -1180,10 +1180,112 @@ std::unique_ptr<IfStatement> Parser::parse_if_statement()
     return stmt;
 }
 
-std::unique_ptr<ForStatement> Parser::parse_for_statement()
+std::unique_ptr<Statement> Parser::parse_for_statement()
 {
     expect("Esperado 'for'", TokenType::FOR);
     expect("Esperado '(' após for", TokenType::LPAREN);
+
+    // Detect range-for: for (type name in start..end)
+    auto saved = current;
+    bool isRangeFor = false;
+    if (isType())
+    {
+        parse_type();
+        if (check(TokenType::IDENTIFIER))
+        {
+            advance();
+            if (check(TokenType::IN))
+            {
+                isRangeFor = true;
+            }
+        }
+    }
+    current = saved;
+
+    // Detect anonymous range-for: for (start..end) or for ([start..end])
+    // Must check before named range-for falls through to regular for
+    saved = current;
+    bool isAnonRange = false;
+    bool anonHasBracket = false;
+    if (!isRangeFor)
+    {
+        if (check(TokenType::LBRACKET))
+        {
+            advance();
+            parse_expression();
+            if (check(TokenType::DOT_DOT) || check(TokenType::DOT_DOT_EQUAL))
+            {
+                isAnonRange = true;
+                anonHasBracket = true;
+            }
+        }
+        else
+        {
+            parse_expression();
+            if (check(TokenType::DOT_DOT) || check(TokenType::DOT_DOT_EQUAL))
+                isAnonRange = true;
+        }
+        current = saved;
+    }
+
+    if (isRangeFor || isAnonRange)
+    {
+        pushScope();
+
+        auto stmt = std::make_unique<RangeForStatement>();
+
+        if (isRangeFor)
+        {
+            auto varType = parse_type();
+            stmt->variableType = std::move(*varType);
+            stmt->variableName = makeSourceIdentifier(advance());
+            expect("Esperado 'in' após nome da variável", TokenType::IN);
+        }
+        else
+        {
+            static int anonRangeCounter = 0;
+            auto loc = SourceLocation(peek().position, peek().value.length());
+            stmt->variableType = Type(TypeKind::INTEGER, 32, true);
+            stmt->variableName = SourceIdentifier("__anon_i_" + std::to_string(anonRangeCounter++), loc);
+        }
+
+        // Parse range bounds: [start..end], [start..end), start..end, start..=end
+        bool hasBracket = match(TokenType::LBRACKET);
+        stmt->startInclusive = true;
+
+        auto startExpr = parse_expression();
+
+        bool inclusive = false;
+        if (match(TokenType::DOT_DOT_EQUAL))
+            inclusive = true;
+        else
+            expect("Esperado '..' ou '..=' no range", TokenType::DOT_DOT);
+
+        auto endExpr = parse_expression();
+
+        if (hasBracket)
+        {
+            if (match(TokenType::RBRACKET))
+                stmt->endInclusive = true;
+            else if (match(TokenType::RPAREN))
+                stmt->endInclusive = false;
+            else
+                expect("Esperado ']' ou ')' para fechar o bound do range", TokenType::RBRACKET);
+        }
+        else
+        {
+            stmt->endInclusive = inclusive;
+        }
+
+        expect("Esperado ')' após range", TokenType::RPAREN);
+
+        stmt->start = std::move(startExpr);
+        stmt->end = std::move(endExpr);
+        stmt->body = parse_block();
+
+        popScope();
+        return stmt;
+    }
 
     pushScope();
 
@@ -1592,6 +1694,12 @@ std::unique_ptr<Expression> Parser::parse_postfix()
             {
                 expr = std::make_unique<FieldAccess>(std::move(expr), std::move(memberName));
             }
+        }
+        else if (check(TokenType::PLUS_PLUS) || check(TokenType::MINUS_MINUS))
+        {
+            auto op = advance();
+            auto loc = SourceLocation(op.position, op.value.length());
+            expr = std::make_unique<PostfixExpression>(op.type, std::move(expr), loc);
         }
         else if (match(TokenType::LBRACKET))
         {

@@ -11,6 +11,7 @@ struct ReturnStatement;
 struct Block;
 struct IfStatement;
 struct ForStatement;
+struct RangeForStatement;
 struct WhileStatement;
 struct DoWhileStatement;
 struct SwitchStatement;
@@ -35,6 +36,8 @@ namespace djinn
         virtual void visit(const IfStatement& stmt) = 0;
 
         virtual void visit(const ForStatement& stmt) = 0;
+
+        virtual void visit(const RangeForStatement& stmt) = 0;
 
         virtual void visit(const WhileStatement& stmt) = 0;
 

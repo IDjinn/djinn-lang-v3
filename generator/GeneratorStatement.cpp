@@ -297,6 +297,80 @@ void Generator::generate_for_statement(const ForStatement& stmt)
     pop_scope();
 }
 
+void Generator::generate_range_for_statement(const RangeForStatement& stmt)
+{
+    push_scope();
+
+    llvm::Type* varType = generate_type(stmt.variableType);
+    auto* alloca = builder->CreateAlloca(varType, nullptr, stmt.variableName.token_name);
+    llvm::Value* startVal = generate_expression(*stmt.start);
+    startVal = cast_value(startVal, varType);
+
+    if (!stmt.startInclusive)
+    {
+        if (varType->isFloatingPointTy())
+            startVal = builder->CreateFAdd(startVal, llvm::ConstantFP::get(varType, 1.0), "rangefor.exstart");
+        else
+            startVal = builder->CreateAdd(startVal, llvm::ConstantInt::get(varType, 1), "rangefor.exstart");
+    }
+
+    builder->CreateStore(startVal, alloca);
+    currentScope->define_variable(stmt.variableName.token_name, alloca, "", nullptr);
+
+    llvm::Value* endVal = generate_expression(*stmt.end);
+    endVal = cast_value(endVal, varType);
+
+    llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*context, "rangefor.cond", currentFunction);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, "rangefor.body", currentFunction);
+    llvm::BasicBlock* incBB = llvm::BasicBlock::Create(*context, "rangefor.inc", currentFunction);
+    llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*context, "rangefor.end", currentFunction);
+
+    breakTargets.push_back(endBB);
+    continueTargets.push_back(incBB);
+
+    builder->CreateBr(condBB);
+
+    builder->SetInsertPoint(condBB);
+    llvm::Value* current = builder->CreateLoad(varType, alloca, stmt.variableName.token_name);
+    llvm::Value* cond;
+    if (varType->isFloatingPointTy())
+        cond = stmt.endInclusive
+                   ? builder->CreateFCmpOLE(current, endVal, "rangefor.cmp")
+                   : builder->CreateFCmpOLT(current, endVal, "rangefor.cmp");
+    else
+        cond = stmt.endInclusive
+                   ? builder->CreateICmpSLE(current, endVal, "rangefor.cmp")
+                   : builder->CreateICmpSLT(current, endVal, "rangefor.cmp");
+    builder->CreateCondBr(cond, bodyBB, endBB);
+
+    builder->SetInsertPoint(bodyBB);
+    if (stmt.body)
+    {
+        generate_block(*stmt.body);
+    }
+    if (!builder->GetInsertBlock()->getTerminator())
+    {
+        builder->CreateBr(incBB);
+    }
+
+    builder->SetInsertPoint(incBB);
+    llvm::Value* curVal = builder->CreateLoad(varType, alloca, stmt.variableName.token_name + ".inc");
+    llvm::Value* nextVal;
+    if (varType->isFloatingPointTy())
+        nextVal = builder->CreateFAdd(curVal, llvm::ConstantFP::get(varType, 1.0), "rangefor.next");
+    else
+        nextVal = builder->CreateAdd(curVal, llvm::ConstantInt::get(varType, 1), "rangefor.next");
+    builder->CreateStore(nextVal, alloca);
+    builder->CreateBr(condBB);
+
+    builder->SetInsertPoint(endBB);
+
+    breakTargets.pop_back();
+    continueTargets.pop_back();
+
+    pop_scope();
+}
+
 void Generator::generate_while_statement(const WhileStatement& stmt)
 {
     llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*context, "while.cond", currentFunction);

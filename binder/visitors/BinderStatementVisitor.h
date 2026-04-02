@@ -30,6 +30,8 @@ namespace djinn
 
         void visit(const ForStatement& stmt) override;
 
+        void visit(const RangeForStatement& stmt) override;
+
         void visit(const WhileStatement& stmt) override;
 
         void visit(const DoWhileStatement& stmt) override;

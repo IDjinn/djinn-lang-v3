@@ -44,6 +44,8 @@ namespace djinn
 
         void visit(const UnaryExpression& expr) override;
 
+        void visit(const PostfixExpression& expr) override;
+
         void visit(const VariableDeclaration& expr) override;
 
         void visit(const VariableInit& expr) override;

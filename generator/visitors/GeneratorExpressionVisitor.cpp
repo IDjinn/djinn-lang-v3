@@ -58,6 +58,11 @@ namespace djinn
         _result = _generator.generate_unary_expression(expr);
     }
 
+    void GeneratorExpressionVisitor::visit(const PostfixExpression& expr)
+    {
+        _result = _generator.generate_postfix_expression(expr);
+    }
+
     void GeneratorExpressionVisitor::visit(const VariableDeclaration& expr)
     {
         _result = _generator.generate_variable_declaration(expr);

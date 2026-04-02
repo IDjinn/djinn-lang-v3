@@ -16,6 +16,7 @@ struct FieldAccess;
 struct FieldAssignment;
 struct BinaryExpression;
 struct UnaryExpression;
+struct PostfixExpression;
 struct VariableDeclaration;
 struct VariableInit;
 struct Assignment;
@@ -56,6 +57,8 @@ namespace djinn
         virtual void visit(const BinaryExpression& expr) = 0;
 
         virtual void visit(const UnaryExpression& expr) = 0;
+
+        virtual void visit(const PostfixExpression& expr) = 0;
 
         virtual void visit(const VariableDeclaration& expr) = 0;
 

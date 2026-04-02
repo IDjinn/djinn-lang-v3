@@ -357,6 +357,24 @@ TEST(ControlFlow, ForLoopSimple)
     EXPECT_EQ(result.returnCode, 5);
 }
 
+
+TEST(ControlFlow, ForLoopPostfix)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 mut i = 0; i < 5; i++) {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
 TEST(ControlFlow, ForLoopSum)
 {
     const auto source = R"(
@@ -431,6 +449,275 @@ TEST(ControlFlow, ForLoopNested)
     const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 3 * 3 = 9
+}
+
+// ==================== RANGE FOR TESTS ====================
+
+TEST(ControlFlow, RangeForSimple)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 0..5) {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ControlFlow, RangeForSum)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 1..11) {
+                sum = sum + i;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 55); // 1 + 2 + ... + 10 = 55
+}
+
+TEST(ControlFlow, RangeForWithBreak)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 0..10) {
+                if (i == 5) {
+                    break;
+                }
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ControlFlow, RangeForWithContinue)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 0..10) {
+                if (i == 5) {
+                    continue;
+                }
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 9); // 10 iterations - 1 skipped = 9
+}
+
+TEST(ControlFlow, RangeForNested)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 0..3) {
+                for (i32 j in 0..4) {
+                    sum = sum + 1;
+                }
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 12); // 3 * 4 = 12
+}
+
+TEST(ControlFlow, RangeForAnonymous)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (0..5) {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ControlFlow, RangeForAnonymousNested)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (0..3) {
+                for (0..4) {
+                    sum = sum + 1;
+                }
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 12); // 3 * 4 = 12
+}
+
+TEST(ControlFlow, RangeForVariableAccess)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut last = 0;
+            for (i32 i in 0..7) {
+                last = i;
+            }
+            return last;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 6); // last value is 6 (0..7 is exclusive)
+}
+
+// ==================== RANGE BOUNDS TESTS ====================
+
+TEST(ControlFlow, RangeForInclusiveEnd)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 0..=5) {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 6); // 0, 1, 2, 3, 4, 5 = 6 iterations
+}
+
+TEST(ControlFlow, RangeForInclusiveEndSum)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in 1..=10) {
+                sum = sum + i;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 55); // 1 + 2 + ... + 10 = 55
+}
+
+TEST(ControlFlow, RangeForBracketClosed)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut last = 0;
+            for (i32 i in [0..5]) {
+                last = i;
+            }
+            return last;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5); // [0..5] inclusive both, last = 5
+}
+
+TEST(ControlFlow, RangeForBracketHalfOpen)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut last = 0;
+            for (i32 i in [0..5)) {
+                last = i;
+            }
+            return last;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 4); // [0..5) exclusive end, last = 4
+}
+
+TEST(ControlFlow, RangeForBracketClosedSum)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (i32 i in [1..10]) {
+                sum = sum + i;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 55); // [1..10] = 1+2+...+10 = 55
+}
+
+TEST(ControlFlow, RangeForAnonymousInclusive)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for (0..=4) {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5); // 0..=4 = 0,1,2,3,4 = 5 iterations
+}
+
+TEST(ControlFlow, RangeForAnonymousBracketClosed)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 mut sum = 0;
+            for ([0..4]) {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5); // [0..4] inclusive = 0,1,2,3,4 = 5 iterations
 }
 
 // ==================== SWITCH STATEMENT TESTS ====================

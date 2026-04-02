@@ -157,6 +157,8 @@ private:
 
     void bindForStatement(const ForStatement& stmt);
 
+    void bindRangeForStatement(const RangeForStatement& stmt);
+
     void bindWhileStatement(const WhileStatement& stmt);
 
     void bindDoWhileStatement(const DoWhileStatement& stmt);
@@ -178,6 +180,8 @@ private:
     std::shared_ptr<Symbol> bindBinaryExpression(const BinaryExpression& expr);
 
     std::shared_ptr<Symbol> bindUnaryExpression(const UnaryExpression& expr);
+
+    std::shared_ptr<Symbol> bindPostfixExpression(const PostfixExpression& expr);
 
     std::shared_ptr<Symbol> bindVariableDeclaration(const VariableDeclaration& decl);
 

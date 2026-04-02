@@ -151,6 +151,20 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
 
 void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr, SourceLocation loc)
 {
+    if (const auto* call = dynamic_cast<const FunctionCall*>(&expr))
+    {
+        if (const auto funcSym = _global_scope->lookupFunction(call->name.token_name))
+        {
+            if (funcSym->isAsync)
+            {
+                BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                             "cannot assign result of async function '" + call->name.token_name +
+                             "' without 'await'",
+                             expr, loc);
+            }
+        }
+    }
+
     const auto inferredOpt = inferExpressionType(expr);
     if (!inferredOpt)
         return;

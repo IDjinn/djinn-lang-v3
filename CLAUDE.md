@@ -54,6 +54,13 @@ runtime/        C runtime for async (event loop, thread pool, coroutine wrappers
 docs/           Fumadocs (Next.js) documentation site
 ```
 
+## Important Constraints
+
+- **`std::types` namespace is special**: In `bindAll()`, the binder collects declarations for the FIRST program with
+  `fileNamespace == "std::types"` (the prelude pass), then **skips all other** programs with that namespace. New std
+  structs/enums must NOT use `namespace std::types;` unless added to `types.djinn` itself. Use a different namespace
+  (e.g., `std::collections`) for new std files.
+
 ## Build & Test
 
 - **Build system**: CMake with GLOB_RECURSE (new .cpp files in existing dirs auto-included)
@@ -64,7 +71,10 @@ docs/           Fumadocs (Next.js) documentation site
 ## Implemented Features (verified by tests)
 
 - **Arithmetic**: sum, sub, mult, div (integer/float)
-- **Control flow**: if/else/else if, while, do-while, for, switch/case, break/continue
+- **Control flow**: if/else/else if, while, do-while, for, range-for, switch/case, break/continue
+- **Postfix operators**: i++, i-- (postfix increment/decrement)
+- **Range-for**: `for (i32 i in 0..10)`, `for (0..5)` (anonymous), `..=` (inclusive end),
+  bracket bounds `[0..10]` (closed), `[0..10)` (half-open)
 - **Structs**: definition, brace init (positional + designated), field access, methods (block + arrow =>), static
   methods, properties (get/set), transparent types (struct size : u32)
 - **Generics**: single/multi param structs, generic enums (optional\<T\>, result\<T,E\>), generic constructors (stack +
@@ -208,7 +218,10 @@ break_stmt           = "break" ";" ;
 continue_stmt        = "continue" ";" ;
 
 if_stmt              = "if" "(" expression ")" block [ "else" ( if_stmt | block ) ] ;
-for_stmt             = "for" "(" [ expression ] ";" [ expression ] ";" [ expression ] ")" block ;
+for_stmt             = "for" "(" ( for_classic | for_range ) ")" block ;
+for_classic          = [ expression ] ";" [ expression ] ";" [ expression ] ;
+for_range            = [ type IDENTIFIER "in" ] range_expr ;
+range_expr           = [ "[" ] expression ( ".." | "..=" ) expression [ "]" | ")" ] ;
 while_stmt           = "while" "(" expression ")" block ;
 do_while_stmt        = "do" block "while" "(" expression ")" ";" ;
 
@@ -232,7 +245,7 @@ term                 = factor { ( "+" | "-" ) factor } ;
 factor               = unary { ( "*" | "/" | "%" ) unary } ;
 unary                = ( "!" | "-" | "*" | "&" ) unary | await_expr | postfix ;
 await_expr           = "await" unary ;
-postfix              = primary { "." IDENTIFIER | "[" expression "]" | "(" [ arg_list ] ")" } ;
+postfix              = primary { "." IDENTIFIER | "[" expression "]" | "(" [ arg_list ] ")" | "++" | "--" } ;
 
 primary              = INTEGER_LITERAL
                      | FLOAT_LITERAL
@@ -279,3 +292,13 @@ LETTER               = "a" | ... | "z" | "A" | ... | "Z" | "_" ;
 ## Standard Library
 
 Files in `std/` directory
+
+- `types/types.djinn` — core types (size, bool, str, string, arr\<T\>, optional\<T\>, result\<T,E\>, TypeInfo, object),
+  primitive impl blocks (Hashable, constants), string operators
+- `types/constraints.djinn` — interfaces (Hashable, Comparable, Equatable, Addition, Serializable)
+- `collections/array.djinn` — generic `array<T>` with push, get, set, reserve, destroy
+- `collections/map.djinn` — generic `map<Key, Value>` hash map
+- `collections/range.djinn` — `range` struct (start, end, step, bounds) with length(), contains(), is_empty()
+- `sys/console.djinn`, `sys/io.djinn`, `sys/debug.djinn` — I/O, assertions
+- `sys/libc.djinn` — FFI bindings (malloc, free, printf, memcpy, etc.)
+- `builtin/coro.djinn` — coroutine utilities

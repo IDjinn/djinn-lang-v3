@@ -22,6 +22,8 @@ constexpr std::string tokenTypeToString(const TokenType type)
     {
     case TokenType::PLUS: return "+";
     case TokenType::MINUS: return "-";
+    case TokenType::PLUS_PLUS: return "++";
+    case TokenType::MINUS_MINUS: return "--";
     case TokenType::STAR: return "*";
     case TokenType::SLASH: return "/";
     case TokenType::PERCENT: return "%";
@@ -55,6 +57,7 @@ constexpr std::string tokenTypeToString(const TokenType type)
     case TokenType::THIN_ARROW: return "->";
     case TokenType::DOT: return ".";
     case TokenType::DOT_DOT: return "..";
+    case TokenType::DOT_DOT_EQUAL: return "..=";
     case TokenType::DOT_DOT_DOT: return "...";
     case TokenType::COLON: return ":";
     case TokenType::COLON_COLON: return "::";
@@ -94,6 +97,7 @@ constexpr std::string tokenTypeToString(const TokenType type)
     case TokenType::WHERE: return "where";
     case TokenType::ASYNC: return "async";
     case TokenType::AWAIT: return "await";
+    case TokenType::IN: return "in";
     case TokenType::YIELD: return "yield";
     case TokenType::SPAWN: return "spawn";
     case TokenType::OPERATOR: return "operator";
@@ -123,6 +127,8 @@ constexpr std::string tokenTypeToHumanString(const TokenType type)
     {
     case TokenType::PLUS: return "Plus(+)";
     case TokenType::MINUS: return "Minus(-)";
+    case TokenType::PLUS_PLUS: return "Increment(++)";
+    case TokenType::MINUS_MINUS: return "Decrement(--)";
     case TokenType::STAR: return "Star(*)";
     case TokenType::SLASH: return "Slash(/)";
     case TokenType::PERCENT: return "Modulo(%)";
@@ -156,6 +162,7 @@ constexpr std::string tokenTypeToHumanString(const TokenType type)
     case TokenType::THIN_ARROW: return "ThinArrow(->)";
     case TokenType::DOT: return "Dot(.)";
     case TokenType::DOT_DOT: return "Range(..)";
+    case TokenType::DOT_DOT_EQUAL: return "RangeInclusive(..=)";
     case TokenType::DOT_DOT_DOT: return "Variadics(...)";
     case TokenType::COLON: return "Colon(:)";
     case TokenType::COLON_COLON: return "Scope(::)";
@@ -458,6 +465,27 @@ struct UnaryExpression : Expression
     {
         writeIndent(os, indent);
         os << "UnaryExpression(" << tokenTypeToString(op) << ")\n";
+        operand->print(os, indent + 2);
+    }
+};
+
+struct PostfixExpression : Expression
+{
+    TokenType op;
+    std::unique_ptr<Expression> operand;
+
+    PostfixExpression(const TokenType op, std::unique_ptr<Expression> operand, const SourceLocation& location)
+        : op(op), operand(std::move(operand))
+    {
+        this->location = location;
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "PostfixExpression(" << tokenTypeToString(op) << ")\n";
         operand->print(os, indent + 2);
     }
 };

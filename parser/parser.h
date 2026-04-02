@@ -85,7 +85,7 @@ private:
 
     std::unique_ptr<IfStatement> parse_if_statement();
 
-    std::unique_ptr<ForStatement> parse_for_statement();
+    std::unique_ptr<Statement> parse_for_statement();
 
     std::unique_ptr<WhileStatement> parse_while_statement();
 

@@ -39,6 +39,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"await", TokenType::AWAIT},
     {"yield", TokenType::YIELD},
     {"spawn", TokenType::SPAWN},
+    {"in", TokenType::IN},
     {"true", TokenType::TRUE},
     {"false", TokenType::FALSE},
     {"operator", TokenType::OPERATOR},
@@ -328,6 +329,19 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                     advance();
                 }
+                else if (pos + 2 < source.size() && source[pos + 1] == '.' && source[pos + 2] == '=')
+                {
+                    tokens.push_back(make_token(TokenType::DOT_DOT_EQUAL, "..="));
+                    advance();
+                    advance();
+                    advance();
+                }
+                else if (peekNext() == '.')
+                {
+                    tokens.push_back(make_token(TokenType::DOT_DOT, ".."));
+                    advance();
+                    advance();
+                }
                 else
                 {
                     tokens.push_back(make_token(TokenType::DOT, "."));
@@ -338,6 +352,12 @@ std::vector<Token> Lexer::tokenize()
                 if (peekNext() == '=')
                 {
                     tokens.push_back(make_token(TokenType::PLUS_EQUAL, "+="));
+                    advance();
+                    advance();
+                }
+                else if (peekNext() == '+')
+                {
+                    tokens.push_back(make_token(TokenType::PLUS_PLUS, "++"));
                     advance();
                     advance();
                 }
@@ -357,6 +377,12 @@ std::vector<Token> Lexer::tokenize()
                 else if (peekNext() == '=')
                 {
                     tokens.push_back(make_token(TokenType::MINUS_EQUAL, "-="));
+                    advance();
+                    advance();
+                }
+                else if (peekNext() == '-')
+                {
+                    tokens.push_back(make_token(TokenType::MINUS_MINUS, "--"));
                     advance();
                     advance();
                 }

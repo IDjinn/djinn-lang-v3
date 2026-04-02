@@ -38,6 +38,11 @@ namespace djinn
         _binder.bindForStatement(stmt);
     }
 
+    void BinderStatementVisitor::visit(const RangeForStatement& stmt)
+    {
+        _binder.bindRangeForStatement(stmt);
+    }
+
     void BinderStatementVisitor::visit(const WhileStatement& stmt)
     {
         _binder.bindWhileStatement(stmt);

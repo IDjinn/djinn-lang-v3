@@ -119,6 +119,27 @@ TEST(Async, AsyncMainWithComputation)
     EXPECT_EQ(result.returnCode, 25); // 9 + 16
 }
 
+TEST(Async, DiagnosticsForNonWaitableAsync)
+{
+    const auto source = R"(
+        async i32 get_value() {
+            return 99;
+        }
+
+        async i32 main() {
+            i32 val = get_value();
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_GE(result.diagnostics.size(), 1);
+    EXPECT_TRUE(
+        result.diagnostics.at(0).message.contains("cannot assign result of async function 'get_value' without 'await'"
+        ));
+    EXPECT_NE(result.returnCode, 99);
+}
+
 // ========================
 // Async/Await: multiple awaits
 // ========================

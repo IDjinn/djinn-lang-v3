@@ -146,6 +146,8 @@ private:
 
     void generate_for_statement(const ForStatement& stmt);
 
+    void generate_range_for_statement(const RangeForStatement& stmt);
+
     void generate_while_statement(const WhileStatement& stmt);
 
     void generate_do_while_statement(const DoWhileStatement& stmt);
@@ -173,6 +175,8 @@ private:
     llvm::Value* generate_binary_expression(const BinaryExpression& expr);
 
     llvm::Value* generate_unary_expression(const UnaryExpression& expr);
+
+    llvm::Value* generate_postfix_expression(const PostfixExpression& expr);
 
     llvm::Value* generate_function_call(const FunctionCall& expr);
 

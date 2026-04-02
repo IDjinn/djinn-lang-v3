@@ -65,6 +65,8 @@ enum class TokenType
     // OPERADORES ARITMÉTICOS //
     PLUS, // +
     MINUS, // -
+    PLUS_PLUS, // ++
+    MINUS_MINUS, // --
     STAR, // *
     SLASH, // /
     PERCENT, // %
@@ -113,6 +115,7 @@ enum class TokenType
     COLON_COLON, // ::
     DOT, // .
     DOT_DOT, // ..
+    DOT_DOT_EQUAL, // ..=
     DOT_DOT_DOT, // ...
     AT, // @
 
@@ -121,6 +124,7 @@ enum class TokenType
     NEW, // new
     IMPL, // impl
     WHERE, // where (for generics)
+    IN, // in
     ASYNC, // async
     AWAIT, // await
     YIELD, // yield

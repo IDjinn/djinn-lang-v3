@@ -59,6 +59,11 @@ namespace djinn
         _result = _binder.bindUnaryExpression(expr);
     }
 
+    void BinderExpressionVisitor::visit(const PostfixExpression& expr)
+    {
+        _result = _binder.bindPostfixExpression(expr);
+    }
+
     void BinderExpressionVisitor::visit(const VariableDeclaration& expr)
     {
         _result = _binder.bindVariableDeclaration(expr);

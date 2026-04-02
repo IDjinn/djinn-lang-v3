@@ -110,6 +110,32 @@ struct ForStatement : Statement
     }
 };
 
+struct RangeForStatement : Statement
+{
+    Type variableType;
+    SourceIdentifier variableName;
+    std::unique_ptr<Expression> start;
+    std::unique_ptr<Expression> end;
+    std::unique_ptr<Block> body;
+    bool startInclusive = true;
+    bool endInclusive = false;
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "RangeForStatement(" << variableName.token_name << " in ";
+        os << (startInclusive ? "[" : "(");
+        start->print(os, 0);
+        os << "..";
+        end->print(os, 0);
+        os << (endInclusive ? "]" : ")");
+        os << ")\n";
+        if (body) body->print(os, indent + 2);
+    }
+};
+
 struct WhileStatement : Statement
 {
     std::unique_ptr<Expression> condition;

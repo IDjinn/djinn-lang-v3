@@ -33,6 +33,11 @@ namespace djinn
         _generator.generate_for_statement(stmt);
     }
 
+    void GeneratorStatementVisitor::visit(const RangeForStatement& stmt)
+    {
+        _generator.generate_range_for_statement(stmt);
+    }
+
     void GeneratorStatementVisitor::visit(const WhileStatement& stmt)
     {
         _generator.generate_while_statement(stmt);
