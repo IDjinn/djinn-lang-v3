@@ -1,0 +1,27 @@
+import std::types;
+
+namespace std::collections;
+
+struct range {
+    i32 start;
+    i32 end;
+    i32 step;
+    u1 start_inclusive;
+    u1 end_inclusive;
+
+    public i32 length() {
+        i32 mut s = this.start;
+        i32 mut e = this.end;
+        if (this.end_inclusive) {
+            e = e + 1;
+        }
+        if (e <= s) {
+            return 0;
+        }
+        return (e - s) / this.step;
+    }
+
+    public u1 is_empty() {
+        return this.length() == 0;
+    }
+}
