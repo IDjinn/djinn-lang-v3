@@ -122,6 +122,7 @@ struct InternalsConfig
     std::optional<bool> printTokens;
     std::optional<bool> printAst;
     std::optional<bool> printIr;
+    std::optional<bool> printMacroExpansion;
 };
 
 struct GeneratorConfig
@@ -192,6 +193,7 @@ struct ProjectConfig
         config.compiler.internals.printTokens = root.get<bool>("compiler.internals.print-tokens");
         config.compiler.internals.printAst = root.get<bool>("compiler.internals.print-ast");
         config.compiler.internals.printIr = root.get<bool>("compiler.internals.print-ir");
+        config.compiler.internals.printMacroExpansion = root.get<bool>("compiler.internals.print-macro-expansion");
 
         // compiler.generator
         config.compiler.generator.optimizationLevel = root.get<int>("compiler.generator.optimization-level", 2);
@@ -223,6 +225,7 @@ struct ProjectConfig
         applyOpt(options.libraryMode, cc.libraryMode);
         applyOpt(options.print_ast, cc.internals.printAst);
         applyOpt(options.print_ir, cc.internals.printIr);
+        applyOpt(options.print_macro_expansion, cc.internals.printMacroExpansion);
 
         if (!cc.output.fileName.empty() && options.outputFileName.empty())
             options.outputFileName = cc.output.fileName;

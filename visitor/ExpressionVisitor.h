@@ -30,6 +30,7 @@ struct IndexAssignment;
 struct CastExpression;
 struct AwaitExpression;
 struct FixedArrayExpression;
+struct MacroExpansionExpression;
 
 namespace djinn
 {
@@ -85,6 +86,8 @@ namespace djinn
         virtual void visit(const AwaitExpression& expr) = 0;
 
         virtual void visit(const FixedArrayExpression& expr) = 0;
+
+        virtual void visit(const MacroExpansionExpression& expr) = 0;
     };
 } // namespace djinn
 

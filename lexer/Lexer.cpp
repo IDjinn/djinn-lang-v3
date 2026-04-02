@@ -46,6 +46,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"const", TokenType::CONST},
     {"constexpr", TokenType::CONST_EXPR},
     {"consteval", TokenType::CONST_EVAL},
+    {"macro", TokenType::MACRO},
 };
 
 Lexer::Lexer(std::string source, std::string fileId)

@@ -143,4 +143,14 @@ namespace djinn
         _binder.bindExpression(*expr.sizeExpr);
         _result = nullptr;
     }
+
+    void BinderExpressionVisitor::visit(const MacroExpansionExpression& expr)
+    {
+        for (const auto& local : expr.locals)
+        {
+            _binder.bindExpression(*local.value);
+            _binder.defineMacroLocal(local.varName);
+        }
+        _result = _binder.bindExpression(*expr.body);
+    }
 } // namespace djinn

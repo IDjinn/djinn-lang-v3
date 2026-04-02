@@ -90,6 +90,11 @@ public:
 
     BindingResult bindAll(const std::vector<std::shared_ptr<Program>>& programs);
 
+    void defineMacroLocal(const std::string& name)
+    {
+        _current_scope->defineVariable(name, Type::auto_type(), false);
+    }
+
 private:
     DiagnosticEngine& _diagnostics;
     std::shared_ptr<ScopedSymbolTable> _current_scope;

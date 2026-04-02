@@ -137,6 +137,9 @@ enum class TokenType
     CONST_EXPR, // constexpr
     CONST_EVAL, // consteval
     CONST, // constant literal
+
+    // MACROS
+    MACRO, // macro
 };
 
 

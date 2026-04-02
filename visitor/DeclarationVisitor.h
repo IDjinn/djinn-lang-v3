@@ -16,6 +16,7 @@ struct ExternFunctionDeclaration;
 struct NamespaceDeclaration;
 struct ImportDeclaration;
 struct ImplDeclaration;
+struct MacroDeclaration;
 
 namespace djinn
 {
@@ -39,6 +40,8 @@ namespace djinn
         virtual void visit(const ImportDeclaration& decl, const std::string& prefix) = 0;
 
         virtual void visit(const ImplDeclaration& decl, const std::string& prefix) = 0;
+
+        virtual void visit(const MacroDeclaration& decl, const std::string& prefix) = 0;
     };
 
     // Convenience base class with empty implementations for selective overriding
@@ -74,6 +77,10 @@ namespace djinn
         }
 
         void visit(const ImplDeclaration&, const std::string&) override
+        {
+        }
+
+        void visit(const MacroDeclaration&, const std::string&) override
         {
         }
     };

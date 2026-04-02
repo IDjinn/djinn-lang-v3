@@ -48,4 +48,8 @@ namespace djinn
     {
         _binder.collectImpl(decl, prefix);
     }
+
+    void DeclarationCollectorVisitor::visit(const MacroDeclaration&/*decl*/, const std::string&/*prefix*/)
+    {
+    }
 } // namespace djinn

@@ -27,12 +27,13 @@ See `todo.md` for full roadmap. Summary:
 - **Phase 1 (Foundation)**: COMPLETE — generics, FFI extern "C", malloc/free, sizeof
 - **Phase 2 (Structures)**: COMPLETE — enums, methods, constructors (incl. generic), array\<T\>, slices, string
 - **Phase 3 (Std)**: COMPLETE — I/O, array\<T\> collection, String, HashMap
-- **Phase 4 (Advanced)**: ~80% — interfaces, async/await, constexpr/consteval done. Missing: closures, pattern matching
+- **Phase 4 (Advanced)**: ~80% — interfaces, async/await, constexpr/consteval, macros done. Missing: closures, pattern
+  matching
 
 Already implemented: control flow, arithmetic, mutability, ownership/copy semantics,
 name mangling, binder/scope, diagnostics, imports, namespaces, LSP server, intrinsics (sizeof, alignof, typeof,
 likely/unlikely, expect), type casting, pointer compatibility, number literals (separators, scientific notation),
-generic constraints (where clauses), slices (str, i32[]).
+generic constraints (where clauses), slices (str, i32[]), macros (expr fragments, local hygiene).
 
 ## Architecture
 
@@ -95,13 +96,16 @@ docs/           Fumadocs (Next.js) documentation site
 - **Name mangling**: C++ compatible, demangling support
 - **Diagnostics**: error codes, suggestions, multiple concurrent errors
 - **Number literals**: underscore separators (420_000), tick separators (800'000'000), scientific notation (1e9)
+- **Macros**: declaration with `macro name { (params) => { body } }`, `expr` fragment type, `local` modifier for
+  hygienic temp variables, token-level substitution with parser re-parse, nested macro calls, side-effect warning
+  (W6001) when non-local param used multiple times
 
 ## Grammar (EBNF)
 
 ### Program Structure
 
 ```ebnf
-program              = { import | extern_block | namespace | enum | interface | struct | function | constexpr_decl } ;
+program              = { import | extern_block | namespace | enum | interface | struct | function | constexpr_decl | macro_decl } ;
 
 import               = "import" qualified_name ";" ;
 qualified_name       = IDENTIFIER { "::" IDENTIFIER } ;
@@ -176,6 +180,36 @@ constexpr_func       = type IDENTIFIER "(" [ param_list ] ")" block ;
    consteval i32 BUFFER = 64 * 1024;
    constexpr i32 square(i32 x) { return x * x; }
    consteval i32 factorial(i32 n) { if (n <= 1) { return 1; } return n * factorial(n - 1); }
+*)
+```
+
+### Macros
+
+```ebnf
+macro_decl           = "macro" IDENTIFIER "{" { macro_rule } "}" ;
+macro_rule           = "(" macro_params ")" "=>" "{" token_stream "}" ;
+macro_params         = macro_param { "," macro_param } ;
+macro_param          = [ "local" ] fragment_type IDENTIFIER ;
+fragment_type        = "expr" ;
+
+(* Macros are expanded at parse time via token substitution + re-parse.
+   Fragment types: expr (expression) — more types planned (stmt, type, ident).
+   The "local" modifier creates a temp variable (__macro_<name>_<param>) to avoid
+   double evaluation / side effects. Without "local", arguments are substituted
+   directly (wrapped in parens for precedence safety).
+
+   Warning W6001 is emitted when a non-local param is used multiple times in the body.
+
+   Examples:
+   macro square {
+       (local expr v) => { v * v }
+   }
+   macro add {
+       (expr a, expr b) => { a + b }
+   }
+
+   i32 x = square(foo());   // evaluates foo() once via temp var
+   i32 y = add(1 + 2, 3);   // expands to (1 + 2) + (3)
 *)
 ```
 

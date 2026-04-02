@@ -71,6 +71,8 @@ namespace djinn
         void visit(const AwaitExpression& expr) override;
 
         void visit(const FixedArrayExpression& expr) override;
+
+        void visit(const MacroExpansionExpression& expr) override;
     };
 } // namespace djinn
 

@@ -200,19 +200,20 @@ std::string DiagnosticEngine::render() const
         out << renderDiagnostic(diag) << "\n";
     }
 
-    if (total_errors > 0 || total_warnings > 0)
+    if (total_errors > 0)
     {
-        out << colorize("aborting", "1;31") << " due to ";
-        if (total_errors > 0)
-        {
-            out << total_errors << " error" << (total_errors > 1 ? "s" : "");
-        }
+        out << colorize("aborting", "1;31") << " due to "
+            << total_errors << " error" << (total_errors > 1 ? "s" : "");
         if (total_warnings > 0)
         {
-            if (total_errors > 0) out << " and ";
-            out << total_warnings << " warning" << (total_warnings > 1 ? "s" : "");
+            out << " and " << total_warnings << " warning" << (total_warnings > 1 ? "s" : "");
         }
         out << "\n";
+    }
+    else if (total_warnings > 0)
+    {
+        out << colorize(std::to_string(total_warnings) + " warning"
+                        + (total_warnings > 1 ? "s" : "") + " generated.", "1;33") << "\n";
     }
 
     return out.str();

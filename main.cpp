@@ -125,6 +125,10 @@ int main(int argc, char* argv[])
         {
             options.print_ast = true;
         }
+        else if (arg == "-macro")
+        {
+            options.print_macro_expansion = true;
+        }
         else if (arg == "-O0")
         {
             options.optimize = false;

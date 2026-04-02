@@ -35,6 +35,8 @@ namespace djinn
         void visit(const ImportDeclaration& decl, const std::string& prefix) override;
 
         void visit(const ImplDeclaration& decl, const std::string& prefix) override;
+
+        void visit(const MacroDeclaration& decl, const std::string& prefix) override;
     };
 } // namespace djinn
 

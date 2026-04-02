@@ -73,6 +73,9 @@ namespace DiagnosticCode
     constexpr uint32_t ASSIGN_TO_BORROWED = 5005;
     constexpr uint32_t BORROW_OUTLIVES_VALUE = 5006;
     constexpr uint32_t DOUBLE_MOVE = 5007;
+
+    // Macro warnings (6xxx)
+    constexpr uint32_t MACRO_POSSIBLE_SIDE_EFFECT = 6001;
 }
 
 struct SourceLocation

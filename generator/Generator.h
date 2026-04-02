@@ -216,6 +216,8 @@ private:
 
     llvm::Value* generate_await_expression(const AwaitExpression& expr);
 
+    llvm::Value* generate_macro_expansion(const MacroExpansionExpression& expr);
+
     llvm::Value* generate_brace_initializer(const BraceInitializer& expr);
 
     llvm::Value* generate_brace_init_for_struct(const BraceInitializer& braceInit, llvm::StructType* structType,

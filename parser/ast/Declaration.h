@@ -12,6 +12,7 @@
 #include "Type.h"
 #include "Statement.h"
 #include "Generic.h"
+#include "../../lexer/Token.h"
 #include "../../visitor/DeclarationVisitor.h"
 
 struct EnumDeclaration;
@@ -708,6 +709,51 @@ struct ConstExprDeclaration : Location
     }
 };
 
+enum class MacroFragmentType
+{
+    EXPR,
+};
+
+struct MacroParameter
+{
+    MacroFragmentType fragmentType;
+    SourceIdentifier name;
+    bool isLocal = false;
+
+    MacroParameter(MacroFragmentType fragmentType, SourceIdentifier name, bool isLocal = false)
+        : fragmentType(fragmentType), name(std::move(name)), isLocal(isLocal)
+    {
+    }
+};
+
+struct MacroRule
+{
+    std::vector<MacroParameter> parameters;
+    std::vector<Token> bodyTokens;
+};
+
+struct MacroDeclaration : Location
+{
+    SourceIdentifier name;
+    std::vector<MacroRule> rules;
+
+    explicit MacroDeclaration(SourceIdentifier name) : name(std::move(name))
+    {
+    }
+
+    void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
+    {
+        visitor.visit(*this, prefix);
+    }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "MacroDeclaration(" << name.token_name;
+        os << ", " << rules.size() << " rules)";
+    }
+};
+
 struct Program : Location
 {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -724,6 +770,7 @@ struct Program : Location
     std::vector<std::unique_ptr<EnumDeclaration>> enums;
     std::vector<std::unique_ptr<ImplDeclaration>> impls;
     std::vector<std::unique_ptr<ConstExprDeclaration>> constExprs;
+    std::vector<std::unique_ptr<MacroDeclaration>> macros;
 
     explicit Program(const std::string& name)
     {
@@ -748,6 +795,7 @@ struct Program : Location
         for (const auto& decl : impls) decl->accept(visitor, prefix);
         for (const auto& decl : functions) decl->accept(visitor, prefix);
         for (const auto& decl : namespaces) decl->accept(visitor, "");
+        for (const auto& decl : macros) decl->accept(visitor, prefix);
     }
 
     void print(std::ostream& os, const int indent = 0) const override

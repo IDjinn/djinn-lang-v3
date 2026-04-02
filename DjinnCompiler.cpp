@@ -90,6 +90,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens, diagnostics);
+        parser.printMacroExpansion = options.print_macro_expansion;
 
         if (registerPrelude)
         {
@@ -280,6 +281,11 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #endif
         }
 
+        if (diagnostics.warningCount() > 0)
+        {
+            std::cerr << diagnostics.render();
+        }
+
         LOG_DEBUG("exit code %d", programReturnCode);
         return {.returnCode = programReturnCode, .diagnostics = diagnostics.get_diagnostics()};
     }
@@ -420,6 +426,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         const auto tokens = lexer.tokenize();
 
         Parser parser(tokens, diagnostics);
+        parser.printMacroExpansion = options.print_macro_expansion;
 
         for (const auto& name : preludeTypeNames)
             parser.registerKnownType(name);
@@ -521,6 +528,11 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
                 programReturnCode = WEXITSTATUS(programReturnCode);
             }
 #endif
+        }
+
+        if (diagnostics.warningCount() > 0)
+        {
+            std::cerr << diagnostics.render();
         }
 
         LOG_DEBUG("exit code %d", programReturnCode);

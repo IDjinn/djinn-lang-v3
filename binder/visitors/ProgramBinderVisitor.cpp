@@ -52,4 +52,8 @@ namespace djinn
     {
         // Impl methods are bound as part of the struct they are attached to
     }
+
+    void ProgramBinderVisitor::visit(const MacroDeclaration&/*decl*/, const std::string&/*prefix*/)
+    {
+    }
 } // namespace djinn

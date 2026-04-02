@@ -833,4 +833,37 @@ struct CastExpression : Expression
     }
 };
 
+struct MacroExpansionExpression : Expression
+{
+    struct LocalBinding
+    {
+        std::string varName;
+        std::unique_ptr<Expression> value;
+    };
+
+    std::vector<LocalBinding> locals;
+    std::unique_ptr<Expression> body;
+
+    MacroExpansionExpression(std::vector<LocalBinding> locals, std::unique_ptr<Expression> body)
+        : locals(std::move(locals)), body(std::move(body))
+    {
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "MacroExpansion(";
+        for (size_t i = 0; i < locals.size(); i++)
+        {
+            if (i > 0) os << ", ";
+            os << locals[i].varName << " = ";
+            locals[i].value->print(os, 0);
+        }
+        os << ")\n";
+        body->print(os, indent + 2);
+    }
+};
+
 #endif //DJINN_EXPRESSION_H

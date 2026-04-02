@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 #include "../lexer/Token.h"
 #include "../lexer/TokenType.h"
@@ -23,6 +24,8 @@ public:
     // Pre-register type names from standard library so isType() recognizes them
     void registerKnownType(const std::string& name);
 
+    bool printMacroExpansion = false;
+
 private:
     std::vector<Token> tokens;
     size_t current = 0;
@@ -30,6 +33,7 @@ private:
 
     std::shared_ptr<Scope> currentScope = std::make_shared<Scope>();
     DiagnosticEngine& _diagnostics;
+    std::unordered_map<std::string, MacroDeclaration*> _macros;
 
     void pushScope();
 
@@ -148,6 +152,12 @@ private:
     QualifiedName parse_qualified_name();
 
     std::unique_ptr<ImportDeclaration> parse_import();
+
+    std::unique_ptr<MacroDeclaration> parse_macro();
+
+    std::unique_ptr<Expression> expand_macro(const MacroDeclaration& macro);
+
+    std::vector<Token> collect_macro_arg_tokens();
 };
 
 #endif //DJINN_PARSER_H
