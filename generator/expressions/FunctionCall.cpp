@@ -405,7 +405,12 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
                     }
                     if (argIdx < ctorType->getNumParams())
                     {
-                        argVal = cast_value(argVal, ctorType->getParamType(argIdx));
+                        llvm::Type* expectedType = ctorType->getParamType(argIdx);
+                        if (is_object_type(expectedType) && argVal->getType() != expectedType)
+                        {
+                            argVal = box_value(argVal, get_djinn_type_name(*arg, argVal));
+                        }
+                        argVal = cast_value(argVal, expectedType);
                     }
                     ctorArgs.push_back(argVal);
                     argIdx++;
@@ -451,7 +456,12 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
 
         if (argIdx < funcType->getNumParams())
         {
-            argVal = cast_value(argVal, funcType->getParamType(argIdx));
+            llvm::Type* expectedType = funcType->getParamType(argIdx);
+            if (is_object_type(expectedType) && argVal->getType() != expectedType)
+            {
+                argVal = box_value(argVal, get_djinn_type_name(*arg, argVal));
+            }
+            argVal = cast_value(argVal, expectedType);
         }
         else if (funcType->isVarArg())
         {
@@ -1009,8 +1019,9 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             // Box each variadic argument
             for (size_t i = 0; i < numVariadicArgs; ++i)
             {
-                llvm::Value* argVal = generate_expression(*call.arguments[normalParamCount + i]);
-                std::string typeName = get_type_name_for_value(argVal);
+                const auto& argExpr = *call.arguments[normalParamCount + i];
+                llvm::Value* argVal = generate_expression(argExpr);
+                std::string typeName = get_djinn_type_name(argExpr, argVal);
                 llvm::Value* boxed = box_value(argVal, typeName);
 
                 auto* gep = builder->CreateGEP(objectDef->llvmType, arrayData,
@@ -1060,7 +1071,12 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
 
             if (argIdx < funcType->getNumParams())
             {
-                argVal = cast_value(argVal, funcType->getParamType(argIdx));
+                llvm::Type* expectedType = funcType->getParamType(argIdx);
+                if (is_object_type(expectedType) && argVal->getType() != expectedType)
+                {
+                    argVal = box_value(argVal, get_djinn_type_name(*arg, argVal));
+                }
+                argVal = cast_value(argVal, expectedType);
             }
             else if (funcType->isVarArg())
             {

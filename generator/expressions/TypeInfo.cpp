@@ -20,7 +20,11 @@ uint8_t Generator::compute_type_kind(llvm::Type* type, const std::string& typeNa
     // Check name-based kinds first (handles fully qualified names like std::types::str)
     if (typeName == "str" || typeName.ends_with("::str")) return 5;
     if (typeName == "string" || typeName.ends_with("::string")) return 6;
-    if (type->isIntegerTy()) return 0;
+    if (type->isIntegerTy())
+    {
+        if (typeName.starts_with("u")) return 4; // unsigned int
+        return 0; // signed int
+    }
     if (type->isFloatingPointTy()) return 1;
     if (type->isPointerTy()) return 2;
     if (type->isStructTy()) return 3;
@@ -101,6 +105,47 @@ std::string Generator::get_type_name_for_value(llvm::Value* value)
     }
 
     return "unknown";
+}
+
+std::string Generator::get_djinn_type_name(const Expression& expr, llvm::Value* value)
+{
+    if (const auto* intLit = dynamic_cast<const IntegerLiteral*>(&expr))
+    {
+        unsigned bits = value->getType()->isIntegerTy()
+                            ? value->getType()->getIntegerBitWidth()
+                            : 32;
+        return (intLit->sign ? "i" : "u") + std::to_string(bits);
+    }
+
+    if (const auto* ident = dynamic_cast<const Identifier*>(&expr))
+    {
+        llvm::Type* valType = value->getType();
+        if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
+            valType = alloca->getAllocatedType();
+
+        if (valType->isIntegerTy())
+        {
+            unsigned bits = valType->getIntegerBitWidth();
+            auto signOpt = currentScope->lookup_variable_signed(ident->identifier.token_name);
+            bool isSigned = signOpt.value_or(true);
+            return (isSigned ? "i" : "u") + std::to_string(bits);
+        }
+
+        auto structType = currentScope->lookup_variable_struct_type(ident->identifier.token_name);
+        if (!structType.empty())
+            return structType;
+    }
+
+    if (dynamic_cast<const StringLiteral*>(&expr))
+        return "str";
+
+    if (const auto* varInit = dynamic_cast<const VariableInit*>(&expr))
+        return varInit->type.toHumanString();
+
+    if (const auto* varDecl = dynamic_cast<const VariableDeclaration*>(&expr))
+        return varDecl->type.toHumanString();
+
+    return get_type_name_for_value(value);
 }
 
 llvm::Value* Generator::box_value(llvm::Value* value, const std::string& typeName)

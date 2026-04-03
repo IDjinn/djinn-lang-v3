@@ -787,6 +787,13 @@ llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType, b
     return value;
 }
 
+bool Generator::is_object_type(llvm::Type* type) const
+{
+    if (!type || !type->isStructTy()) return false;
+    const StructDef* objectDef = currentScope->lookup_struct("std::types::object");
+    return objectDef && objectDef->llvmType && objectDef->llvmType == type;
+}
+
 bool Generator::is_slice_struct(llvm::StructType* st)
 {
     if (!st || !st->hasName()) return false;

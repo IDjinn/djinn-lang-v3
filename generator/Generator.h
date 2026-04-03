@@ -193,6 +193,7 @@ private:
     static bool is_intrinsic(const std::string& name);
 
     static bool is_slice_struct(llvm::StructType* st);
+    bool is_object_type(llvm::Type* type) const;
 
     llvm::Value* generate_identifier(const Identifier& expr) const;
 
@@ -297,6 +298,7 @@ private:
     static uint8_t compute_type_kind(llvm::Type* type, const std::string& typeName);
     llvm::Value* box_value(llvm::Value* value, const std::string& typeName);
     std::string get_type_name_for_value(llvm::Value* value);
+    std::string get_djinn_type_name(const Expression& expr, llvm::Value* value);
 };
 
 #endif //DJINN_GENERATOR_H
