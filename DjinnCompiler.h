@@ -29,6 +29,7 @@ struct CompilerOptions
     bool print_ast = false;
     bool print_ir = false;
     bool print_macro_expansion = false;
+    bool dump_macro_expansion = false;
     bool optimize = true;
     bool generateBinary = true;
     bool includeStd = true;
@@ -52,6 +53,7 @@ struct CompilerResult
     std::shared_ptr<Program> program;
     std::string ir;
     std::vector<Diagnostic> diagnostics{};
+    std::string expandedSource;
 };
 
 

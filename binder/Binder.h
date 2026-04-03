@@ -90,9 +90,9 @@ public:
 
     BindingResult bindAll(const std::vector<std::shared_ptr<Program>>& programs);
 
-    void defineMacroLocal(const std::string& name)
+    void defineMacroLocal(const std::string& name, const Type& type)
     {
-        _current_scope->defineVariable(name, Type::auto_type(), false);
+        _current_scope->defineVariable(name, type, false);
     }
 
 private:

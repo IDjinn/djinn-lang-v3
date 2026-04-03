@@ -26,6 +26,16 @@ public:
 
     bool printMacroExpansion = false;
 
+    struct MacroExpansionRecord
+    {
+        std::string macroName;
+        std::string argsText;
+        std::string expandedText;
+        int line;
+    };
+
+    std::vector<MacroExpansionRecord> macroExpansions;
+
 private:
     std::vector<Token> tokens;
     size_t current = 0;
@@ -34,6 +44,7 @@ private:
     std::shared_ptr<Scope> currentScope = std::make_shared<Scope>();
     DiagnosticEngine& _diagnostics;
     std::unordered_map<std::string, MacroDeclaration*> _macros;
+    size_t _macroExpansionCounter = 0;
 
     void pushScope();
 

@@ -6,6 +6,7 @@
 
 #include <cctype>
 #include <ranges>
+#include <sstream>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/CommandLine.h>
 #include <cassert>
@@ -2844,6 +2845,8 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
         }
     }
 
+    const auto expansionId = _macroExpansionCounter++;
+
     std::vector<std::string> localVarNames(rule.parameters.size());
     std::vector<std::vector<Token>> localArgTokens;
 
@@ -2853,7 +2856,8 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
         {
             if (rule.parameters[i].isLocal)
             {
-                localVarNames[i] = "__macro_" + macro.name.token_name + "_" + rule.parameters[i].name.token_name;
+                localVarNames[i] = "__macro_" + macro.name.token_name + "_" + rule.parameters[i].name.token_name + "_" +
+                    std::to_string(expansionId);
                 localArgTokens.push_back(argTokenSets[i]);
             }
         }
@@ -2892,43 +2896,71 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
     }
     expanded.push_back({Position{}, TokenType::END_OF_FILE, ""});
 
-    if (printMacroExpansion)
     {
-        std::string argsStr;
-        for (size_t i = 0; i < argTokenSets.size(); i++)
-        {
-            if (i > 0) argsStr += ", ";
-            for (const auto& t : argTokenSets[i]) argsStr += t.value;
-        }
-
-        std::string expandedStr;
-        for (const auto& t : expanded)
-        {
-            if (t.type == TokenType::END_OF_FILE) break;
-            if (!expandedStr.empty() && t.value != "(" && t.value != ")" &&
-                expandedStr.back() != '(' && expandedStr.back() != ')')
-                expandedStr += " ";
-            expandedStr += t.value;
-        }
-
+        std::ostringstream bodyStream;
         if (hasLocals)
         {
-            std::string localsStr;
             for (size_t i = 0; i < rule.parameters.size(); i++)
             {
                 if (rule.parameters[i].isLocal)
                 {
-                    if (!localsStr.empty()) localsStr += ", ";
-                    localsStr += "auto " + localVarNames[i] + " = ";
-                    for (const auto& t : argTokenSets[i]) localsStr += t.value;
+                    bodyStream << "auto " << rule.parameters[i].name.token_name << " = ";
+                    for (const auto& t : argTokenSets[i]) bodyStream << t.value;
+                    bodyStream << "; ";
                 }
             }
-            LOG_INFO("[macro] %s(%s) => { %s; %s }", macro.name.token_name.c_str(),
-                     argsStr.c_str(), localsStr.c_str(), expandedStr.c_str());
         }
-        else
+        for (const auto& tok : rule.bodyTokens)
         {
-            LOG_INFO("[macro] %s(%s) => %s", macro.name.token_name.c_str(), argsStr.c_str(), expandedStr.c_str());
+            bool replaced = false;
+            if (tok.type == TokenType::IDENTIFIER)
+            {
+                for (size_t i = 0; i < rule.parameters.size(); i++)
+                {
+                    if (tok.value == rule.parameters[i].name.token_name)
+                    {
+                        if (rule.parameters[i].isLocal)
+                        {
+                            bodyStream << rule.parameters[i].name.token_name;
+                        }
+                        else
+                        {
+                            bodyStream << '(';
+                            for (const auto& t : argTokenSets[i]) bodyStream << t.value;
+                            bodyStream << ')';
+                        }
+                        replaced = true;
+                        break;
+                    }
+                }
+            }
+            if (!replaced)
+            {
+                if (bodyStream.tellp() > 0 && tok.value != "(" && tok.value != ")" &&
+                    bodyStream.str().back() != '(' && bodyStream.str().back() != ')')
+                    bodyStream << ' ';
+                bodyStream << tok.value;
+            }
+        }
+
+        std::ostringstream argsStream;
+        for (size_t i = 0; i < argTokenSets.size(); i++)
+        {
+            if (i > 0) argsStream << ", ";
+            for (const auto& t : argTokenSets[i]) argsStream << t.value;
+        }
+
+        int callLine = 0;
+        if (!argTokenSets.empty() && !argTokenSets[0].empty())
+            callLine = argTokenSets[0][0].position.line;
+
+        macroExpansions.push_back({macro.name.token_name, argsStream.str(), bodyStream.str(), callLine});
+
+        if (printMacroExpansion)
+        {
+            const auto& record = macroExpansions.back();
+            LOG_INFO("[macro] %s(%s) => %s", macro.name.token_name.c_str(),
+                     record.argsText.c_str(), record.expandedText.c_str());
         }
     }
 

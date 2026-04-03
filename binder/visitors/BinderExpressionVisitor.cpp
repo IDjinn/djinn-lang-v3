@@ -148,8 +148,8 @@ namespace djinn
     {
         for (const auto& local : expr.locals)
         {
-            _binder.bindExpression(*local.value);
-            _binder.defineMacroLocal(local.varName);
+            auto valueSym = _binder.bindExpression(*local.value);
+            _binder.defineMacroLocal(local.varName, valueSym ? valueSym->type : Type::auto_type());
         }
         _result = _binder.bindExpression(*expr.body);
     }

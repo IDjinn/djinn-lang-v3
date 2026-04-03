@@ -54,6 +54,87 @@ static std::filesystem::path resolve_std_path(const std::filesystem::path& given
 }
 
 
+static size_t find_matching_paren(const std::string& s, size_t openPos)
+{
+    int depth = 1;
+    auto i = openPos;
+    while (i < s.size() && depth > 0)
+    {
+        if (s[i] == '(') depth++;
+        else if (s[i] == ')') depth--;
+        i++;
+    }
+    return i;
+}
+
+static void collect_expansion_steps(std::string& body,
+                                    const std::vector<Parser::MacroExpansionRecord>& expansions,
+                                    size_t startIdx,
+                                    std::vector<std::string>& steps)
+{
+    for (size_t j = startIdx; j < expansions.size(); j++)
+    {
+        const auto& inner = expansions[j];
+        std::string pattern = inner.macroName + "(";
+        auto pos = body.find(pattern);
+        if (pos == std::string::npos) continue;
+
+        auto end = find_matching_paren(body, pos + pattern.size());
+        body.replace(pos, end - pos, inner.expandedText);
+
+        collect_expansion_steps(body, expansions, j + 1, steps);
+
+        std::ostringstream step;
+        step << inner.macroName << "(" << inner.argsText << ") => " << inner.expandedText;
+        steps.push_back(step.str());
+    }
+}
+
+static std::string apply_macro_expansions(const std::string& source,
+                                          const std::vector<Parser::MacroExpansionRecord>& expansions)
+{
+    auto result = source;
+    for (size_t i = 0; i < expansions.size(); i++)
+    {
+        const auto& expansion = expansions[i];
+        std::string callPattern = expansion.macroName + "(";
+        size_t searchFrom = 0;
+        while (true)
+        {
+            auto pos = result.find(callPattern, searchFrom);
+            if (pos == std::string::npos) break;
+
+            auto commentCheck = result.rfind("/*", pos);
+            auto commentEnd = result.rfind("*/", pos);
+            if (commentCheck != std::string::npos &&
+                (commentEnd == std::string::npos || commentEnd < commentCheck))
+            {
+                searchFrom = pos + 1;
+                continue;
+            }
+
+            auto end = find_matching_paren(result, pos + callPattern.size());
+
+            auto body = expansion.expandedText;
+            std::vector<std::string> steps;
+            collect_expansion_steps(body, expansions, i + 1, steps);
+
+            std::ostringstream oss;
+            oss << "/*\n";
+            for (const auto& step : steps)
+                oss << "    " << step << "\n";
+            oss << "    " << expansion.macroName << "(" << expansion.argsText << ") => " << body << "\n";
+            oss << "*/ " << body;
+
+            auto replacement = oss.str();
+            result.replace(pos, end - pos, replacement);
+            searchFrom = pos + replacement.size();
+            break;
+        }
+    }
+    return result;
+}
+
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
 {
     auto global_watch = INIT_STOPWATCH_WITH_LEVEL("build time", logger::Level::INFO);
@@ -112,6 +193,18 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             program->print(oss);
             oss << "=====";
             LOG_DEBUG("%s", oss.str().c_str());
+        }
+
+        if (options.dump_macro_expansion && isUserCode && !parser.macroExpansions.empty())
+        {
+            auto expandedSource = apply_macro_expansions(source, parser.macroExpansions);
+            auto expandedPath = fs::path(options.outputDirectory) / fs::path(file_name).filename().replace_extension(
+                ".djinn.expanded");
+            if (std::ofstream expandedFile(expandedPath); expandedFile.is_open())
+            {
+                expandedFile << expandedSource;
+                LOG_INFO("[macro-dump] Expanded source written to: %s", expandedPath.string().c_str());
+            }
         }
 
         programs.emplace_back(std::move(program));
@@ -252,7 +345,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #ifdef _WIN32
             ".exe";
 #else
-            "";
+        "";
 #endif
         if (options.generateBinary)
         {
@@ -306,6 +399,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
     std::vector<std::shared_ptr<Program>> programs;
     std::shared_ptr<Program> userProgram;
     std::string generatedIr;
+    std::string expandedSourceResult;
 
     auto makeResult = [&](int returnCode, const std::stacktrace& trace)
     {
@@ -317,7 +411,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             .returnCode = returnCode,
             .program = userProgram,
             .ir = generatedIr,
-            .diagnostics = diagnostics.get_diagnostics()
+            .diagnostics = diagnostics.get_diagnostics(),
+            .expandedSource = expandedSourceResult
         };
     };
 
@@ -447,6 +542,19 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             LOG_DEBUG("%s", oss.str().c_str());
         }
 
+        if (options.dump_macro_expansion && !parser.macroExpansions.empty())
+        {
+            auto expandedSource = apply_macro_expansions(source, parser.macroExpansions);
+            expandedSourceResult = expandedSource;
+
+            auto expandedPath = fs::path(options.outputDirectory) / "main.djinn.expanded";
+            if (std::ofstream expandedFile(expandedPath); expandedFile.is_open())
+            {
+                expandedFile << expandedSource;
+                LOG_INFO("[macro-dump] Expanded source written to: %s", expandedPath.string().c_str());
+            }
+        }
+
         userProgram = std::shared_ptr<Program>(std::move(program));
         programs.emplace_back(userProgram);
 
@@ -485,7 +593,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 #ifdef _WIN32
             ".exe";
 #else
-            "";
+        "";
 #endif
 
         {
