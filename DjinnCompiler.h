@@ -17,10 +17,13 @@
 struct RuntimeProperties
 {
     std::string loggerLevel = "INFO";
+    std::string loggerFormat;
 
     void serialize(std::ostream& out) const
     {
         out << "logger.level=" << loggerLevel << "\n";
+        if (!loggerFormat.empty())
+            out << "logger.format=" << loggerFormat << "\n";
     }
 };
 

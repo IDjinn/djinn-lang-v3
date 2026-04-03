@@ -211,10 +211,11 @@ int main(int argc, char* argv[])
     {
         LOG_DEBUG("loading project file %s", projFile.string().c_str());
         const auto config = ProjectConfig::load(projFile);
+        logger::configure(config.compiler.logger.level, config.compiler.logger.format);
+        config.applyTo(options);
+
         if (!config.name.empty())
             LOG_INFO("Project: %s v%s", config.name.c_str(), config.version.c_str());
-
-        config.applyTo(options);
     }
 
     result = DjinnCompiler::compileFromDirectory(baseDir, options);

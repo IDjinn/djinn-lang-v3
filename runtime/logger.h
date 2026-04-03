@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 
+#define DJINN_LOG_FORMAT_MAX 256
+
 typedef enum
 {
     LOG_TRACE = 0,
@@ -23,11 +25,14 @@ typedef struct
     FILE* output;
     LogLevel level;
     const char* name;
+    char format[DJINN_LOG_FORMAT_MAX];
 } Logger;
 
 Logger* logger_create(const char* name, int output, LogLevel level);
+void logger_configure_from_properties(Logger* logger, const char* props_path);
 
 void logger_set_level(Logger* logger, LogLevel level);
+void logger_set_format(Logger* logger, const char* format);
 
 void logger_trace(Logger* logger, const char* fmt, ...);
 void logger_debug(Logger* logger, const char* fmt, ...);

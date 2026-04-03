@@ -207,6 +207,7 @@ struct ProjectConfig
 
         // runtime
         config.runtime.logger.level = root.get<std::string>("runtime.logger.level", "INFO");
+        config.runtime.logger.format = root.get<std::string>("runtime.logger.format", "");
         return config;
     }
 
@@ -243,6 +244,7 @@ struct ProjectConfig
         options.includeStd = hasStd;
 
         options.runtimeProperties.loggerLevel = runtime.logger.level;
+        options.runtimeProperties.loggerFormat = runtime.logger.format;
     }
 };
 

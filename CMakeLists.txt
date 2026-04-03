@@ -102,6 +102,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         binder/scope/*.cpp
         binder/ownership/*.cpp
         evaluator/*.cpp
+        utils/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -170,6 +171,7 @@ if (DJINN_DISABLE_BINDER_ASSERTS)
     target_compile_definitions(djinn_lib PUBLIC DJINN_TESTING)
 endif ()
 
+target_compile_definitions(djinn_lib PUBLIC DJINN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_include_directories(djinn_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(djinn_lib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_options(djinn_lib PRIVATE ${DJINN_WARNINGS})

@@ -656,6 +656,7 @@ void __djinn_runtime_init(int num_threads)
 {
     memset(&runtime, 0, sizeof(runtime));
     logger = logger_create("RUNTIME", 1, LOG_TRACE);
+    logger_configure_from_properties(logger, "runtime.properties");
 
 #ifdef _WIN32
     // Initialize Winsock
