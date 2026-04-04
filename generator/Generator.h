@@ -69,6 +69,8 @@ private:
 
     void pop_scope();
 
+    void register_intrinsic_constants();
+
     void generate_default_main();
 
     void forward_declare_struct(const StructSymbol& struct_symbol);

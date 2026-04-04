@@ -15,6 +15,7 @@
 
 #include "binder/Binder.h"
 #include "generator/Generator.h"
+#include "evaluator/ConstEvaluator.h"
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
 #include "utils/Logger.h"
@@ -28,6 +29,7 @@
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
+    "sys/intrinsics.djinn",
     "sys/debug.djinn",
     "sys/console.djinn",
     "types/types.djinn",
@@ -133,6 +135,125 @@ static std::string apply_macro_expansions(const std::string& source,
         }
     }
     return result;
+}
+
+static void merge_program_into(Program& target, Program& source)
+{
+    for (auto& i : source.imports) target.imports.push_back(std::move(i));
+    for (auto& s : source.structs) target.structs.push_back(std::move(s));
+    for (auto& f : source.functions) target.functions.push_back(std::move(f));
+    for (auto& e : source.enums) target.enums.push_back(std::move(e));
+    for (auto& n : source.namespaces) target.namespaces.push_back(std::move(n));
+    for (auto& ef : source.externFunctions) target.externFunctions.push_back(std::move(ef));
+    for (auto& iface : source.interfaces) target.interfaces.push_back(std::move(iface));
+    for (auto& impl : source.impls) target.impls.push_back(std::move(impl));
+    for (auto& ce : source.constExprs) target.constExprs.push_back(std::move(ce));
+    for (auto& m : source.macros) target.macros.push_back(std::move(m));
+    for (auto& ct : source.compileTimeBlocks) target.compileTimeBlocks.push_back(std::move(ct));
+}
+
+static void resolve_compile_time_blocks(Program& program, ConstEvaluator& evaluator)
+{
+    std::vector<std::unique_ptr<CompileTimeBlock>> blocks;
+    blocks.swap(program.compileTimeBlocks);
+
+    for (auto& block : blocks)
+    {
+        ConstValue val = evaluator.evaluate(*block->condition);
+        LOG_DEBUG("[comptime] top-level compile-time block: condition=%s",
+                  val.toBool() ? "true" : "false");
+        if (val.toBool())
+        {
+            if (block->thenProgram)
+            {
+                resolve_compile_time_blocks(*block->thenProgram, evaluator);
+                merge_program_into(program, *block->thenProgram);
+            }
+        }
+        else
+        {
+            if (block->elseProgram)
+            {
+                resolve_compile_time_blocks(*block->elseProgram, evaluator);
+                merge_program_into(program, *block->elseProgram);
+            }
+        }
+    }
+}
+
+static void register_intrinsic_values(ConstEvaluator& eval)
+{
+    auto def = [&eval](const std::string& structName, const std::string& field, ConstValue val)
+    {
+        eval.defineConstant("std::sys::" + structName + "." + field, val);
+        eval.defineConstant(structName + "." + field, val);
+    };
+    auto defBool = [&def](const std::string& s, const std::string& f, bool val)
+    {
+        def(s, f, ConstValue::makeInt(val ? 1 : 0, 1, false));
+    };
+    auto defInt = [&def](const std::string& s, const std::string& f, int64_t val)
+    {
+        def(s, f, ConstValue::makeInt(val));
+    };
+
+#ifdef _WIN32
+    defBool("Platform", "Windows", true);
+    defBool("Platform", "Linux", false);
+    defBool("Platform", "MacOs", false);
+#elif __linux__
+    defBool("Platform", "Windows", false); defBool("Platform", "Linux", true); defBool("Platform", "MacOs", false);
+#elif __APPLE__
+    defBool("Platform", "Windows", false); defBool("Platform", "Linux", false); defBool("Platform", "MacOs", true);
+#else
+    defBool("Platform", "Windows", false); defBool("Platform", "Linux", false); defBool("Platform", "MacOs", false);
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+    defBool("Arch", "X64", true);
+    defBool("Arch", "X86", false);
+    defBool("Arch", "Arm64", false);
+#elif defined(__i386__) || defined(_M_IX86)
+    defBool("Arch", "X64", false); defBool("Arch", "X86", true); defBool("Arch", "Arm64", false);
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    defBool("Arch", "X64", false); defBool("Arch", "X86", false); defBool("Arch", "Arm64", true);
+#else
+    defBool("Arch", "X64", false); defBool("Arch", "X86", false); defBool("Arch", "Arm64", false);
+#endif
+
+#ifdef NDEBUG
+    defBool("Build", "Debug", false); defBool("Build", "Release", true);
+#else
+    defBool("Build", "Debug", true);
+    defBool("Build", "Release", false);
+#endif
+
+    defInt("Runtime", "PointerSize", sizeof(void*));
+}
+
+static ConstEvaluator create_comptime_evaluator(
+    const std::vector<std::shared_ptr<Program>>& programs)
+{
+    ConstEvaluator eval;
+    register_intrinsic_values(eval);
+
+    for (const auto& prog : programs)
+    {
+        for (const auto& ce : prog->constExprs)
+        {
+            if (ce->isIntrinsic || !ce->value) continue;
+            ConstValue val = eval.evaluate(*ce->value);
+            if (!val.isError())
+            {
+                eval.defineConstant(ce->name.token_name, val);
+                const std::string prefix = prog->getNamespacePrefix();
+                if (!prefix.empty())
+                    eval.defineConstant(prefix + ce->name.token_name, val);
+            }
+        }
+    }
+
+    return eval;
 }
 
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
@@ -311,6 +432,10 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             std::cerr << diagnostics.render();
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
+
+        auto comptimeEval = create_comptime_evaluator(programs);
+        for (auto& prog : programs)
+            resolve_compile_time_blocks(*prog, comptimeEval);
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);
@@ -562,6 +687,11 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         {
             return makeResult(1, std::stacktrace::current());
         }
+
+        // Resolve top-level compile-time blocks before binding
+        auto comptimeEval = create_comptime_evaluator(programs);
+        for (auto& prog : programs)
+            resolve_compile_time_blocks(*prog, comptimeEval);
 
         Binder binder(diagnostics);
         const auto bindResult = binder.bindAll(programs);

@@ -39,8 +39,9 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         }
         else
         {
+            bool isConst = field.isConstant || decl.isConstExpr;
             structSym->addField(field.name.token_name, *field.type, false,
-                                field.isConstant, field.initializer.get());
+                                isConst, field.initializer.get());
         }
     }
 

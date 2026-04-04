@@ -4,6 +4,7 @@
 #include "../Generator.h"
 #include "../../lexer/TokenType.h"
 #include "../../evaluator/ConstEvaluator.h"
+#include "../../utils/Logger.h"
 
 
 void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
@@ -150,8 +151,15 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
     }
 
     std::vector<llvm::Type*> fieldTypes;
+    LOG_DEBUG("[generator] resolve_struct_body: '%s' (fields=%zu, attrs=%zu)",
+              struct_symbol.name.c_str(), struct_symbol.fields.size(), struct_symbol.attributes.size());
+    for (const auto& attr : struct_symbol.attributes)
+        LOG_DEBUG("[generator]   attribute: '%s'", attr.c_str());
     for (const auto& field : struct_symbol.fields)
     {
+        LOG_DEBUG("[generator]   field '%s': isConstant=%s, hasInit=%s",
+                  field.name.c_str(), field.isConstant ? "true" : "false",
+                  field.initializer ? "true" : "false");
         if (field.isConstant)
         {
             if (field.initializer)
@@ -165,6 +173,25 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
                 {
                     throw CompileError(DiagnosticCode::TYPE_MISMATCH,
                                        "const field '" + field.name + "' initializer must be a compile-time constant");
+                }
+            }
+            else if (def->hasAttribute("intrinsic") || struct_symbol.hasAttribute("intrinsic"))
+            {
+                std::string key = struct_symbol.name + "." + field.name;
+                LOG_DEBUG("[generator] intrinsic field lookup: '%s' (def attr=%s, sym attr=%s)",
+                          key.c_str(),
+                          def->hasAttribute("intrinsic") ? "true" : "false",
+                          struct_symbol.hasAttribute("intrinsic") ? "true" : "false");
+                if (auto val = constEvaluator.lookupConstant(key))
+                {
+                    LOG_DEBUG("[generator]   found! intVal=%lld, boolVal=%d", val->intVal, val->boolVal);
+                    llvm::Constant* llvmConst = const_value_to_llvm(*val);
+                    if (llvmConst)
+                        def->constFields[field.name] = llvmConst;
+                }
+                else
+                {
+                    LOG_DEBUG("[generator]   NOT found in constEvaluator!");
                 }
             }
             continue;

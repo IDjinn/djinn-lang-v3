@@ -830,6 +830,151 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes()
     return attributes;
 }
 
+std::unique_ptr<CompileTimeBlock> Parser::parse_compile_time_block(const std::string& programName)
+{
+    auto block = std::make_unique<CompileTimeBlock>();
+    expect("Esperado 'if'", TokenType::IF);
+
+    if (match(TokenType::CONST_EXPR))
+        block->compileTimeKind = CompileTimeKind::ConstExpr;
+    else if (match(TokenType::CONST_EVAL))
+        block->compileTimeKind = CompileTimeKind::ConstEval;
+
+    block->condition = parse_expression();
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    block->thenProgram = std::make_unique<Program>(programName);
+    parse_top_level_declarations(block->thenProgram.get());
+    expect("Esperado '}'", TokenType::RBRACE);
+
+    if (match(TokenType::ELSE))
+    {
+        if (check(TokenType::IF))
+        {
+            block->elseProgram = std::make_unique<Program>(programName);
+            block->elseProgram->compileTimeBlocks.push_back(parse_compile_time_block(programName));
+        }
+        else
+        {
+            expect("Esperado '{'", TokenType::LBRACE);
+            block->elseProgram = std::make_unique<Program>(programName);
+            parse_top_level_declarations(block->elseProgram.get());
+            expect("Esperado '}'", TokenType::RBRACE);
+        }
+    }
+
+    return block;
+}
+
+void Parser::parse_top_level_declarations(Program* program)
+{
+    while (!check(TokenType::RBRACE) && !isAtEnd())
+    {
+        if (check(TokenType::IMPORT))
+            program->imports.push_back(parse_import());
+        else if (check(TokenType::EXTERN))
+            parse_extern(program);
+        else if (check(TokenType::ENUM))
+            program->enums.push_back(parse_enum());
+        else if (check(TokenType::INTERFACE))
+            program->interfaces.push_back(parse_interface());
+        else if (check(TokenType::IMPL))
+            program->impls.push_back(parse_impl());
+        else if (check(TokenType::LBRACKET))
+        {
+            const size_t saved = current;
+            auto attrs = parse_attributes();
+            if (check(TokenType::CONST_EVAL) || check(TokenType::CONST_EXPR) || check(TokenType::CONST))
+                parse_constexpr_declaration(program, std::move(attrs));
+            else
+            {
+                current = saved;
+                program->structs.push_back(parse_struct());
+            }
+        }
+        else if (check(TokenType::STRUCT) || check(TokenType::LBRACE))
+            program->structs.push_back(parse_struct());
+        else if (check(TokenType::CONST_EVAL) || check(TokenType::CONST_EXPR) || check(TokenType::CONST))
+            parse_constexpr_declaration(program, {});
+        else if (check(TokenType::MACRO))
+        {
+            auto macroDecl = parse_macro();
+            _macros[macroDecl->name.token_name] = macroDecl.get();
+            program->macros.push_back(std::move(macroDecl));
+        }
+        else if (check(TokenType::IF))
+            program->compileTimeBlocks.push_back(parse_compile_time_block(program->name));
+        else if (check(TokenType::ASYNC))
+        {
+            advance();
+            auto func = parse_function();
+            func->isAsync = true;
+            program->functions.push_back(std::move(func));
+        }
+        else
+            program->functions.push_back(parse_function());
+    }
+}
+
+void Parser::parse_constexpr_declaration(Program* program, std::vector<AttributeUsageDeclaration> attrs)
+{
+    bool isConstEval = check(TokenType::CONST_EVAL);
+    bool isConstExpr = check(TokenType::CONST_EXPR);
+    advance(); // consume consteval/constexpr/const
+
+    bool isIntrinsic = false;
+    for (const auto& attr : attrs)
+    {
+        if (attr.name.token_name == "intrinsic")
+            isIntrinsic = true;
+    }
+
+    if (check(TokenType::STRUCT) || check(TokenType::LBRACE))
+    {
+        auto structDecl = parse_struct();
+        structDecl->isConstExpr = true;
+        structDecl->isIntrinsic = isIntrinsic;
+        structDecl->attributes = std::move(attrs);
+        program->structs.push_back(std::move(structDecl));
+        return;
+    }
+
+    auto type = parse_type();
+    const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
+
+    if ((isConstEval || isConstExpr) && check(TokenType::LPAREN))
+    {
+        pushScope();
+        auto params = parse_parameters();
+        for (const auto& param : params)
+            currentScope->define_variable(param.name.token_name, *param.type);
+        auto body = parse_block();
+        popScope();
+        auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
+                                                          params, std::move(body));
+        func->constEval = isConstEval;
+        func->constExpr = isConstExpr;
+        program->functions.push_back(std::move(func));
+    }
+    else if (isIntrinsic && check(TokenType::SEMICOLON))
+    {
+        advance(); // consume ';'
+        auto decl = std::make_unique<ConstExprDeclaration>(*type, makeSourceIdentifier(nameToken), nullptr);
+        decl->attributes = std::move(attrs);
+        decl->isIntrinsic = true;
+        program->constExprs.push_back(std::move(decl));
+    }
+    else
+    {
+        expect("Esperado '='", TokenType::EQUAL);
+        auto value = parse_expression();
+        expect("Esperado ';'", TokenType::SEMICOLON);
+        auto decl = std::make_unique<ConstExprDeclaration>(*type, makeSourceIdentifier(nameToken), std::move(value));
+        decl->attributes = std::move(attrs);
+        program->constExprs.push_back(std::move(decl));
+    }
+}
+
 std::unique_ptr<Program> Parser::parse(const std::string& program_name)
 {
     LOG_DEBUG("[parser] === parsing program: '%s' ===", program_name.c_str());
@@ -882,7 +1027,29 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             {
                 program->impls.push_back(parse_impl());
             }
-            else if (check(TokenType::STRUCT) || check(TokenType::LBRACKET) || check(TokenType::LBRACE))
+            else if (check(TokenType::LBRACKET))
+            {
+                const size_t saved = current;
+                auto attrs = parse_attributes();
+                if (check(TokenType::CONST_EVAL) || check(TokenType::CONST_EXPR) || check(TokenType::CONST))
+                {
+                    parse_constexpr_declaration(program.get(), std::move(attrs));
+                }
+                else
+                {
+                    current = saved;
+                    auto structDecl = parse_struct();
+                    auto structName = structDecl->name.token_name;
+                    program->structs.push_back(std::move(structDecl));
+
+                    if (structName.starts_with("__anon_struct_") && check(TokenType::IDENTIFIER))
+                    {
+                        auto returnType = std::make_unique<Type>(Type::struct_type(structName));
+                        program->functions.push_back(parse_function_with_type(std::move(returnType)));
+                    }
+                }
+            }
+            else if (check(TokenType::STRUCT) || check(TokenType::LBRACE))
             {
                 auto structDecl = parse_struct();
                 auto structName = structDecl->name.token_name;
@@ -894,83 +1061,13 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                     program->functions.push_back(parse_function_with_type(std::move(returnType)));
                 }
             }
-            else if (check(TokenType::CONST_EVAL))
+            else if (check(TokenType::CONST_EVAL) || check(TokenType::CONST_EXPR) || check(TokenType::CONST))
             {
-                advance(); // consume 'consteval'
-
-                auto type = parse_type();
-                const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
-
-                if (check(TokenType::LPAREN))
-                {
-                    // consteval function
-                    pushScope();
-                    auto params = parse_parameters();
-                    for (const auto& param : params)
-                    {
-                        currentScope->define_variable(param.name.token_name, *param.type);
-                    }
-                    auto body = parse_block();
-                    popScope();
-                    auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
-                                                                      params, std::move(body));
-                    func->constEval = true;
-                    program->functions.push_back(std::move(func));
-                }
-                else
-                {
-                    // consteval variable: consteval i32 X = expr;
-                    expect("Esperado '=' para consteval", TokenType::EQUAL);
-                    auto value = parse_expression();
-                    expect("Esperado ';'", TokenType::SEMICOLON);
-                    program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
-                        *type, makeSourceIdentifier(nameToken), std::move(value)));
-                }
+                parse_constexpr_declaration(program.get(), {});
             }
-            else if (check(TokenType::CONST_EXPR))
+            else if (check(TokenType::IF))
             {
-                advance(); // consume 'constexpr'
-
-                // Lookahead: parse type + name, then check if '(' (function) or '=' (variable)
-                auto type = parse_type();
-                const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
-
-                if (check(TokenType::LPAREN))
-                {
-                    // constexpr function
-                    pushScope();
-                    auto params = parse_parameters();
-                    for (const auto& param : params)
-                    {
-                        currentScope->define_variable(param.name.token_name, *param.type);
-                    }
-                    auto body = parse_block();
-                    popScope();
-                    auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
-                                                                      params, std::move(body));
-                    func->constExpr = true;
-                    program->functions.push_back(std::move(func));
-                }
-                else
-                {
-                    // constexpr variable: constexpr i32 SIZE = expr;
-                    expect("Esperado '=' para constexpr", TokenType::EQUAL);
-                    auto value = parse_expression();
-                    expect("Esperado ';'", TokenType::SEMICOLON);
-                    program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
-                        *type, makeSourceIdentifier(nameToken), std::move(value)));
-                }
-            }
-            else if (check(TokenType::CONST))
-            {
-                advance(); // consume 'const'
-                auto type = parse_type();
-                const Token& nameToken = expect("Esperado nome", TokenType::IDENTIFIER);
-                expect("Esperado '=' para constante", TokenType::EQUAL);
-                auto value = parse_expression();
-                expect("Esperado ';'", TokenType::SEMICOLON);
-                program->constExprs.push_back(std::make_unique<ConstExprDeclaration>(
-                    *type, makeSourceIdentifier(nameToken), std::move(value)));
+                program->compileTimeBlocks.push_back(parse_compile_time_block(program->name));
             }
             else if (check(TokenType::MACRO))
             {
@@ -1158,11 +1255,39 @@ std::unique_ptr<Statement> Parser::parse_statement()
 
 std::unique_ptr<IfStatement> Parser::parse_if_statement()
 {
-    expect("Esperado 'if'", TokenType::IF);
-    expect("Esperado '(' após if", TokenType::LPAREN);
-    auto condition = parse_expression();
-    expect("Esperado ')' após condição", TokenType::RPAREN);
+    auto ifToken = expect("Esperado 'if'", TokenType::IF);
+    auto ifStatementIndex = ifToken.position.index;
 
+    auto kind = CompileTimeKind::None;
+    if (match(TokenType::CONST_EXPR))
+    {
+        kind = CompileTimeKind::ConstExpr;
+    }
+    else if (match(TokenType::CONST_EVAL))
+    {
+        kind = CompileTimeKind::ConstEval;
+    }
+    else if (!check(TokenType::LPAREN))
+    {
+        kind = CompileTimeKind::ConstExpr;
+    }
+
+    if (kind == CompileTimeKind::None)
+    {
+        advance(); // consume '('
+    }
+
+    auto condition = parse_expression();
+
+    if (kind == CompileTimeKind::None)
+    {
+        expect("Esperado ')' após condição", TokenType::RPAREN);
+    }
+
+    auto& lastCondToken = previous();
+    auto ifStatementLocation = SourceLocation(ifToken.position,
+                                              lastCondToken.position.index + lastCondToken.value.size() -
+                                              ifStatementIndex);
     auto thenBranch = parse_block();
 
     std::unique_ptr<Block> elseBranch = nullptr;
@@ -1170,7 +1295,6 @@ std::unique_ptr<IfStatement> Parser::parse_if_statement()
     {
         if (check(TokenType::IF))
         {
-            // else if - wrap in a block
             elseBranch = std::make_unique<Block>();
             elseBranch->statements.push_back(parse_if_statement());
         }
@@ -1181,6 +1305,8 @@ std::unique_ptr<IfStatement> Parser::parse_if_statement()
     }
 
     auto stmt = std::make_unique<IfStatement>();
+    stmt->compileTimeKind = kind;
+    stmt->location = ifStatementLocation;
     stmt->condition = std::move(condition);
     stmt->thenBranch = std::move(thenBranch);
     stmt->elseBranch = std::move(elseBranch);

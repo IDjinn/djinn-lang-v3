@@ -26,17 +26,17 @@ BindingResult Binder::bind(const Program& program)
     for (const auto& ce : program.constExprs)
     {
         const std::string qualifiedName = prefix + ce->name.token_name;
-        _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->value.get()};
-        // Also register as a symbol so the binder recognizes it during binding
+        _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->isIntrinsic ? nullptr : ce->value.get()};
         auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, ce->type, ce->name.location);
         _global_scope->define(sym);
-        // Short name alias (for unqualified access)
         if (!prefix.empty())
         {
             auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, ce->name.token_name, ce->type,
                                                      ce->name.location);
             _global_scope->define(shortSym);
-            _global_scope->constExprConstants[ce->name.token_name] = {ce->type, ce->value.get()};
+            _global_scope->constExprConstants[ce->name.token_name] = {
+                ce->type, ce->isIntrinsic ? nullptr : ce->value.get()
+            };
         }
     }
 
@@ -172,7 +172,7 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         for (const auto& ce : program->constExprs)
         {
             const std::string qualifiedName = prefix + ce->name.token_name;
-            _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->value.get()};
+            _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->isIntrinsic ? nullptr : ce->value.get()};
             auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, ce->type, ce->name.location);
             _global_scope->define(sym);
             if (!prefix.empty())
@@ -180,9 +180,12 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
                 auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, ce->name.token_name, ce->type,
                                                          ce->name.location);
                 _global_scope->define(shortSym);
-                _global_scope->constExprConstants[ce->name.token_name] = {ce->type, ce->value.get()};
+                _global_scope->constExprConstants[ce->name.token_name] = {
+                    ce->type, ce->isIntrinsic ? nullptr : ce->value.get()
+                };
             }
-            LOG_DEBUG("[binder] constexpr registered: '%s'", qualifiedName.c_str());
+            LOG_DEBUG("[binder] constexpr registered: '%s'%s", qualifiedName.c_str(),
+                      ce->isIntrinsic ? " [intrinsic]" : "");
         }
     }
 

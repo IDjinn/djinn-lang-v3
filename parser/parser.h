@@ -80,6 +80,11 @@ private:
 
     std::vector<AttributeUsageDeclaration> parse_attributes();
 
+    void parse_constexpr_declaration(Program* program, std::vector<AttributeUsageDeclaration> attrs);
+
+    std::unique_ptr<CompileTimeBlock> parse_compile_time_block(const std::string& programName);
+    void parse_top_level_declarations(Program* program);
+
     std::unique_ptr<InterfaceDeclaration> parse_interface();
 
     std::unique_ptr<StructMethodDeclaration> parse_method(bool allowBody = true);

@@ -159,6 +159,8 @@ private:
     void bindStatement(const Statement& stmt);
 
     void bindIfStatement(const IfStatement& stmt);
+    bool isCompileTimeExpression(const Expression& expr) const;
+    bool hasConstExprIdentifier(const Expression& expr) const;
 
     void bindForStatement(const ForStatement& stmt);
 

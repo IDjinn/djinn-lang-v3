@@ -268,6 +268,8 @@ struct StructDeclaration : Location
     std::vector<std::string> implements;
     std::unique_ptr<Type> baseType;
     std::vector<AttributeUsageDeclaration> attributes;
+    bool isConstExpr = false;
+    bool isIntrinsic = false;
 
     StructDeclaration(SourceIdentifier name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields))
@@ -689,11 +691,14 @@ struct ImplDeclaration : Location
 };
 
 // Global constexpr variable: constexpr i32 SIZE = 1024;
+// Intrinsic: [intrinsic] consteval i32 is_windows;  (value provided by compiler)
 struct ConstExprDeclaration : Location
 {
     Type type;
     SourceIdentifier name;
-    std::unique_ptr<Expression> value;
+    std::unique_ptr<Expression> value; // nullptr for [intrinsic] declarations
+    std::vector<AttributeUsageDeclaration> attributes;
+    bool isIntrinsic = false;
 
     ConstExprDeclaration(Type type, SourceIdentifier name, std::unique_ptr<Expression> value)
         : type(std::move(type)), name(std::move(name)), value(std::move(value))
@@ -703,8 +708,16 @@ struct ConstExprDeclaration : Location
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
-        os << "ConstExprDeclaration(" << name.token_name << ": " << type << " = ";
-        value->print(os, 0);
+        os << "ConstExprDeclaration(" << name.token_name << ": " << type;
+        if (value)
+        {
+            os << " = ";
+            value->print(os, 0);
+        }
+        else
+        {
+            os << " [intrinsic]";
+        }
         os << ")";
     }
 };
@@ -754,6 +767,23 @@ struct MacroDeclaration : Location
     }
 };
 
+struct Program;
+
+struct CompileTimeBlock : Location
+{
+    std::unique_ptr<Expression> condition;
+    std::unique_ptr<Program> thenProgram;
+    std::unique_ptr<Program> elseProgram;
+    CompileTimeKind compileTimeKind = CompileTimeKind::ConstExpr;
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "CompileTimeBlock\n";
+        if (condition) condition->print(os, indent + 2);
+    }
+};
+
 struct Program : Location
 {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -771,6 +801,7 @@ struct Program : Location
     std::vector<std::unique_ptr<ImplDeclaration>> impls;
     std::vector<std::unique_ptr<ConstExprDeclaration>> constExprs;
     std::vector<std::unique_ptr<MacroDeclaration>> macros;
+    std::vector<std::unique_ptr<CompileTimeBlock>> compileTimeBlocks;
 
     explicit Program(const std::string& name)
     {

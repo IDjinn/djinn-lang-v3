@@ -4,6 +4,7 @@
 
 #include "Generator.h"
 #include "visitors/GeneratorStatementVisitor.h"
+#include "../utils/Logger.h"
 
 void Generator::generate_statement(const Statement& stmt)
 {
@@ -182,6 +183,32 @@ void Generator::generate_block(const Block& block)
 
 void Generator::generate_if_statement(const IfStatement& stmt)
 {
+    LOG_DEBUG("[generator] generate_if_statement: compileTimeKind=%d", static_cast<int>(stmt.compileTimeKind));
+    if (stmt.compileTimeKind != CompileTimeKind::None)
+    {
+        ConstValue val = constEvaluator.evaluate(*stmt.condition);
+        LOG_DEBUG("[generator]   compile-time eval: kind=%d, intVal=%lld, boolVal=%d, isError=%s, toBool=%s",
+                  val.kind, val.intVal, val.boolVal, val.isError() ? "true" : "false",
+                  val.toBool() ? "true" : "false");
+        if (val.toBool())
+        {
+            if (stmt.thenBranch)
+                generate_block(*stmt.thenBranch);
+        }
+        else
+        {
+            if (stmt.elseBranch)
+                generate_block(*stmt.elseBranch);
+        }
+
+        if (builder->GetInsertBlock()->getTerminator())
+        {
+            auto* deadBB = llvm::BasicBlock::Create(*context, "ct.dead", currentFunction);
+            builder->SetInsertPoint(deadBB);
+        }
+        return;
+    }
+
     llvm::Value* condValue = generate_expression(*stmt.condition);
 
     if (!condValue->getType()->isIntegerTy(1))

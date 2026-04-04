@@ -72,11 +72,14 @@ struct Block : Statement
     }
 };
 
+enum class CompileTimeKind : uint8_t { None, ConstExpr, ConstEval };
+
 struct IfStatement : Statement
 {
     std::unique_ptr<Expression> condition;
     std::unique_ptr<Block> thenBranch;
     std::unique_ptr<Block> elseBranch;
+    CompileTimeKind compileTimeKind = CompileTimeKind::None;
 
     void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 

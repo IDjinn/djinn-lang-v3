@@ -164,6 +164,16 @@ void BytecodeCompiler::compileExpression(const Expression& expr)
         return compileBooleanLiteral(*boolLit);
     if (const auto* ident = dynamic_cast<const Identifier*>(&expr))
         return compileIdentifier(*ident);
+    if (const auto* fa = dynamic_cast<const FieldAccess*>(&expr))
+    {
+        if (const auto* obj = dynamic_cast<const Identifier*>(fa->object.get()))
+        {
+            Identifier syntheticId(SourceIdentifier(obj->name() + "." + fa->fieldName.token_name, fa->location));
+            return compileIdentifier(syntheticId);
+        }
+        _hadError = true;
+        return;
+    }
     if (const auto* binExpr = dynamic_cast<const BinaryExpression*>(&expr))
         return compileBinaryExpression(*binExpr);
     if (const auto* unaryExpr = dynamic_cast<const UnaryExpression*>(&expr))

@@ -27,8 +27,9 @@ See `todo.md` for full roadmap. Summary:
 - **Phase 1 (Foundation)**: COMPLETE — generics, FFI extern "C", malloc/free, sizeof
 - **Phase 2 (Structures)**: COMPLETE — enums, methods, constructors (incl. generic), array\<T\>, slices, string
 - **Phase 3 (Std)**: COMPLETE — I/O, array\<T\> collection, String, HashMap
-- **Phase 4 (Advanced)**: ~80% — interfaces, async/await, constexpr/consteval, macros done. Missing: closures, pattern
-  matching
+- **Phase 4 (Advanced)**: ~85% — interfaces, async/await, constexpr/consteval, macros, compile-time if,
+  top-level CompileTimeBlock, [intrinsic] attribute done. Missing: closures, pattern matching.
+  TODO: `[platform(windows)]` attribute-based conditional compilation (implement as macro).
 
 Already implemented: control flow, arithmetic, mutability, ownership/copy semantics,
 name mangling, binder/scope, diagnostics, imports, namespaces, LSP server, intrinsics (sizeof, alignof, typeof,

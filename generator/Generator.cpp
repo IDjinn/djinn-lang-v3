@@ -44,6 +44,61 @@ void Generator::pop_scope()
     }
 }
 
+void Generator::register_intrinsic_constants()
+{
+    auto def = [this](const std::string& structName, const std::string& field, ConstValue val)
+    {
+        std::string qualified = "std::sys::" + structName + "." + field;
+        std::string shortName = structName + "." + field;
+        constEvaluator.defineConstant(qualified, val);
+        constEvaluator.defineConstant(shortName, val);
+        LOG_DEBUG("[generator] intrinsic: '%s' (alias '%s')", qualified.c_str(), shortName.c_str());
+    };
+    auto defBool = [&def](const std::string& s, const std::string& f, bool val)
+    {
+        def(s, f, ConstValue::makeInt(val ? 1 : 0, 1, false));
+    };
+    auto defInt = [&def](const std::string& s, const std::string& f, int64_t val)
+    {
+        def(s, f, ConstValue::makeInt(val));
+    };
+
+#ifdef _WIN32
+    defBool("Platform", "Windows", true);
+    defBool("Platform", "Linux", false);
+    defBool("Platform", "MacOs", false);
+#elif __linux__
+    defBool("Platform", "Windows", false); defBool("Platform", "Linux", true); defBool("Platform", "MacOs", false);
+#elif __APPLE__
+    defBool("Platform", "Windows", false); defBool("Platform", "Linux", false); defBool("Platform", "MacOs", true);
+#else
+    defBool("Platform", "Windows", false); defBool("Platform", "Linux", false); defBool("Platform", "MacOs", false);
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+    defBool("Arch", "X64", true);
+    defBool("Arch", "X86", false);
+    defBool("Arch", "Arm64", false);
+#elif defined(__i386__) || defined(_M_IX86)
+    defBool("Arch", "X64", false); defBool("Arch", "X86", true); defBool("Arch", "Arm64", false);
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    defBool("Arch", "X64", false); defBool("Arch", "X86", false); defBool("Arch", "Arm64", true);
+#else
+    defBool("Arch", "X64", false); defBool("Arch", "X86", false); defBool("Arch", "Arm64", false);
+#endif
+
+#ifdef NDEBUG
+    defBool("Build", "Debug", false); defBool("Build", "Release", true);
+#else
+    defBool("Build", "Debug", true);
+    defBool("Build", "Release", false);
+#endif
+
+    defInt("Runtime", "PointerSize", sizeof(void*));
+
+    LOG_DEBUG("[generator] intrinsic constants registered");
+}
+
 void Generator::generate()
 {
     // PASS 0: Register short-name aliases for namespaced symbols
@@ -58,14 +113,19 @@ void Generator::generate()
         }
     }
 
+    // PASS 0a: Define intrinsic constants (compiler-provided values)
+    register_intrinsic_constants();
+
     // PASS 0b: Evaluate constexpr declarations and register in the compile-time evaluator
     for (const auto& [name, entry] : symbols->constExprConstants)
     {
+        if (!entry.value)
+            continue; // intrinsic — already defined in PASS 0a
+
         ConstValue val = constEvaluator.evaluate(*entry.value);
         if (!val.isError())
         {
             constEvaluator.defineConstant(name, val);
-            // Also register short name (without namespace prefix)
             if (const auto pos = name.rfind("::"); pos != std::string::npos)
             {
                 constEvaluator.defineConstant(name.substr(pos + 2), val);
