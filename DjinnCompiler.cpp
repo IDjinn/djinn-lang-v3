@@ -29,10 +29,10 @@
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
-    "sys/intrinsics.djinn",
     "sys/debug.djinn",
     "sys/console.djinn",
     "types/types.djinn",
+    "sys/intrinsics.djinn",
     "builtin/coro.djinn",
 };
 
@@ -489,14 +489,17 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         int programReturnCode = 0;
         if (options.runAfterCompile)
         {
+            auto start = std::chrono::high_resolution_clock::now();
             programReturnCode = system(exePath.c_str());
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration<double, std::milli>(end - start);
 #ifndef _WIN32
-            // On Unix, need to extract exit code with WEXITSTATUS
             if (WIFEXITED(programReturnCode))
             {
                 programReturnCode = WEXITSTATUS(programReturnCode);
             }
 #endif
+            LOG_INFO("program exited with code %d in %.3f ms", programReturnCode, elapsed.count());
         }
 
         if (diagnostics.warningCount() > 0)
@@ -758,14 +761,17 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         int programReturnCode = 0;
         if (options.runAfterCompile)
         {
+            auto start = std::chrono::high_resolution_clock::now();
             programReturnCode = system(exePath.c_str());
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration<double, std::milli>(end - start);
 #ifndef _WIN32
-            // On Unix, need to extract exit code with WEXITSTATUS
             if (WIFEXITED(programReturnCode))
             {
                 programReturnCode = WEXITSTATUS(programReturnCode);
             }
 #endif
+            LOG_INFO("program exited with code %d in %.3f ms", programReturnCode, elapsed.count());
         }
 
         if (diagnostics.warningCount() > 0)

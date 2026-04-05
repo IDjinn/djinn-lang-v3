@@ -165,6 +165,18 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         }
     }
 
+    // Debug: verify intrinsic struct aliases
+    for (const std::string& check : {
+             "Target", "Platform", "Arch", "Build", "Runtime",
+             "std::sys::Target", "std::sys::Platform"
+         })
+    {
+        auto sym = _global_scope->lookup(check);
+        LOG_DEBUG("[binder] intrinsic check: '%s' = %s (isStruct=%s)",
+                  check.c_str(), sym ? "FOUND" : "NOT FOUND",
+                  (sym && sym->isStruct()) ? "true" : "false");
+    }
+
     // Collect constexpr declarations into the global scope
     for (const auto& program : programs)
     {

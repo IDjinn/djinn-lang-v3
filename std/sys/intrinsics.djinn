@@ -1,0 +1,22 @@
+namespace std::sys;
+
+[intrinsic] constexpr struct Platform {
+    bool Windows;
+    bool Linux;
+    bool MacOs;
+}
+
+[intrinsic] constexpr struct Arch {
+    bool X64;
+    bool X86;
+    bool Arm64;
+}
+
+[intrinsic] constexpr struct Build {
+    bool Debug;
+    bool Release;
+}
+
+[intrinsic] constexpr struct Runtime {
+    i32 PointerSize;
+}
