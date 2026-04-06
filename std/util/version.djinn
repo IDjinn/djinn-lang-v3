@@ -10,11 +10,34 @@ struct Version {
     i32 minor;
     i32 patch;
 
-    operator ==(Version left, Version right) -> bool {
-        if (left.major < right.major) return true;
-        if (left.major == right.major && left.minor < right.minor) return true;
-        if (left.major == right.major && left.minor == right.minor && left.patch < right.patch) return true;
-        return false;
+    operator==(Version left, Version right) -> bool {
+        return left.major == right.major &&
+               left.minor == right.minor &&
+               left.patch == right.patch;
+    }
+
+    operator<(Version left, Version right) -> bool {
+        if (left.major != right.major)
+            return left.major < right.major;
+        if (left.minor != right.minor)
+            return left.minor < right.minor;
+        return left.patch < right.patch;
+    }
+
+    operator>(Version left, Version right) -> bool {
+        return right < left;
+    }
+
+    operator<=(Version left, Version right) -> bool {
+        return !(right < left);
+    }
+
+    operator>=(Version left, Version right) -> bool {
+        return !(left < right);
+    }
+
+    operator!=(Version left, Version right) -> bool {
+        return !(left == right);
     }
 }
 

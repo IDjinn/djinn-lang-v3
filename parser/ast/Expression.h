@@ -122,6 +122,37 @@ constexpr std::string tokenTypeToString(const TokenType type)
     }
 }
 
+constexpr std::string operatorTypeToHumanString(const TokenType type)
+{
+    switch (type)
+    {
+    case TokenType::PLUS: return "+ (Addition)";
+    case TokenType::MINUS: return "- (Subtraction)";
+    case TokenType::STAR: return "* (Multiplication)";
+    case TokenType::SLASH: return "/ (Division)";
+    case TokenType::PERCENT: return "% (Modulo)";
+
+    case TokenType::EQUAL_EQUAL: return "== (Equality)";
+    case TokenType::BANG_EQUAL: return "!= (Inequality)";
+
+    case TokenType::LESS: return "< (Less Than)";
+    case TokenType::LESS_EQUAL: return "<= (Less Than or Equal)";
+    case TokenType::GREATER: return "> (Greater Than)";
+    case TokenType::GREATER_EQUAL: return ">= (Greater Than or Equal)";
+
+    case TokenType::AMPERSAND: return "& (Bitwise AND)";
+    case TokenType::PIPE: return "| (Bitwise OR)";
+    case TokenType::CARET: return "^ (Bitwise XOR)";
+    case TokenType::LESS_LESS: return "<< (Left Shift)";
+    case TokenType::GREATER_GREATER: return ">> (Right Shift)";
+
+    case TokenType::AND_AND: return "&& (Logical AND)";
+    case TokenType::OR_OR: return "|| (Logical OR)";
+
+    default: return "invalid";
+    }
+}
+
 constexpr std::string tokenTypeToHumanString(const TokenType type)
 {
     switch (type)

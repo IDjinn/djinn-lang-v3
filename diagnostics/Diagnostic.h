@@ -56,6 +56,7 @@ namespace DiagnosticCode
     constexpr uint32_t GENERIC_CONSTRAINT_VIOLATION = 3012;
     constexpr uint32_t IMPL_METHOD_SIGNATURE_MISMATCH = 3013;
     constexpr uint32_t UNDEFINED_INTRINSIC_FUNCTION = 3014;
+    constexpr uint32_t OPERATOR_NOT_IMPLEMENTED = 3015;
 
     // CodeGen errors (4xxx)
     constexpr uint32_t INVALID_TYPE = 4001;

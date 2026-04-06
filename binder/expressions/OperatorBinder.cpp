@@ -128,9 +128,9 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
             else if (!opCanonical.empty())
             {
                 BINDER_ERROR(
-                    DiagnosticCode::TYPE_MISMATCH,
+                    DiagnosticCode::OPERATOR_NOT_IMPLEMENTED,
                     "invalid types for binary expression: struct '" + structType.structName +
-                    "' does not implement operator '" + opCanonical + "'"
+                    "' does not implement operator '" + operatorTypeToHumanString(expr.op) + "'"
                     "\n\tleft: " + left->type.toHumanString() +
                     "\n\tright: " + right->type.toHumanString(),
                     left,

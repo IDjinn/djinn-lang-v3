@@ -176,9 +176,12 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
                 return result;
             }
 
-            throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,
-                               "struct '" + structTypeName + "' does not implement operator '" + opCanonical + "'",
-                               expr.location);
+            GENERATOR_ERROR(
+                DiagnosticCode::OPERATOR_NOT_IMPLEMENTED,
+                "struct '" + structTypeName + "' does not implement operator '" + operatorTypeToHumanString(expr.op) +
+                "'",
+                expr.location
+            );
         }
     }
 
