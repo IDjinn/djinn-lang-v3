@@ -3,6 +3,16 @@
 //
 
 #include "../Binder.h"
+#include <unordered_set>
+
+static const std::unordered_set<std::string> knownAttributes = {
+    "force-inline", "no-inline", "noreturn", "hot", "cold",
+    "nosync", "nounwind", "willreturn", "norecurse",
+    "intrinsic", "no-mangle", "no_mangle", "attribute",
+    "align", "volatile", "restrict", "nocapture",
+    "readonly", "writeonly", "nonnull",
+    "deprecated", "llvm", "sync"
+};
 
 void Binder::collectStruct(const StructDeclaration& decl, const std::string& prefix) const
 {
@@ -85,7 +95,13 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
 
         for (const auto& attr : method->attributes)
         {
-            methodSym->attributes.push_back(attr.name.token_name);
+            if (!knownAttributes.contains(attr.name.token_name))
+            {
+                BINDER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "unknown attribute '" + attr.name.token_name + "'",
+                             attr.name, attr.location);
+            }
+            methodSym->attributes.emplace_back(attr.name.token_name, attr.args);
         }
 
         methodSym->body = method->body.get();
@@ -121,7 +137,13 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
     // Attributes
     for (const auto& attr : decl.attributes)
     {
-        structSym->attributes.push_back(attr.name.token_name);
+        if (!knownAttributes.contains(attr.name.token_name))
+        {
+            BINDER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "unknown attribute '" + attr.name.token_name + "'",
+                         attr.name, attr.location);
+        }
+        structSym->attributes.emplace_back(attr.name.token_name, attr.args);
     }
 
     // Base type

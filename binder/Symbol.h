@@ -10,9 +10,12 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <variant>
+#include <optional>
 #include "../parser/ast/Type.h"
 #include "../parser/ast/Statement.h"
 #include "../parser/ast/Expression.h"
+#include "../parser/ast/Declaration.h"
 #include "../diagnostics/Diagnostic.h"
 
 struct GenericParamInfo
@@ -30,6 +33,63 @@ struct GenericParamInfo
     GenericParamInfo(std::string name, std::vector<std::string> constraints)
         : name(std::move(name)), constraints(std::move(constraints))
     {
+    }
+};
+
+struct AttributeSymbol
+{
+    std::string name;
+    std::vector<AttributeArg> args;
+
+    AttributeSymbol() = default;
+
+    explicit AttributeSymbol(std::string name) : name(std::move(name))
+    {
+    }
+
+    AttributeSymbol(std::string name, std::vector<AttributeArg> args)
+        : name(std::move(name)), args(std::move(args))
+    {
+    }
+
+    [[nodiscard]] bool hasArgs() const { return !args.empty(); }
+
+    [[nodiscard]] std::optional<int64_t> getInt(size_t index) const
+    {
+        if (index >= args.size()) return std::nullopt;
+        if (auto* v = std::get_if<int64_t>(&args[index].value)) return *v;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<std::string> getString(size_t index) const
+    {
+        if (index >= args.size()) return std::nullopt;
+        if (auto* v = std::get_if<std::string>(&args[index].value)) return *v;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<int64_t> getNamedInt(const std::string& argName) const
+    {
+        for (const auto& arg : args)
+        {
+            if (arg.name && *arg.name == argName)
+            {
+                if (auto* v = std::get_if<int64_t>(&arg.value)) return *v;
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<std::string> getNamedString(const std::string& argName) const
+    {
+        for (const auto& arg : args)
+        {
+            if (arg.name && *arg.name == argName)
+            {
+                if (auto* v = std::get_if<std::string>(&arg.value)) return *v;
+            }
+        }
+        return std::nullopt;
     }
 };
 
@@ -174,9 +234,8 @@ struct MethodSymbol : Symbol
     bool isOperator = false; // True if this is an operator overload
     std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq"
     std::string structName; // Name of the struct this constructor belongs to (for constructors only)
-    std::vector<std::string> attributes;
+    std::vector<AttributeSymbol> attributes;
 
-    // Raw pointers to AST nodes (AST owns the memory)
     Block* body = nullptr;
     Expression* expressionBody = nullptr;
 
@@ -209,7 +268,14 @@ struct MethodSymbol : Symbol
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
-        return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
+        for (const auto& a : attributes) { if (a.name == attr) return true; }
+        return false;
+    }
+
+    [[nodiscard]] const AttributeSymbol* getAttribute(const std::string& attr) const
+    {
+        for (const auto& a : attributes) { if (a.name == attr) return &a; }
+        return nullptr;
     }
 };
 
@@ -255,7 +321,7 @@ struct StructSymbol : Symbol
     std::vector<std::shared_ptr<PropertySymbol>> properties;
     std::vector<GenericParamInfo> genericParams;
     std::vector<std::string> implements;
-    std::vector<std::string> attributes;
+    std::vector<AttributeSymbol> attributes;
     std::unique_ptr<Type> baseType;
 
     [[nodiscard]] bool isGeneric() const
@@ -275,7 +341,14 @@ struct StructSymbol : Symbol
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
-        return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
+        for (const auto& a : attributes) { if (a.name == attr) return true; }
+        return false;
+    }
+
+    [[nodiscard]] const AttributeSymbol* getAttribute(const std::string& attr) const
+    {
+        for (const auto& a : attributes) { if (a.name == attr) return &a; }
+        return nullptr;
     }
 
     std::optional<FieldSymbol> findField(const std::string& fieldName)

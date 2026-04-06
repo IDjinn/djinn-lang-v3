@@ -144,6 +144,35 @@ namespace djinn
         _result = nullptr;
     }
 
+    void BinderExpressionVisitor::visit(const IsExpression& expr)
+    {
+        auto operand = _binder.bindExpression(*expr.operand);
+        if (operand)
+        {
+            const auto& type = operand->type;
+            bool isObject = type.kind == TypeKind::STRUCT &&
+                (type.structName == "object" || type.structName == "std::types::object");
+            if (!isObject)
+            {
+                _binder._diagnostics.emitAndPrint(
+                    Diagnostic(Severity::Error, DiagnosticCode::TYPE_MISMATCH,
+                               "'is' expression requires operand of type 'object', got '" + type.toHumanString() + "'",
+                               expr.location));
+                throw CompileError(DiagnosticCode::TYPE_MISMATCH,
+                                   "'is' expression requires operand of type 'object'");
+            }
+        }
+
+        if (expr.bindingName)
+        {
+            auto resolvedType = _binder.resolveType(expr.targetType);
+            Type bindType = resolvedType ? *resolvedType : expr.targetType;
+            _binder._current_scope->defineVariable(*expr.bindingName, bindType, false);
+        }
+
+        _result = std::make_shared<Symbol>(SymbolKind::Variable, "is", Type::integer(1, false), expr.location);
+    }
+
     void BinderExpressionVisitor::visit(const MacroExpansionExpression& expr)
     {
         for (const auto& local : expr.locals)

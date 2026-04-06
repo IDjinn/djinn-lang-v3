@@ -96,6 +96,16 @@ void Generator::register_intrinsic_constants()
 
     defInt("Runtime", "PointerSize", sizeof(void*));
 
+    // AttributeTarget bitmask values
+    defInt("AttributeTarget", "Function", 1);
+    defInt("AttributeTarget", "Method", 2);
+    defInt("AttributeTarget", "Struct", 4);
+    defInt("AttributeTarget", "Field", 8);
+    defInt("AttributeTarget", "Parameter", 16);
+    defInt("AttributeTarget", "ReturnValue", 32);
+    defInt("AttributeTarget", "Variable", 64);
+    defInt("AttributeTarget", "All", 127);
+
     LOG_DEBUG("[generator] intrinsic constants registered");
 }
 
@@ -238,6 +248,7 @@ void Generator::generate()
             auto* mainFuncType = llvm::FunctionType::get(builder->getInt32Ty(), false);
             auto* realMainFn = llvm::Function::Create(
                 mainFuncType, llvm::Function::ExternalLinkage, "main", *module);
+            apply_implicit_attributes(realMainFn);
             functions["main"] = realMainFn;
 
             auto* entryBB = llvm::BasicBlock::Create(*context, "entry", realMainFn);
@@ -302,6 +313,7 @@ void Generator::generate()
             auto* mainFuncType = llvm::FunctionType::get(builder->getInt32Ty(), false);
             auto* realMainFn = llvm::Function::Create(
                 mainFuncType, llvm::Function::ExternalLinkage, "main", *module);
+            apply_implicit_attributes(realMainFn);
             functions["main"] = realMainFn;
 
             auto* entryBB = llvm::BasicBlock::Create(*context, "entry", realMainFn);
@@ -388,6 +400,7 @@ void Generator::generate_default_main()
         "main",
         *module
     );
+    apply_implicit_attributes(mainFunc);
     functions["main"] = mainFunc;
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", mainFunc);

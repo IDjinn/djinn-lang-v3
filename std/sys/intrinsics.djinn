@@ -1,5 +1,9 @@
 namespace std::sys;
 
+// ============================================================================
+// Compile-time platform/architecture intrinsics
+// ============================================================================
+
 [intrinsic] constexpr struct Platform {
     bool Windows;
     bool Linux;
@@ -19,4 +23,82 @@ namespace std::sys;
 
 [intrinsic] constexpr struct Runtime {
     i32 PointerSize;
+}
+
+// ============================================================================
+// Attribute target flags (bitmask)
+// ============================================================================
+
+[intrinsic] constexpr struct AttributeTarget {
+    const i32 Function = 1;
+    const i32 Method = 2;
+    const i32 Struct = 4;
+    const i32 Field = 8;
+    const i32 Parameter = 16;
+    const i32 ReturnValue = 32;
+    const i32 Variable = 64;
+    const i32 All = 127;
+}
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct ForceInline;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct NoInline;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct NoReturn;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct Hot;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct Cold;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct NoSync;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct NoUnwind;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct WillReturn;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct NoRecurse;
+
+[attribute(AttributeTarget.Struct | AttributeTarget.Field | AttributeTarget.Parameter)]
+struct Align {
+    i32 value;
+}
+
+[attribute(AttributeTarget.Field | AttributeTarget.Variable)]
+struct Volatile;
+
+[attribute(AttributeTarget.Parameter)]
+struct Restrict;
+
+[attribute(AttributeTarget.Parameter)]
+struct NoCapture;
+
+[attribute(AttributeTarget.Parameter | AttributeTarget.Field)]
+struct ReadOnly;
+
+[attribute(AttributeTarget.Parameter)]
+struct WriteOnly;
+
+[attribute(AttributeTarget.Parameter | AttributeTarget.ReturnValue)]
+struct NonNull;
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method | AttributeTarget.Struct)]
+struct NoMangle;
+
+[attribute(AttributeTarget.All)]
+struct Deprecated {
+    i8* message;
+}
+
+[attribute(AttributeTarget.Function | AttributeTarget.Method)]
+struct Llvm {
+    i8* attr;
 }

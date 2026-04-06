@@ -229,6 +229,16 @@ static void register_intrinsic_values(ConstEvaluator& eval)
 #endif
 
     defInt("Runtime", "PointerSize", sizeof(void*));
+
+    // AttributeTarget bitmask values
+    defInt("AttributeTarget", "Function", 1);
+    defInt("AttributeTarget", "Method", 2);
+    defInt("AttributeTarget", "Struct", 4);
+    defInt("AttributeTarget", "Field", 8);
+    defInt("AttributeTarget", "Parameter", 16);
+    defInt("AttributeTarget", "ReturnValue", 32);
+    defInt("AttributeTarget", "Variable", 64);
+    defInt("AttributeTarget", "All", 127);
 }
 
 static ConstEvaluator create_comptime_evaluator(

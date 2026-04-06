@@ -1,0 +1,2754 @@
+{
+  "tests": 492,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "Async",
+      "tests": 19,
+      "testsuite": [
+        {
+          "name": "SimpleReturnValue",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 9
+        },
+        {
+          "name": "WithParameter",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 27
+        },
+        {
+          "name": "MultipleParameters",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 45
+        },
+        {
+          "name": "ExpressionComputation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 63
+        },
+        {
+          "name": "AsyncMain",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 85
+        },
+        {
+          "name": "AsyncMainWithComputation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 103
+        },
+        {
+          "name": "DiagnosticsForNonWaitableAsync",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 122
+        },
+        {
+          "name": "MultipleAwaitsSequential",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 147
+        },
+        {
+          "name": "ThreeAwaitsAccumulate",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 170
+        },
+        {
+          "name": "ChainedAwait",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 194
+        },
+        {
+          "name": "DeepChaining",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 217
+        },
+        {
+          "name": "ChainedAsyncMain",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 245
+        },
+        {
+          "name": "AwaitResultAsArgument",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 273
+        },
+        {
+          "name": "AwaitWithLocalComputation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 292
+        },
+        {
+          "name": "Yield_BasicYield",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 315
+        },
+        {
+          "name": "Yield_MultipleYields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 334
+        },
+        {
+          "name": "Yield_WithComputation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 355
+        },
+        {
+          "name": "NonAsyncMainStillWorks",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 452
+        },
+        {
+          "name": "NonAsyncMainWithRuntime",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 470
+        }
+      ]
+    },
+    {
+      "name": "Spawn",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "BasicSpawnParse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 381
+        },
+        {
+          "name": "MultipleSpawnsParse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 495
+        },
+        {
+          "name": "WithYieldParse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 518
+        }
+      ]
+    },
+    {
+      "name": "EventLoop",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "AsyncMainGeneratesRuntimeCalls",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 406
+        },
+        {
+          "name": "CoroWrappersGenerated",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\async.cpp",
+          "line": 426
+        }
+      ]
+    },
+    {
+      "name": "Attributes",
+      "tests": 11,
+      "testsuite": [
+        {
+          "name": "ForceInlineGeneratesAlwaysInline",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 13
+        },
+        {
+          "name": "NoInlineGeneratesNoInline",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 34
+        },
+        {
+          "name": "NoReturnAttribute",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 55
+        },
+        {
+          "name": "ColdAttribute",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 76
+        },
+        {
+          "name": "ParameterizedAttributeParses",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 101
+        },
+        {
+          "name": "NamedParameterAttributeParses",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 121
+        },
+        {
+          "name": "MultipleAttributesOnMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 144
+        },
+        {
+          "name": "ImplicitNounwindOnAllFunctions",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 170
+        },
+        {
+          "name": "LlvmEscapeHatch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 194
+        },
+        {
+          "name": "ErrorOnUnknownAttribute",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 219
+        },
+        {
+          "name": "ErrorOnUnknownStructAttribute",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\attributes.cpp",
+          "line": 238
+        }
+      ]
+    },
+    {
+      "name": "Binder",
+      "tests": 8,
+      "testsuite": [
+        {
+          "name": "AllowsValidCode",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 6
+        },
+        {
+          "name": "VariableDeclarationAndUsage",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 26
+        },
+        {
+          "name": "FunctionCallWithCorrectArgs",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 39
+        },
+        {
+          "name": "NamespaceQualifiedNames",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 55
+        },
+        {
+          "name": "NestedNamespaceQualifiedNames",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 69
+        },
+        {
+          "name": "FileScopedNamespaceBinding",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 85
+        },
+        {
+          "name": "StructFieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 99
+        },
+        {
+          "name": "MultipleVariables",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\binder.cpp",
+          "line": 117
+        }
+      ]
+    },
+    {
+      "name": "Cast",
+      "tests": 11,
+      "testsuite": [
+        {
+          "name": "IntTruncation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 4
+        },
+        {
+          "name": "IntWidening",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 19
+        },
+        {
+          "name": "FloatToInt",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 34
+        },
+        {
+          "name": "IntToFloat",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 49
+        },
+        {
+          "name": "ChainedCast",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 65
+        },
+        {
+          "name": "SameTypeCastNoop",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 81
+        },
+        {
+          "name": "CastInExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 96
+        },
+        {
+          "name": "FloatTruncation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 112
+        },
+        {
+          "name": "PointerCast",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 127
+        },
+        {
+          "name": "CastLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 144
+        },
+        {
+          "name": "NegativeFloatToInt",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\cast.cpp",
+          "line": 158
+        }
+      ]
+    },
+    {
+      "name": "ConstField",
+      "tests": 10,
+      "testsuite": [
+        {
+          "name": "BasicConstFieldStaticAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 5
+        },
+        {
+          "name": "ConstFieldUsedInStaticMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 22
+        },
+        {
+          "name": "ConstFieldWithPublicModifier",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 43
+        },
+        {
+          "name": "ConstFieldDoesNotAffectStructLayout",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 61
+        },
+        {
+          "name": "ConstFieldAccessViaInstance",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 81
+        },
+        {
+          "name": "ConstFieldNegativeValue",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 100
+        },
+        {
+          "name": "MutAndConstError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 118
+        },
+        {
+          "name": "ConstFieldWithoutInitializerError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 132
+        },
+        {
+          "name": "MultipleConstFields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 146
+        },
+        {
+          "name": "ConstFieldWithMixedRegularFields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\const_field.cpp",
+          "line": 166
+        }
+      ]
+    },
+    {
+      "name": "ConstEvalVM",
+      "tests": 37,
+      "testsuite": [
+        {
+          "name": "IntegerLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 38
+        },
+        {
+          "name": "FloatLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 48
+        },
+        {
+          "name": "BooleanLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 58
+        },
+        {
+          "name": "BooleanFalseLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 67
+        },
+        {
+          "name": "HexLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 76
+        },
+        {
+          "name": "BinaryLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 83
+        },
+        {
+          "name": "SeparatorLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 90
+        },
+        {
+          "name": "TickSeparatorLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 97
+        },
+        {
+          "name": "NegativeZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 104
+        },
+        {
+          "name": "Addition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 115
+        },
+        {
+          "name": "Subtraction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 122
+        },
+        {
+          "name": "Multiplication",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 129
+        },
+        {
+          "name": "Division",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 136
+        },
+        {
+          "name": "Modulo",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 143
+        },
+        {
+          "name": "DivisionByZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 150
+        },
+        {
+          "name": "ModuloByZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 157
+        },
+        {
+          "name": "UnaryNegate",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 164
+        },
+        {
+          "name": "DoubleNegate",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 171
+        },
+        {
+          "name": "NestedArithmetic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 179
+        },
+        {
+          "name": "ComplexNestedArithmetic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 188
+        },
+        {
+          "name": "LessThan",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 202
+        },
+        {
+          "name": "LessThanFalse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 209
+        },
+        {
+          "name": "GreaterThan",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 216
+        },
+        {
+          "name": "LessEqual",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 223
+        },
+        {
+          "name": "GreaterEqual",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 230
+        },
+        {
+          "name": "Equality",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 237
+        },
+        {
+          "name": "Inequality",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 244
+        },
+        {
+          "name": "LogicAnd",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 255
+        },
+        {
+          "name": "LogicOr",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 262
+        },
+        {
+          "name": "LogicalNot",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 269
+        },
+        {
+          "name": "LogicalNotFalse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 276
+        },
+        {
+          "name": "NamedConstant",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 287
+        },
+        {
+          "name": "NamedConstantInExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 295
+        },
+        {
+          "name": "MultipleNamedConstants",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 303
+        },
+        {
+          "name": "UnknownIdentifierReturnsError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 312
+        },
+        {
+          "name": "MaxIterationsExceeded",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 323
+        },
+        {
+          "name": "StackOverflowProtection",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 339
+        }
+      ]
+    },
+    {
+      "name": "ConstExpr",
+      "tests": 15,
+      "testsuite": [
+        {
+          "name": "SimpleConstExprVariable",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 356
+        },
+        {
+          "name": "ConstExprWithArithmetic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 371
+        },
+        {
+          "name": "ConstExprMultiplication",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 387
+        },
+        {
+          "name": "ConstExprNegative",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 404
+        },
+        {
+          "name": "ConstExprUsedInArraySize",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 419
+        },
+        {
+          "name": "ConstFieldUsedInExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 440
+        },
+        {
+          "name": "ConstFieldWithArithmetic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 458
+        },
+        {
+          "name": "ConstExprFunctionCompiles",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 481
+        },
+        {
+          "name": "ConstExprFunctionResult",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 498
+        },
+        {
+          "name": "LocalConstExprVariable",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 519
+        },
+        {
+          "name": "LocalConstevalVariable",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 533
+        },
+        {
+          "name": "LocalConstExprUsedInExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 547
+        },
+        {
+          "name": "LocalConstExprInArraySize",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 562
+        },
+        {
+          "name": "GlobalConstevalVariable",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 578
+        },
+        {
+          "name": "InvalidConstExprAndAsyncModifier",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 597
+        }
+      ]
+    },
+    {
+      "name": "CompileTimeIf",
+      "tests": 17,
+      "testsuite": [
+        {
+          "name": "TrueBranch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 618
+        },
+        {
+          "name": "FalseBranch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 636
+        },
+        {
+          "name": "FalseBranchWithElse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 654
+        },
+        {
+          "name": "TrueBranchWithElse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 673
+        },
+        {
+          "name": "BinaryExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 692
+        },
+        {
+          "name": "CompoundExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 710
+        },
+        {
+          "name": "ElseIfChain",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 729
+        },
+        {
+          "name": "WarningOnConstExprInRuntimeIf",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 750
+        },
+        {
+          "name": "NoWarningOnRuntimeVariable",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 777
+        },
+        {
+          "name": "ErrorOnNonConstExprWithoutParens",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 803
+        },
+        {
+          "name": "LiteralCondition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 828
+        },
+        {
+          "name": "DeadCodeEliminated",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 844
+        },
+        {
+          "name": "ExplicitConstexprKeyword",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 863
+        },
+        {
+          "name": "ExplicitConstevalKeyword",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 881
+        },
+        {
+          "name": "ConstevalErrorOnRuntimeExpr",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 899
+        },
+        {
+          "name": "ExplicitConstexprWithElseIf",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 924
+        },
+        {
+          "name": "NoWarningOnMixedExpr",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 947
+        }
+      ]
+    },
+    {
+      "name": "Intrinsic",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "IntrinsicConstevalVariable",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 979
+        },
+        {
+          "name": "ConstexprStructFieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 996
+        },
+        {
+          "name": "ConstexprStructAllFieldsAreConst",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constexpr.cpp",
+          "line": 1013
+        }
+      ]
+    },
+    {
+      "name": "Constructor",
+      "tests": 18,
+      "testsuite": [
+        {
+          "name": "StackBasicFieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 9
+        },
+        {
+          "name": "StackSecondField",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 33
+        },
+        {
+          "name": "StackFieldExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 57
+        },
+        {
+          "name": "StackThreeFields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 81
+        },
+        {
+          "name": "StackPassedToFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 107
+        },
+        {
+          "name": "HeapBasicFieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 139
+        },
+        {
+          "name": "HeapSecondField",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 163
+        },
+        {
+          "name": "HeapFieldExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 187
+        },
+        {
+          "name": "HeapThreeFields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 211
+        },
+        {
+          "name": "HeapFieldAssignment",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 237
+        },
+        {
+          "name": "StackAndHeapSameStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 264
+        },
+        {
+          "name": "GenericStackBasic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 293
+        },
+        {
+          "name": "GenericStackNoArgs",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 315
+        },
+        {
+          "name": "GenericStackTwoFields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 337
+        },
+        {
+          "name": "GenericStackMethodCall",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 361
+        },
+        {
+          "name": "GenericStackMethodForwardReference",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 387
+        },
+        {
+          "name": "GenericHeapBasic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 420
+        },
+        {
+          "name": "GenericHeapMethodCall",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\constructor.cpp",
+          "line": 442
+        }
+      ]
+    },
+    {
+      "name": "ControlFlow",
+      "tests": 48,
+      "testsuite": [
+        {
+          "name": "IfStatementTrueBranch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 7
+        },
+        {
+          "name": "IfStatementFalseBranch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 24
+        },
+        {
+          "name": "IfElseStatementTrueBranch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 41
+        },
+        {
+          "name": "IfElseStatementFalseBranch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 59
+        },
+        {
+          "name": "IfElseIfElseStatement",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 77
+        },
+        {
+          "name": "NestedIfStatements",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 97
+        },
+        {
+          "name": "IfWithEquality",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 118
+        },
+        {
+          "name": "IfWithNotEqual",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 135
+        },
+        {
+          "name": "IfWithLogicalAnd",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 152
+        },
+        {
+          "name": "IfWithLogicalOr",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 170
+        },
+        {
+          "name": "WhileLoopSimple",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 190
+        },
+        {
+          "name": "WhileLoopSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 207
+        },
+        {
+          "name": "WhileLoopWithBreak",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 226
+        },
+        {
+          "name": "WhileLoopWithContinue",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 246
+        },
+        {
+          "name": "WhileLoopNeverExecutes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 268
+        },
+        {
+          "name": "DoWhileLoopSimple",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 287
+        },
+        {
+          "name": "DoWhileExecutesAtLeastOnce",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 304
+        },
+        {
+          "name": "DoWhileWithBreak",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 321
+        },
+        {
+          "name": "ForLoopSimple",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 343
+        },
+        {
+          "name": "ForLoopPostfix",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 361
+        },
+        {
+          "name": "ForLoopSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 378
+        },
+        {
+          "name": "ForLoopWithBreak",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 395
+        },
+        {
+          "name": "ForLoopWithContinue",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 415
+        },
+        {
+          "name": "ForLoopNested",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 435
+        },
+        {
+          "name": "RangeForSimple",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 456
+        },
+        {
+          "name": "RangeForSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 473
+        },
+        {
+          "name": "RangeForWithBreak",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 490
+        },
+        {
+          "name": "RangeForWithContinue",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 510
+        },
+        {
+          "name": "RangeForNested",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 530
+        },
+        {
+          "name": "RangeForAnonymous",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 549
+        },
+        {
+          "name": "RangeForAnonymousNested",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 566
+        },
+        {
+          "name": "RangeForVariableAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 585
+        },
+        {
+          "name": "RangeForInclusiveEnd",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 604
+        },
+        {
+          "name": "RangeForInclusiveEndSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 621
+        },
+        {
+          "name": "RangeForBracketClosed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 638
+        },
+        {
+          "name": "RangeForBracketHalfOpen",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 655
+        },
+        {
+          "name": "RangeForBracketClosedSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 672
+        },
+        {
+          "name": "RangeForAnonymousInclusive",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 689
+        },
+        {
+          "name": "RangeForAnonymousBracketClosed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 706
+        },
+        {
+          "name": "SwitchStatementCase1",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 725
+        },
+        {
+          "name": "SwitchStatementCase2",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 746
+        },
+        {
+          "name": "SwitchStatementDefault",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 767
+        },
+        {
+          "name": "SwitchStatementWithBreak",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 788
+        },
+        {
+          "name": "SwitchStatementWithoutDefault",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 813
+        },
+        {
+          "name": "FibonacciIterative",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 838
+        },
+        {
+          "name": "FactorialIterative",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 859
+        },
+        {
+          "name": "NestedLoopsWithBreak",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 877
+        },
+        {
+          "name": "WhileWithMultipleConditions",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\control_flow.cpp",
+          "line": 899
+        }
+      ]
+    },
+    {
+      "name": "Diagnostics",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "BasicError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\diagnostics.cpp",
+          "line": 4
+        },
+        {
+          "name": "ErrorWithHelp",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\diagnostics.cpp",
+          "line": 25
+        },
+        {
+          "name": "MultipleErrors",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\diagnostics.cpp",
+          "line": 50
+        },
+        {
+          "name": "CodeFormatting",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\diagnostics.cpp",
+          "line": 62
+        }
+      ]
+    },
+    {
+      "name": "Math",
+      "tests": 34,
+      "testsuite": [
+        {
+          "name": "IntegerDivFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\div.cpp",
+          "line": 5
+        },
+        {
+          "name": "IntegerDiv",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\div.cpp",
+          "line": 17
+        },
+        {
+          "name": "IntegerDivWithRemainder",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\div.cpp",
+          "line": 34
+        },
+        {
+          "name": "Sqrt",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 13
+        },
+        {
+          "name": "SqrtFloat",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 31
+        },
+        {
+          "name": "Pow",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 49
+        },
+        {
+          "name": "Floor",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 67
+        },
+        {
+          "name": "Ceil",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 85
+        },
+        {
+          "name": "Round",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 103
+        },
+        {
+          "name": "Fabs",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 121
+        },
+        {
+          "name": "Fmax",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 139
+        },
+        {
+          "name": "Fmin",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 157
+        },
+        {
+          "name": "Cbrt",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 175
+        },
+        {
+          "name": "Exp",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 193
+        },
+        {
+          "name": "Log",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 212
+        },
+        {
+          "name": "Log10",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 233
+        },
+        {
+          "name": "Log2",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 251
+        },
+        {
+          "name": "Fmod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 269
+        },
+        {
+          "name": "Hypot",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 287
+        },
+        {
+          "name": "Trunc",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 305
+        },
+        {
+          "name": "Exp2",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 323
+        },
+        {
+          "name": "ImportMathSqrt",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 345
+        },
+        {
+          "name": "ImportMathPow",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 361
+        },
+        {
+          "name": "ImportMathMultipleFunctions",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 377
+        },
+        {
+          "name": "ImportMathFloatFunctions",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 395
+        },
+        {
+          "name": "CombinedMathOperations",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\math.cpp",
+          "line": 411
+        },
+        {
+          "name": "IntegerMultFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mult.cpp",
+          "line": 5
+        },
+        {
+          "name": "IntegerMult",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mult.cpp",
+          "line": 17
+        },
+        {
+          "name": "IntegerSubFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\sub.cpp",
+          "line": 5
+        },
+        {
+          "name": "IntegerSub",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\sub.cpp",
+          "line": 17
+        },
+        {
+          "name": "IntegerSubNegative",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\sub.cpp",
+          "line": 33
+        },
+        {
+          "name": "IntegerSumFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\sum.cpp",
+          "line": 5
+        },
+        {
+          "name": "IntegerSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\sum.cpp",
+          "line": 17
+        },
+        {
+          "name": "IntegerSumWithAnonStructReturn",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\sum.cpp",
+          "line": 33
+        }
+      ]
+    },
+    {
+      "name": "Enum",
+      "tests": 17,
+      "testsuite": [
+        {
+          "name": "SimpleDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 13
+        },
+        {
+          "name": "VariantConstruction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 33
+        },
+        {
+          "name": "VariantWithPayload",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 52
+        },
+        {
+          "name": "MultiplePayloadTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 71
+        },
+        {
+          "name": "VariantWithMultipleFields",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 93
+        },
+        {
+          "name": "GenericOptional",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 118
+        },
+        {
+          "name": "GenericResult",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 138
+        },
+        {
+          "name": "GenericWithPointerType",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 158
+        },
+        {
+          "name": "GenericWithFloatType",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 177
+        },
+        {
+          "name": "GenericMultipleInstantiations",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 196
+        },
+        {
+          "name": "PatternMatchBasic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 222
+        },
+        {
+          "name": "PatternMatchEmpty",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 247
+        },
+        {
+          "name": "PatternMatchResult",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 272
+        },
+        {
+          "name": "PatternMatchResultError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 297
+        },
+        {
+          "name": "PatternMatchWithComputation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 322
+        },
+        {
+          "name": "PatternMatchNoPayload",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 347
+        },
+        {
+          "name": "PatternMatchInFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\enum.cpp",
+          "line": 374
+        }
+      ]
+    },
+    {
+      "name": "Extern",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "PrintfHelloWorld",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\extern.cpp",
+          "line": 4
+        },
+        {
+          "name": "BlockSyntax",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\extern.cpp",
+          "line": 18
+        },
+        {
+          "name": "MultipleExternBlocks",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\extern.cpp",
+          "line": 36
+        },
+        {
+          "name": "StdImportNoDuplicateExternSymbols",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\extern.cpp",
+          "line": 55
+        },
+        {
+          "name": "ExternNotRemovedByOptimizer",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\extern.cpp",
+          "line": 91
+        }
+      ]
+    },
+    {
+      "name": "GenericConstraints",
+      "tests": 14,
+      "testsuite": [
+        {
+          "name": "ParseWhereClauseSingleConstraint",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 13
+        },
+        {
+          "name": "ParseWhereClauseMultipleConstraintsSameParam",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 35
+        },
+        {
+          "name": "ParseWhereClauseMultipleParams",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 61
+        },
+        {
+          "name": "ParseWhereClauseOnEnum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 89
+        },
+        {
+          "name": "ParseWhereClauseOnInterface",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 112
+        },
+        {
+          "name": "UndefinedConstraintInterfaceError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 138
+        },
+        {
+          "name": "ConstraintSatisfied",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 154
+        },
+        {
+          "name": "ConstraintViolated",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 185
+        },
+        {
+          "name": "NoConstraintNoValidation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 211
+        },
+        {
+          "name": "MultipleConstraintsSatisfied",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 234
+        },
+        {
+          "name": "MultipleConstraintsPartiallyViolated",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 273
+        },
+        {
+          "name": "EnumConstraintSatisfied",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 311
+        },
+        {
+          "name": "EnumConstraintViolated",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 342
+        },
+        {
+          "name": "WhereClauseWithImplements",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_constraints.cpp",
+          "line": 373
+        }
+      ]
+    },
+    {
+      "name": "FullCompilation",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "StructGeneric",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_integration.cpp",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "name": "GenericStruct",
+      "tests": 14,
+      "testsuite": [
+        {
+          "name": "TwoParameters",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 13
+        },
+        {
+          "name": "ThreeParameters",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 32
+        },
+        {
+          "name": "FourParameters",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 52
+        },
+        {
+          "name": "MapEntry",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 73
+        },
+        {
+          "name": "TwoParametersWithInit",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 93
+        },
+        {
+          "name": "TwoParametersFieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 112
+        },
+        {
+          "name": "TwoParametersSecondFieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 131
+        },
+        {
+          "name": "MixedTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 150
+        },
+        {
+          "name": "PointerTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 169
+        },
+        {
+          "name": "MultipleInstantiations",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 188
+        },
+        {
+          "name": "NestedGenericStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 211
+        },
+        {
+          "name": "FunctionReturningGenericStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 235
+        },
+        {
+          "name": "GenericStructAsParameter",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 258
+        },
+        {
+          "name": "ThreeParametersFieldSum",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\generic_struct.cpp",
+          "line": 281
+        }
+      ]
+    },
+    {
+      "name": "Hash",
+      "tests": 12,
+      "testsuite": [
+        {
+          "name": "I32HashIsIdentity",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 8
+        },
+        {
+          "name": "U8HashIsIdentity",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 23
+        },
+        {
+          "name": "I16HashIsIdentity",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 38
+        },
+        {
+          "name": "U16HashIsIdentity",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 53
+        },
+        {
+          "name": "I8HashIsIdentity",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 69
+        },
+        {
+          "name": "U32HashIsIdentity",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 84
+        },
+        {
+          "name": "I64HashProducesNonZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 100
+        },
+        {
+          "name": "U64HashProducesNonZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 115
+        },
+        {
+          "name": "128HashProducesNonZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 130
+        },
+        {
+          "name": "U128HashProducesNonZero",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 145
+        },
+        {
+          "name": "HexLiteralHash",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 160
+        },
+        {
+          "name": "BinaryLiteralHash",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hash.cpp",
+          "line": 175
+        }
+      ]
+    },
+    {
+      "name": "Hello",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "World",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\hello_world.cpp",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "name": "Import",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "BasicImport",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\import.cpp",
+          "line": 5
+        },
+        {
+          "name": "QualifiedImport",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\import.cpp",
+          "line": 24
+        },
+        {
+          "name": "MultipleImports",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\import.cpp",
+          "line": 45
+        },
+        {
+          "name": "ImportParsesQualifiedName",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\import.cpp",
+          "line": 70
+        }
+      ]
+    },
+    {
+      "name": "IndexAccess",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "BasicRead",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\index_access.cpp",
+          "line": 5
+        },
+        {
+          "name": "Write",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\index_access.cpp",
+          "line": 24
+        },
+        {
+          "name": "WithMalloc",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\index_access.cpp",
+          "line": 41
+        },
+        {
+          "name": "I8Pointer",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\index_access.cpp",
+          "line": 60
+        }
+      ]
+    },
+    {
+      "name": "Interface",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "BasicDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\interface.cpp",
+          "line": 5
+        },
+        {
+          "name": "SameNameInterfaceDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\interface.cpp",
+          "line": 19
+        },
+        {
+          "name": "GenericInterface",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\interface.cpp",
+          "line": 37
+        },
+        {
+          "name": "StructImplementsInterface",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\interface.cpp",
+          "line": 50
+        },
+        {
+          "name": "StructImplementsMultipleInterfaces",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\interface.cpp",
+          "line": 74
+        }
+      ]
+    },
+    {
+      "name": "Intrinsics",
+      "tests": 17,
+      "testsuite": [
+        {
+          "name": "SizeofI32",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 5
+        },
+        {
+          "name": "SizeofI64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 20
+        },
+        {
+          "name": "SizeofI8",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 35
+        },
+        {
+          "name": "SizeofStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 50
+        },
+        {
+          "name": "AlignofI32",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 70
+        },
+        {
+          "name": "AlignofI64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 85
+        },
+        {
+          "name": "Likely",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 101
+        },
+        {
+          "name": "Unlikely",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 118
+        },
+        {
+          "name": "Expect",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 135
+        },
+        {
+          "name": "SizeofF32",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 150
+        },
+        {
+          "name": "SizeofF64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 165
+        },
+        {
+          "name": "SizeofGenericStructI32",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 184
+        },
+        {
+          "name": "SizeofGenericStructI64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 203
+        },
+        {
+          "name": "SizeofGenericStructPoint",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 222
+        },
+        {
+          "name": "TypeofI32",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 248
+        },
+        {
+          "name": "TypeofF64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 265
+        },
+        {
+          "name": "TypeofStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\intrinsics.cpp",
+          "line": 282
+        }
+      ]
+    },
+    {
+      "name": "IsExpression",
+      "tests": 11,
+      "testsuite": [
+        {
+          "name": "ObjectIsI32True",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 13
+        },
+        {
+          "name": "ObjectIsI32False",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 36
+        },
+        {
+          "name": "ObjectIsF64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 59
+        },
+        {
+          "name": "ObjectIsStr",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 82
+        },
+        {
+          "name": "NegatedIsExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 109
+        },
+        {
+          "name": "ErrorOnNonObjectOperand",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 136
+        },
+        {
+          "name": "MultipleTypeChecks",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 156
+        },
+        {
+          "name": "IRContainsIsCheck",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 185
+        },
+        {
+          "name": "BindingExtractsI32Value",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 212
+        },
+        {
+          "name": "BindingNotUsedWhenTypeMismatch",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 235
+        },
+        {
+          "name": "BindingWithDifferentTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\is_expression.cpp",
+          "line": 258
+        }
+      ]
+    },
+    {
+      "name": "Macro",
+      "tests": 12,
+      "testsuite": [
+        {
+          "name": "SimpleExprMacro",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 5
+        },
+        {
+          "name": "MultipleParameters",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 23
+        },
+        {
+          "name": "PrecedencePreserved",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 41
+        },
+        {
+          "name": "LocalAvoidsDoubleEvaluation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 59
+        },
+        {
+          "name": "WithoutLocalCausesDoubleEvaluation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 85
+        },
+        {
+          "name": "LocalWithArithmeticExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 111
+        },
+        {
+          "name": "MixedLocalAndNonLocal",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 130
+        },
+        {
+          "name": "NestedMacroCall",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 148
+        },
+        {
+          "name": "WarnOnPossibleSideEffect",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 172
+        },
+        {
+          "name": "NoWarnWhenLocalUsed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 200
+        },
+        {
+          "name": "NoWarnWhenSingleUse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 228
+        },
+        {
+          "name": "MacroStoredInProgram",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\macro.cpp",
+          "line": 256
+        }
+      ]
+    },
+    {
+      "name": "ManglerType",
+      "tests": 15,
+      "testsuite": [
+        {
+          "name": "Integer8Signed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 10
+        },
+        {
+          "name": "Integer16Signed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 15
+        },
+        {
+          "name": "Integer32Signed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 20
+        },
+        {
+          "name": "Integer64Signed",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 25
+        },
+        {
+          "name": "Integer32Unsigned",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 30
+        },
+        {
+          "name": "Integer64Unsigned",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 35
+        },
+        {
+          "name": "Void",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 40
+        },
+        {
+          "name": "Float32",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 45
+        },
+        {
+          "name": "Float64",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 50
+        },
+        {
+          "name": "String",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 55
+        },
+        {
+          "name": "Pointer",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 60
+        },
+        {
+          "name": "PointerToPointer",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 65
+        },
+        {
+          "name": "Array",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 70
+        },
+        {
+          "name": "Struct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 75
+        },
+        {
+          "name": "StructShortName",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "name": "ManglerFunction",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "SimpleName",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 85
+        },
+        {
+          "name": "LongerName",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 89
+        },
+        {
+          "name": "SingleCharName",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 93
+        },
+        {
+          "name": "WithIntParam",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 97
+        },
+        {
+          "name": "WithMultipleParams",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 102
+        },
+        {
+          "name": "WithStructParam",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 111
+        },
+        {
+          "name": "WithPointerParam",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 116
+        }
+      ]
+    },
+    {
+      "name": "ManglerMethod",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "SimpleMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 121
+        },
+        {
+          "name": "MethodWithParams",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 125
+        },
+        {
+          "name": "MethodWithMultipleParams",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 130
+        },
+        {
+          "name": "GetterMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 138
+        }
+      ]
+    },
+    {
+      "name": "ManglerGeneric",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "StructSingleTypeArg",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 142
+        },
+        {
+          "name": "StructMultipleTypeArgs",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 147
+        },
+        {
+          "name": "StructWithStructTypeArg",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 155
+        },
+        {
+          "name": "NestedGeneric",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 160
+        }
+      ]
+    },
+    {
+      "name": "ManglerGenericMethod",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "SimpleMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 166
+        },
+        {
+          "name": "MethodNoParams",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 175
+        }
+      ]
+    },
+    {
+      "name": "ManglerDemangle",
+      "tests": 6,
+      "testsuite": [
+        {
+          "name": "SimpleFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 184
+        },
+        {
+          "name": "LongerFunction",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 188
+        },
+        {
+          "name": "Method",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 192
+        },
+        {
+          "name": "NestedMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 197
+        },
+        {
+          "name": "NonMangled",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 202
+        },
+        {
+          "name": "GenericStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mangler.cpp",
+          "line": 206
+        }
+      ]
+    },
+    {
+      "name": "Method",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "BasicMethodWithBlock",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 5
+        },
+        {
+          "name": "ExpressionBodyArrow",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 23
+        },
+        {
+          "name": "MethodWithParameters",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 42
+        },
+        {
+          "name": "PublicPrivateModifiers",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 62
+        },
+        {
+          "name": "StaticMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 81
+        },
+        {
+          "name": "VoidMethodWithBlock",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 99
+        },
+        {
+          "name": "MixedFieldsAndMethods",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\method.cpp",
+          "line": 115
+        }
+      ]
+    },
+    {
+      "name": "Mutable",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "BasicMutableVariables",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mut.cpp",
+          "line": 5
+        },
+        {
+          "name": "InvalidImmutableAssingment",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\mut.cpp",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "name": "Namespace",
+      "tests": 8,
+      "testsuite": [
+        {
+          "name": "BasicDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 5
+        },
+        {
+          "name": "StructInNamespace",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 26
+        },
+        {
+          "name": "NestedNamespace",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 48
+        },
+        {
+          "name": "MultipleFunctionsInNamespace",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 72
+        },
+        {
+          "name": "StructAndFunctionInNamespace",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 100
+        },
+        {
+          "name": "FileScopedNamespace",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 126
+        },
+        {
+          "name": "FileScopedQualifiedNamespace",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 147
+        },
+        {
+          "name": "NoNamespaceIsGlobal",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\namespace.cpp",
+          "line": 167
+        }
+      ]
+    },
+    {
+      "name": "Numbers",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "MultipleNumbersDeclaration",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\numbers.cpp",
+          "line": 8
+        },
+        {
+          "name": "CompileTimeOverflowCheck",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\numbers.cpp",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "name": "Object",
+      "tests": 12,
+      "testsuite": [
+        {
+          "name": "TypeInfoStructDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 13
+        },
+        {
+          "name": "ObjectStructDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 27
+        },
+        {
+          "name": "TypeInfoKindInt",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 43
+        },
+        {
+          "name": "TypeInfoKindFloat",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 63
+        },
+        {
+          "name": "TypeInfoKindPointer",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 83
+        },
+        {
+          "name": "VariadicMethodCompiles",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 108
+        },
+        {
+          "name": "VariadicEmptyArgs",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 127
+        },
+        {
+          "name": "VariadicArgsLength",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 146
+        },
+        {
+          "name": "VariadicWithNormalParams",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 165
+        },
+        {
+          "name": "VariadicAccessTypeInfo",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 184
+        },
+        {
+          "name": "SyncPrintIntViaVariadic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 208
+        },
+        {
+          "name": "BoxingIRContainsKind",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\object_typeinfo.cpp",
+          "line": 235
+        }
+      ]
+    },
+    {
+      "name": "OperatorOverload",
+      "tests": 8,
+      "testsuite": [
+        {
+          "name": "ParseOperatorInInterface",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 5
+        },
+        {
+          "name": "ParseOperatorInImpl",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 17
+        },
+        {
+          "name": "StructAddition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 36
+        },
+        {
+          "name": "StructEquality",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 63
+        },
+        {
+          "name": "NotEqualDerivedFromEqual",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 93
+        },
+        {
+          "name": "BitwiseOperatorsOnPrimitives",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 122
+        },
+        {
+          "name": "OperatorInStructBody",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 148
+        },
+        {
+          "name": "MultipleOperatorsOnSameStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\operator_overload.cpp",
+          "line": 173
+        }
+      ]
+    },
+    {
+      "name": "Ownership",
+      "tests": 13,
+      "testsuite": [
+        {
+          "name": "CopyTypesDoNotMove",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 9
+        },
+        {
+          "name": "FloatCopyTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 25
+        },
+        {
+          "name": "PointerCopyTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 41
+        },
+        {
+          "name": "StructMoveSemantics",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 61
+        },
+        {
+          "name": "UseAfterMove",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 81
+        },
+        {
+          "name": "DoubleMoveError",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 100
+        },
+        {
+          "name": "ReinitializeAfterMove",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 124
+        },
+        {
+          "name": "ScopeOwnership",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 149
+        },
+        {
+          "name": "NestedScopeOwnership",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 167
+        },
+        {
+          "name": "FunctionParameterCopyType",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 192
+        },
+        {
+          "name": "IfStatementOwnership",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 215
+        },
+        {
+          "name": "WhileLoopOwnership",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 233
+        },
+        {
+          "name": "ForLoopOwnership",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\ownership.cpp",
+          "line": 252
+        }
+      ]
+    },
+    {
+      "name": "PointerCompat",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "VoidToTyped",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\pointer_compat.cpp",
+          "line": 5
+        },
+        {
+          "name": "TypedToVoid",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\pointer_compat.cpp",
+          "line": 21
+        },
+        {
+          "name": "IncompatibleTypes",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\pointer_compat.cpp",
+          "line": 36
+        },
+        {
+          "name": "IncompatibleTypesHumanReadableMessage",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\pointer_compat.cpp",
+          "line": 54
+        },
+        {
+          "name": "SameType",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\pointer_compat.cpp",
+          "line": 68
+        }
+      ]
+    },
+    {
+      "name": "Str",
+      "tests": 9,
+      "testsuite": [
+        {
+          "name": "LiteralCreatesStrStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 13
+        },
+        {
+          "name": "EmptyLiteral",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 27
+        },
+        {
+          "name": "CoercionToI8PtrForPrintf",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 42
+        },
+        {
+          "name": "DirectLiteralCoercion",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 57
+        },
+        {
+          "name": "LenField",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 71
+        },
+        {
+          "name": "IsEmptyMethodTrue",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 86
+        },
+        {
+          "name": "IsEmptyMethodFalse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 104
+        },
+        {
+          "name": "IndexAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 122
+        },
+        {
+          "name": "PassAsParameter",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 138
+        }
+      ]
+    },
+    {
+      "name": "Arr",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "LiteralCreatesArrStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 161
+        },
+        {
+          "name": "IndexRead",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 176
+        },
+        {
+          "name": "IndexWrite",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 191
+        },
+        {
+          "name": "LenField",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 207
+        },
+        {
+          "name": "IsEmptyMethodFalse",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 222
+        },
+        {
+          "name": "SumElements",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 240
+        },
+        {
+          "name": "WithPrintf",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 259
+        }
+      ]
+    },
+    {
+      "name": "FixedArray",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "BasicAllocation",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 278
+        },
+        {
+          "name": "WriteAndReadMultiple",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 293
+        },
+        {
+          "name": "WithConstSize",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 310
+        },
+        {
+          "name": "LoopFill",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 326
+        },
+        {
+          "name": "LargeBuffer",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 343
+        }
+      ]
+    },
+    {
+      "name": "String",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "StructDefinition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 363
+        },
+        {
+          "name": "IsEmptyMethod",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 378
+        },
+        {
+          "name": "CapacityField",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\slices.cpp",
+          "line": 396
+        }
+      ]
+    },
+    {
+      "name": "Struct",
+      "tests": 11,
+      "testsuite": [
+        {
+          "name": "Definition",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 5
+        },
+        {
+          "name": "BraceInitializerPositional",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 24
+        },
+        {
+          "name": "BraceInitializerDesignated",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 44
+        },
+        {
+          "name": "FieldAccess",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 64
+        },
+        {
+          "name": "FieldAccessSecondField",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 82
+        },
+        {
+          "name": "MethodReturnWithBraceInit",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 101
+        },
+        {
+          "name": "AutoInferStructType",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 123
+        },
+        {
+          "name": "MultipleFieldsPositional",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 144
+        },
+        {
+          "name": "FieldAccessInExpression",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 164
+        },
+        {
+          "name": "StructAsParameter",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 183
+        },
+        {
+          "name": "SimpleBraceInitScalar",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 206
+        }
+      ]
+    },
+    {
+      "name": "Impl",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "ConstFieldOnPrimitive",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 224
+        },
+        {
+          "name": "ConstFieldWithArithmetic",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 241
+        },
+        {
+          "name": "MethodOnStruct",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 259
+        },
+        {
+          "name": "ConstAndMethodTogether",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 283
+        },
+        {
+          "name": "StaticMethodOnPrimitive",
+          "file": "C:\\dev\\djinn\\djinn-lang-v3\\tests\\struct.cpp",
+          "line": 309
+        }
+      ]
+    }
+  ]
+}

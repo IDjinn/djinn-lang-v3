@@ -217,6 +217,8 @@ private:
 
     llvm::Value* generate_cast_expression(const CastExpression& expr);
 
+    llvm::Value* generate_is_expression(const IsExpression& expr);
+
     llvm::Value* generate_await_expression(const AwaitExpression& expr);
 
     llvm::Value* generate_macro_expansion(const MacroExpansionExpression& expr);
@@ -301,6 +303,10 @@ private:
     llvm::Value* box_value(llvm::Value* value, const std::string& typeName);
     std::string get_type_name_for_value(llvm::Value* value);
     std::string get_djinn_type_name(const Expression& expr, llvm::Value* value);
+
+    // Centralized attribute application
+    void apply_attributes(llvm::Function* func, const std::vector<AttributeSymbol>& attrs);
+    void apply_implicit_attributes(llvm::Function* func);
 };
 
 #endif //DJINN_GENERATOR_H

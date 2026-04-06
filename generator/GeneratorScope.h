@@ -37,7 +37,7 @@ struct StructDef
     bool isMonomorphized = false;
 
     GenericParams genericParams;
-    std::vector<std::string> attributes;
+    std::vector<AttributeSymbol> attributes;
 
     llvm::Type* transparentUnderlying = nullptr;
 
@@ -62,7 +62,14 @@ struct StructDef
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
-        return std::find(attributes.begin(), attributes.end(), attr) != attributes.end();
+        for (const auto& a : attributes) { if (a.name == attr) return true; }
+        return false;
+    }
+
+    [[nodiscard]] const AttributeSymbol* getAttribute(const std::string& attr) const
+    {
+        for (const auto& a : attributes) { if (a.name == attr) return &a; }
+        return nullptr;
     }
 
     [[nodiscard]] bool hasField(const std::string& fieldName) const

@@ -129,6 +129,11 @@ namespace djinn
         _result = _generator.generate_fixed_array(expr);
     }
 
+    void GeneratorExpressionVisitor::visit(const IsExpression& expr)
+    {
+        _result = _generator.generate_is_expression(expr);
+    }
+
     void GeneratorExpressionVisitor::visit(const MacroExpansionExpression& expr)
     {
         _result = _generator.generate_macro_expansion(expr);

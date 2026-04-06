@@ -154,7 +154,7 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
     LOG_DEBUG("[generator] resolve_struct_body: '%s' (fields=%zu, attrs=%zu)",
               struct_symbol.name.c_str(), struct_symbol.fields.size(), struct_symbol.attributes.size());
     for (const auto& attr : struct_symbol.attributes)
-        LOG_DEBUG("[generator]   attribute: '%s'", attr.c_str());
+        LOG_DEBUG("[generator]   attribute: '%s'", attr.name.c_str());
     for (const auto& field : struct_symbol.fields)
     {
         LOG_DEBUG("[generator]   field '%s': isConstant=%s, hasInit=%s",
@@ -282,6 +282,7 @@ void Generator::generate_property(const StructSymbol& struc, const PropertySymbo
 
         auto* funcType = llvm::FunctionType::get(returnType, paramTypes, false);
         auto* llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, getterName, *module);
+        apply_implicit_attributes(llvmFunc);
 
         functions[getterName] = llvmFunc;
         def->methodFunctions["get_" + prop.name] = llvmFunc;
@@ -331,6 +332,7 @@ void Generator::generate_property(const StructSymbol& struc, const PropertySymbo
 
         auto* funcType = llvm::FunctionType::get(builder->getVoidTy(), paramTypes, false);
         auto* llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, setterName, *module);
+        apply_implicit_attributes(llvmFunc);
 
         functions[setterName] = llvmFunc;
         def->methodFunctions["set_" + prop.name] = llvmFunc;
@@ -398,10 +400,8 @@ void Generator::forward_declare_method(const StructSymbol& struc, const MethodSy
     const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, false);
     const auto llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
-    if (method.hasAttribute("force-inline"))
-    {
-        llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
-    }
+    apply_attributes(llvmFunc, method.attributes);
+    apply_implicit_attributes(llvmFunc);
 
     functions[mangledName] = llvmFunc;
     def->methodFunctions[method.name] = llvmFunc;
@@ -449,10 +449,8 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         const auto funcType = llvm::FunctionType::get(actualReturnType, paramTypes, false);
         llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
-        if (method.hasAttribute("force-inline"))
-        {
-            llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
-        }
+        apply_attributes(llvmFunc, method.attributes);
+        apply_implicit_attributes(llvmFunc);
 
         functions[mangledName] = llvmFunc;
         def->methodFunctions[method.name] = llvmFunc;

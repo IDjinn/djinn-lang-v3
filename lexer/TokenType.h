@@ -140,6 +140,9 @@ enum class TokenType
 
     // MACROS
     MACRO, // macro
+
+    // PATTERN MATCHING
+    IS, // is (type check for object)
 };
 
 

@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <variant>
+#include <optional>
 #include "ASTNode.h"
 #include "Type.h"
 #include "Statement.h"
@@ -17,18 +19,89 @@
 
 struct EnumDeclaration;
 
+struct AttributeArg
+{
+    std::optional<std::string> name; // nullopt = positional
+    std::variant<int64_t, double, std::string, bool> value;
+    SourceLocation location;
+};
+
 struct AttributeUsageDeclaration : Location
 {
     SourceIdentifier name;
+    std::vector<AttributeArg> args;
 
     AttributeUsageDeclaration(SourceIdentifier name) : name(std::move(name))
     {
     }
 
+    AttributeUsageDeclaration(SourceIdentifier name, std::vector<AttributeArg> args)
+        : name(std::move(name)), args(std::move(args))
+    {
+    }
+
+    [[nodiscard]] bool hasArgs() const { return !args.empty(); }
+
+    [[nodiscard]] std::optional<int64_t> getInt(size_t index) const
+    {
+        if (index >= args.size()) return std::nullopt;
+        if (auto* v = std::get_if<int64_t>(&args[index].value)) return *v;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<std::string> getString(size_t index) const
+    {
+        if (index >= args.size()) return std::nullopt;
+        if (auto* v = std::get_if<std::string>(&args[index].value)) return *v;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<int64_t> getNamedInt(const std::string& argName) const
+    {
+        for (const auto& arg : args)
+        {
+            if (arg.name && *arg.name == argName)
+            {
+                if (auto* v = std::get_if<int64_t>(&arg.value)) return *v;
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<std::string> getNamedString(const std::string& argName) const
+    {
+        for (const auto& arg : args)
+        {
+            if (arg.name && *arg.name == argName)
+            {
+                if (auto* v = std::get_if<std::string>(&arg.value)) return *v;
+            }
+        }
+        return std::nullopt;
+    }
+
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
-        os << "AttributeUsageDeclaration(" << name.token_name << ")";
+        os << "Attribute(" << name.token_name;
+        if (!args.empty())
+        {
+            os << "(";
+            for (size_t i = 0; i < args.size(); ++i)
+            {
+                if (i > 0) os << ", ";
+                if (args[i].name) os << *args[i].name << " = ";
+                std::visit([&os](auto&& v)
+                {
+                    using T = std::decay_t<decltype(v)>;
+                    if constexpr (std::is_same_v<T, std::string>) os << "\"" << v << "\"";
+                    else if constexpr (std::is_same_v<T, bool>) os << (v ? "true" : "false");
+                    else os << v;
+                }, args[i].value);
+            }
+            os << ")";
+        }
+        os << ")";
     }
 };
 

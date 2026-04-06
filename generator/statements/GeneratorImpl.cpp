@@ -56,10 +56,8 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
     auto* funcType = llvm::FunctionType::get(returnType, paramTypes, false);
     auto* llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
-    if (method.hasAttribute("force-inline"))
-    {
-        llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
-    }
+    apply_attributes(llvmFunc, method.attributes);
+    apply_implicit_attributes(llvmFunc);
 
     functions[mangledName] = llvmFunc;
 

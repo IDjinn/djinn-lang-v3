@@ -844,10 +844,8 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                         auto* funcType = llvm::FunctionType::get(retType, paramTypes, false);
                         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
 
-                        if (method->hasAttribute("force-inline"))
-                        {
-                            func->addFnAttr(llvm::Attribute::AlwaysInline);
-                        }
+                        apply_attributes(func, method->attributes);
+                        apply_implicit_attributes(func);
 
                         functions[mangledName] = func;
                         def->methodFunctions[call.name.token_name] = func;

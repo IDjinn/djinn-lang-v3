@@ -27,8 +27,9 @@ See `todo.md` for full roadmap. Summary:
 - **Phase 1 (Foundation)**: COMPLETE — generics, FFI extern "C", malloc/free, sizeof
 - **Phase 2 (Structures)**: COMPLETE — enums, methods, constructors (incl. generic), array\<T\>, slices, string
 - **Phase 3 (Std)**: COMPLETE — I/O, array\<T\> collection, String, HashMap
-- **Phase 4 (Advanced)**: ~85% — interfaces, async/await, constexpr/consteval, macros, compile-time if,
-  top-level CompileTimeBlock, [intrinsic] attribute done. Missing: closures, pattern matching.
+- **Phase 4 (Advanced)**: ~92% — interfaces, async/await, constexpr/consteval, macros, compile-time if,
+  top-level CompileTimeBlock, `is` expression (pattern matching), attribute system (parameterized, validated,
+  centralized LLVM mapping, `[llvm()]` escape hatch, built-in attrs defined in std) done. Missing: closures.
   TODO: `[platform(windows)]` attribute-based conditional compilation (implement as macro).
 
 Already implemented: control flow, arithmetic, mutability, ownership/copy semantics,
@@ -90,6 +91,8 @@ docs/           Fumadocs (Next.js) documentation site
 - **Type system**: casting (truncation, widening, float<->int, pointer), auto type inference, pointer compatibility (
   void* coercion)
 - **Intrinsics**: sizeof, alignof, typeof, likely/unlikely, expect
+- **Pattern matching**: `is` expression for runtime type checking on `object` (`obj is i32`, `obj is f64`), with
+  optional variable binding (`obj is i32 value` — extracts and casts `object.data` to target type)
 - **Async/Await**: LLVM coroutines, yield, spawn, event loop runtime, await in sync (busy-loop fallback)
 - **Imports/Namespaces**: import qualified names, file-scoped namespaces, nested namespaces
 - **Slices**: str (string slices), typed array slices (i32[]), index access, len field
@@ -100,6 +103,10 @@ docs/           Fumadocs (Next.js) documentation site
 - **Macros**: declaration with `macro name { (params) => { body } }`, `expr` fragment type, `local` modifier for
   hygienic temp variables, token-level substitution with parser re-parse, nested macro calls, side-effect warning
   (W6001) when non-local param used multiple times
+- **Attributes**: parameterized (`[align(16)]`), named args (`[deprecated(message = "use v2")]`), centralized LLVM
+  mapping (force-inline, no-inline, noreturn, hot, cold, nosync, nounwind, willreturn, norecurse), implicit nounwind
+  on all functions, `[llvm("attr")]` escape hatch for raw LLVM attributes, built-in attrs defined in
+  `std/sys/intrinsics.djinn` with `[attribute(target)]` meta-attribute
 
 ## Grammar (EBNF)
 
@@ -154,7 +161,9 @@ setter               = "set" ( ";" | "=>" expression ";" | block ) ;
 method               = [ modifiers ] type IDENTIFIER [ generic_params ] "(" [ param_list ] ")" ( ";" | "=>" expression ";" | block ) ;
 
 modifiers            = { "public" | "private" | "static" } ;
-attributes           = { "[" IDENTIFIER "]" } ;
+attributes           = { "[" IDENTIFIER [ "(" attr_args ")" ] "]" } ;
+attr_args            = attr_arg { "," attr_arg } ;
+attr_arg             = [ IDENTIFIER "=" ] ( INTEGER_LITERAL | FLOAT_LITERAL | STRING_LITERAL | "true" | "false" | qualified_name ) ;
 ```
 
 ### Function
@@ -274,7 +283,7 @@ expression           = assignment ;
 assignment           = or_expr [ "=" assignment ] ;
 or_expr              = and_expr { "||" and_expr } ;
 and_expr             = equality { "&&" equality } ;
-equality             = comparison { ( "==" | "!=" ) comparison } ;
+equality             = comparison { ( "==" | "!=" ) comparison } [ "is" type [ IDENTIFIER ] ] ;
 comparison           = term { ( "<" | "<=" | ">" | ">=" ) term } ;
 term                 = factor { ( "+" | "-" ) factor } ;
 factor               = unary { ( "*" | "/" | "%" ) unary } ;

@@ -28,6 +28,7 @@ void Generator::forward_declare_function(const FunctionSymbol& func)
         *module
     );
 
+    apply_implicit_attributes(llvmFunc);
     functions[func.name] = llvmFunc;
 }
 

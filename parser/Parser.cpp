@@ -814,7 +814,6 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes()
     {
         expect("Esperado '[' no uso de Atributos", TokenType::LBRACKET);
         const Token& identifier = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
-        // Support hyphenated attribute names: [force-inline] -> "force-inline"
         std::string attrName = identifier.value;
         auto loc = makeSourceIdentifier(identifier);
         while (match(TokenType::MINUS))
@@ -823,7 +822,77 @@ std::vector<AttributeUsageDeclaration> Parser::parse_attributes()
             attrName += "-" + next.value;
         }
         loc.token_name = attrName;
-        attributes.emplace_back(loc);
+
+        std::vector<AttributeArg> args;
+        if (match(TokenType::LPAREN))
+        {
+            if (!check(TokenType::RPAREN))
+            {
+                do
+                {
+                    AttributeArg arg;
+                    arg.location = SourceLocation(peek().position, peek().value.length());
+
+                    // Check for named argument: identifier = value
+                    if (check(TokenType::IDENTIFIER) && current + 1 < tokens.size() &&
+                        tokens[current + 1].type == TokenType::EQUAL)
+                    {
+                        arg.name = advance().value;
+                        advance(); // consume '='
+                    }
+
+                    // Parse value
+                    if (match(TokenType::INTEGER_LITERAL))
+                    {
+                        arg.value = std::stoll(previous().value);
+                    }
+                    else if (match(TokenType::FLOAT_LITERAL))
+                    {
+                        arg.value = std::stod(previous().value);
+                    }
+                    else if (match(TokenType::STRING_LITERAL))
+                    {
+                        arg.value = previous().value;
+                    }
+                    else if (match(TokenType::TRUE))
+                    {
+                        arg.value = true;
+                    }
+                    else if (match(TokenType::FALSE))
+                    {
+                        arg.value = false;
+                    }
+                    else
+                    {
+                        // Identifier as string value (e.g., AttributeTarget.Function)
+                        std::string val = expect("Esperado valor do argumento do atributo", TokenType::IDENTIFIER).
+                            value;
+                        while (match(TokenType::DOT))
+                        {
+                            val += "." + expect("Esperado nome após '.'", TokenType::IDENTIFIER).value;
+                        }
+                        // Support bitwise OR for target flags: Target.A | Target.B
+                        while (match(TokenType::PIPE))
+                        {
+                            val += " | ";
+                            std::string next = expect("Esperado identificador", TokenType::IDENTIFIER).value;
+                            while (match(TokenType::DOT))
+                            {
+                                next += "." + expect("Esperado nome após '.'", TokenType::IDENTIFIER).value;
+                            }
+                            val += next;
+                        }
+                        arg.value = val;
+                    }
+
+                    args.push_back(std::move(arg));
+                }
+                while (match(TokenType::COMMA));
+            }
+            expect("Esperado ')' nos argumentos do atributo", TokenType::RPAREN);
+        }
+
+        attributes.emplace_back(loc, std::move(args));
         expect("Esperado ']' no uso de Atributos", TokenType::RBRACKET);
     }
 
@@ -1631,6 +1700,18 @@ std::unique_ptr<Expression> Parser::parse_equality()
         auto right = parse_comparison();
         auto finalLocation = right->location - left->location;
         left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
+    }
+
+    if (match(TokenType::IS))
+    {
+        auto type = parse_type();
+        std::optional<std::string> bindingName;
+        if (check(TokenType::IDENTIFIER))
+        {
+            bindingName = advance().value;
+        }
+        auto finalLocation = left->location;
+        left = std::make_unique<IsExpression>(std::move(left), std::move(*type), finalLocation, std::move(bindingName));
     }
 
     return left;

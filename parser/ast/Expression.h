@@ -116,6 +116,7 @@ constexpr std::string tokenTypeToString(const TokenType type)
     case TokenType::STRING_LITERAL: return "string_literal";
     case TokenType::INTEGER_LITERAL: return "integer_literal";
     case TokenType::FLOAT_LITERAL: return "float_literal";
+    case TokenType::IS: return "is";
     case TokenType::END_OF_FILE: return "EOF";
     default: return "?";
     }
@@ -829,6 +830,31 @@ struct CastExpression : Expression
     {
         writeIndent(os, indent);
         os << "CastExpression(" << targetType << ")\n";
+        operand->print(os, indent + 2);
+    }
+};
+
+struct IsExpression : Expression
+{
+    std::unique_ptr<Expression> operand;
+    Type targetType;
+    std::optional<std::string> bindingName;
+
+    IsExpression(std::unique_ptr<Expression> operand, Type targetType, const SourceLocation& loc,
+                 std::optional<std::string> bindingName = std::nullopt)
+        : operand(std::move(operand)), targetType(std::move(targetType)), bindingName(std::move(bindingName))
+    {
+        this->location = loc;
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "IsExpression(" << targetType;
+        if (bindingName) os << " " << *bindingName;
+        os << ")\n";
         operand->print(os, indent + 2);
     }
 };

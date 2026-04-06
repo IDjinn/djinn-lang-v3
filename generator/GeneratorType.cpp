@@ -323,10 +323,8 @@ void Generator::forward_declare_monomorphized_method(const MethodSymbol& method,
         *module
     );
 
-    if (method.hasAttribute("force-inline"))
-    {
-        llvmFunc->addFnAttr(llvm::Attribute::AlwaysInline);
-    }
+    apply_attributes(llvmFunc, method.attributes);
+    apply_implicit_attributes(llvmFunc);
 
     functions[mangledMethodName] = llvmFunc;
     if (StructDef* monoDef = currentScope->lookup_struct(mangledStructName))
@@ -485,6 +483,7 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
             getterName,
             *module
         );
+        apply_implicit_attributes(llvmFunc);
 
         functions[getterName] = llvmFunc;
         monoDef->methodFunctions["get_" + prop.name] = llvmFunc;
@@ -538,6 +537,7 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
             setterName,
             *module
         );
+        apply_implicit_attributes(llvmFunc);
 
         functions[setterName] = llvmFunc;
         monoDef->methodFunctions["set_" + prop.name] = llvmFunc;
