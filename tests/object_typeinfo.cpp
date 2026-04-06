@@ -296,7 +296,7 @@ TEST(Object, AutoBoxStructToObject)
 
         i32 main() {
             Point p = { 10, 20 };
-            object boxed = p;
+            object boxed = (object)p;
             return boxed.type.size;
         }
     )";
@@ -316,7 +316,7 @@ TEST(Object, AutoBoxStructToObjectKind)
 
         i32 main() {
             Vec2 v = { 1.0, 2.0 };
-            object boxed = v;
+            object boxed = (object)v;
             return (i32)boxed.type.kind;
         }
     )";
