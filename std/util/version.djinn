@@ -1,0 +1,23 @@
+namespace std::util;
+
+[attribute(AttributeTarget.Struct | AttributeTarget.Field | AttributeTarget.Parameter)]
+struct VersionAttribute {
+    Version version;
+}
+
+struct Version {
+    i32 major;
+    i32 minor;
+    i32 patch;
+
+    operator ==(Version left, Version right) -> bool {
+        if (left.major < right.major) return true;
+        if (left.major == right.major && left.minor < right.minor) return true;
+        if (left.major == right.major && left.minor == right.minor && left.patch < right.patch) return true;
+        return false;
+    }
+}
+
+impl Version {
+    const Version NONE = { 0, 0, 0 };
+}

@@ -150,6 +150,33 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
                            "não foi possível gerar valor inicial para: " + expr.name.token_name);
     }
 
+    // Auto-box value when assigning to object type
+    if (expr.type.kind == TypeKind::STRUCT &&
+        (expr.type.structName == "object" || expr.type.structName == "std::types::object"))
+    {
+        llvm::Type* objectLlvmType = generate_type(expr.type);
+        if (initVal->getType() != objectLlvmType)
+        {
+            bool isLiteral = dynamic_cast<const IntegerLiteral*>(expr.value.get())
+                || dynamic_cast<const FloatLiteral*>(expr.value.get())
+                || dynamic_cast<const StringLiteral*>(expr.value.get())
+                || dynamic_cast<const BooleanLiteral*>(expr.value.get());
+            if (!isLiteral)
+            {
+                GENERATOR_WARN(DiagnosticCode::TYPE_MISMATCH,
+                               "implicit boxing to 'object'; use explicit cast '(object)' instead",
+                               expr.value->location);
+            }
+            initVal = box_value(initVal, get_djinn_type_name(*expr.value, initVal));
+        }
+
+        auto* alloca = builder->CreateAlloca(objectLlvmType, nullptr, expr.name.token_name);
+        std::string qualifiedName = currentScope->resolve_alias(expr.type.structName);
+        currentScope->define_variable(expr.name.token_name, alloca, qualifiedName);
+        builder->CreateStore(initVal, alloca);
+        return alloca;
+    }
+
     // If the init value is an alloca (e.g. from a constructor call), reuse it directly
     if (auto* allocaInit = llvm::dyn_cast<llvm::AllocaInst>(initVal))
     {

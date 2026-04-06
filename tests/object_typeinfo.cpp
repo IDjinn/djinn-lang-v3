@@ -253,3 +253,179 @@ TEST(Object, BoxingIRContainsKind)
     // Check IR contains typeinfo with kind field (4th element in the struct constant)
     EXPECT_NE(result.ir.find("__typeinfo_i32"), std::string::npos) << "IR should contain __typeinfo_i32";
 }
+
+// ============================================================================
+// Auto-boxing: object variable = value
+// ============================================================================
+
+TEST(Object, AutoBoxPrimitiveToObject)
+{
+    const auto source = R"(
+        i32 main() {
+            object boxed = 42;
+            return (i32)boxed.type.kind;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 0); // kind 0 = signed int
+}
+
+TEST(Object, AutoBoxStringToObject)
+{
+    const auto source = R"(
+        i32 main() {
+            object boxed = "hello";
+            return (i32)boxed.type.kind;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5); // kind 5 = str
+}
+
+TEST(Object, AutoBoxStructToObject)
+{
+    const auto source = R"(
+        struct Point {
+            i32 x;
+            i32 y;
+        }
+
+        i32 main() {
+            Point p = { 10, 20 };
+            object boxed = p;
+            return boxed.type.size;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 8); // sizeof(Point) = 2 * i32 = 8
+}
+
+TEST(Object, AutoBoxStructToObjectKind)
+{
+    const auto source = R"(
+        struct Vec2 {
+            f32 x;
+            f32 y;
+        }
+
+        i32 main() {
+            Vec2 v = { 1.0, 2.0 };
+            object boxed = v;
+            return (i32)boxed.type.kind;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 3); // kind 3 = struct
+}
+
+TEST(Object, AutoBoxFloatToObject)
+{
+    const auto source = R"(
+        i32 main() {
+            object boxed = 3.14;
+            return (i32)boxed.type.kind;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 1); // kind 1 = float
+}
+
+// ============================================================================
+// 'is' expression with auto-boxed objects
+// ============================================================================
+
+TEST(Object, IsExpressionWithAutoBoxedPrimitive)
+{
+    const auto source = R"(
+        i32 main() {
+            object boxed = 42;
+            if (boxed is i32) {
+                return 1;
+            }
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(Object, IsExpressionBindingWithAutoBoxed)
+{
+    const auto source = R"(
+        i32 main() {
+            object boxed = 99;
+            if (boxed is i32 value) {
+                return value;
+            }
+            return -1;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 99);
+}
+
+// ============================================================================
+// Implicit boxing warning
+// ============================================================================
+
+TEST(Object, NoWarningOnLiteralBoxing)
+{
+    const auto source = R"(
+        i32 main() {
+            object a = 42;
+            object b = "hello";
+            object c = 3.14;
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+TEST(Object, WarningOnVariableBoxing)
+{
+    const auto source = R"(
+        i32 main() {
+            i32 x = 42;
+            object boxed = x;
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 1);
+}
+
+TEST(Object, WarningOnStructBoxing)
+{
+    const auto source = R"(
+        struct Point {
+            i32 x;
+            i32 y;
+        }
+
+        i32 main() {
+            Point p = { 1, 2 };
+            object boxed = p;
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 1);
+}

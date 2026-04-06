@@ -1357,7 +1357,16 @@ std::unique_ptr<IfStatement> Parser::parse_if_statement()
     auto ifStatementLocation = SourceLocation(ifToken.position,
                                               lastCondToken.position.index + lastCondToken.value.size() -
                                               ifStatementIndex);
-    auto thenBranch = parse_block();
+    std::unique_ptr<Block> thenBranch;
+    if (check(TokenType::LBRACE)) // {
+    {
+        thenBranch = parse_block();
+    }
+    else
+    {
+        thenBranch = std::make_unique<Block>();
+        thenBranch->statements.push_back(parse_statement());
+    }
 
     std::unique_ptr<Block> elseBranch = nullptr;
     if (match(TokenType::ELSE))
@@ -1367,9 +1376,14 @@ std::unique_ptr<IfStatement> Parser::parse_if_statement()
             elseBranch = std::make_unique<Block>();
             elseBranch->statements.push_back(parse_if_statement());
         }
-        else
+        else if (check(TokenType::LBRACE))
         {
             elseBranch = parse_block();
+        }
+        else
+        {
+            elseBranch = std::make_unique<Block>();
+            elseBranch->statements.push_back(parse_statement());
         }
     }
 

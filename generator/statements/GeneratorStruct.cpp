@@ -164,7 +164,37 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
         {
             if (field.initializer)
             {
-                llvm::Constant* constVal = evaluate_const_initializer(*field.initializer);
+                llvm::Constant* constVal = nullptr;
+
+                // Handle struct-typed const fields with brace initializer
+                if (field.type.kind == TypeKind::STRUCT)
+                {
+                    if (const auto* braceInit = dynamic_cast<const BraceInitializer*>(field.initializer))
+                    {
+                        const std::string resolvedName = currentScope->resolve_alias(field.type.structName);
+                        StructDef* fieldStructDef = currentScope->lookup_struct(resolvedName);
+                        if (fieldStructDef && fieldStructDef->llvmType)
+                        {
+                            std::vector<llvm::Constant*> fieldValues;
+                            for (const auto& elem : braceInit->elements)
+                            {
+                                llvm::Constant* elemVal = evaluate_const_initializer(*elem.value);
+                                if (!elemVal)
+                                {
+                                    throw CompileError(DiagnosticCode::TYPE_MISMATCH,
+                                                       "const struct field '" + field.name +
+                                                       "': element must be a compile-time constant");
+                                }
+                                fieldValues.push_back(elemVal);
+                            }
+                            constVal = llvm::ConstantStruct::get(fieldStructDef->llvmType, fieldValues);
+                        }
+                    }
+                }
+
+                if (!constVal)
+                    constVal = evaluate_const_initializer(*field.initializer);
+
                 if (constVal)
                 {
                     def->constFields[field.name] = constVal;
