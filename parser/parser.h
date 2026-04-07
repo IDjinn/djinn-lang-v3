@@ -93,6 +93,8 @@ private:
 
     std::vector<VisibilityModifier> parse_modifiers();
 
+    std::unique_ptr<StaticVarDeclaration> parse_static_var();
+
     std::unique_ptr<FunctionDeclaration> parse_function();
 
     std::unique_ptr<FunctionDeclaration> parse_function_with_type(std::unique_ptr<Type> returnType);

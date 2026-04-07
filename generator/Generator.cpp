@@ -150,6 +150,42 @@ void Generator::generate()
         }
     }
 
+    // PASS 0c: Generate global static variables
+    for (const auto& [name, entry] : symbols->staticVars)
+    {
+        if (name.find("::") != std::string::npos && name != name.substr(name.rfind("::") + 2))
+            continue;
+
+        llvm::Type* llvmType = generate_type(entry.type);
+        llvm::Constant* initVal = nullptr;
+
+        if (entry.initializer)
+        {
+            ConstValue cv = constEvaluator.evaluate(*entry.initializer);
+            if (!cv.isError())
+            {
+                if (llvmType->isIntegerTy())
+                    initVal = llvm::ConstantInt::get(llvmType, cv.intVal, true);
+                else if (llvmType->isFloatingPointTy())
+                    initVal = llvm::ConstantFP::get(llvmType, cv.floatVal);
+            }
+        }
+
+        if (!initVal)
+            initVal = llvm::Constant::getNullValue(llvmType);
+
+        auto* gv = new llvm::GlobalVariable(
+            *module,
+            llvmType,
+            !entry.isMutable,
+            llvm::GlobalValue::InternalLinkage,
+            initVal,
+            name
+        );
+
+        LOG_DEBUG("[generator] static var '%s' (mut=%d)", name.c_str(), entry.isMutable);
+    }
+
     // PASS 1: Forward declare all structs (create opaque types)
     const auto allStructs = symbols->get_all_structs();
     LOG_DEBUG("[generator] PASS 1: forward declaring %zu structs", allStructs.size());

@@ -36,5 +36,17 @@ llvm::Value *Generator::generate_assignment(const Assignment &expr) {
         }
     }
 
+    // Check static global variables
+    if (auto* gv = module->getGlobalVariable(expr.name.token_name, true))
+    {
+        auto val = generate_expression(*expr.value);
+        if (val)
+        {
+            val = cast_value(val, gv->getValueType());
+            builder->CreateStore(val, gv);
+        }
+        return val;
+    }
+
     throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + expr.name.token_name);
 }

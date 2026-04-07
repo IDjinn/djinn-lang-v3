@@ -397,6 +397,15 @@ public:
 
     std::unordered_map<std::string, ConstExprEntry> constExprConstants;
 
+    struct StaticVarEntry
+    {
+        Type type;
+        const Expression* initializer;
+        bool isMutable;
+    };
+
+    std::unordered_map<std::string, StaticVarEntry> staticVars;
+
 private:
     std::shared_ptr<ScopedSymbolTable> parentScoped_;
 };

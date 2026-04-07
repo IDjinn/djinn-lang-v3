@@ -1144,6 +1144,10 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
                 _macros[macroDecl->name.token_name] = macroDecl.get();
                 program->macros.push_back(std::move(macroDecl));
             }
+            else if (check(TokenType::STATIC))
+            {
+                program->staticVars.push_back(parse_static_var());
+            }
             else if (check(TokenType::ASYNC))
             {
                 advance(); // consume 'async'
@@ -2757,7 +2761,6 @@ std::unique_ptr<ImplDeclaration> Parser::parse_impl()
         auto fieldType = parse_type();
         if (check(TokenType::IDENTIFIER))
         {
-            const size_t afterType = current;
             const Token& nameToken = advance();
 
             if (check(TokenType::SEMICOLON) || check(TokenType::EQUAL))
@@ -2913,6 +2916,30 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_operator(const bool allow
 }
 
 // macro name { (params) => { body } }
+// static [mut] type name = expr;
+std::unique_ptr<StaticVarDeclaration> Parser::parse_static_var()
+{
+    expect("Esperado 'static'", TokenType::STATIC);
+
+    bool isMutable = false;
+    if (check(TokenType::MUT))
+    {
+        advance();
+        isMutable = true;
+    }
+
+    auto type = parse_type();
+    const Token& nameToken = expect("Esperado nome da variável", TokenType::IDENTIFIER);
+    auto name = makeSourceIdentifier(nameToken);
+
+    expect("Esperado '='", TokenType::EQUAL);
+    auto initializer = parse_expression();
+    expect("Esperado ';'", TokenType::SEMICOLON);
+
+    LOG_DEBUG("[parser] static var parsed: '%s' (mut=%d)", nameToken.value.c_str(), isMutable);
+    return std::make_unique<StaticVarDeclaration>(std::move(*type), std::move(name), std::move(initializer), isMutable);
+}
+
 std::unique_ptr<MacroDeclaration> Parser::parse_macro()
 {
     const auto initialLocation = SourceLocation(peek().position, peek().value.length());

@@ -94,7 +94,6 @@ TEST(Extern, ExternNotRemovedByOptimizer)
         extern i32 printf(i8* format, ...);
 
         i32 main() {
-            printf("optimized?\n");
             return 0;
         }
     )";

@@ -51,5 +51,11 @@ llvm::Value* Generator::generate_identifier(const Identifier& expr) const
         if (llvmConst) return llvmConst;
     }
 
+    // Check static global variables
+    if (auto* gv = module->getGlobalVariable(expr.identifier.token_name, true))
+    {
+        return builder->CreateLoad(gv->getValueType(), gv, expr.identifier.token_name);
+    }
+
     throw CompileError(DiagnosticCode::UNDEFINED_VARIABLE, "variável não encontrada: " + expr.identifier.token_name);
 }

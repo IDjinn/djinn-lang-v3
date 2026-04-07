@@ -108,16 +108,32 @@ docs/           Fumadocs (Next.js) documentation site
   mapping (force-inline, no-inline, noreturn, hot, cold, nosync, nounwind, willreturn, norecurse), implicit nounwind
   on all functions, `[llvm("attr")]` escape hatch for raw LLVM attributes, built-in attrs defined in
   `std/sys/intrinsics.djinn` with `[attribute(target)]` meta-attribute
+- **Static variables**: global variables with `static` keyword, immutable by default, `mut` for mutable,
+  namespace-accessible, compile-time initialized, emitted as LLVM global variables
 
 ## Grammar (EBNF)
 
 ### Program Structure
 
 ```ebnf
-program              = { import | extern_block | namespace | enum | interface | struct | function | constexpr_decl | macro_decl } ;
+program              = { import | extern_block | namespace | enum | interface | struct | function | constexpr_decl | macro_decl | static_var } ;
 
 import               = "import" qualified_name ";" ;
 qualified_name       = IDENTIFIER { "::" IDENTIFIER } ;
+```
+
+### Static Variables
+
+```ebnf
+static_var           = "static" [ "mut" ] type IDENTIFIER "=" expression ";" ;
+
+(* Global variables require "static" keyword. Immutable by default, use "mut" for mutable.
+   Accessible via namespace system. Initialized with compile-time evaluable expressions.
+
+   Examples:
+   static i32 MAX_SIZE = 1024;
+   static mut i32 counter = 0;
+*)
 ```
 
 ### Extern Block

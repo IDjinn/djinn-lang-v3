@@ -203,6 +203,28 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
 
     for (const auto& program : programs)
     {
+        const std::string prefix = program->getNamespacePrefix();
+        for (const auto& sv : program->staticVars)
+        {
+            const std::string qualifiedName = prefix + sv->name.token_name;
+            auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, sv->type, sv->name.location);
+            sym->isMutable = sv->isMutable;
+            _global_scope->define(sym);
+            _global_scope->staticVars[qualifiedName] = {sv->type, sv->initializer.get(), sv->isMutable};
+            if (!prefix.empty())
+            {
+                auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, sv->name.token_name, sv->type,
+                                                         sv->name.location);
+                shortSym->isMutable = sv->isMutable;
+                _global_scope->define(shortSym);
+                _global_scope->staticVars[sv->name.token_name] = {sv->type, sv->initializer.get(), sv->isMutable};
+            }
+            LOG_DEBUG("[binder] static var registered: '%s' (mut=%d)", qualifiedName.c_str(), sv->isMutable);
+        }
+    }
+
+    for (const auto& program : programs)
+    {
         LOG_TRACE("binding program %s", program->name.c_str());
         _bindingStdLib = program->fileNamespace.starts_with("std::");
         bindProgram(*program);

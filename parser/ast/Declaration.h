@@ -867,6 +867,26 @@ struct CompileTimeBlock : Location
     }
 };
 
+struct StaticVarDeclaration : Location
+{
+    Type type;
+    SourceIdentifier name;
+    std::unique_ptr<Expression> initializer;
+    bool isMutable;
+
+    StaticVarDeclaration(Type type, SourceIdentifier name, std::unique_ptr<Expression> initializer, bool isMutable)
+        : type(std::move(type)), name(std::move(name)), initializer(std::move(initializer)), isMutable(isMutable)
+    {
+        location = this->name.location;
+    }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "StaticVar(" << (isMutable ? "mut " : "") << type << " " << name.token_name << ")";
+    }
+};
+
 struct Program : Location
 {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -885,6 +905,7 @@ struct Program : Location
     std::vector<std::unique_ptr<ConstExprDeclaration>> constExprs;
     std::vector<std::unique_ptr<MacroDeclaration>> macros;
     std::vector<std::unique_ptr<CompileTimeBlock>> compileTimeBlocks;
+    std::vector<std::unique_ptr<StaticVarDeclaration>> staticVars;
 
     explicit Program(const std::string& name)
     {
