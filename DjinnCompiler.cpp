@@ -12,6 +12,8 @@
 #include <set>
 #include <sstream>
 #include <stacktrace>
+#include <functional>
+#include <map>
 
 #include "binder/Binder.h"
 #include "generator/Generator.h"
@@ -26,6 +28,81 @@
 #endif
 
 #define CLANG_LINK_ARGS "-flto -fuse-ld=lld"
+
+namespace
+{
+    std::string compute_hash(const std::string& data)
+    {
+        auto h = std::hash<std::string>{}(data);
+        std::ostringstream oss;
+        oss << std::hex << h;
+        return oss.str();
+    }
+
+    struct BuildCache
+    {
+        std::map<std::string, std::string> fileHashes;
+        std::string irHash;
+        int optimizationLevel = -1;
+
+        static BuildCache load(const std::string& cachePath)
+        {
+            BuildCache cache;
+            std::ifstream file(cachePath);
+            if (!file) return cache;
+
+            std::string line;
+            while (std::getline(file, line))
+            {
+                if (line.starts_with("ir:"))
+                    cache.irHash = line.substr(3);
+                else if (line.starts_with("opt:"))
+                    cache.optimizationLevel = std::stoi(line.substr(4));
+                else
+                {
+                    auto sep = line.find(':');
+                    if (sep != std::string::npos)
+                        cache.fileHashes[line.substr(0, sep)] = line.substr(sep + 1);
+                }
+            }
+            return cache;
+        }
+
+        void save(const std::string& cachePath) const
+        {
+            std::ofstream file(cachePath);
+            for (const auto& [path, hash] : fileHashes)
+                file << path << ":" << hash << "\n";
+            file << "ir:" << irHash << "\n";
+            file << "opt:" << optimizationLevel << "\n";
+        }
+
+        bool matches(const std::map<std::string, std::string>& current, int optLevel) const
+        {
+            if (optimizationLevel != optLevel) return false;
+            if (fileHashes.size() != current.size()) return false;
+            for (const auto& [path, hash] : current)
+            {
+                auto it = fileHashes.find(path);
+                if (it == fileHashes.end() || it->second != hash) return false;
+            }
+            return true;
+        }
+    };
+
+    std::map<std::string, std::string> hash_source_files(const std::set<std::filesystem::path>& files)
+    {
+        std::map<std::string, std::string> result;
+        for (const auto& f : files)
+        {
+            std::ifstream in(f, std::ios::binary);
+            if (!in) continue;
+            std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            result[f.filename().string()] = compute_hash(content);
+        }
+        return result;
+    }
+}
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
@@ -356,8 +433,78 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
     std::set<fs::path> parsedFiles;
 
+    const auto out_file_path = options.outputDirectory + "\\" + options.outputFileName;
+    const std::string llPath = out_file_path + ".ll";
+    const std::string cachePath = options.outputDirectory + "\\.djinn.cache";
+    auto exePath = out_file_path +
+#ifdef _WIN32
+        ".exe";
+#else
+    "";
+#endif
+
     try
     {
+        // Collect all source file paths first (for hashing)
+        std::set<fs::path> allSourceFiles;
+        if (options.includeStd && !stdCanonical.empty())
+        {
+            for (const auto& prelude : preludes)
+            {
+                auto preludePath = fs::canonical(stdLibPath / prelude);
+                if (fs::exists(preludePath))
+                    allSourceFiles.insert(preludePath);
+            }
+            for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
+            {
+                if (entry.is_regular_file() && entry.path().extension() == ".djinn")
+                    allSourceFiles.insert(fs::canonical(entry.path()));
+            }
+        }
+        if (fs::exists(path))
+        {
+            for (const auto& entry : fs::recursive_directory_iterator(path))
+            {
+                if (!entry.is_regular_file() || entry.path().extension() != ".djinn") continue;
+                auto canonical = fs::canonical(entry.path());
+                if (!stdCanonical.empty())
+                {
+                    auto rel = canonical.lexically_relative(stdCanonical);
+                    if (!rel.empty() && !rel.string().starts_with("..")) continue;
+                }
+                allSourceFiles.insert(canonical);
+            }
+        }
+
+        // Check source-level cache: if no source file changed, skip everything
+        std::map<std::string, std::string> currentHashes;
+        BuildCache cache;
+        {
+            auto _phase = summary.phase("cache");
+            currentHashes = hash_source_files(allSourceFiles);
+            cache = BuildCache::load(cachePath);
+            LOG_DEBUG("[cache] hashed %zu source files, loaded cache from %s", currentHashes.size(), cachePath.c_str());
+        }
+
+        if (cache.matches(currentHashes, options.optimizationLevel) && fs::exists(exePath))
+        {
+            LOG_INFO("[cache] sources unchanged, skipping build");
+
+            int programReturnCode = 0;
+            if (options.runAfterCompile)
+            {
+                auto _phase = summary.phase("run");
+                programReturnCode = system(exePath.c_str());
+#ifndef _WIN32
+                if (WIFEXITED(programReturnCode))
+                    programReturnCode = WEXITSTATUS(programReturnCode);
+#endif
+            }
+            summary.print();
+            return {.returnCode = programReturnCode};
+        }
+
+        // Sources changed — full compilation
         if (options.includeStd && !stdCanonical.empty())
         {
             for (const auto& prelude : preludes)
@@ -386,25 +533,23 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 }
             }
 
+            for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
             {
-                for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
+                try
                 {
-                    try
-                    {
-                        if (!entry.is_regular_file()) continue;
-                        if (entry.path().extension() != ".djinn") continue;
+                    if (!entry.is_regular_file()) continue;
+                    if (entry.path().extension() != ".djinn") continue;
 
-                        auto canonical = fs::canonical(entry.path());
-                        if (parsedFiles.contains(canonical)) continue;
-                        parsedFiles.insert(canonical);
+                    auto canonical = fs::canonical(entry.path());
+                    if (parsedFiles.contains(canonical)) continue;
+                    parsedFiles.insert(canonical);
 
-                        parseFile(entry.path(), true, false);
-                    }
-                    catch (const CompileError& compile_error)
-                    {
-                        LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(),
-                                  compile_error.message().c_str());
-                    }
+                    parseFile(entry.path(), true, false);
+                }
+                catch (const CompileError& compile_error)
+                {
+                    LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(),
+                              compile_error.message().c_str());
                 }
             }
         }
@@ -486,26 +631,30 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
         }
 
-        const auto out_file_path = options.outputDirectory + "\\" + options.outputFileName;
-        const std::string llPath = out_file_path + ".ll";
-
         {
             auto _phase = summary.phase("llvm passes");
             generator.run_passes(options.skipCoroPasses);
         }
 
         std::string generatedIr = generator.print();
-        std::ofstream outFile(llPath);
-        outFile << generatedIr;
-        outFile.close();
 
-        auto exePath = out_file_path +
-#ifdef _WIN32
-            ".exe";
-#else
-        "";
-#endif
-        if (options.generateBinary)
+        // Check IR-level cache: if generated IR unchanged, skip clang
+        auto irHash = compute_hash(generatedIr);
+        bool skipClang = (cache.irHash == irHash
+            && cache.optimizationLevel == options.optimizationLevel
+            && fs::exists(exePath));
+
+        // Always write .ll for debugging
+        {
+            std::ofstream outFile(llPath);
+            outFile << generatedIr;
+        }
+
+        if (skipClang)
+        {
+            LOG_INFO("[cache] IR unchanged, skipping clang");
+        }
+        else if (options.generateBinary)
         {
             auto _phase = summary.phase("clang");
             std::string runtimeArg;
@@ -522,20 +671,25 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             LOG_DEBUG("Compile return: %d", compile_result);
         }
 
+        // Save cache
+        BuildCache newCache;
+        newCache.fileHashes = currentHashes;
+        newCache.irHash = irHash;
+        newCache.optimizationLevel = options.optimizationLevel;
+        newCache.save(cachePath);
+        LOG_DEBUG("[cache] saved %zu file hashes to %s", currentHashes.size(), cachePath.c_str());
+
         int programReturnCode = 0;
         if (options.runAfterCompile)
         {
-            auto start = std::chrono::high_resolution_clock::now();
+            auto _phase = summary.phase("run");
             programReturnCode = system(exePath.c_str());
-            auto end = std::chrono::high_resolution_clock::now();
-            auto elapsed = std::chrono::duration<double, std::milli>(end - start);
 #ifndef _WIN32
             if (WIFEXITED(programReturnCode))
             {
                 programReturnCode = WEXITSTATUS(programReturnCode);
             }
 #endif
-            LOG_INFO("program exited with code %d in %.3f ms", programReturnCode, elapsed.count());
         }
 
         if (diagnostics.warningCount() > 0)
@@ -802,17 +956,13 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         int programReturnCode = 0;
         if (options.runAfterCompile)
         {
-            auto start = std::chrono::high_resolution_clock::now();
             programReturnCode = system(exePath.c_str());
-            auto end = std::chrono::high_resolution_clock::now();
-            auto elapsed = std::chrono::duration<double, std::milli>(end - start);
 #ifndef _WIN32
             if (WIFEXITED(programReturnCode))
             {
                 programReturnCode = WEXITSTATUS(programReturnCode);
             }
 #endif
-            LOG_INFO("program exited with code %d in %.3f ms", programReturnCode, elapsed.count());
         }
 
         if (diagnostics.warningCount() > 0)
