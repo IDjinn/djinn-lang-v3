@@ -2927,6 +2927,14 @@ std::unique_ptr<MacroDeclaration> Parser::parse_macro()
     while (!check(TokenType::RBRACE) && !isAtEnd())
     {
         MacroRule rule;
+        rule.location = SourceLocation(peek().position, peek().value.length());
+
+        bool ruleLocal = false;
+        if (check(TokenType::IDENTIFIER) && peek().value == "local")
+        {
+            advance();
+            ruleLocal = true;
+        }
 
         expect("Esperado '(' para parâmetros da macro", TokenType::LPAREN);
         while (!check(TokenType::RPAREN) && !isAtEnd())
@@ -2934,46 +2942,73 @@ std::unique_ptr<MacroDeclaration> Parser::parse_macro()
             if (!rule.parameters.empty())
                 expect("Esperado ','", TokenType::COMMA);
 
-            bool isLocal = false;
-            if (check(TokenType::IDENTIFIER) && peek().value == "local")
+            bool isLocal = ruleLocal;
+            if (!isLocal && check(TokenType::IDENTIFIER) && peek().value == "local")
             {
                 advance();
                 isLocal = true;
             }
 
-            const Token& fragToken = expect("Esperado tipo do fragmento (expr)", TokenType::IDENTIFIER);
-            if (fragToken.value != "expr")
-            {
-                PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION,
-                             "tipo de fragmento de macro desconhecido: '" + fragToken.value + "'. Esperado: 'expr'",
-                             SourceLocation(fragToken.position, fragToken.value.length()));
-            }
+            const Token& fragToken = expect("Esperado tipo do fragmento ou token literal", TokenType::IDENTIFIER);
 
-            const Token& paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-            rule.parameters.emplace_back(MacroFragmentType::EXPR, makeSourceIdentifier(paramName), isLocal);
+            if (fragToken.value == "expression")
+            {
+                const Token& paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+                rule.parameters.emplace_back(MacroFragmentType::EXPRESSION, makeSourceIdentifier(paramName), isLocal);
+            }
+            else if (fragToken.value == "identifier")
+            {
+                if (isLocal)
+                {
+                    PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION,
+                                 "modificador 'local' não é válido para fragmento 'identifier'",
+                                 SourceLocation(fragToken.position, fragToken.value.length()));
+                }
+                const Token& paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
+                rule.parameters.emplace_back(MacroFragmentType::IDENTIFIER, makeSourceIdentifier(paramName), false);
+            }
+            else
+            {
+                if (isLocal)
+                {
+                    PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION,
+                                 "modificador 'local' não é válido para token literal",
+                                 SourceLocation(fragToken.position, fragToken.value.length()));
+                }
+                auto litParam = MacroParameter(fragToken.value, makeSourceIdentifier(fragToken));
+                rule.parameters.push_back(std::move(litParam));
+            }
         }
         expect("Esperado ')'", TokenType::RPAREN);
 
         expect("Esperado '=>'", TokenType::ARROW);
 
-        expect("Esperado '{'", TokenType::LBRACE);
-        int braceDepth = 1;
-        while (braceDepth > 0 && !isAtEnd())
+        if (check(TokenType::VOID))
         {
-            if (check(TokenType::LBRACE)) braceDepth++;
-            else if (check(TokenType::RBRACE))
-            {
-                braceDepth--;
-                if (braceDepth == 0) break;
-            }
-            rule.bodyTokens.push_back(peek());
             advance();
+            rule.isVoid = true;
         }
-        expect("Esperado '}'", TokenType::RBRACE);
+        else
+        {
+            expect("Esperado '{'", TokenType::LBRACE);
+            int braceDepth = 1;
+            while (braceDepth > 0 && !isAtEnd())
+            {
+                if (check(TokenType::LBRACE)) braceDepth++;
+                else if (check(TokenType::RBRACE))
+                {
+                    braceDepth--;
+                    if (braceDepth == 0) break;
+                }
+                rule.bodyTokens.push_back(peek());
+                advance();
+            }
+            expect("Esperado '}'", TokenType::RBRACE);
+        }
 
         for (const auto& param : rule.parameters)
         {
-            if (param.isLocal) continue;
+            if (param.isLocal || param.fragmentType != MacroFragmentType::EXPRESSION) continue;
             int count = 0;
             for (const auto& tok : rule.bodyTokens)
             {
@@ -2988,6 +3023,30 @@ std::unique_ptr<MacroDeclaration> Parser::parse_macro()
                     "' is used " + std::to_string(count) + " times without 'local', "
                     "which may cause side effects. Consider using 'local expr " + param.name.token_name + "'",
                     param.name.location));
+            }
+        }
+
+        for (size_t prev = 0; prev < decl->rules.size(); prev++)
+        {
+            const auto& existing = decl->rules[prev];
+            if (existing.parameters.size() != rule.parameters.size()) continue;
+
+            bool same = true;
+            for (size_t p = 0; p < existing.parameters.size(); p++)
+            {
+                if (existing.parameters[p].fragmentType != rule.parameters[p].fragmentType ||
+                    existing.parameters[p].literalToken != rule.parameters[p].literalToken)
+                {
+                    same = false;
+                    break;
+                }
+            }
+            if (same)
+            {
+                PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION,
+                             "macro '" + nameToken.value + "': regra " + std::to_string(decl->rules.size() + 1) +
+                             " ambígua — regra " + std::to_string(prev + 1) + " contém a mesma assinatura",
+                             rule.location);
             }
         }
 
@@ -3036,8 +3095,6 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
                      macro.location);
     }
 
-    const auto& rule = macro.rules[0];
-
     std::vector<std::vector<Token>> argTokenSets;
     while (!check(TokenType::RPAREN) && !isAtEnd())
     {
@@ -3047,13 +3104,54 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
     }
     expect("Esperado ')'", TokenType::RPAREN);
 
-    if (argTokenSets.size() != rule.parameters.size())
+    const MacroRule* matchedRule = nullptr;
+    for (const auto& rule : macro.rules)
+    {
+        if (rule.parameters.size() != argTokenSets.size()) continue;
+
+        bool matches = true;
+        for (size_t i = 0; i < rule.parameters.size(); i++)
+        {
+            const auto& param = rule.parameters[i];
+            if (param.fragmentType == MacroFragmentType::LITERAL_TOKEN)
+            {
+                if (argTokenSets[i].size() != 1 ||
+                    argTokenSets[i][0].type != TokenType::IDENTIFIER ||
+                    argTokenSets[i][0].value != param.literalToken)
+                {
+                    matches = false;
+                    break;
+                }
+            }
+            else if (param.fragmentType == MacroFragmentType::IDENTIFIER)
+            {
+                if (argTokenSets[i].size() != 1 ||
+                    argTokenSets[i][0].type != TokenType::IDENTIFIER)
+                {
+                    matches = false;
+                    break;
+                }
+            }
+        }
+        if (matches)
+        {
+            matchedRule = &rule;
+            break;
+        }
+    }
+
+    if (!matchedRule)
     {
         PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION,
-                     "macro '" + macro.name.token_name + "' espera " +
-                     std::to_string(rule.parameters.size()) + " argumento(s), mas recebeu " +
-                     std::to_string(argTokenSets.size()),
+                     "macro '" + macro.name.token_name + "' não tem regra que corresponda aos argumentos fornecidos",
                      macro.location);
+    }
+
+    const auto& rule = *matchedRule;
+
+    if (rule.isVoid)
+    {
+        return std::make_unique<IntegerLiteral>("0", false, SourceLocation{});
     }
 
     bool hasLocals = false;
@@ -3092,9 +3190,15 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
         {
             for (size_t i = 0; i < rule.parameters.size(); i++)
             {
+                if (rule.parameters[i].fragmentType == MacroFragmentType::LITERAL_TOKEN) continue;
+
                 if (tok.value == rule.parameters[i].name.token_name)
                 {
-                    if (rule.parameters[i].isLocal)
+                    if (rule.parameters[i].fragmentType == MacroFragmentType::IDENTIFIER)
+                    {
+                        expanded.push_back(argTokenSets[i][0]);
+                    }
+                    else if (rule.parameters[i].isLocal)
                     {
                         expanded.push_back({tok.position, TokenType::IDENTIFIER, localVarNames[i]});
                     }

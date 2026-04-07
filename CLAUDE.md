@@ -35,7 +35,7 @@ See `todo.md` for full roadmap. Summary:
 Already implemented: control flow, arithmetic, mutability, ownership/copy semantics,
 name mangling, binder/scope, diagnostics, imports, namespaces, LSP server, intrinsics (sizeof, alignof, typeof,
 likely/unlikely, expect), type casting, pointer compatibility, number literals (separators, scientific notation),
-generic constraints (where clauses), slices (str, i32[]), macros (expr fragments, local hygiene).
+generic constraints (where clauses), slices (str, i32[]), macros (expression fragments, local hygiene, multi-rule).
 
 ## Architecture
 
@@ -100,9 +100,10 @@ docs/           Fumadocs (Next.js) documentation site
 - **Name mangling**: C++ compatible, demangling support
 - **Diagnostics**: error codes, suggestions, multiple concurrent errors
 - **Number literals**: underscore separators (420_000), tick separators (800'000'000), scientific notation (1e9)
-- **Macros**: declaration with `macro name { (params) => { body } }`, `expr` fragment type, `local` modifier for
-  hygienic temp variables, token-level substitution with parser re-parse, nested macro calls, side-effect warning
-  (W6001) when non-local param used multiple times
+- **Macros**: declaration with `macro name { (params) => { body } }`, `expression` and `identifier` fragment types,
+  literal token matching in rules, `local` modifier (per-param or rule-level), token-level substitution with parser
+  re-parse, nested macro calls, multi-rule pattern matching by arity + literal tokens (first match wins, ambiguous
+  rules rejected), side-effect warning (W6001) when non-local expression param used multiple times
 - **Attributes**: parameterized (`[align(16)]`), named args (`[deprecated(message = "use v2")]`), centralized LLVM
   mapping (force-inline, no-inline, noreturn, hot, cold, nosync, nounwind, willreturn, norecurse), implicit nounwind
   on all functions, `[llvm("attr")]` escape hatch for raw LLVM attributes, built-in attrs defined in
@@ -197,29 +198,49 @@ constexpr_func       = type IDENTIFIER "(" [ param_list ] ")" block ;
 
 ```ebnf
 macro_decl           = "macro" IDENTIFIER "{" { macro_rule } "}" ;
-macro_rule           = "(" macro_params ")" "=>" "{" token_stream "}" ;
+macro_rule           = [ "local" ] "(" macro_params ")" "=>" "{" token_stream "}" ;
 macro_params         = macro_param { "," macro_param } ;
-macro_param          = [ "local" ] fragment_type IDENTIFIER ;
-fragment_type        = "expr" ;
+macro_param          = [ "local" ] ( fragment_type IDENTIFIER | IDENTIFIER ) ;
+fragment_type        = "expression" | "identifier" ;
 
 (* Macros are expanded at parse time via token substitution + re-parse.
-   Fragment types: expr (expression) — more types planned (stmt, type, ident).
-   The "local" modifier creates a temp variable (__macro_<name>_<param>) to avoid
-   double evaluation / side effects. Without "local", arguments are substituted
-   directly (wrapped in parens for precedence safety).
+   Fragment types: expression (any expr), identifier (single ident token).
+   Bare identifiers in params are literal token matchers (pattern matching).
 
-   Warning W6001 is emitted when a non-local param is used multiple times in the body.
+   The "local" modifier creates a temp variable (__macro_<name>_<param>) to avoid
+   double evaluation / side effects. "local" before "(" applies to all expression params.
+   Without "local", arguments are substituted directly (wrapped in parens for precedence).
+
+   Multiple rules per macro: matched by arity + literal tokens (first match wins).
+   Ambiguous rules (same signature) are rejected at parse time.
+   Warning W6001 is emitted when a non-local expression param is used multiple times.
 
    Examples:
    macro square {
-       (local expr v) => { v * v }
+       (local expression v) => { v * v }
    }
    macro add {
-       (expr a, expr b) => { a + b }
+       (expression a, expression b) => { a + b }
+   }
+   macro maybe_double {
+       (local expression v, expression m) => { v * m }
+       (local expression v) => { v * 2 }
+   }
+   macro calc {
+       (double, local expression v) => { v + v }  // "double" is literal token
+       (square, local expression v) => { v * v }
+       (expression v) => { v }
+   }
+   macro apply {
+       local (expression a, expression b) => { a + b }  // local on all params
    }
 
-   i32 x = square(foo());   // evaluates foo() once via temp var
-   i32 y = add(1 + 2, 3);   // expands to (1 + 2) + (3)
+   i32 x = square(foo());       // evaluates foo() once via temp var
+   i32 y = add(1 + 2, 3);       // expands to (1 + 2) + (3)
+   i32 a = maybe_double(5, 3);  // matches rule 1 → 5 * 3
+   i32 b = maybe_double(5);     // matches rule 2 → 5 * 2
+   i32 c = calc(double, 5);     // matches literal "double" → 5 + 5
+   i32 d = calc(7);             // matches expression-only rule → 7
 *)
 ```
 

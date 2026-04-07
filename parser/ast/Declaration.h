@@ -797,7 +797,9 @@ struct ConstExprDeclaration : Location
 
 enum class MacroFragmentType
 {
-    EXPR,
+    EXPRESSION,
+    IDENTIFIER,
+    LITERAL_TOKEN,
 };
 
 struct MacroParameter
@@ -805,9 +807,15 @@ struct MacroParameter
     MacroFragmentType fragmentType;
     SourceIdentifier name;
     bool isLocal = false;
+    std::string literalToken;
 
     MacroParameter(MacroFragmentType fragmentType, SourceIdentifier name, bool isLocal = false)
         : fragmentType(fragmentType), name(std::move(name)), isLocal(isLocal)
+    {
+    }
+
+    MacroParameter(const std::string& literalToken, SourceIdentifier name)
+        : fragmentType(MacroFragmentType::LITERAL_TOKEN), name(std::move(name)), literalToken(literalToken)
     {
     }
 };
@@ -816,6 +824,8 @@ struct MacroRule
 {
     std::vector<MacroParameter> parameters;
     std::vector<Token> bodyTokens;
+    SourceLocation location;
+    bool isVoid = false;
 };
 
 struct MacroDeclaration : Location
