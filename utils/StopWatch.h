@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <string>
+#include <vector>
 #include "Logger.h"
 #include "../runtime/logger.h"
 
@@ -61,8 +62,74 @@ namespace utils
             _start = clock::now();
         }
     };
-} // namespace utils
 
 #define STOPWATCH(label) utils::StopWatch _sw_##__LINE__(label)
+
+    class BuildSummary
+    {
+        using clock = std::chrono::high_resolution_clock;
+
+        struct Phase
+        {
+            std::string name;
+            long long ms = 0;
+        };
+
+        std::vector<Phase> _phases;
+        clock::time_point _total_start;
+
+    public:
+        BuildSummary() : _total_start(clock::now())
+        {
+        }
+
+        class ScopedPhase
+        {
+            BuildSummary& _summary;
+            size_t _index;
+            clock::time_point _start;
+
+        public:
+            ScopedPhase(BuildSummary& summary, size_t index)
+                : _summary(summary), _index(index), _start(clock::now())
+            {
+            }
+
+            ~ScopedPhase()
+            {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - _start).count();
+                _summary._phases[_index].ms += elapsed;
+            }
+        };
+
+        ScopedPhase phase(const std::string& name)
+        {
+            for (size_t i = 0; i < _phases.size(); i++)
+            {
+                if (_phases[i].name == name)
+                    return ScopedPhase(*this, i);
+            }
+            _phases.push_back({name, 0});
+            return ScopedPhase(*this, _phases.size() - 1);
+        }
+
+        void print() const
+        {
+            auto total = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - _total_start).count();
+
+            fprintf(stdout, "+----------------------+----------+-------+\n");
+            fprintf(stdout, "| %-20s | %8s | %5s |\n", "Phase", "Time", "%");
+            fprintf(stdout, "+----------------------+----------+-------+\n");
+            for (const auto& [name, ms] : _phases)
+            {
+                double pct = total > 0 ? (ms * 100.0 / total) : 0.0;
+                fprintf(stdout, "| %-20s | %5lldms  | %4.1f%% |\n", name.c_str(), ms, pct);
+            }
+            fprintf(stdout, "+----------------------+----------+-------+\n");
+            fprintf(stdout, "| %-20s | %5lldms  |       |\n", "total", total);
+            fprintf(stdout, "+----------------------+----------+-------+\n");
+        }
+    };
+} // namespace utils
 
 #endif //DJINN_STOPWATCH_H

@@ -268,7 +268,7 @@ static ConstEvaluator create_comptime_evaluator(
 
 CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& path, const CompilerOptions& options)
 {
-    auto global_watch = INIT_STOPWATCH_WITH_LEVEL("build time", logger::Level::INFO);
+    utils::BuildSummary summary;
     namespace fs = std::filesystem;
     assert(!options.outputDirectory.empty() && "You need give output directory!");
 
@@ -298,24 +298,34 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         auto file_name = filePath.string();
         diagnostics.registerSource(file_name, source);
 
-        Lexer lexer(source, file_name);
-        const auto tokens = lexer.tokenize();
-
-        Parser parser(tokens, diagnostics);
-        parser.printMacroExpansion = options.print_macro_expansion;
-
-        if (registerPrelude)
+        std::vector<Token> tokens;
         {
-            for (const auto& name : preludeTypeNames)
-                parser.registerKnownType(name);
-        }
-        if (isUserCode)
-        {
-            for (const auto& name : stdTypeNames)
-                parser.registerKnownType(name);
+            auto _phase = summary.phase("lexer");
+            Lexer lexer(source, file_name);
+            tokens = lexer.tokenize();
         }
 
-        auto program = parser.parse(file_name);
+        std::unique_ptr<Program> program;
+        std::vector<Parser::MacroExpansionRecord> macroExpansions;
+        {
+            auto _phase = summary.phase("parser");
+            Parser parser(tokens, diagnostics);
+            parser.printMacroExpansion = options.print_macro_expansion;
+
+            if (registerPrelude)
+            {
+                for (const auto& name : preludeTypeNames)
+                    parser.registerKnownType(name);
+            }
+            if (isUserCode)
+            {
+                for (const auto& name : stdTypeNames)
+                    parser.registerKnownType(name);
+            }
+
+            program = parser.parse(file_name);
+            macroExpansions = std::move(parser.macroExpansions);
+        }
 
         if (options.print_ast && isUserCode)
         {
@@ -326,9 +336,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             LOG_DEBUG("%s", oss.str().c_str());
         }
 
-        if (options.dump_macro_expansion && isUserCode && !parser.macroExpansions.empty())
+        if (options.dump_macro_expansion && isUserCode && !macroExpansions.empty())
         {
-            auto expandedSource = apply_macro_expansions(source, parser.macroExpansions);
+            auto expandedSource = apply_macro_expansions(source, macroExpansions);
             auto expandedPath = fs::path(options.outputDirectory) / fs::path(file_name).filename().replace_extension(
                 ".djinn.expanded");
             if (std::ofstream expandedFile(expandedPath); expandedFile.is_open())
@@ -376,22 +386,25 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 }
             }
 
-            for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
             {
-                try
+                for (const auto& entry : fs::recursive_directory_iterator(stdLibPath))
                 {
-                    if (!entry.is_regular_file()) continue;
-                    if (entry.path().extension() != ".djinn") continue;
+                    try
+                    {
+                        if (!entry.is_regular_file()) continue;
+                        if (entry.path().extension() != ".djinn") continue;
 
-                    auto canonical = fs::canonical(entry.path());
-                    if (parsedFiles.contains(canonical)) continue;
-                    parsedFiles.insert(canonical);
+                        auto canonical = fs::canonical(entry.path());
+                        if (parsedFiles.contains(canonical)) continue;
+                        parsedFiles.insert(canonical);
 
-                    parseFile(entry.path(), true, false);
-                }
-                catch (const CompileError& compile_error)
-                {
-                    LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
+                        parseFile(entry.path(), true, false);
+                    }
+                    catch (const CompileError& compile_error)
+                    {
+                        LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(),
+                                  compile_error.message().c_str());
+                    }
                 }
             }
         }
@@ -443,12 +456,19 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
-        auto comptimeEval = create_comptime_evaluator(programs);
-        for (auto& prog : programs)
-            resolve_compile_time_blocks(*prog, comptimeEval);
+        {
+            auto _phase = summary.phase("comptime");
+            auto comptimeEval = create_comptime_evaluator(programs);
+            for (auto& prog : programs)
+                resolve_compile_time_blocks(*prog, comptimeEval);
+        }
 
         Binder binder(diagnostics);
-        const auto bindResult = binder.bindAll(programs);
+        BindingResult bindResult;
+        {
+            auto _phase = summary.phase("binding");
+            bindResult = binder.bindAll(programs);
+        }
         if (!bindResult.success)
         {
             std::cerr << diagnostics.render();
@@ -457,7 +477,10 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
-        generator.generate();
+        {
+            auto _phase = summary.phase("codegen");
+            generator.generate();
+        }
         if (options.print_ir)
         {
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
@@ -467,7 +490,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         const std::string llPath = out_file_path + ".ll";
 
         {
-            auto pass_stop_watch = INIT_STOPWATCH("run passes");
+            auto _phase = summary.phase("llvm passes");
             generator.run_passes(options.optimize);
         }
 
@@ -484,6 +507,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 #endif
         if (options.generateBinary)
         {
+            auto _phase = summary.phase("clang");
             std::string runtimeArg;
             for (auto& runtime_path : runtimePaths)
             {
@@ -517,6 +541,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             std::cerr << diagnostics.render();
         }
 
+        summary.print();
+
         LOG_DEBUG("exit code %d", programReturnCode);
         return {.returnCode = programReturnCode, .diagnostics = diagnostics.get_diagnostics()};
     }
@@ -524,6 +550,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
     {
         diagnostics.emit(Diagnostic(Severity::Error, e.code(), e.message(), e.location()));
         diagnostics.printToStderr(std::stacktrace::current());
+        summary.print();
         return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
     }
 }
