@@ -25,7 +25,7 @@ TEST(Attributes, ForceInlineGeneratesAlwaysInline)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("alwaysinline"), std::string::npos)
         << "IR should contain alwaysinline attribute";
@@ -46,7 +46,7 @@ TEST(Attributes, NoInlineGeneratesNoInline)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("noinline"), std::string::npos)
         << "IR should contain noinline attribute";
@@ -88,7 +88,7 @@ TEST(Attributes, ColdAttribute)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("cold"), std::string::npos)
         << "IR should contain cold attribute";
@@ -114,7 +114,7 @@ TEST(Attributes, ParameterizedAttributeParses)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -133,7 +133,7 @@ TEST(Attributes, NamedParameterAttributeParses)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -157,7 +157,7 @@ TEST(Attributes, MultipleAttributesOnMethod)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("alwaysinline"), std::string::npos);
     EXPECT_NE(result.ir.find("hot"), std::string::npos);
@@ -181,7 +181,7 @@ TEST(Attributes, ImplicitNounwindOnAllFunctions)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("nounwind"), std::string::npos)
         << "All Djinn functions should have nounwind";
@@ -206,7 +206,7 @@ TEST(Attributes, LlvmEscapeHatch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("mustprogress"), std::string::npos)
         << "IR should contain raw LLVM attribute from [llvm()] escape hatch";

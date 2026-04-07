@@ -248,7 +248,7 @@ TEST(Object, BoxingIRContainsKind)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     // Check IR contains typeinfo with kind field (4th element in the struct constant)
     EXPECT_NE(result.ir.find("__typeinfo_i32"), std::string::npos) << "IR should contain __typeinfo_i32";

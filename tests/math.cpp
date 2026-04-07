@@ -23,7 +23,7 @@ TEST(Math, Sqrt)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 4);
 }
@@ -41,7 +41,7 @@ TEST(Math, SqrtFloat)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -59,7 +59,7 @@ TEST(Math, Pow)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 8);
 }
@@ -77,7 +77,7 @@ TEST(Math, Floor)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -95,7 +95,7 @@ TEST(Math, Ceil)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 4);
 }
@@ -113,7 +113,7 @@ TEST(Math, Round)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 4);
 }
@@ -131,7 +131,7 @@ TEST(Math, Fabs)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -149,7 +149,7 @@ TEST(Math, Fmax)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 20);
 }
@@ -167,7 +167,7 @@ TEST(Math, Fmin)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -185,7 +185,7 @@ TEST(Math, Cbrt)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -204,7 +204,7 @@ TEST(Math, Exp)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7); // floor(e^2) = floor(7.389...) = 7
 }
@@ -225,7 +225,7 @@ TEST(Math, Log)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1); // ln(e) = 1
 }
@@ -243,7 +243,7 @@ TEST(Math, Log10)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3); // log10(1000) = 3
 }
@@ -261,7 +261,7 @@ TEST(Math, Log2)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3); // log2(8) = 3
 }
@@ -279,7 +279,7 @@ TEST(Math, Fmod)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1); // 10 mod 3 = 1
 }
@@ -297,7 +297,7 @@ TEST(Math, Hypot)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5); // sqrt(3^2 + 4^2) = 5
 }
@@ -315,7 +315,7 @@ TEST(Math, Trunc)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7);
 }
@@ -333,7 +333,7 @@ TEST(Math, Exp2)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 16); // 2^4 = 16
 }

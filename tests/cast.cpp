@@ -11,7 +11,7 @@ TEST(Cast, IntTruncation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -26,7 +26,7 @@ TEST(Cast, IntWidening)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7);
 }
@@ -41,7 +41,7 @@ TEST(Cast, FloatToInt)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -57,7 +57,7 @@ TEST(Cast, IntToFloat)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -73,7 +73,7 @@ TEST(Cast, ChainedCast)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 100);
 }
@@ -88,7 +88,7 @@ TEST(Cast, SameTypeCastNoop)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
@@ -104,7 +104,7 @@ TEST(Cast, CastInExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 13);
 }
@@ -119,7 +119,7 @@ TEST(Cast, FloatTruncation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
@@ -136,7 +136,7 @@ TEST(Cast, PointerCast)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -150,7 +150,7 @@ TEST(Cast, CastLiteral)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -165,7 +165,7 @@ TEST(Cast, NegativeFloatToInt)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9);
 }

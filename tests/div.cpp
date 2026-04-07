@@ -10,7 +10,7 @@ TEST(Math, IntegerDivFunction)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.print_ast = true, .print_ir = true, .optimize = false});
+    const auto result = DjinnCompiler::run(source, {.print_ast = true, .print_ir = true, .optimizationLevel = 0});
     EXPECT_EQ(result.program->functions.size(), 1);
 }
 

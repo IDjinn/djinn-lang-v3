@@ -200,7 +200,7 @@ TEST(IsExpression, IRContainsIsCheck)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("is_check"), std::string::npos) << "IR should contain is_check comparison";
 }

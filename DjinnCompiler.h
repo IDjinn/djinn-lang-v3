@@ -33,7 +33,8 @@ struct CompilerOptions
     bool print_ir = false;
     bool print_macro_expansion = false;
     bool dump_macro_expansion = false;
-    bool optimize = true;
+    int optimizationLevel = 3;
+    bool skipCoroPasses = false;
     bool generateBinary = true;
     bool includeStd = true;
     bool stdDeclOnly = false;

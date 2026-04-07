@@ -22,7 +22,7 @@ TEST(GenericConstraints, ParseWhereClauseSingleConstraint)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->structs.size(), 1);
 
@@ -48,7 +48,7 @@ TEST(GenericConstraints, ParseWhereClauseMultipleConstraintsSameParam)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 
     const auto& structDecl = result.program->structs[0];
@@ -75,7 +75,7 @@ TEST(GenericConstraints, ParseWhereClauseMultipleParams)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 
     const auto& structDecl = result.program->structs[0];
@@ -99,7 +99,7 @@ TEST(GenericConstraints, ParseWhereClauseOnEnum)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->enums.size(), 1);
 
@@ -121,7 +121,7 @@ TEST(GenericConstraints, ParseWhereClauseOnInterface)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.program->interfaces.size(), 2);
 
@@ -143,7 +143,7 @@ TEST(GenericConstraints, UndefinedConstraintInterfaceError)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -177,7 +177,7 @@ TEST(GenericConstraints, ConstraintSatisfied)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -204,7 +204,7 @@ TEST(GenericConstraints, ConstraintViolated)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -226,7 +226,7 @@ TEST(GenericConstraints, NoConstraintNoValidation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -265,7 +265,7 @@ TEST(GenericConstraints, MultipleConstraintsSatisfied)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -300,7 +300,7 @@ TEST(GenericConstraints, MultipleConstraintsPartiallyViolated)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -335,7 +335,7 @@ TEST(GenericConstraints, EnumConstraintSatisfied)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -362,7 +362,7 @@ TEST(GenericConstraints, EnumConstraintViolated)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
@@ -405,7 +405,7 @@ TEST(GenericConstraints, WhereClauseWithImplements)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }

@@ -25,7 +25,7 @@
 #define DJINN_CLANG_PATH "clang"
 #endif
 
-#define CLANG_ARGS "-O3 -flto -fuse-ld=lld"
+#define CLANG_LINK_ARGS "-flto -fuse-ld=lld"
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
@@ -491,7 +491,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         {
             auto _phase = summary.phase("llvm passes");
-            generator.run_passes(options.optimize);
+            generator.run_passes(options.skipCoroPasses);
         }
 
         std::string generatedIr = generator.print();
@@ -514,7 +514,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 runtimeArg += " " + runtime_path.string();
             }
 
-            auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;
+            auto optFlag = "-O" + std::to_string(options.optimizationLevel);
+            auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_LINK_ARGS " " + optFlag + " " + llPath + runtimeArg +
+                " -o " + exePath;
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
             const auto compile_result = system(cmdString.c_str());
             LOG_DEBUG("Compile return: %d", compile_result);
@@ -768,7 +770,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         {
             auto pass_stop_watch = INIT_STOPWATCH("run passes");
-            generator.run_passes(options.optimize);
+            generator.run_passes(options.skipCoroPasses);
         }
 
         generatedIr = generator.print();
@@ -787,7 +789,9 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             runtimeArg += " " + runtime_path.string();
         }
 
-        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_ARGS " " + llPath + runtimeArg + " -o " + exePath;
+        auto optFlag = "-O" + std::to_string(options.optimizationLevel);
+        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_LINK_ARGS " " + optFlag + " " + llPath + runtimeArg +
+            " -o " + exePath;
         LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
         int clangResult = system(cmdString.c_str());
         if (clangResult != 0)

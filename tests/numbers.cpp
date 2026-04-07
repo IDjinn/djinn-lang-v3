@@ -20,7 +20,7 @@ TEST(Numbers, MultipleNumbersDeclaration)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -36,6 +36,6 @@ TEST(Numbers, CompileTimeOverflowCheck)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }

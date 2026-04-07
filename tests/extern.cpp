@@ -11,7 +11,7 @@ TEST(Extern, PrintfHelloWorld)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.program->externFunctions.size(), 1);
 }
 
@@ -29,7 +29,7 @@ TEST(Extern, BlockSyntax)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.program->externFunctions.size(), 2);
 }
 
@@ -48,7 +48,7 @@ TEST(Extern, MultipleExternBlocks)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
     EXPECT_EQ(result.program->externFunctions.size(), 2);
 }
 
@@ -98,7 +98,7 @@ TEST(Extern, ExternNotRemovedByOptimizer)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = true, .includeStd = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 3, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("declare"), std::string::npos)
         << "extern declaration should not be removed by optimizer";

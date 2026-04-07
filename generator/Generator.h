@@ -44,7 +44,7 @@ class Generator
 public:
     Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<ScopedSymbolTable>& symbols);
 
-    void run_passes(bool optimize) const;
+    void run_passes(bool skipCoroPasses = false) const;
 
     std::string print() const;
 

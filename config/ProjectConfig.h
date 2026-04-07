@@ -128,6 +128,7 @@ struct InternalsConfig
 struct GeneratorConfig
 {
     int optimizationLevel = 2;
+    std::optional<bool> skipCoroPasses;
 };
 
 struct CompilerConfig
@@ -197,6 +198,7 @@ struct ProjectConfig
 
         // compiler.generator
         config.compiler.generator.optimizationLevel = root.get<int>("compiler.generator.optimization-level", 2);
+        config.compiler.generator.skipCoroPasses = root.get<bool>("compiler.generator.skip-coro-passes");
 
         // compiler.libs
         if (root.has("compiler.libs"))
@@ -227,6 +229,8 @@ struct ProjectConfig
         applyOpt(options.print_ast, cc.internals.printAst);
         applyOpt(options.print_ir, cc.internals.printIr);
         applyOpt(options.dump_macro_expansion, cc.internals.dump_macro_expansion);
+        applyOpt(options.skipCoroPasses, cc.generator.skipCoroPasses);
+        options.optimizationLevel = cc.generator.optimizationLevel;
 
         if (!cc.output.fileName.empty() && options.outputFileName.empty())
             options.outputFileName = cc.output.fileName;

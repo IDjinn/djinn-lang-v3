@@ -392,7 +392,7 @@ TEST(Spawn, BasicSpawnParse)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     // Verify spawn and event loop declarations appear in IR
     EXPECT_NE(result.ir.find("__djinn_spawn"), std::string::npos);
@@ -416,7 +416,7 @@ TEST(EventLoop, AsyncMainGeneratesRuntimeCalls)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     // Verify runtime init/shutdown are called in the IR
     EXPECT_NE(result.ir.find("__djinn_runtime_init"), std::string::npos);
@@ -436,7 +436,7 @@ TEST(EventLoop, CoroWrappersGenerated)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     // Verify coro wrapper functions are generated
     EXPECT_NE(result.ir.find("__djinn_coro_resume"), std::string::npos);
@@ -480,7 +480,7 @@ TEST(Async, NonAsyncMainWithRuntime)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     // Sync main with async functions needs runtime for nested await support
     EXPECT_NE(result.ir.find("__djinn_runtime_init"), std::string::npos);
@@ -507,7 +507,7 @@ TEST(Spawn, MultipleSpawnsParse)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
@@ -531,6 +531,6 @@ TEST(Spawn, WithYieldParse)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimize = false, .generateBinary = false});
+    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .generateBinary = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
 }

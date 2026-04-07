@@ -489,11 +489,8 @@ void Generator::generate_default_main()
 //     return llvmFunc;
 // }
 
-void Generator::run_passes(bool optimize) const
+void Generator::run_passes(bool skipCoroPasses) const
 {
-    if (!optimize) return;
-
-    // Verify module before running optimization passes
     {
         std::string errorStr;
         llvm::raw_string_ostream errorStream(errorStr);
@@ -502,8 +499,9 @@ void Generator::run_passes(bool optimize) const
             LOG_ERROR("[run_passes] LLVM module verification FAILED before passes:\n%s", errorStr.c_str());
             return;
         }
-        LOG_DEBUG("[run_passes] module verification passed, running optimization passes");
     }
+
+    if (skipCoroPasses) return;
 
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
@@ -517,10 +515,14 @@ void Generator::run_passes(bool optimize) const
     PB.registerLoopAnalyses(LAM);
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-    // O2 pipeline includes CoroEarly/CoroSplit/CoroElide/CoroCleanup.
-    // When not optimizing, we output pre-split IR with presplitcoroutine
-    // attribute and let clang handle coroutine lowering.
-    llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+    llvm::ModulePassManager MPM;
+    MPM.addPass(llvm::CoroEarlyPass());
+
+    llvm::CGSCCPassManager CGPM;
+    CGPM.addPass(llvm::CoroSplitPass());
+    MPM.addPass(llvm::createModuleToPostOrderCGSCCPassAdaptor(std::move(CGPM)));
+
+    MPM.addPass(llvm::CoroCleanupPass());
     MPM.run(*module, MAM);
 }
 

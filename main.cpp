@@ -19,8 +19,8 @@ void printUsage(const char* programName)
         << "  -out <dir>    Output file directory (default=build)\n"
         << "  -ir           print ir (default=false)\n"
         << "  -ast          print ast (default=false)\n"
-        << "  -o3            Enable optimizations (default)\n"
-        << "  -O0           Disable optimizations\n"
+        << "  -O0..O3       Set optimization level (default: -O3, passed to clang)\n"
+        << "  --no-coro-passes  Skip coroutine lowering passes\n"
         << "  -c            Compile only, do not execute\n"
         << "  -r            Recursively search directories for .djinn files\n"
         << "  -run          Auto run generated exe file\n"
@@ -113,9 +113,9 @@ int main(int argc, char* argv[])
         {
             options.runAfterCompile = true;
         }
-        else if (arg == "-o3")
+        else if (arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3" || arg == "-o3")
         {
-            options.optimize = true;
+            options.optimizationLevel = arg.back() - '0';
         }
         else if (arg == "-ir")
         {
@@ -129,9 +129,9 @@ int main(int argc, char* argv[])
         {
             options.print_macro_expansion = true;
         }
-        else if (arg == "-O0")
+        else if (arg == "--no-coro-passes")
         {
-            options.optimize = false;
+            options.skipCoroPasses = true;
         }
         else if (arg == "-c")
         {
