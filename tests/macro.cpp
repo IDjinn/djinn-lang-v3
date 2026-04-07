@@ -107,8 +107,8 @@ TEST(Macro, WithoutLocalCausesDoubleEvaluation)
     )";
 
     const auto result = DjinnCompiler::run(source);
-    EXPECT_EQ(result.returnCode, 1);
-    EXPECT_EQ(result.diagnostics.size(), 2);
+    EXPECT_EQ(result.returnCode, 2);
+    EXPECT_EQ(result.diagnostics.size(), 1);
     EXPECT_TRUE(result.diagnostics.at(0).message.contains("is used 2 times without 'local'"));
 }
 
@@ -589,4 +589,74 @@ TEST(Macro, ConditionalCodegenViaLiteralToken)
 
     const auto result = DjinnCompiler::run(source);
     EXPECT_EQ(result.returnCode, 50); // 42 + 0 + 8
+}
+
+TEST(Macro, LiteralFragment)
+{
+    const auto source = R"(
+        macro double_lit {
+            (literal val) => { val + val }
+        }
+
+        i32 main() {
+            return double_lit(21);
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(Macro, LiteralFragmentRejectsExpression)
+{
+    const auto source = R"(
+        macro lit_only {
+            (literal val) => { val }
+        }
+
+        i32 main() {
+            i32 x = 5;
+            return lit_only(x);
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_GE(result.diagnostics.size(), 1);
+}
+
+TEST(Macro, TypeFragment)
+{
+    const auto source = R"(
+        macro default_val {
+            (type T) => { 123 }
+        }
+
+        i32 main() {
+            return default_val(i32);
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.returnCode, 123);
+}
+
+TEST(Macro, LiteralTokenWithLiteralFragment)
+{
+    const auto source = R"(
+        macro config {
+            (max_size) => { 1024 }
+            (min_size) => { 64 }
+            (literal fallback) => { fallback }
+        }
+
+        i32 main() {
+            i32 a = config(max_size);
+            i32 b = config(min_size);
+            i32 c = config(42);
+            return a + b + c;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source);
+    EXPECT_EQ(result.returnCode, 1130); // 1024 + 64 + 42
 }

@@ -2983,16 +2983,22 @@ std::unique_ptr<MacroDeclaration> Parser::parse_macro()
                 const Token& paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
                 rule.parameters.emplace_back(MacroFragmentType::EXPRESSION, makeSourceIdentifier(paramName), isLocal);
             }
-            else if (fragToken.value == "identifier")
+            else if (fragToken.value == "identifier" || fragToken.value == "literal" ||
+                fragToken.value == "type" || fragToken.value == "block")
             {
                 if (isLocal)
                 {
                     PARSER_ERROR(DiagnosticCode::EXPECTED_EXPRESSION,
-                                 "modificador 'local' não é válido para fragmento 'identifier'",
+                                 "modificador 'local' não é válido para fragmento '" + fragToken.value + "'",
                                  SourceLocation(fragToken.position, fragToken.value.length()));
                 }
+                MacroFragmentType ft = MacroFragmentType::IDENTIFIER;
+                if (fragToken.value == "literal") ft = MacroFragmentType::LITERAL;
+                else if (fragToken.value == "type") ft = MacroFragmentType::TYPE;
+                else if (fragToken.value == "block") ft = MacroFragmentType::BLOCK;
+
                 const Token& paramName = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-                rule.parameters.emplace_back(MacroFragmentType::IDENTIFIER, makeSourceIdentifier(paramName), false);
+                rule.parameters.emplace_back(ft, makeSourceIdentifier(paramName), false);
             }
             else
             {
@@ -3159,6 +3165,25 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
                     break;
                 }
             }
+            else if (param.fragmentType == MacroFragmentType::LITERAL)
+            {
+                if (argTokenSets[i].size() != 1 ||
+                    (argTokenSets[i][0].type != TokenType::INTEGER_LITERAL &&
+                        argTokenSets[i][0].type != TokenType::FLOAT_LITERAL &&
+                        argTokenSets[i][0].type != TokenType::STRING_LITERAL))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+            else if (param.fragmentType == MacroFragmentType::BLOCK)
+            {
+                if (argTokenSets[i].empty() || argTokenSets[i][0].type != TokenType::LBRACE)
+                {
+                    matches = false;
+                    break;
+                }
+            }
         }
         if (matches)
         {
@@ -3221,9 +3246,16 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
 
                 if (tok.value == rule.parameters[i].name.token_name)
                 {
-                    if (rule.parameters[i].fragmentType == MacroFragmentType::IDENTIFIER)
+                    if (rule.parameters[i].fragmentType == MacroFragmentType::IDENTIFIER ||
+                        rule.parameters[i].fragmentType == MacroFragmentType::LITERAL)
                     {
                         expanded.push_back(argTokenSets[i][0]);
+                    }
+                    else if (rule.parameters[i].fragmentType == MacroFragmentType::TYPE ||
+                        rule.parameters[i].fragmentType == MacroFragmentType::BLOCK)
+                    {
+                        for (const auto& argTok : argTokenSets[i])
+                            expanded.push_back(argTok);
                     }
                     else if (rule.parameters[i].isLocal)
                     {

@@ -799,6 +799,9 @@ enum class MacroFragmentType
 {
     EXPRESSION,
     IDENTIFIER,
+    LITERAL,
+    TYPE,
+    BLOCK,
     LITERAL_TOKEN,
 };
 

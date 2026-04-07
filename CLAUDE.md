@@ -217,10 +217,11 @@ macro_decl           = "macro" IDENTIFIER "{" { macro_rule } "}" ;
 macro_rule           = [ "local" ] "(" macro_params ")" "=>" "{" token_stream "}" ;
 macro_params         = macro_param { "," macro_param } ;
 macro_param          = [ "local" ] ( fragment_type IDENTIFIER | IDENTIFIER ) ;
-fragment_type        = "expression" | "identifier" ;
+fragment_type        = "expression" | "identifier" | "literal" | "type" | "block" ;
 
 (* Macros are expanded at parse time via token substitution + re-parse.
-   Fragment types: expression (any expr), identifier (single ident token).
+   Fragment types: expression (any expr), identifier (single ident), literal (int/float/string),
+   type (any type), block ({ ... }).
    Bare identifiers in params are literal token matchers (pattern matching).
 
    The "local" modifier creates a temp variable (__macro_<name>_<param>) to avoid
