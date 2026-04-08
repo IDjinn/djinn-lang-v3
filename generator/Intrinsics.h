@@ -22,6 +22,7 @@ enum class Intrinsic
     DebugTrap,
     Typeof,
     AwaitBlock,
+    Assume,
 };
 
 inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
@@ -32,6 +33,7 @@ inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
         {"bitcast", Intrinsic::Bitcast},
         {"trap", Intrinsic::Trap},
         {"debugtrap", Intrinsic::DebugTrap},
+        {"assume", Intrinsic::Assume},
         {"unreachable", Intrinsic::Unreachable},
         {"expect", Intrinsic::Expect},
         {"likely", Intrinsic::Likely},

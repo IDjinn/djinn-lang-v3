@@ -103,7 +103,7 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
             const auto trapFunc = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::trap);
             if (!trapFunc)
                 GENERATOR_ERROR(DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION, "missing intrinsic trap()",
-                                call.location);
+                            call.location);
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
@@ -116,7 +116,7 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
                 llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::debugtrap);
             if (!trapFunc)
                 GENERATOR_ERROR(DiagnosticCode::UNDEFINED_INTRINSIC_FUNCTION, "missing intrinsic debugtrap()",
-                                call.location);
+                            call.location);
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
@@ -197,6 +197,25 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
             const auto expectFunc = llvm::Intrinsic::getOrInsertDeclaration(
                 module.get(), llvm::Intrinsic::expect, {cond->getType()});
             return builder->CreateCall(expectFunc, {cond, builder->getFalse()}, "unlikely");
+        }
+
+    case Intrinsic::Assume:
+        {
+            if (call.arguments.empty())
+            {
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "assume requires 1 argument",
+                    call.location
+                );
+            }
+
+            auto cond = generate_expression(*call.arguments[0]);
+            cond = cast_value(cond, builder->getInt1Ty());
+            const auto assumeFunc = llvm::Intrinsic::getOrInsertDeclaration(
+                module.get(), llvm::Intrinsic::assume);
+            builder->CreateCall(assumeFunc, {cond});
+            return cond;
         }
 
     case Intrinsic::AwaitBlock:
@@ -440,41 +459,77 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     llvm::Function* func = it->second;
     const llvm::FunctionType* funcType = func->getFunctionType();
     std::vector<llvm::Value*> args;
-    size_t argIdx = 0;
-    for (const auto& arg : expr.arguments)
+
+    // Check if function has [Location] parameter attributes
+    const auto funcSym = symbols->lookupFunction(expr.name.token_name);
+    bool hasTransparentParams = funcSym && funcSym->callerArity() != funcSym->arity();
+
+    if (hasTransparentParams)
     {
-        llvm::Value* argVal = generate_expression(*arg);
-
-        // Only coerce str/slice -> ptr when the target parameter expects a pointer
-        const bool targetIsPtr = argIdx < funcType->getNumParams()
-                                     ? funcType->getParamType(argIdx)->isPointerTy()
-                                     : funcType->isVarArg(); // variadic extra args always need raw ptrs
-        if (targetIsPtr)
+        size_t userArgIdx = 0;
+        for (size_t paramIdx = 0; paramIdx < funcSym->arity(); paramIdx++)
         {
-            argVal = coerce_str_to_ptr(argVal);
-        }
-
-        if (argIdx < funcType->getNumParams())
-        {
-            llvm::Type* expectedType = funcType->getParamType(argIdx);
-            if (is_object_type(expectedType) && argVal->getType() != expectedType)
+            if (funcSym->paramHasAttribute(paramIdx, "Location"))
             {
-                argVal = box_value(argVal, get_djinn_type_name(*arg, argVal));
+                inject_location_argument(args, expr.name.location);
             }
-            argVal = cast_value(argVal, expectedType);
-        }
-        else if (funcType->isVarArg())
-        {
-            if (argVal->getType()->isIntegerTy() &&
-                argVal->getType()->getIntegerBitWidth() < 32)
+            else if (userArgIdx < expr.arguments.size())
             {
-                argVal = argVal->getType()->getIntegerBitWidth() == 1
-                             ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
-                             : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                llvm::Value* argVal = generate_expression(*expr.arguments[userArgIdx]);
+                const bool targetIsPtr = paramIdx < funcType->getNumParams()
+                                             ? funcType->getParamType(paramIdx)->isPointerTy()
+                                             : false;
+                if (targetIsPtr)
+                    argVal = coerce_str_to_ptr(argVal);
+                if (paramIdx < funcType->getNumParams())
+                {
+                    llvm::Type* expectedType = funcType->getParamType(paramIdx);
+                    if (is_object_type(expectedType) && argVal->getType() != expectedType)
+                        argVal = box_value(argVal, get_djinn_type_name(*expr.arguments[userArgIdx], argVal));
+                    argVal = cast_value(argVal, expectedType);
+                }
+                args.push_back(argVal);
+                userArgIdx++;
             }
         }
-        args.push_back(argVal);
-        argIdx++;
+    }
+    else
+    {
+        size_t argIdx = 0;
+        for (const auto& arg : expr.arguments)
+        {
+            llvm::Value* argVal = generate_expression(*arg);
+
+            const bool targetIsPtr = argIdx < funcType->getNumParams()
+                                         ? funcType->getParamType(argIdx)->isPointerTy()
+                                         : funcType->isVarArg();
+            if (targetIsPtr)
+            {
+                argVal = coerce_str_to_ptr(argVal);
+            }
+
+            if (argIdx < funcType->getNumParams())
+            {
+                llvm::Type* expectedType = funcType->getParamType(argIdx);
+                if (is_object_type(expectedType) && argVal->getType() != expectedType)
+                {
+                    argVal = box_value(argVal, get_djinn_type_name(*arg, argVal));
+                }
+                argVal = cast_value(argVal, expectedType);
+            }
+            else if (funcType->isVarArg())
+            {
+                if (argVal->getType()->isIntegerTy() &&
+                    argVal->getType()->getIntegerBitWidth() < 32)
+                {
+                    argVal = argVal->getType()->getIntegerBitWidth() == 1
+                                 ? builder->CreateZExt(argVal, builder->getInt32Ty(), "vararg_promote")
+                                 : builder->CreateSExt(argVal, builder->getInt32Ty(), "vararg_promote");
+                }
+            }
+            args.push_back(argVal);
+            argIdx++;
+        }
     }
 
     auto call = builder->CreateCall(func, args);
@@ -1091,14 +1146,45 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         }
     }
 
-    // Inject caller file and line for Debug::assert calls
-    if (isStaticCall && call.name.token_name == "assert" && structName.find("Debug") != std::string::npos)
+    // Inject compiler-provided arguments for [Location] parameter attributes
+    if (structDef)
     {
-        std::string fileStr = call.name.location.fileId.empty() ? "<unknown>" : call.name.location.fileId;
-        auto* fileConst = builder->CreateGlobalStringPtr(fileStr, "assert_file");
-        args.push_back(fileConst);
-        args.push_back(builder->getInt32(call.name.location.line));
+        if (const auto method = structDef->getMethod(call.name.token_name))
+        {
+            for (size_t i = 0; i < method->paramAttributes.size(); i++)
+            {
+                if (method->paramHasAttribute(i, "Location"))
+                {
+                    inject_location_argument(args, call.name.location);
+                }
+            }
+        }
     }
 
     return builder->CreateCall(func, args);
+}
+
+void Generator::inject_location_argument(std::vector<llvm::Value*>& args, const SourceLocation& callSite)
+{
+    std::string fileStr = callSite.fileId.empty() ? "<unknown>" : callSite.fileId;
+    auto* fileConst = builder->CreateGlobalStringPtr(fileStr, "loc_file");
+    auto* lineConst = builder->getInt32(callSite.line);
+    auto* colConst = builder->getInt32(callSite.column);
+
+    const std::string resolvedLocation = currentScope->resolve_alias("Location");
+    StructDef* locationDef = currentScope->lookup_struct(resolvedLocation);
+    if (locationDef && locationDef->llvmType)
+    {
+        auto* locAlloca = builder->CreateAlloca(locationDef->llvmType, nullptr, "caller_loc");
+        builder->CreateStore(fileConst, builder->CreateStructGEP(locationDef->llvmType, locAlloca, 0));
+        builder->CreateStore(lineConst, builder->CreateStructGEP(locationDef->llvmType, locAlloca, 1));
+        builder->CreateStore(colConst, builder->CreateStructGEP(locationDef->llvmType, locAlloca, 2));
+        args.push_back(builder->CreateLoad(locationDef->llvmType, locAlloca, "loc"));
+    }
+    else
+    {
+        args.push_back(fileConst);
+        args.push_back(lineConst);
+        args.push_back(colConst);
+    }
 }

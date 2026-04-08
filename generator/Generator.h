@@ -307,6 +307,9 @@ private:
     // Centralized attribute application
     void apply_attributes(llvm::Function* func, const std::vector<AttributeSymbol>& attrs);
     void apply_implicit_attributes(llvm::Function* func);
+
+    // Parameter attribute injection
+    void inject_location_argument(std::vector<llvm::Value*>& args, const SourceLocation& callSite);
 };
 
 #endif //DJINN_GENERATOR_H

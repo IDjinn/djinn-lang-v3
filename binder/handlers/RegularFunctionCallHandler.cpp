@@ -27,18 +27,22 @@ namespace djinn::binder {
             return nullptr;
         }
 
-        if (!funcSym->isVariadic && call.arguments.size() != funcSym->arity()) {
+        const size_t expectedArgs = funcSym->callerArity();
+        if (!funcSym->isVariadic && call.arguments.size() != expectedArgs)
+        {
             diagnostics.emitAndPrint(Diagnostic(
                 Severity::Error, DiagnosticCode::TYPE_MISMATCH,
                 "function '" + call.name.token_name + "' expects " +
-                std::to_string(funcSym->arity()) +
+                std::to_string(expectedArgs) +
                 " arguments but got " + std::to_string(call.arguments.size()),
                 call.name.location));
-        } else if (funcSym->isVariadic && call.arguments.size() < funcSym->arity()) {
+        }
+        else if (funcSym->isVariadic && call.arguments.size() < expectedArgs)
+        {
             diagnostics.emitAndPrint(Diagnostic(
                 Severity::Error, DiagnosticCode::TYPE_MISMATCH,
                 "function '" + call.name.token_name + "' expects at least " +
-                std::to_string(funcSym->arity()) +
+                std::to_string(expectedArgs) +
                 " arguments but got " + std::to_string(call.arguments.size()),
                 call.name.location));
         }

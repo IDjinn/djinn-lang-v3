@@ -42,11 +42,13 @@ namespace djinn::binder {
         }
 
         // Validate argument count
-        if (call.arguments.size() != ctor->arity()) {
+        const size_t expectedArgs = ctor->callerArity();
+        if (call.arguments.size() != expectedArgs)
+        {
             diagnostics.emitAndPrint(Diagnostic(
                 Severity::Error, DiagnosticCode::TYPE_MISMATCH,
                 "constructor '" + call.name.token_name + "' expects " +
-                std::to_string(ctor->arity()) +
+                std::to_string(expectedArgs) +
                 " arguments but got " + std::to_string(call.arguments.size()),
                 call.name.location));
         }

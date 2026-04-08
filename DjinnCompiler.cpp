@@ -106,10 +106,10 @@ namespace
 
 const std::string preludes[] = {
     // DO NOT TOUCH IT! ORDERING MATTERS
+    "sys/intrinsics.djinn",
     "sys/debug.djinn",
     "sys/console.djinn",
     "types/types.djinn",
-    "sys/intrinsics.djinn",
     "builtin/coro.djinn",
 };
 
@@ -525,6 +525,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                         const auto& preludeProgram = programs.back();
                         for (const auto& s : preludeProgram->structs) preludeTypeNames.push_back(s->name.token_name);
                         for (const auto& e : preludeProgram->enums) preludeTypeNames.push_back(e->name.token_name);
+                        for (const auto& a : preludeProgram->attributeDecls)
+                            if (!a->fields.empty()) preludeTypeNames.push_back(a->name.token_name);
                     }
                 }
                 catch (const CompileError& compile_error)
@@ -558,6 +560,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         {
             for (const auto& s : prog->structs) stdTypeNames.push_back(s->name.token_name);
             for (const auto& e : prog->enums) stdTypeNames.push_back(e->name.token_name);
+            for (const auto& a : prog->attributeDecls)
+                if (!a->fields.empty()) stdTypeNames.push_back(a->name.token_name);
         }
 
         if (fs::exists(path))
@@ -777,6 +781,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
                     for (const auto& s : program->structs) preludeTypeNames.push_back(s->name.token_name);
                     for (const auto& e : program->enums) preludeTypeNames.push_back(e->name.token_name);
+                    for (const auto& a : program->attributeDecls)
+                        if (!a->fields.empty()) preludeTypeNames.push_back(a->name.token_name);
 
                     programs.emplace_back(std::move(program));
                 }
@@ -850,6 +856,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         {
             for (const auto& s : prog->structs) parser.registerKnownType(s->name.token_name);
             for (const auto& e : prog->enums) parser.registerKnownType(e->name.token_name);
+            for (const auto& a : prog->attributeDecls)
+                if (!a->fields.empty()) parser.registerKnownType(a->name.token_name);
         }
 
         auto program = parser.parse("main");

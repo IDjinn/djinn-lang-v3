@@ -9,43 +9,43 @@ void Generator::apply_attributes(llvm::Function* func, const std::vector<Attribu
 {
     for (const auto& attr : attrs)
     {
-        if (attr.name == "force-inline")
+        if (attr.name == "ForceInline")
         {
             func->addFnAttr(llvm::Attribute::AlwaysInline);
         }
-        else if (attr.name == "no-inline")
+        else if (attr.name == "NoInline")
         {
             func->addFnAttr(llvm::Attribute::NoInline);
         }
-        else if (attr.name == "noreturn")
+        else if (attr.name == "NoReturn")
         {
             func->addFnAttr(llvm::Attribute::NoReturn);
         }
-        else if (attr.name == "cold")
+        else if (attr.name == "Cold")
         {
             func->addFnAttr(llvm::Attribute::Cold);
         }
-        else if (attr.name == "hot")
+        else if (attr.name == "Hot")
         {
             func->addFnAttr(llvm::Attribute::Hot);
         }
-        else if (attr.name == "nosync")
+        else if (attr.name == "NoSync")
         {
             func->addFnAttr(llvm::Attribute::NoSync);
         }
-        else if (attr.name == "nounwind")
+        else if (attr.name == "NoUnwind")
         {
             func->addFnAttr(llvm::Attribute::NoUnwind);
         }
-        else if (attr.name == "willreturn")
+        else if (attr.name == "WillReturn")
         {
             func->addFnAttr(llvm::Attribute::WillReturn);
         }
-        else if (attr.name == "norecurse")
+        else if (attr.name == "NoRecurse")
         {
             func->addFnAttr(llvm::Attribute::NoRecurse);
         }
-        else if (attr.name == "llvm")
+        else if (attr.name == "Llvm")
         {
             // Escape hatch: pass raw LLVM attribute strings
             for (const auto& arg : attr.args)

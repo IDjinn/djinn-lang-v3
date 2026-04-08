@@ -56,7 +56,10 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
 
     for (const auto& param : decl.parameters)
     {
-        funcSym->addParameter(param.name.token_name, *param.type);
+        std::vector<AttributeSymbol> paramAttrs;
+        for (const auto& attr : param.attributes)
+            paramAttrs.emplace_back(attr.name.token_name, attr.args);
+        funcSym->addParameter(param.name.token_name, *param.type, false, std::move(paramAttrs));
     }
 
     if (!_global_scope->defineFunction(funcSym))

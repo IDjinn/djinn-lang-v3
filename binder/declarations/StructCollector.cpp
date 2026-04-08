@@ -6,12 +6,12 @@
 #include <unordered_set>
 
 static const std::unordered_set<std::string> knownAttributes = {
-    "force-inline", "no-inline", "noreturn", "hot", "cold",
-    "nosync", "nounwind", "willreturn", "norecurse",
-    "intrinsic", "no-mangle", "no_mangle", "attribute",
-    "align", "volatile", "restrict", "nocapture",
-    "readonly", "writeonly", "nonnull",
-    "deprecated", "llvm", "sync"
+    "intrinsic", "no_mangle", "attribute", "sync",
+    "ForceInline", "NoInline", "NoReturn", "Hot", "Cold",
+    "NoSync", "NoUnwind", "WillReturn", "NoRecurse",
+    "Align", "Volatile", "Restrict", "NoCapture",
+    "ReadOnly", "WriteOnly", "NonNull", "NoMangle",
+    "Deprecated", "Llvm", "Location"
 };
 
 void Binder::collectStruct(const StructDeclaration& decl, const std::string& prefix) const
@@ -51,7 +51,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         {
             bool isConst = field.isConstant || decl.isConstExpr;
             structSym->addField(field.name.token_name, *field.type, false,
-                                isConst, field.initializer.get());
+                                isConst, field.initializer.get(), field.name.location);
         }
     }
 
@@ -109,7 +109,10 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
 
         for (const auto& param : method->parameters)
         {
-            methodSym->addParameter(param.name.token_name, *param.type);
+            std::vector<AttributeSymbol> paramAttrs;
+            for (const auto& attr : param.attributes)
+                paramAttrs.emplace_back(attr.name.token_name, attr.args);
+            methodSym->addParameter(param.name.token_name, *param.type, std::move(paramAttrs));
         }
 
         // Add variadic arr<object> parameter AFTER normal params

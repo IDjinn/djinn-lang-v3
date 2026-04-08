@@ -169,6 +169,7 @@ struct FunctionSymbol : Symbol
     std::vector<Type> paramTypes;
     std::vector<std::string> paramNames;
     std::vector<bool> paramMutable;
+    std::vector<std::vector<AttributeSymbol>> paramAttributes;
     bool isVariadic = false;
     bool isAsync = false;
     std::unique_ptr<Block> body;
@@ -181,11 +182,13 @@ struct FunctionSymbol : Symbol
     {
     }
 
-    void addParameter(const std::string& paramName, const Type& paramType, bool paramIsMutable = false)
+    void addParameter(const std::string& paramName, const Type& paramType, bool paramIsMutable = false,
+                      std::vector<AttributeSymbol> attrs = {})
     {
         paramNames.push_back(paramName);
         paramTypes.push_back(paramType);
         paramMutable.push_back(paramIsMutable);
+        paramAttributes.push_back(std::move(attrs));
     }
 
     void setBody(std::unique_ptr<Block> b)
@@ -195,6 +198,27 @@ struct FunctionSymbol : Symbol
 
     [[nodiscard]] bool hasBody() const { return body != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
+
+    [[nodiscard]] size_t callerArity() const
+    {
+        size_t count = 0;
+        for (size_t i = 0; i < paramAttributes.size(); i++)
+        {
+            bool transparent = false;
+            for (const auto& a : paramAttributes[i])
+                if (a.name == "Location") transparent = true;
+            if (!transparent) count++;
+        }
+        return count;
+    }
+
+    [[nodiscard]] bool paramHasAttribute(size_t idx, const std::string& attr) const
+    {
+        if (idx >= paramAttributes.size()) return false;
+        for (const auto& a : paramAttributes[idx])
+            if (a.name == attr) return true;
+        return false;
+    }
 };
 
 struct ExternFunctionSymbol : FunctionSymbol
@@ -225,15 +249,16 @@ struct MethodSymbol : Symbol
     Type returnType;
     std::vector<Type> paramTypes;
     std::vector<std::string> paramNames;
+    std::vector<std::vector<AttributeSymbol>> paramAttributes;
     std::vector<GenericParamInfo> genericParams;
     std::string variadicName;
     bool isAbstract = false;
     bool isStatic = false;
-    bool isConstructor = false; // True if this is a constructor (name == struct name)
-    bool isAsync = false; // True if this is an async method
-    bool isOperator = false; // True if this is an operator overload
-    std::string operatorCanonicalName; // e.g., "__op_add", "__op_eq"
-    std::string structName; // Name of the struct this constructor belongs to (for constructors only)
+    bool isConstructor = false;
+    bool isAsync = false;
+    bool isOperator = false;
+    std::string operatorCanonicalName;
+    std::string structName;
     std::vector<AttributeSymbol> attributes;
 
     Block* body = nullptr;
@@ -245,10 +270,12 @@ struct MethodSymbol : Symbol
     {
     }
 
-    void addParameter(const std::string& paramName, const Type& paramType)
+    void addParameter(const std::string& paramName, const Type& paramType,
+                      std::vector<AttributeSymbol> attrs = {})
     {
         paramNames.push_back(paramName);
         paramTypes.push_back(paramType);
+        paramAttributes.push_back(std::move(attrs));
     }
 
     void addGenericParam(const std::string& param)
@@ -265,6 +292,27 @@ struct MethodSymbol : Symbol
     [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
     [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
+
+    [[nodiscard]] size_t callerArity() const
+    {
+        size_t count = 0;
+        for (size_t i = 0; i < paramAttributes.size(); i++)
+        {
+            bool transparent = false;
+            for (const auto& a : paramAttributes[i])
+                if (a.name == "Location") transparent = true;
+            if (!transparent) count++;
+        }
+        return count;
+    }
+
+    [[nodiscard]] bool paramHasAttribute(size_t idx, const std::string& attr) const
+    {
+        if (idx >= paramAttributes.size()) return false;
+        for (const auto& a : paramAttributes[idx])
+            if (a.name == attr) return true;
+        return false;
+    }
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
@@ -368,10 +416,11 @@ struct StructSymbol : Symbol
     }
 
     void addField(const std::string& fieldName, const Type& fieldType, const bool fieldIsMutable = false,
-                  const bool fieldIsConstant = false, Expression* fieldInitializer = nullptr)
+                  const bool fieldIsConstant = false, Expression* fieldInitializer = nullptr,
+                  const SourceLocation& loc = {})
     {
         fields.push_back({
-            SymbolKind::Struct, fieldName, fieldType, {}, fieldIsMutable, fieldIsConstant, fieldInitializer
+            SymbolKind::Struct, fieldName, fieldType, loc, fieldIsMutable, fieldIsConstant, fieldInitializer
         });
     }
 

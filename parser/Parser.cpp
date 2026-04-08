@@ -350,10 +350,12 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
                 method->variadic = std::make_unique<SourceIdentifier>(makeSourceIdentifier(identifier));
                 break;
             }
+            auto paramAttrs = parse_attributes();
             auto paramType = parse_type();
             const Token& paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
             bool isMutable = match(TokenType::MUT);
-            method->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken), isMutable);
+            method->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken), isMutable,
+                                            std::move(paramAttrs));
         }
         while (match(TokenType::COMMA));
     }
@@ -973,6 +975,10 @@ void Parser::parse_top_level_declarations(Program* program)
         }
         else if (check(TokenType::IF))
             program->compileTimeBlocks.push_back(parse_compile_time_block(program->name));
+        else if (checkContextual("attribute"))
+        {
+            program->attributeDecls.push_back(parse_attribute_declaration());
+        }
         else if (check(TokenType::ASYNC))
         {
             advance();
@@ -1148,6 +1154,10 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             {
                 program->staticVars.push_back(parse_static_var());
             }
+            else if (checkContextual("attribute"))
+            {
+                program->attributeDecls.push_back(parse_attribute_declaration());
+            }
             else if (check(TokenType::ASYNC))
             {
                 advance(); // consume 'async'
@@ -1209,9 +1219,11 @@ std::vector<Parameter> Parser::parse_parameters()
     {
         do
         {
+            auto attrs = parse_attributes();
             auto type = this->parse_type();
             const Token& paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
-            parameters.emplace_back(std::move(type), makeSourceIdentifier(paramNameToken), match(TokenType::MUT));
+            parameters.emplace_back(std::move(type), makeSourceIdentifier(paramNameToken), match(TokenType::MUT),
+                                    std::move(attrs));
         }
         while (match(TokenType::COMMA));
     }
@@ -2870,10 +2882,12 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_operator(const bool allow
     {
         do
         {
+            auto paramAttrs = parse_attributes();
             auto paramType = parse_type();
             const Token& paramNameToken = expect("Esperado nome do parâmetro", TokenType::IDENTIFIER);
             bool isMutable = match(TokenType::MUT);
-            method->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken), isMutable);
+            method->parameters.emplace_back(std::move(paramType), makeSourceIdentifier(paramNameToken), isMutable,
+                                            std::move(paramAttrs));
         }
         while (match(TokenType::COMMA));
     }
@@ -2915,7 +2929,71 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_operator(const bool allow
     return method;
 }
 
-// macro name { (params) => { body } }
+bool Parser::checkContextual(const std::string& keyword)
+{
+    return check(TokenType::IDENTIFIER) && peek().value == keyword;
+}
+
+// attribute Name(targets) { fields } | attribute Name(targets);
+std::unique_ptr<AttributeDeclaration> Parser::parse_attribute_declaration()
+{
+    advance(); // consume "attribute" identifier
+    const Token& nameToken = expect("Esperado nome do atributo", TokenType::IDENTIFIER);
+    auto name = makeSourceIdentifier(nameToken);
+
+    expect("Esperado '(' para targets do atributo", TokenType::LPAREN);
+
+    std::vector<AttributeArg> targetArgs;
+    if (!check(TokenType::RPAREN))
+    {
+        do
+        {
+            AttributeArg arg;
+            arg.location = SourceLocation(peek().position, peek().value.length());
+            std::string val = expect("Esperado target do atributo", TokenType::IDENTIFIER).value;
+            while (match(TokenType::DOT))
+            {
+                val += "." + expect("Esperado nome após '.'", TokenType::IDENTIFIER).value;
+            }
+            while (match(TokenType::PIPE))
+            {
+                val += " | ";
+                std::string next = expect("Esperado identificador", TokenType::IDENTIFIER).value;
+                while (match(TokenType::DOT))
+                {
+                    next += "." + expect("Esperado nome após '.'", TokenType::IDENTIFIER).value;
+                }
+                val += next;
+            }
+            arg.value = val;
+            targetArgs.push_back(std::move(arg));
+        }
+        while (match(TokenType::COMMA));
+    }
+
+    expect("Esperado ')' após targets do atributo", TokenType::RPAREN);
+
+    if (match(TokenType::SEMICOLON))
+    {
+        LOG_DEBUG("[parser] attribute declaration parsed: '%s' (no fields)", nameToken.value.c_str());
+        return std::make_unique<AttributeDeclaration>(std::move(name), std::move(targetArgs));
+    }
+
+    expect("Esperado '{' para campos do atributo", TokenType::LBRACE);
+    std::vector<AttributeField> fields;
+    while (!check(TokenType::RBRACE) && !isAtEnd())
+    {
+        auto fieldType = parse_type();
+        const Token& fieldNameToken = expect("Esperado nome do campo", TokenType::IDENTIFIER);
+        expect("Esperado ';' após campo do atributo", TokenType::SEMICOLON);
+        fields.emplace_back(std::move(fieldType), makeSourceIdentifier(fieldNameToken));
+    }
+    expect("Esperado '}' após campos do atributo", TokenType::RBRACE);
+
+    LOG_DEBUG("[parser] attribute declaration parsed: '%s' (%zu fields)", nameToken.value.c_str(), fields.size());
+    return std::make_unique<AttributeDeclaration>(std::move(name), std::move(targetArgs), std::move(fields));
+}
+
 // static [mut] type name = expr;
 std::unique_ptr<StaticVarDeclaration> Parser::parse_static_var()
 {

@@ -201,8 +201,9 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
                 }
                 else
                 {
-                    throw CompileError(DiagnosticCode::TYPE_MISMATCH,
-                                       "const field '" + field.name + "' initializer must be a compile-time constant");
+                    GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                                    "const field '" + field.name + "' initializer must be a compile-time constant",
+                                    field.location);
                 }
             }
             else if (def->hasAttribute("intrinsic") || struct_symbol.hasAttribute("intrinsic"))

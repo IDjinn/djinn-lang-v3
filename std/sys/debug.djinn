@@ -1,3 +1,5 @@
+import std::sys;
+
 namespace std::debug;
 
 struct Debug {
@@ -5,12 +7,20 @@ struct Debug {
         debugtrap();
     }
 
-    public static void assert(bool condition, i8* message, i8* file, i32 line) {
-        if (condition) {
-            return;
-        }
+    [ForceInline]
+    public static void assert(bool condition, i8* message, [Location] Location sourceLocation) {
+          if (unlikely(condition == false)) {
+              Debug.assert_fail(message, sourceLocation);
+          }
+          assume(condition);
+    }
 
-        printf("assertion failed: %s\n  at %s:%d\n", message, file, line);
-        debugtrap();
+    [Cold]
+    [NoInline]
+    [NoReturn]
+    private static void assert_fail(i8* message, Location sourceLocation) {
+      printf("assertion failed: %s\n  at %s:%d:%d\n", message, sourceLocation.fileName, sourceLocation.line, sourceLocation.column);
+      debugtrap();
+      unreacheable();
     }
 }

@@ -21,6 +21,24 @@ BindingResult Binder::bind(const Program& program)
     collectDeclarations(program);
     processImports(program);
 
+    // Collect attribute declarations as structs
+    {
+        const std::string attrPrefix = program.getNamespacePrefix();
+        for (const auto& attrDecl : program.attributeDecls)
+        {
+            const std::string qualifiedName = attrPrefix + attrDecl->name.token_name;
+            if (!attrDecl->fields.empty())
+            {
+                auto structSym = std::make_shared<StructSymbol>(qualifiedName);
+                for (const auto& field : attrDecl->fields)
+                {
+                    structSym->addField(field.name.token_name, *field.type, false);
+                }
+                _global_scope->defineStruct(structSym);
+            }
+        }
+    }
+
     // Collect constexpr declarations
     const std::string prefix = program.getNamespacePrefix();
     for (const auto& ce : program.constExprs)
@@ -136,6 +154,25 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
                   program->name.c_str(), program->fileNamespace.c_str(),
                   program->structs.size(), program->enums.size(), program->functions.size());
         collectDeclarations(*program);
+    }
+
+    // Collect attribute declarations — register as structs for typed attributes (e.g., Location)
+    for (const auto& program : programs)
+    {
+        const std::string prefix = program->getNamespacePrefix();
+        for (const auto& attrDecl : program->attributeDecls)
+        {
+            const std::string qualifiedName = prefix + attrDecl->name.token_name;
+            if (!attrDecl->fields.empty())
+            {
+                auto structSym = std::make_shared<StructSymbol>(qualifiedName);
+                for (const auto& field : attrDecl->fields)
+                {
+                    structSym->addField(field.name.token_name, *field.type, false);
+                }
+                _global_scope->defineStruct(structSym);
+            }
+        }
     }
 
     LOG_DEBUG("[binder] total symbols after collection: %zu", _global_scope->symbols().size());

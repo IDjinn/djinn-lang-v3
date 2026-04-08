@@ -95,6 +95,10 @@ private:
 
     std::unique_ptr<StaticVarDeclaration> parse_static_var();
 
+    std::unique_ptr<AttributeDeclaration> parse_attribute_declaration();
+
+    bool checkContextual(const std::string& keyword);
+
     std::unique_ptr<FunctionDeclaration> parse_function();
 
     std::unique_ptr<FunctionDeclaration> parse_function_with_type(std::unique_ptr<Type> returnType);

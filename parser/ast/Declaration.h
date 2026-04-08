@@ -117,9 +117,12 @@ struct MethodParameter
     std::unique_ptr<Type> type;
     SourceIdentifier name;
     bool isMutable = false;
+    std::vector<AttributeUsageDeclaration> attributes;
 
-    MethodParameter(std::unique_ptr<Type> type, SourceIdentifier name, bool isMutable = false)
-        : type(std::move(type)), name(std::move(name)), isMutable(isMutable)
+    MethodParameter(std::unique_ptr<Type> type, SourceIdentifier name, bool isMutable = false,
+                    std::vector<AttributeUsageDeclaration> attrs = {})
+        : type(std::move(type)), name(std::move(name)), isMutable(isMutable),
+          attributes(std::move(attrs))
     {
     }
 };
@@ -462,10 +465,12 @@ struct Parameter : Location
     std::unique_ptr<Type> type;
     SourceIdentifier name;
     bool isMutable;
+    std::vector<AttributeUsageDeclaration> attributes;
 
-    Parameter(std::unique_ptr<Type> type, SourceIdentifier name, const bool isMutable = false) : type(std::move(type)),
-        name(std::move(name)),
-        isMutable(isMutable)
+    Parameter(std::unique_ptr<Type> type, SourceIdentifier name, const bool isMutable = false,
+              std::vector<AttributeUsageDeclaration> attrs = {})
+        : type(std::move(type)), name(std::move(name)), isMutable(isMutable),
+          attributes(std::move(attrs))
     {
     }
 
@@ -855,6 +860,37 @@ struct MacroDeclaration : Location
 
 struct Program;
 
+struct AttributeField
+{
+    std::unique_ptr<Type> type;
+    SourceIdentifier name;
+
+    AttributeField(std::unique_ptr<Type> type, SourceIdentifier name)
+        : type(std::move(type)), name(std::move(name))
+    {
+    }
+};
+
+struct AttributeDeclaration : Location
+{
+    SourceIdentifier name;
+    std::vector<AttributeArg> targetArgs;
+    std::vector<AttributeField> fields;
+
+    AttributeDeclaration(SourceIdentifier name, std::vector<AttributeArg> targetArgs,
+                         std::vector<AttributeField> fields = {})
+        : name(std::move(name)), targetArgs(std::move(targetArgs)), fields(std::move(fields))
+    {
+        location = this->name.location;
+    }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "AttributeDeclaration(" << name.token_name << ", " << fields.size() << " fields)";
+    }
+};
+
 struct CompileTimeBlock : Location
 {
     std::unique_ptr<Expression> condition;
@@ -909,6 +945,7 @@ struct Program : Location
     std::vector<std::unique_ptr<MacroDeclaration>> macros;
     std::vector<std::unique_ptr<CompileTimeBlock>> compileTimeBlocks;
     std::vector<std::unique_ptr<StaticVarDeclaration>> staticVars;
+    std::vector<std::unique_ptr<AttributeDeclaration>> attributeDecls;
 
     explicit Program(const std::string& name)
     {

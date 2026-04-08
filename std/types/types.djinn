@@ -39,7 +39,7 @@ impl Hashable, Equatable for arr<T> {
 }
 
 impl Hashable for i128, u128 {
-    [force-inline] u64 hash() {
+    [ForceInline] u64 hash() {
         u64 hi = this >> 64;
         u64 lo = (u64)this;
         mut u64 x = hi ^ (lo * 0x9e3779b97f4a7c15);
@@ -54,7 +54,7 @@ impl Hashable for i128, u128 {
 }
 
 impl Hashable for i64, u64 {
-    [force-inline] u64 hash() {
+    [ForceInline] u64 hash() {
         mut u64 x = (u64)this + 0x9e3779b97f4a7c15;
         x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
         x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
@@ -65,13 +65,13 @@ impl Hashable for i64, u64 {
 }
 
 impl Hashable for i8, i16, i32, u8, u16, u32 {
-     [force-inline] u64 hash() {
+     [ForceInline] u64 hash() {
         return this;
     }
 }
 
 impl Hashable for f32 {
-    [force-inline] u64 hash() {
+    [ForceInline] u64 hash() {
         // Reinterpret f32 bits as u32 via pointer cast, then hash as integer
         f32* p = &this;
         u32* ip = (u32*)p;
@@ -83,7 +83,7 @@ impl Hashable for f32 {
 }
 
 impl Hashable for f64 {
-    [force-inline] u64 hash() {
+    [ForceInline] u64 hash() {
         // Reinterpret f64 bits as u64 via pointer cast, then hash
         f64* p = &this;
         u64* ip = (u64*)p;
@@ -110,7 +110,7 @@ struct TypeInfo {
     i8* name;
     u8 kind;
 
-    [force-inline] u64 hash() {
+    [ForceInline] u64 hash() {
         mut u64 x = (u64)this.id;
         x = x * 31 + (u64)this.size;
         x = x * 31 + (u64)this.kind;
@@ -126,7 +126,7 @@ struct object : Hashable {
     TypeInfo* type;
     void* data;
 
-    [force-inline] u64 hash() {
+    [ForceInline] u64 hash() {
         return this.type.hash();
     }
 }

@@ -14,7 +14,7 @@ TEST(Attributes, ForceInlineGeneratesAlwaysInline)
 {
     const auto source = R"(
         struct Math {
-            [force-inline]
+            [ForceInline]
             public static i32 add(i32 a, i32 b) {
                 return a + b;
             }
@@ -35,7 +35,7 @@ TEST(Attributes, NoInlineGeneratesNoInline)
 {
     const auto source = R"(
         struct Math {
-            [no-inline]
+            [NoInline]
             public static i32 add(i32 a, i32 b) {
                 return a + b;
             }
@@ -56,7 +56,7 @@ TEST(Attributes, NoReturnAttribute)
 {
     const auto source = R"(
         struct Util {
-            [noreturn]
+            [NoReturn]
             public static void abort() {
                 while (true) {}
             }
@@ -77,7 +77,7 @@ TEST(Attributes, ColdAttribute)
 {
     const auto source = R"(
         struct Util {
-            [cold]
+            [Cold]
             public static i32 rare_path() {
                 return -1;
             }
@@ -101,7 +101,7 @@ TEST(Attributes, ColdAttribute)
 TEST(Attributes, ParameterizedAttributeParses)
 {
     const auto source = R"(
-        [align(16)]
+        [Align(16)]
         struct Vec4 {
             f32 x;
             f32 y;
@@ -121,7 +121,7 @@ TEST(Attributes, ParameterizedAttributeParses)
 TEST(Attributes, NamedParameterAttributeParses)
 {
     const auto source = R"(
-        [deprecated(message = "use v2")]
+        [Deprecated(message = "use v2")]
         struct OldApi {
             public static i32 call() {
                 return 0;
@@ -145,8 +145,8 @@ TEST(Attributes, MultipleAttributesOnMethod)
 {
     const auto source = R"(
         struct Math {
-            [force-inline]
-            [hot]
+            [ForceInline]
+            [Hot]
             public static i32 add(i32 a, i32 b) {
                 return a + b;
             }
@@ -188,14 +188,14 @@ TEST(Attributes, ImplicitNounwindOnAllFunctions)
 }
 
 // ============================================================================
-// [llvm(...)] escape hatch
+// [Llvm(...)] escape hatch
 // ============================================================================
 
 TEST(Attributes, LlvmEscapeHatch)
 {
     const auto source = R"(
         struct Util {
-            [llvm("mustprogress")]
+            [Llvm("mustprogress")]
             public static i32 compute(i32 x) {
                 return x * 2;
             }
@@ -209,7 +209,7 @@ TEST(Attributes, LlvmEscapeHatch)
     const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_NE(result.ir.find("mustprogress"), std::string::npos)
-        << "IR should contain raw LLVM attribute from [llvm()] escape hatch";
+        << "IR should contain raw LLVM attribute from [Llvm()] escape hatch";
 }
 
 // ============================================================================

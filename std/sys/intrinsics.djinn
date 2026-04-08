@@ -40,65 +40,42 @@ namespace std::sys;
     const i32 All = 127;
 }
 
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct ForceInline;
+// ============================================================================
+// Attribute declarations
+// ============================================================================
 
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct NoInline;
+attribute ForceInline(AttributeTarget.Function | AttributeTarget.Method);
+attribute NoInline(AttributeTarget.Function | AttributeTarget.Method);
+attribute NoReturn(AttributeTarget.Function | AttributeTarget.Method);
+attribute Hot(AttributeTarget.Function | AttributeTarget.Method);
+attribute Cold(AttributeTarget.Function | AttributeTarget.Method);
+attribute NoSync(AttributeTarget.Function | AttributeTarget.Method);
+attribute NoUnwind(AttributeTarget.Function | AttributeTarget.Method);
+attribute WillReturn(AttributeTarget.Function | AttributeTarget.Method);
+attribute NoRecurse(AttributeTarget.Function | AttributeTarget.Method);
 
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct NoReturn;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct Hot;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct Cold;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct NoSync;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct NoUnwind;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct WillReturn;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct NoRecurse;
-
-[attribute(AttributeTarget.Struct | AttributeTarget.Field | AttributeTarget.Parameter)]
-struct Align {
+attribute Align(AttributeTarget.Struct | AttributeTarget.Field | AttributeTarget.Parameter) {
     i32 value;
 }
 
-[attribute(AttributeTarget.Field | AttributeTarget.Variable)]
-struct Volatile;
+attribute Volatile(AttributeTarget.Field | AttributeTarget.Variable);
+attribute Restrict(AttributeTarget.Parameter);
+attribute NoCapture(AttributeTarget.Parameter);
+attribute ReadOnly(AttributeTarget.Parameter | AttributeTarget.Field);
+attribute WriteOnly(AttributeTarget.Parameter);
+attribute NonNull(AttributeTarget.Parameter | AttributeTarget.ReturnValue);
+attribute NoMangle(AttributeTarget.Function | AttributeTarget.Method | AttributeTarget.Struct);
 
-[attribute(AttributeTarget.Parameter)]
-struct Restrict;
-
-[attribute(AttributeTarget.Parameter)]
-struct NoCapture;
-
-[attribute(AttributeTarget.Parameter | AttributeTarget.Field)]
-struct ReadOnly;
-
-[attribute(AttributeTarget.Parameter)]
-struct WriteOnly;
-
-[attribute(AttributeTarget.Parameter | AttributeTarget.ReturnValue)]
-struct NonNull;
-
-[attribute(AttributeTarget.Function | AttributeTarget.Method | AttributeTarget.Struct)]
-struct NoMangle;
-
-[attribute(AttributeTarget.All)]
-struct Deprecated {
+attribute Deprecated(AttributeTarget.All) {
     i8* message;
 }
 
-[attribute(AttributeTarget.Function | AttributeTarget.Method)]
-struct Llvm {
+attribute Llvm(AttributeTarget.Function | AttributeTarget.Method) {
     i8* attr;
+}
+
+attribute Location(AttributeTarget.Field | AttributeTarget.Parameter | AttributeTarget.Variable) {
+    i8* fileName;
+    i32 line;
+    i32 column;
 }
