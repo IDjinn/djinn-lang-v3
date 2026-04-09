@@ -54,6 +54,11 @@ public:
 
     bool linkModules(const std::vector<std::filesystem::path>& allPaths) const;
 
+    bool libraryMode = false;
+    bool stdDeclOnly = false;
+    std::string moduleName;
+    std::string reflectionMode = "none";
+
 private:
     DiagnosticEngine& _diagnostics;
     std::unique_ptr<llvm::LLVMContext> context;
@@ -302,6 +307,7 @@ private:
     // TypeInfo constants for object boxing (variadics)
     std::unordered_map<std::string, llvm::GlobalVariable*> typeInfoConstants;
     llvm::GlobalVariable* get_or_create_typeinfo(const std::string& typeName, llvm::Type* llvmType);
+    void generate_reflection_data();
     static int32_t compute_type_id(const std::string& typeName);
     static uint8_t compute_type_kind(llvm::Type* type, const std::string& typeName);
     llvm::Value* box_value(llvm::Value* value, const std::string& typeName);

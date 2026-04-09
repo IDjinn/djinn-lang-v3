@@ -46,6 +46,7 @@ struct CompilerOptions
     bool noCache = false;
     bool debugMode = true;
     bool releaseMode = false;
+    std::string reflectionMode = "none"; // none | annotated | all
     std::string outputFileName{};
     std::string outputDirectory{"build"};
     std::filesystem::path stdLibPath{"./std"};

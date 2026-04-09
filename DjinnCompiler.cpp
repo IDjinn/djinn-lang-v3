@@ -437,7 +437,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
     };
 
     const auto stdLibPath = resolve_std_path(options.stdLibPath);
-    const auto stdCanonical = fs::exists(stdLibPath) ? fs::canonical(stdLibPath) : fs::path{};
+    const auto stdCanonical = (options.includeStd && fs::exists(stdLibPath))
+                                  ? fs::canonical(stdLibPath)
+                                  : fs::path{};
 
     std::set<fs::path> parsedFiles;
 
@@ -635,9 +637,23 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
+        generator.libraryMode = options.libraryMode;
+        generator.stdDeclOnly = options.stdDeclOnly;
+        generator.moduleName = options.outputFileName.empty() ? "djinn_module" : options.outputFileName;
+        generator.reflectionMode = options.reflectionMode;
         {
             auto _phase = summary.phase("codegen");
             generator.generate();
+        }
+
+        if (!options.linkLibraries.empty())
+        {
+            auto _phase = summary.phase("link");
+            if (!generator.linkModules(options.linkLibraries))
+            {
+                summary.print();
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
         }
 
         if (!generator.verify())
@@ -932,6 +948,10 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
+        generator.libraryMode = options.libraryMode;
+        generator.stdDeclOnly = options.stdDeclOnly;
+        generator.moduleName = options.outputFileName.empty() ? "djinn_module" : options.outputFileName;
+        generator.reflectionMode = options.reflectionMode;
         generator.generate();
         irVerified = generator.verify();
 

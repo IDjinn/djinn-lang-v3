@@ -318,10 +318,14 @@ void Generator::forward_declare_monomorphized_method(const MethodSymbol& method,
     const auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
     const auto llvmFunc = llvm::Function::Create(
         funcType,
-        llvm::Function::ExternalLinkage,
+        llvm::Function::LinkOnceODRLinkage,
         mangledMethodName,
         *module
     );
+    llvmFunc->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    auto* comdat = module->getOrInsertComdat(mangledMethodName);
+    comdat->setSelectionKind(llvm::Comdat::Any);
+    llvmFunc->setComdat(comdat);
 
     apply_attributes(llvmFunc, method.attributes);
     apply_implicit_attributes(llvmFunc);
@@ -479,10 +483,14 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
         auto* funcType = llvm::FunctionType::get(returnType, paramTypes, false);
         auto* llvmFunc = llvm::Function::Create(
             funcType,
-            llvm::Function::ExternalLinkage,
+            llvm::Function::LinkOnceODRLinkage,
             getterName,
             *module
         );
+        llvmFunc->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+        auto* getComdat = module->getOrInsertComdat(getterName);
+        getComdat->setSelectionKind(llvm::Comdat::Any);
+        llvmFunc->setComdat(getComdat);
         apply_implicit_attributes(llvmFunc);
 
         functions[getterName] = llvmFunc;
@@ -533,10 +541,14 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
         auto* funcType = llvm::FunctionType::get(builder->getVoidTy(), paramTypes, false);
         auto* llvmFunc = llvm::Function::Create(
             funcType,
-            llvm::Function::ExternalLinkage,
+            llvm::Function::LinkOnceODRLinkage,
             setterName,
             *module
         );
+        llvmFunc->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+        auto* setComdat = module->getOrInsertComdat(setterName);
+        setComdat->setSelectionKind(llvm::Comdat::Any);
+        llvmFunc->setComdat(setComdat);
         apply_implicit_attributes(llvmFunc);
 
         functions[setterName] = llvmFunc;

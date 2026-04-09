@@ -141,6 +141,7 @@ struct CompilerConfig
     std::optional<bool> libraryMode;
     std::optional<bool> noCache;
     std::optional<std::string> buildMode;
+    std::optional<std::string> reflectionMode;
 };
 
 struct RuntimeConfig
@@ -210,6 +211,7 @@ struct ProjectConfig
         config.compiler.libraryMode = root.get<bool>("compiler.library-mode");
         config.compiler.noCache = root.get<bool>("compiler.no-cache");
         config.compiler.buildMode = root.get<std::string>("compiler.build-mode");
+        config.compiler.reflectionMode = root.get<std::string>("compiler.reflection-mode");
 
         // runtime
         config.runtime.logger.level = root.get<std::string>("runtime.logger.level", "INFO");
@@ -248,6 +250,8 @@ struct ProjectConfig
                 options.releaseMode = true;
             }
         }
+        if (cc.reflectionMode.has_value())
+            options.reflectionMode = *cc.reflectionMode;
         options.optimizationLevel = cc.generator.optimizationLevel;
 
         if (!cc.output.fileName.empty() && options.outputFileName.empty())

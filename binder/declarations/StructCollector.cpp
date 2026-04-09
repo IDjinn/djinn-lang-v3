@@ -11,7 +11,7 @@ static const std::unordered_set<std::string> knownAttributes = {
     "NoSync", "NoUnwind", "WillReturn", "NoRecurse",
     "Align", "Volatile", "Restrict", "NoCapture",
     "ReadOnly", "WriteOnly", "NonNull", "NoMangle",
-    "Deprecated", "Llvm", "Location"
+    "Deprecated", "Llvm", "Location", "Reflect"
 };
 
 void Binder::collectStruct(const StructDeclaration& decl, const std::string& prefix) const

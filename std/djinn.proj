@@ -1,0 +1,20 @@
+project: "djinn-std"
+version: "1.0.0"
+
+compiler:
+  library-mode: true
+  no-cache: true
+  reflection-mode: all
+
+  output:
+    file: "std"
+    directory: "build"
+    run-after-compile: false
+
+  logger:
+    level: 'INFO'
+
+  generator:
+    optimization-level: 2
+
+  libs: [ ]

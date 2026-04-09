@@ -122,6 +122,40 @@ struct TypeInfo {
     }
 }
 
+struct AttributeInfo {
+    i8* name;
+    i8* value;
+}
+
+struct FieldInfo {
+    i8* name;
+    i32 typeId;
+    u16 offset;
+    u8 flags;
+    u8 attrCount;
+    AttributeInfo* attrs;
+}
+
+struct MethodInfo {
+    i8* name;
+    void* funcPtr;
+    i32 returnTypeId;
+    u8 paramCount;
+    u8 flags;
+    u8 attrCount;
+    AttributeInfo* attrs;
+}
+
+struct TypeInfoExt {
+    TypeInfo base;
+    u16 fieldCount;
+    u16 methodCount;
+    u8 attrCount;
+    FieldInfo* fields;
+    MethodInfo* methods;
+    AttributeInfo* attrs;
+}
+
 struct object : Hashable {
     TypeInfo* type;
     void* data;

@@ -29,6 +29,8 @@ void printUsage(const char* programName)
         << "  -l <file.ll>  Link external .ll module (can be used multiple times)\n"
         << "  --debug       Set build mode to debug\n"
         << "  --release     Set build mode to release (default)\n"
+        << "  --reflect-all       Generate TypeInfoExt for all struct types\n"
+        << "  --reflect-annotated Generate TypeInfoExt only for [Reflect] structs\n"
         << "  --no-std      Don't include standard library\n"
         << "  --std-decl    Include std declarations only (use with -l std.ll)\n"
         << "  -h, --help    Show this help message\n"
@@ -155,6 +157,14 @@ int main(int argc, char* argv[])
         else if (arg == "--bundle")
         {
             options.bundleModules = true;
+        }
+        else if (arg == "--reflect-all")
+        {
+            options.reflectionMode = "all";
+        }
+        else if (arg == "--reflect-annotated")
+        {
+            options.reflectionMode = "annotated";
         }
         else if (arg == "--debug")
         {

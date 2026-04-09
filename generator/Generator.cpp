@@ -101,6 +101,12 @@ void Generator::register_intrinsic_constants()
 
 void Generator::generate()
 {
+    if (!moduleName.empty())
+    {
+        module->setModuleIdentifier(moduleName);
+        module->setSourceFileName(moduleName);
+    }
+
     // PASS 0: Register short-name aliases for namespaced symbols
     LOG_DEBUG("[generator] PASS 0: registering aliases from %zu symbols", symbols->symbols().size());
     for (const auto& [name, sym] : symbols->symbols())
@@ -215,6 +221,19 @@ void Generator::generate()
         }
     }
 
+    // In std-decl mode, skip all body generation — only declarations and struct layouts
+    if (stdDeclOnly)
+    {
+        // Forward-declare global functions too (no bodies)
+        for (const auto& sym : symbols->get_all_functions())
+        {
+            auto fSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
+            forward_declare_function(*fSym);
+        }
+        verify_all_symbols_generated();
+        return;
+    }
+
     // PASS 5b: Generate struct method bodies and properties
     for (const auto& sym : symbols->get_all_structs())
     {
@@ -249,15 +268,20 @@ void Generator::generate()
         generatedFunctions++;
     }
 
-    // PASS 7: Always generate coro wrappers + runtime support (async by default)
-    // All programs use the runtime for memory tracing (__djinn_malloc/__djinn_free)
-    // and async infrastructure
-    hasAsyncFunctions = true; // we set program as async by default!
-    ensure_malloc_free_declared();
-    generate_coro_wrappers();
-    generate_runtime_declarations();
+    // PASS 6c: Generate reflection data (TypeInfoExt) for structs
+    if (reflectionMode != "none")
+        generate_reflection_data();
 
-    if (auto mainSym = symbols->lookupFunction("main"))
+    // PASS 7: Generate coro wrappers + runtime support (skip in library mode)
+    if (!libraryMode)
+    {
+        hasAsyncFunctions = true; // we set program as async by default!
+        ensure_malloc_free_declared();
+        generate_coro_wrappers();
+        generate_runtime_declarations();
+    }
+
+    if (auto mainSym = !libraryMode ? symbols->lookupFunction("main") : nullptr)
     {
         if (mainSym->isAsync)
         {
@@ -382,21 +406,24 @@ void Generator::generate()
 
 void Generator::verify_all_symbols_generated()
 {
-    if (!functions.contains("main"))
+    if (!functions.contains("main") && !libraryMode && !stdDeclOnly)
     {
         generate_default_main();
     }
 
-    const size_t expectedFunctions = symbols->get_all_functions().size();
-    const size_t expectedExternFunctions = symbols->get_all_extern_functions().size();
-    const size_t expectedStructs = symbols->get_all_structs().size();
+    if (!stdDeclOnly)
+    {
+        const size_t expectedFunctions = symbols->get_all_functions().size();
+        const size_t expectedExternFunctions = symbols->get_all_extern_functions().size();
+        const size_t expectedStructs = symbols->get_all_structs().size();
 
-    assert(generatedFunctions == expectedFunctions &&
-        "Not all functions were generated!");
-    assert(generatedExternFunctions == expectedExternFunctions &&
-        "Not all extern functions were generated!");
-    assert(generatedStructs == expectedStructs &&
-        "Not all structs were generated!");
+        assert(generatedFunctions == expectedFunctions &&
+            "Not all functions were generated!");
+        assert(generatedExternFunctions == expectedExternFunctions &&
+            "Not all extern functions were generated!");
+        assert(generatedStructs == expectedStructs &&
+            "Not all structs were generated!");
+    }
 
     // Verify all generated functions exist in the LLVM module
     for (const auto& sym : symbols->get_all_functions())

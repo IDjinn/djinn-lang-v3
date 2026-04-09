@@ -79,3 +79,5 @@ attribute Location(AttributeTarget.Field | AttributeTarget.Parameter | Attribute
     i32 line;
     i32 column;
 }
+
+attribute Reflect(AttributeTarget.Struct);
