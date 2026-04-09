@@ -538,6 +538,14 @@ bool Generator::verify() const
     if (llvm::verifyModule(*module, &errorStream))
     {
         LOG_ERROR("LLVM module verification failed:\n%s", errorStr.c_str());
+        for (auto& fn : *module)
+        {
+            if (fn.isDeclaration()) continue;
+            std::string fnErr;
+            llvm::raw_string_ostream fnStream(fnErr);
+            if (llvm::verifyFunction(fn, &fnStream))
+                LOG_ERROR("  broken function: '%s': %s", fn.getName().str().c_str(), fnErr.c_str());
+        }
         return false;
     }
     return true;
