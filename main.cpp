@@ -108,7 +108,17 @@ int main(int argc, char* argv[])
         }
         else if (arg == "-o" && i + 1 < argc)
         {
-            options.outputFileName = argv[++i];
+            std::string name = argv[++i];
+            if (name.size() > 6 && name.substr(name.size() - 6) == ".djlib")
+            {
+                options.outputDjLib = true;
+                options.libraryMode = true;
+                options.outputFileName = name.substr(0, name.size() - 6);
+            }
+            else
+            {
+                options.outputFileName = name;
+            }
         }
         else if (arg == "-out" && i + 1 < argc)
         {
@@ -186,7 +196,11 @@ int main(int argc, char* argv[])
         }
         else if ((arg == "-l" || arg == "--link") && i + 1 < argc)
         {
-            options.linkLibraries.emplace_back(argv[++i]);
+            fs::path libPath = argv[++i];
+            if (libPath.extension() == ".djlib")
+                options.djlibPaths.push_back(libPath);
+            else
+                options.linkLibraries.push_back(libPath);
         }
         else if (arg[0] == '-')
         {

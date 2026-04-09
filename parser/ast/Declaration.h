@@ -812,10 +812,12 @@ enum class MacroFragmentType
 
 struct MacroParameter
 {
-    MacroFragmentType fragmentType;
+    MacroFragmentType fragmentType = MacroFragmentType::EXPRESSION;
     SourceIdentifier name;
     bool isLocal = false;
     std::string literalToken;
+
+    MacroParameter() = default;
 
     MacroParameter(MacroFragmentType fragmentType, SourceIdentifier name, bool isLocal = false)
         : fragmentType(fragmentType), name(std::move(name)), isLocal(isLocal)

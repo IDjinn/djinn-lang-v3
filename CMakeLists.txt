@@ -103,6 +103,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         binder/ownership/*.cpp
         evaluator/*.cpp
         utils/*.cpp
+        lib/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -120,6 +121,7 @@ file(GLOB_RECURSE DJINN_HEADERS
         binder/ownership/*.h
         visitor/*.h
         evaluator/*.h
+        lib/*.h
 )
 
 
@@ -156,6 +158,9 @@ llvm_map_components_to_libnames(LLVM_LIBS
         MCJIT
         native
         Passes
+        Linker
+        BitWriter
+        BitReader
 )
 
 option(DJINN_DISABLE_BINDER_ASSERTS "Disable binder debug assertions" ON)
@@ -178,6 +183,7 @@ target_compile_options(djinn_lib PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
 target_link_libraries(djinn_lib PRIVATE ${LIBXML2_LIBRARY})
 target_link_libraries(djinn_lib PUBLIC ryml::ryml)
+target_link_libraries(djinn_lib PUBLIC nlohmann_json::nlohmann_json)
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
 
 add_executable(djinn main.cpp)

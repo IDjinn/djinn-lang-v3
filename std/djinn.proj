@@ -7,7 +7,7 @@ compiler:
   reflection-mode: all
 
   output:
-    file: "std"
+    file: "std.djlib"
     directory: "build"
     run-after-compile: false
 

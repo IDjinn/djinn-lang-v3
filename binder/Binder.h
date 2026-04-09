@@ -19,6 +19,11 @@
 #include "../diagnostics/Diagnostic.h"
 #include <cassert>
 
+namespace djlib
+{
+    class DjLibReader;
+}
+
 
 #define BINDER_ERROR(code, msg, token, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
@@ -94,6 +99,8 @@ public:
     {
         _current_scope->defineVariable(name, type, false);
     }
+
+    void injectLibrarySymbols(const djlib::DjLibReader& reader);
 
 private:
     DiagnosticEngine& _diagnostics;

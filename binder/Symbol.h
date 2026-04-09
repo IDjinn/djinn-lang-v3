@@ -125,6 +125,7 @@ struct Symbol
     bool isInitialized = false;
     bool isUsed = false;
     bool isMutable = false;
+    bool isFromLibrary = false;
 
     Symbol(const SymbolKind kind, std::string name, Type type, const SourceLocation loc = {},
            const bool is_mutable = false)
@@ -236,6 +237,11 @@ struct FieldSymbol : Symbol
 {
     bool isConstant = false;
     Expression* initializer = nullptr; // raw pointer, AST owns the memory
+
+    FieldSymbol()
+        : Symbol(SymbolKind::Field, "", Type::voided())
+    {
+    }
 
     FieldSymbol(const SymbolKind kind, const std::string& name, const Type& type, const SourceLocation& loc,
                 const bool is_mutable, const bool is_constant = false, Expression* init = nullptr)
@@ -584,6 +590,8 @@ struct EnumVariant
     std::string name;
     std::vector<Type> associatedTypes;
     unsigned tag = 0; // discriminant value
+
+    EnumVariant() = default;
 
     EnumVariant(std::string name, std::vector<Type> types, unsigned tag = 0)
         : name(std::move(name)), associatedTypes(std::move(types)), tag(tag)

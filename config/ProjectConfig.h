@@ -255,7 +255,16 @@ struct ProjectConfig
         options.optimizationLevel = cc.generator.optimizationLevel;
 
         if (!cc.output.fileName.empty() && options.outputFileName.empty())
+        {
             options.outputFileName = cc.output.fileName;
+            if (cc.output.fileName.size() > 6 &&
+                cc.output.fileName.substr(cc.output.fileName.size() - 6) == ".djlib")
+            {
+                options.outputDjLib = true;
+                options.libraryMode = true;
+                options.outputFileName = cc.output.fileName.substr(0, cc.output.fileName.size() - 6);
+            }
+        }
         if (!cc.output.directory.empty() && options.outputDirectory == "build")
             options.outputDirectory = cc.output.directory;
 
@@ -264,6 +273,8 @@ struct ProjectConfig
         {
             if (lib == "std")
                 hasStd = true;
+            else if (lib.size() > 6 && lib.substr(lib.size() - 6) == ".djlib")
+                options.djlibPaths.emplace_back(lib);
             else
                 options.linkLibraries.emplace_back(lib);
         }

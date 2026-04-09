@@ -53,6 +53,9 @@ public:
     void generate();
 
     bool linkModules(const std::vector<std::filesystem::path>& allPaths) const;
+    bool linkBitcode(const std::string& bitcodeData) const;
+
+    [[nodiscard]] llvm::Module& getModule() const { return *module; }
 
     bool libraryMode = false;
     bool stdDeclOnly = false;

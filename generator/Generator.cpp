@@ -17,6 +17,7 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Bitcode/BitcodeReader.h"
 
 #include "../binder/SymbolTable.h"
 #include "../utils/Logger.h"
@@ -183,11 +184,13 @@ void Generator::generate()
     }
 
     // PASS 1: Forward declare all structs (create opaque types)
+    // Library structs are included so the generator scope knows the types
     const auto allStructs = symbols->get_all_structs();
     LOG_DEBUG("[generator] PASS 1: forward declaring %zu structs", allStructs.size());
     for (const auto& sym : allStructs)
     {
-        LOG_DEBUG("[generator]   forward declare struct: '%s'", sym->name.c_str());
+        LOG_DEBUG("[generator]   forward declare struct: '%s'%s", sym->name.c_str(),
+                  sym->isFromLibrary ? " [lib]" : "");
         forward_declare_struct(*std::dynamic_pointer_cast<StructSymbol>(sym));
         generatedStructs++;
     }
@@ -198,7 +201,8 @@ void Generator::generate()
         generate_enum(*std::dynamic_pointer_cast<EnumSymbol>(sym));
     }
 
-    // PASS 3: Generate extern functions
+    // PASS 3: Generate extern function declarations
+    // Library externs included — they are just declarations, linker resolves them
     for (const auto& sym : symbols->get_all_extern_functions())
     {
         generate_extern_function(*std::dynamic_pointer_cast<ExternFunctionSymbol>(sym));
@@ -206,12 +210,14 @@ void Generator::generate()
     }
 
     // PASS 4: Resolve struct bodies (fill in field types)
+    // Library structs are included so the generator can access fields
     for (const auto& sym : symbols->get_all_structs())
     {
         resolve_struct_body(*std::dynamic_pointer_cast<StructSymbol>(sym));
     }
 
     // PASS 5a: Forward-declare all struct methods (so methods can reference each other)
+    // Library structs included — declarations needed so user code can call them
     for (const auto& sym : symbols->get_all_structs())
     {
         const auto& structSym = *std::dynamic_pointer_cast<StructSymbol>(sym);
@@ -237,6 +243,7 @@ void Generator::generate()
     // PASS 5b: Generate struct method bodies and properties
     for (const auto& sym : symbols->get_all_structs())
     {
+        if (sym->isFromLibrary) continue;
         const auto& structSym = *std::dynamic_pointer_cast<StructSymbol>(sym);
         if (is_primitive_impl(structSym))
         {
@@ -253,6 +260,7 @@ void Generator::generate()
     }
 
     // PASS 6a: Forward declare all global functions
+    // Library functions included — declarations needed so user code can call them
     for (const auto& sym : symbols->get_all_functions())
     {
         auto fSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
@@ -264,6 +272,7 @@ void Generator::generate()
     // PASS 6b: Generate global function bodies
     for (const auto& sym : symbols->get_all_functions())
     {
+        if (sym->isFromLibrary) continue;
         generate_function_body(*std::dynamic_pointer_cast<FunctionSymbol>(sym));
         generatedFunctions++;
     }
@@ -604,5 +613,26 @@ bool Generator::linkModules(const std::vector<std::filesystem::path>& llPaths) c
             return false;
         }
     }
+    return true;
+}
+
+bool Generator::linkBitcode(const std::string& bitcodeData) const
+{
+    auto buffer = llvm::MemoryBuffer::getMemBuffer(
+        llvm::StringRef(bitcodeData.data(), bitcodeData.size()), "", false);
+
+    auto moduleOrErr = llvm::parseBitcodeFile(buffer->getMemBufferRef(), *context);
+    if (!moduleOrErr)
+    {
+        LOG_ERROR("Link error: failed to parse djlib bitcode");
+        return false;
+    }
+
+    if (llvm::Linker::linkModules(*module, std::move(*moduleOrErr)))
+    {
+        LOG_ERROR("Link error: failed to link djlib bitcode");
+        return false;
+    }
+
     return true;
 }

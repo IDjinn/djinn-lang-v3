@@ -46,11 +46,13 @@ struct CompilerOptions
     bool noCache = false;
     bool debugMode = true;
     bool releaseMode = false;
+    bool outputDjLib = false;
     std::string reflectionMode = "none"; // none | annotated | all
     std::string outputFileName{};
     std::string outputDirectory{"build"};
     std::filesystem::path stdLibPath{"./std"};
     std::vector<std::filesystem::path> linkLibraries{};
+    std::vector<std::filesystem::path> djlibPaths{};
     RuntimeProperties runtimeProperties{};
 };
 

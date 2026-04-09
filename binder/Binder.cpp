@@ -5,12 +5,22 @@
 #include "Binder.h"
 
 #include "../utils/Logger.h"
+#include "../lib/DjLibReader.h"
 
 Binder::Binder(DiagnosticEngine& diagnostics)
     : _diagnostics(diagnostics)
 {
     _global_scope = std::make_shared<ScopedSymbolTable>();
     _current_scope = _global_scope;
+}
+
+void Binder::injectLibrarySymbols(const djlib::DjLibReader& reader)
+{
+    LOG_DEBUG("[binder] injecting library symbols from djlib");
+    reader.populateSymbolTable(*_global_scope);
+    reader.populateAttributeTargets(_attributeTargets);
+    reader.populateConstExprs(*_global_scope);
+    reader.populateStaticVars(*_global_scope);
 }
 
 BindingResult Binder::bind(const Program& program)

@@ -22,6 +22,8 @@
 #include "parser/parser.h"
 #include "utils/Logger.h"
 #include "utils/StopWatch.h"
+#include "lib/DjLibReader.h"
+#include "lib/DjLibWriter.h"
 
 #ifndef DJINN_CLANG_PATH
 #define DJINN_CLANG_PATH "clang"
@@ -575,6 +577,52 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 if (!a->fields.empty()) stdTypeNames.push_back(a->name.token_name);
         }
 
+        auto isPrimitiveTypeName = [](const std::string& n) -> bool
+        {
+            if (n.empty()) return false;
+            if (n == "void" || n == "auto" || n == "bool" || n == "str" || n == "string") return true;
+            if ((n[0] == 'i' || n[0] == 'u' || n[0] == 'f') && n.size() > 1)
+            {
+                for (size_t i = 1; i < n.size(); ++i)
+                    if (!std::isdigit(n[i])) return false;
+                return true;
+            }
+            return false;
+        };
+
+        for (const auto& djlibPath : options.djlibPaths)
+        {
+            djlib::DjLibReader reader;
+            if (reader.read(djlibPath))
+            {
+                const auto& meta = reader.metadata();
+                if (meta.contains("structs"))
+                    for (const auto& s : meta["structs"])
+                    {
+                        auto name = s.at("name").get<std::string>();
+                        auto shortName = name;
+                        if (auto pos = name.rfind("::"); pos != std::string::npos)
+                            shortName = name.substr(pos + 2);
+                        if (isPrimitiveTypeName(shortName)) continue;
+                        stdTypeNames.push_back(name);
+                        if (shortName != name)
+                            stdTypeNames.push_back(shortName);
+                    }
+                if (meta.contains("enums"))
+                    for (const auto& e : meta["enums"])
+                    {
+                        auto name = e.at("name").get<std::string>();
+                        auto shortName = name;
+                        if (auto pos = name.rfind("::"); pos != std::string::npos)
+                            shortName = name.substr(pos + 2);
+                        if (isPrimitiveTypeName(shortName)) continue;
+                        stdTypeNames.push_back(name);
+                        if (shortName != name)
+                            stdTypeNames.push_back(shortName);
+                    }
+            }
+        }
+
         if (fs::exists(path))
         {
             for (const auto& entry : fs::recursive_directory_iterator(path))
@@ -623,7 +671,33 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                 resolve_compile_time_blocks(*prog, comptimeEval);
         }
 
+        std::vector<djlib::DjLibReader> djlibReaders;
+        if (!options.djlibPaths.empty())
+        {
+            auto _phase = summary.phase("djlib-load");
+            for (const auto& djlibPath : options.djlibPaths)
+            {
+                djlib::DjLibReader reader;
+                if (!reader.read(djlibPath))
+                {
+                    LOG_ERROR("Failed to load djlib: %s", djlibPath.string().c_str());
+                    return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+                }
+                djlibReaders.push_back(std::move(reader));
+            }
+        }
+
         Binder binder(diagnostics);
+
+        for (const auto& reader : djlibReaders)
+        {
+            binder.injectLibrarySymbols(reader);
+            for (auto& program : programs)
+            {
+                reader.populateMacros(*program);
+            }
+        }
+
         BindingResult bindResult;
         {
             auto _phase = summary.phase("binding");
@@ -646,13 +720,24 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             generator.generate();
         }
 
-        if (!options.linkLibraries.empty())
+        if (!options.linkLibraries.empty() || !djlibReaders.empty())
         {
             auto _phase = summary.phase("link");
-            if (!generator.linkModules(options.linkLibraries))
+            if (!options.linkLibraries.empty())
             {
-                summary.print();
-                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+                if (!generator.linkModules(options.linkLibraries))
+                {
+                    summary.print();
+                    return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+                }
+            }
+            for (const auto& reader : djlibReaders)
+            {
+                if (!generator.linkBitcode(reader.getBitcodeData()))
+                {
+                    summary.print();
+                    return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+                }
             }
         }
 
@@ -678,6 +763,26 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             std::cerr << diagnostics.render();
             summary.print();
             return {.returnCode = 1, .verifiedIr = false, .diagnostics = diagnostics.get_diagnostics()};
+        }
+
+        if (options.outputDjLib)
+        {
+            auto _phase = summary.phase("djlib-write");
+            djlib::DjLibWriter writer;
+            writer.collectSymbols(*bindResult.globalScope);
+            writer.collectMacros(programs);
+            writer.collectAttributeDecls(programs);
+            writer.collectImplBlocks(programs);
+            writer.collectConstExprs(*bindResult.globalScope);
+            writer.collectStaticVars(*bindResult.globalScope);
+
+            auto djlibName = options.outputFileName.empty() ? "output" : options.outputFileName;
+            auto djlibPath = fs::path(options.outputDirectory) / (djlibName + ".djlib");
+            if (!writer.write(djlibPath, generator.getModule()))
+            {
+                LOG_ERROR("Failed to write djlib: %s", djlibPath.string().c_str());
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
         }
 
         std::string generatedIr = generator.print();
