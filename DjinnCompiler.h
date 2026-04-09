@@ -44,6 +44,8 @@ struct CompilerOptions
     bool useTempDirectory = true; // Use system temp directory for output files
     bool runAfterCompile = true; // Run the compiled binary and capture exit code
     bool noCache = false;
+    bool debugMode = true;
+    bool releaseMode = false;
     std::string outputFileName{};
     std::string outputDirectory{"build"};
     std::filesystem::path stdLibPath{"./std"};

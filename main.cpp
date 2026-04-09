@@ -27,6 +27,8 @@ void printUsage(const char* programName)
         << "  --lib         Compile as library (no main required)\n"
         << "  --bundle      Bundle all into single .ll (default: per namespace)\n"
         << "  -l <file.ll>  Link external .ll module (can be used multiple times)\n"
+        << "  --debug       Set build mode to debug\n"
+        << "  --release     Set build mode to release (default)\n"
         << "  --no-std      Don't include standard library\n"
         << "  --std-decl    Include std declarations only (use with -l std.ll)\n"
         << "  -h, --help    Show this help message\n"
@@ -152,6 +154,16 @@ int main(int argc, char* argv[])
         else if (arg == "--bundle")
         {
             options.bundleModules = true;
+        }
+        else if (arg == "--debug")
+        {
+            options.debugMode = true;
+            options.releaseMode = false;
+        }
+        else if (arg == "--release")
+        {
+            options.debugMode = false;
+            options.releaseMode = true;
         }
         else if (arg == "--no-std")
         {

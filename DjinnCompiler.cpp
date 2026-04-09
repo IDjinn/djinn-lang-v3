@@ -258,7 +258,7 @@ static void resolve_compile_time_blocks(Program& program, ConstEvaluator& evalua
     }
 }
 
-static void register_intrinsic_values(ConstEvaluator& eval)
+static void register_intrinsic_values(ConstEvaluator& eval, const CompilerOptions& options)
 {
     auto def = [&eval](const std::string& structName, const std::string& field, ConstValue val)
     {
@@ -274,45 +274,63 @@ static void register_intrinsic_values(ConstEvaluator& eval)
         def(s, f, ConstValue::makeInt(val));
     };
 
+    constexpr bool isWindows =
 #ifdef _WIN32
-    defBool("Platform", "Windows", true);
-    defBool("Platform", "Linux", false);
-    defBool("Platform", "MacOs", false);
-#elif __linux__
-    defBool("Platform", "Windows", false); defBool("Platform", "Linux", true); defBool("Platform", "MacOs", false);
-#elif __APPLE__
-    defBool("Platform", "Windows", false); defBool("Platform", "Linux", false); defBool("Platform", "MacOs", true);
+        true;
 #else
-    defBool("Platform", "Windows", false); defBool("Platform", "Linux", false); defBool("Platform", "MacOs", false);
+    false;
+#endif
+    constexpr bool isLinux =
+#ifdef __linux__
+        true;
+#else
+        false;
+#endif
+    constexpr bool isMacOs =
+#ifdef __APPLE__
+        true;
+#else
+        false;
 #endif
 
+    defBool("Platform", "Windows", isWindows);
+    defBool("Platform", "Linux", isLinux);
+    defBool("Platform", "MacOs", isMacOs);
+
+    constexpr bool isX64 =
 #if defined(__x86_64__) || defined(_M_X64)
-    defBool("Arch", "X64", true);
-    defBool("Arch", "X86", false);
-    defBool("Arch", "Arm64", false);
-#elif defined(__i386__) || defined(_M_IX86)
-    defBool("Arch", "X64", false); defBool("Arch", "X86", true); defBool("Arch", "Arm64", false);
-#elif defined(__aarch64__) || defined(_M_ARM64)
-    defBool("Arch", "X64", false); defBool("Arch", "X86", false); defBool("Arch", "Arm64", true);
+        true;
 #else
-    defBool("Arch", "X64", false); defBool("Arch", "X86", false); defBool("Arch", "Arm64", false);
+    false;
+#endif
+    constexpr bool isX86 =
+#if defined(__i386__) || defined(_M_IX86)
+        true;
+#else
+        false;
+#endif
+    constexpr bool isArm64 =
+#if defined(__aarch64__) || defined(_M_ARM64)
+        true;
+#else
+        false;
 #endif
 
-#ifdef NDEBUG
-    defBool("Build", "Debug", false); defBool("Build", "Release", true);
-#else
-    defBool("Build", "Debug", true);
-    defBool("Build", "Release", false);
-#endif
+    defBool("Arch", "X64", isX64);
+    defBool("Arch", "X86", isX86);
+    defBool("Arch", "Arm64", isArm64);
+
+    defBool("Build", "Debug", options.debugMode);
+    defBool("Build", "Release", options.releaseMode);
 
     defInt("Runtime", "PointerSize", sizeof(void*));
 }
 
 static ConstEvaluator create_comptime_evaluator(
-    const std::vector<std::shared_ptr<Program>>& programs)
+    const std::vector<std::shared_ptr<Program>>& programs, const CompilerOptions& options)
 {
     ConstEvaluator eval;
-    register_intrinsic_values(eval);
+    register_intrinsic_values(eval, options);
 
     for (const auto& prog : programs)
     {
@@ -598,7 +616,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         {
             auto _phase = summary.phase("comptime");
-            auto comptimeEval = create_comptime_evaluator(programs);
+            auto comptimeEval = create_comptime_evaluator(programs, options);
             for (auto& prog : programs)
                 resolve_compile_time_blocks(*prog, comptimeEval);
         }
@@ -885,7 +903,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
 
         // Resolve top-level compile-time blocks before binding
-        auto comptimeEval = create_comptime_evaluator(programs);
+        auto comptimeEval = create_comptime_evaluator(programs, options);
         for (auto& prog : programs)
             resolve_compile_time_blocks(*prog, comptimeEval);
 
