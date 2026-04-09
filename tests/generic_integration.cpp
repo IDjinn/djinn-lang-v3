@@ -20,6 +20,6 @@ TEST(FullCompilation, StructGeneric)
         }
 )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 0);
 }

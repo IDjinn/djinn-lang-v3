@@ -639,6 +639,14 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             auto _phase = summary.phase("codegen");
             generator.generate();
         }
+
+        if (!generator.verify())
+        {
+            std::cerr << diagnostics.render();
+            summary.print();
+            return {.returnCode = 1, .verifiedIr = false, .diagnostics = diagnostics.get_diagnostics()};
+        }
+
         if (options.print_ir)
         {
             LOG_INFO("RESULT\n\n%s", generator.print().c_str());
@@ -647,6 +655,13 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         {
             auto _phase = summary.phase("llvm passes");
             generator.run_passes(options.skipCoroPasses);
+        }
+
+        if (!generator.verify())
+        {
+            std::cerr << diagnostics.render();
+            summary.print();
+            return {.returnCode = 1, .verifiedIr = false, .diagnostics = diagnostics.get_diagnostics()};
         }
 
         std::string generatedIr = generator.print();
@@ -736,6 +751,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
     std::string generatedIr;
     std::string expandedSourceResult;
 
+    bool irVerified = true;
     auto makeResult = [&](int returnCode, const std::stacktrace& trace)
     {
         if (!options.silentMode && !diagnostics.get_diagnostics().empty())
@@ -744,6 +760,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         }
         return CompilerResult{
             .returnCode = returnCode,
+            .verifiedIr = irVerified,
             .program = userProgram,
             .ir = generatedIr,
             .diagnostics = diagnostics.get_diagnostics(),
@@ -916,6 +933,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         auto generator = Generator(diagnostics, bindResult.globalScope);
         generator.generate();
+        irVerified = generator.verify();
 
         if (options.print_ir)
         {
@@ -952,7 +970,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         if (!options.generateBinary)
         {
-            return makeResult(0, std::stacktrace::current());
+            return makeResult(5555, std::stacktrace::current());
         }
 
         std::string runtimeArg;

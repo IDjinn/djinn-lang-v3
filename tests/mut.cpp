@@ -21,7 +21,7 @@ TEST(Mutable, BasicMutableVariables)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
@@ -45,7 +45,7 @@ TEST(Mutable, InvalidImmutableAssingment)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 2);
     EXPECT_EQ(result.returnCode, 1);
 }

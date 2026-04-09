@@ -525,19 +525,22 @@ void Generator::run_passes(bool skipCoroPasses) const
 
 std::string Generator::print() const
 {
-    std::string errorStr;
-    llvm::raw_string_ostream errorStream(errorStr);
-
     std::string str;
     llvm::raw_string_ostream stream(str);
     module->print(stream, nullptr);
+    return str;
+}
 
+bool Generator::verify() const
+{
+    std::string errorStr;
+    llvm::raw_string_ostream errorStream(errorStr);
     if (llvm::verifyModule(*module, &errorStream))
     {
         LOG_ERROR("LLVM module verification failed:\n%s", errorStr.c_str());
-        return "Erro: módulo inválido\n" + errorStr;
+        return false;
     }
-    return str;
+    return true;
 }
 
 bool Generator::linkModules(const std::vector<std::filesystem::path>& llPaths) const

@@ -177,7 +177,8 @@ TEST(GenericConstraints, ConstraintSatisfied)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -226,7 +227,8 @@ TEST(GenericConstraints, NoConstraintNoValidation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -265,7 +267,8 @@ TEST(GenericConstraints, MultipleConstraintsSatisfied)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -405,7 +408,8 @@ TEST(GenericConstraints, WhereClauseWithImplements)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }

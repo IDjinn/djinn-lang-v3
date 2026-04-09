@@ -16,7 +16,7 @@ TEST(Namespace, BasicDefinition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
@@ -38,7 +38,7 @@ TEST(Namespace, StructInNamespace)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
@@ -61,7 +61,7 @@ TEST(Namespace, NestedNamespace)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces.size(), 1);
@@ -91,7 +91,7 @@ TEST(Namespace, MultipleFunctionsInNamespace)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces[0]->functions.size(), 3);
@@ -116,7 +116,7 @@ TEST(Namespace, StructAndFunctionInNamespace)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->namespaces[0]->structs.size(), 1);
@@ -137,7 +137,7 @@ TEST(Namespace, FileScopedNamespace)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->fileNamespace, "myapp");
@@ -158,7 +158,7 @@ TEST(Namespace, FileScopedQualifiedNamespace)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->fileNamespace, "myapp::utils");
@@ -172,7 +172,7 @@ TEST(Namespace, NoNamespaceIsGlobal)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_FALSE(result.program->hasFileNamespace());

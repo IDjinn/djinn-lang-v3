@@ -19,7 +19,7 @@ TEST(Object, TypeInfoStructDefinition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -35,7 +35,7 @@ TEST(Object, ObjectStructDefinition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -55,7 +55,7 @@ TEST(Object, TypeInfoKindInt)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0); // kind 0 = int
 }
@@ -75,7 +75,7 @@ TEST(Object, TypeInfoKindFloat)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1); // kind 1 = float
 }
@@ -96,7 +96,7 @@ TEST(Object, TypeInfoKindPointer)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -119,7 +119,7 @@ TEST(Object, VariadicMethodCompiles)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -138,7 +138,7 @@ TEST(Object, VariadicEmptyArgs)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -157,7 +157,7 @@ TEST(Object, VariadicArgsLength)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -176,7 +176,7 @@ TEST(Object, VariadicWithNormalParams)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
@@ -196,7 +196,7 @@ TEST(Object, VariadicAccessTypeInfo)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 4); // sizeof(i32) = 4
 }
@@ -227,7 +227,7 @@ TEST(Object, SyncPrintIntViaVariadic)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -267,7 +267,7 @@ TEST(Object, AutoBoxPrimitiveToObject)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0); // kind 0 = signed int
 }
@@ -281,7 +281,7 @@ TEST(Object, AutoBoxStringToObject)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5); // kind 5 = str
 }
@@ -301,7 +301,7 @@ TEST(Object, AutoBoxStructToObject)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 8); // sizeof(Point) = 2 * i32 = 8
 }
@@ -321,7 +321,7 @@ TEST(Object, AutoBoxStructToObjectKind)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3); // kind 3 = struct
 }
@@ -335,7 +335,7 @@ TEST(Object, AutoBoxFloatToObject)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1); // kind 1 = float
 }
@@ -356,7 +356,7 @@ TEST(Object, IsExpressionWithAutoBoxedPrimitive)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -373,7 +373,7 @@ TEST(Object, IsExpressionBindingWithAutoBoxed)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }

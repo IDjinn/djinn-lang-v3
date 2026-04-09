@@ -25,7 +25,8 @@ TEST(Enum, SimpleDefinition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -44,7 +45,8 @@ TEST(Enum, VariantConstruction)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -63,7 +65,8 @@ TEST(Enum, VariantWithPayload)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -85,7 +88,8 @@ TEST(Enum, MultiplePayloadTypes)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -106,7 +110,8 @@ TEST(Enum, VariantWithMultipleFields)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -130,7 +135,8 @@ TEST(Enum, GenericOptional)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -150,7 +156,8 @@ TEST(Enum, GenericResult)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -169,7 +176,7 @@ TEST(Enum, GenericWithPointerType)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -188,7 +195,8 @@ TEST(Enum, GenericWithFloatType)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -210,7 +218,8 @@ TEST(Enum, GenericMultipleInstantiations)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -239,7 +248,8 @@ TEST(Enum, PatternMatchBasic)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 69);
 }
@@ -264,7 +274,8 @@ TEST(Enum, PatternMatchEmpty)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, -1);
 }
@@ -289,7 +300,8 @@ TEST(Enum, PatternMatchResult)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -314,7 +326,8 @@ TEST(Enum, PatternMatchResultError)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7);
 }
@@ -339,7 +352,8 @@ TEST(Enum, PatternMatchWithComputation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 21);
 }
@@ -366,7 +380,8 @@ TEST(Enum, PatternMatchNoPayload)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
@@ -397,7 +412,8 @@ TEST(Enum, PatternMatchInFunction)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .includeStd = false});
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 149);
 }

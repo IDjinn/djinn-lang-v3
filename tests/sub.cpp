@@ -9,7 +9,7 @@ TEST(Math, IntegerSubFunction) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
 }
@@ -25,7 +25,7 @@ TEST(Math, IntegerSub) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 7);
     EXPECT_EQ(result.program->functions.size(), 2);
 }
@@ -41,7 +41,7 @@ TEST(Math, IntegerSubNegative) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     // -7 em complemento de 2 como código de retorno
     EXPECT_EQ(result.returnCode, -7);
 }

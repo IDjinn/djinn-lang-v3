@@ -363,7 +363,7 @@ TEST(ConstExpr, SimpleConstExprVariable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -379,7 +379,7 @@ TEST(ConstExpr, ConstExprWithArithmetic)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 35);
 }
@@ -396,7 +396,7 @@ TEST(ConstExpr, ConstExprMultiplication)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 192);
 }
@@ -411,7 +411,7 @@ TEST(ConstExpr, ConstExprNegative)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -428,7 +428,7 @@ TEST(ConstExpr, ConstExprUsedInArraySize)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
@@ -450,7 +450,7 @@ TEST(ConstExpr, ConstFieldUsedInExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
@@ -469,7 +469,7 @@ TEST(ConstExpr, ConstFieldWithArithmetic)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 192);
 }
@@ -507,7 +507,7 @@ TEST(ConstExpr, ConstExprFunctionResult)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -525,7 +525,7 @@ TEST(ConstExpr, LocalConstExprVariable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -539,7 +539,7 @@ TEST(ConstExpr, LocalConstevalVariable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -554,7 +554,7 @@ TEST(ConstExpr, LocalConstExprUsedInExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
 }
@@ -570,7 +570,7 @@ TEST(ConstExpr, LocalConstExprInArraySize)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 77);
 }
@@ -585,7 +585,7 @@ TEST(ConstExpr, GlobalConstevalVariable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7);
 }
@@ -628,7 +628,7 @@ TEST(CompileTimeIf, TrueBranch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -646,7 +646,7 @@ TEST(CompileTimeIf, FalseBranch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -665,7 +665,7 @@ TEST(CompileTimeIf, FalseBranchWithElse)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -684,7 +684,7 @@ TEST(CompileTimeIf, TrueBranchWithElse)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -702,7 +702,7 @@ TEST(CompileTimeIf, BinaryExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -721,7 +721,7 @@ TEST(CompileTimeIf, CompoundExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -742,7 +742,7 @@ TEST(CompileTimeIf, ElseIfChain)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -760,7 +760,7 @@ TEST(CompileTimeIf, WarningOnConstExprInRuntimeIf)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     bool hasWarning = false;
     for (const auto& d : result.diagnostics)
     {
@@ -786,7 +786,7 @@ TEST(CompileTimeIf, NoWarningOnRuntimeVariable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     bool hasWarning = false;
     for (const auto& d : result.diagnostics)
     {
@@ -836,7 +836,7 @@ TEST(CompileTimeIf, LiteralCondition)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -855,7 +855,7 @@ TEST(CompileTimeIf, DeadCodeEliminated)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -873,7 +873,7 @@ TEST(CompileTimeIf, ExplicitConstexprKeyword)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -891,7 +891,7 @@ TEST(CompileTimeIf, ExplicitConstevalKeyword)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -939,7 +939,7 @@ TEST(CompileTimeIf, ExplicitConstexprWithElseIf)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -958,7 +958,7 @@ TEST(CompileTimeIf, NoWarningOnMixedExpr)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     bool hasWarning = false;
     for (const auto& d : result.diagnostics)
     {
@@ -1005,7 +1005,7 @@ TEST(Intrinsic, ConstexprStructFieldAccess)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -1023,7 +1023,7 @@ TEST(Intrinsic, ConstexprStructAllFieldsAreConst)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }

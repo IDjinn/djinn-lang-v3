@@ -35,7 +35,7 @@ struct CompilerOptions
     bool dump_macro_expansion = false;
     int optimizationLevel = 3;
     bool skipCoroPasses = false;
-    bool generateBinary = true;
+    bool generateBinary = false;
     bool includeStd = true;
     bool stdDeclOnly = false;
     bool silentMode = false;
@@ -56,6 +56,7 @@ struct CompilerOptions
 struct CompilerResult
 {
     int returnCode;
+    bool verifiedIr = true;
     std::vector<Token> tokens{};
     std::shared_ptr<Program> program;
     std::string ir;

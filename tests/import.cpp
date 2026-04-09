@@ -14,7 +14,7 @@ TEST(Import, BasicImport)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports.size(), 1);
@@ -35,7 +35,7 @@ TEST(Import, QualifiedImport)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports.size(), 1);
@@ -61,7 +61,7 @@ TEST(Import, MultipleImports)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports.size(), 2);
@@ -73,7 +73,7 @@ TEST(Import, ImportParsesQualifiedName)
         import a::b::c;
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->imports[0]->namespacePath.parts.size(), 3);

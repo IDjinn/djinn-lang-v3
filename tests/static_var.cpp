@@ -12,7 +12,7 @@ TEST(StaticVar, SimpleImmutable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -33,7 +33,7 @@ TEST(StaticVar, Mutable)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 3);
 }
 
@@ -49,7 +49,7 @@ TEST(StaticVar, MultipleGlobals)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -72,7 +72,7 @@ TEST(StaticVar, MutableWithFunctions)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -91,7 +91,7 @@ TEST(StaticVar, UsedInExpressions)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -112,6 +112,6 @@ TEST(StaticVar, MutableAccumulator)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }

@@ -16,7 +16,7 @@ TEST(ControlFlow, IfStatementTrueBranch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -33,7 +33,7 @@ TEST(ControlFlow, IfStatementFalseBranch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -51,7 +51,7 @@ TEST(ControlFlow, IfElseStatementTrueBranch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -69,7 +69,7 @@ TEST(ControlFlow, IfElseStatementFalseBranch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
@@ -89,7 +89,7 @@ TEST(ControlFlow, IfElseIfElseStatement)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 2);
 }
@@ -110,7 +110,7 @@ TEST(ControlFlow, NestedIfStatements)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -127,7 +127,7 @@ TEST(ControlFlow, IfWithEquality)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -144,7 +144,7 @@ TEST(ControlFlow, IfWithNotEqual)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -162,7 +162,7 @@ TEST(ControlFlow, IfWithLogicalAnd)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -180,7 +180,7 @@ TEST(ControlFlow, IfWithLogicalOr)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -199,7 +199,7 @@ TEST(ControlFlow, WhileLoopSimple)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -218,7 +218,7 @@ TEST(ControlFlow, WhileLoopSum)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15); // 1 + 2 + 3 + 4 + 5 = 15
 }
@@ -238,7 +238,7 @@ TEST(ControlFlow, WhileLoopWithBreak)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -260,7 +260,7 @@ TEST(ControlFlow, WhileLoopWithContinue)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 10 iterations - 1 skipped = 9
 }
@@ -277,7 +277,7 @@ TEST(ControlFlow, WhileLoopNeverExecutes)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -296,7 +296,7 @@ TEST(ControlFlow, DoWhileLoopSimple)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -313,7 +313,7 @@ TEST(ControlFlow, DoWhileExecutesAtLeastOnce)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 11); // Executes once even though condition is false
 }
@@ -333,7 +333,7 @@ TEST(ControlFlow, DoWhileWithBreak)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -352,7 +352,7 @@ TEST(ControlFlow, ForLoopSimple)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -370,7 +370,7 @@ TEST(ControlFlow, ForLoopPostfix)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -387,7 +387,7 @@ TEST(ControlFlow, ForLoopSum)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // 1 + 2 + ... + 10 = 55
 }
@@ -407,7 +407,7 @@ TEST(ControlFlow, ForLoopWithBreak)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -427,7 +427,7 @@ TEST(ControlFlow, ForLoopWithContinue)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 10 iterations - 1 skipped = 9
 }
@@ -446,7 +446,7 @@ TEST(ControlFlow, ForLoopNested)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 3 * 3 = 9
 }
@@ -465,7 +465,7 @@ TEST(ControlFlow, RangeForSimple)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -482,7 +482,7 @@ TEST(ControlFlow, RangeForSum)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // 1 + 2 + ... + 10 = 55
 }
@@ -502,7 +502,7 @@ TEST(ControlFlow, RangeForWithBreak)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -522,7 +522,7 @@ TEST(ControlFlow, RangeForWithContinue)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 9); // 10 iterations - 1 skipped = 9
 }
@@ -541,7 +541,7 @@ TEST(ControlFlow, RangeForNested)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 12); // 3 * 4 = 12
 }
@@ -558,7 +558,7 @@ TEST(ControlFlow, RangeForAnonymous)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
@@ -577,7 +577,7 @@ TEST(ControlFlow, RangeForAnonymousNested)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 12); // 3 * 4 = 12
 }
@@ -594,7 +594,7 @@ TEST(ControlFlow, RangeForVariableAccess)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6); // last value is 6 (0..7 is exclusive)
 }
@@ -613,7 +613,7 @@ TEST(ControlFlow, RangeForInclusiveEnd)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6); // 0, 1, 2, 3, 4, 5 = 6 iterations
 }
@@ -630,7 +630,7 @@ TEST(ControlFlow, RangeForInclusiveEndSum)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // 1 + 2 + ... + 10 = 55
 }
@@ -647,7 +647,7 @@ TEST(ControlFlow, RangeForBracketClosed)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5); // [0..5] inclusive both, last = 5
 }
@@ -664,7 +664,7 @@ TEST(ControlFlow, RangeForBracketHalfOpen)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 4); // [0..5) exclusive end, last = 4
 }
@@ -681,7 +681,7 @@ TEST(ControlFlow, RangeForBracketClosedSum)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // [1..10] = 1+2+...+10 = 55
 }
@@ -698,7 +698,7 @@ TEST(ControlFlow, RangeForAnonymousInclusive)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5); // 0..=4 = 0,1,2,3,4 = 5 iterations
 }
@@ -715,7 +715,7 @@ TEST(ControlFlow, RangeForAnonymousBracketClosed)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5); // [0..4] inclusive = 0,1,2,3,4 = 5 iterations
 }
@@ -738,7 +738,7 @@ TEST(ControlFlow, SwitchStatementCase1)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -759,7 +759,7 @@ TEST(ControlFlow, SwitchStatementCase2)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 20);
 }
@@ -780,7 +780,7 @@ TEST(ControlFlow, SwitchStatementDefault)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -805,7 +805,7 @@ TEST(ControlFlow, SwitchStatementWithBreak)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -828,7 +828,7 @@ TEST(ControlFlow, SwitchStatementWithoutDefault)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10);
 }
@@ -851,7 +851,7 @@ TEST(ControlFlow, FibonacciIterative)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 55); // Fib(10) = 55
 }
@@ -869,7 +869,7 @@ TEST(ControlFlow, FactorialIterative)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 120); // 5! = 120
 }
@@ -891,7 +891,7 @@ TEST(ControlFlow, NestedLoopsWithBreak)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15); // 5 outer iterations * 3 inner iterations = 15
 }
@@ -910,7 +910,7 @@ TEST(ControlFlow, WhileWithMultipleConditions)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 10); // x = 5, y = 5, sum = 10
 }

@@ -9,7 +9,7 @@ TEST(Math, IntegerSumFunction) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
 }
@@ -25,7 +25,7 @@ TEST(Math, IntegerSum) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 5);
     EXPECT_EQ(result.program->functions.size(), 2);
 }
@@ -42,7 +42,7 @@ TEST(Math, IntegerSumWithAnonStructReturn)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 5);
     EXPECT_EQ(result.program->functions.size(), 2);
 }

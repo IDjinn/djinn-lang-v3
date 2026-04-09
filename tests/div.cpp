@@ -26,7 +26,7 @@ TEST(Math, IntegerDiv)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 5);
     EXPECT_EQ(result.program->functions.size(), 2);
 }
@@ -43,6 +43,6 @@ TEST(Math, IntegerDivWithRemainder)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 3);
 }

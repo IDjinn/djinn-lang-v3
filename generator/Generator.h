@@ -48,6 +48,8 @@ public:
 
     std::string print() const;
 
+    bool verify() const;
+
     void generate();
 
     bool linkModules(const std::vector<std::filesystem::path>& allPaths) const;

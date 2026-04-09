@@ -91,6 +91,7 @@ int main(int argc, char* argv[])
     }
 
     CompilerOptions options;
+    options.generateBinary = true;
     std::vector<fs::path> inputPaths;
     bool recursive = false;
 

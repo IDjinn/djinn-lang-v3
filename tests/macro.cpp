@@ -16,7 +16,7 @@ TEST(Macro, SimpleExprMacro)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
     EXPECT_EQ(result.diagnostics.size(), 1);
     EXPECT_TRUE(result.diagnostics.at(0).message.contains("times without 'local', which may cause side effects"));
@@ -36,7 +36,7 @@ TEST(Macro, MultipleParameters)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -54,7 +54,7 @@ TEST(Macro, PrecedencePreserved)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 25);
 }
 
@@ -80,7 +80,7 @@ TEST(Macro, LocalAvoidsDoubleEvaluation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 1);
 }
 
@@ -106,7 +106,7 @@ TEST(Macro, WithoutLocalCausesDoubleEvaluation)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 2);
     EXPECT_EQ(result.diagnostics.size(), 1);
     EXPECT_TRUE(result.diagnostics.at(0).message.contains("is used 2 times without 'local'"));
@@ -127,7 +127,7 @@ TEST(Macro, LocalWithArithmeticExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 49);
 }
 
@@ -145,7 +145,7 @@ TEST(Macro, MixedLocalAndNonLocal)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 19);
 }
 
@@ -169,7 +169,7 @@ TEST(Macro, NestedMacroCall)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 25);
 }
 
@@ -187,7 +187,7 @@ TEST(Macro, WarnOnPossibleSideEffect)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     bool hasWarning = false;
     for (const auto& d : result.diagnostics)
     {
@@ -215,7 +215,7 @@ TEST(Macro, NoWarnWhenLocalUsed)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     bool hasWarning = false;
     for (const auto& d : result.diagnostics)
     {
@@ -243,7 +243,7 @@ TEST(Macro, NoWarnWhenSingleUse)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     bool hasWarning = false;
     for (const auto& d : result.diagnostics)
     {
@@ -271,7 +271,7 @@ TEST(Macro, MacroStoredInProgram)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.program->macros.size(), 1);
     EXPECT_EQ(result.program->macros[0]->name.token_name, "my_macro");
     EXPECT_EQ(result.returnCode, 10);
@@ -292,7 +292,7 @@ TEST(Macro, MultiRuleByArity)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 25); // (5*3) + (5*2) = 15 + 10
 }
 
@@ -345,7 +345,7 @@ TEST(Macro, LiteralTokenMatching)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 36); // 15 + 21
 }
 
@@ -379,7 +379,7 @@ TEST(Macro, IdentifierFragment)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -400,7 +400,7 @@ TEST(Macro, LiteralTokenWithMultiRule)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 33); // 10 + 16 + 7
 }
 
@@ -424,7 +424,7 @@ TEST(Macro, RuleLevelLocal)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 5); // 1*1 + 2*2 = 1 + 4
 }
 
@@ -451,7 +451,7 @@ TEST(Macro, LogWithLiteralTokenLevels)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 30); // 10 + 20, off ignored
 }
 
@@ -490,7 +490,7 @@ TEST(Macro, LogMultiRuleWithIdentifier)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 3); // 1 + 2
 }
 
@@ -514,7 +514,7 @@ TEST(Macro, LiteralTokenWithIdentifierAndExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 109); // 10 + 99
 }
 
@@ -537,7 +537,7 @@ TEST(Macro, LiteralTokenPatternMatchingComplex)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 78); // 14 + 25 + (-3) + 42
 }
 
@@ -567,7 +567,7 @@ TEST(Macro, LogPatternLikeRust)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 15); // 1 + 2 + 4 + 8, off calls ignored
 }
 
@@ -587,7 +587,7 @@ TEST(Macro, ConditionalCodegenViaLiteralToken)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 50); // 42 + 0 + 8
 }
 
@@ -603,7 +603,7 @@ TEST(Macro, LiteralFragment)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 42);
 }
 
@@ -636,7 +636,7 @@ TEST(Macro, TypeFragment)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 123);
 }
 
@@ -657,6 +657,6 @@ TEST(Macro, LiteralTokenWithLiteralFragment)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 1130); // 1024 + 64 + 42
 }

@@ -9,7 +9,7 @@ TEST(Math, IntegerMultFunction) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 0);
     EXPECT_EQ(result.program->functions.size(), 1);
 }
@@ -25,7 +25,7 @@ TEST(Math, IntegerMult) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source);
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.returnCode, 6);
     EXPECT_EQ(result.program->functions.size(), 2);
 }

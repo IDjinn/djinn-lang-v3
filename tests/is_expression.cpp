@@ -28,7 +28,7 @@ TEST(IsExpression, ObjectIsI32True)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -51,7 +51,7 @@ TEST(IsExpression, ObjectIsI32False)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -74,7 +74,7 @@ TEST(IsExpression, ObjectIsF64)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -97,7 +97,7 @@ TEST(IsExpression, ObjectIsStr)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -124,7 +124,7 @@ TEST(IsExpression, NegatedIsExpression)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
@@ -177,7 +177,7 @@ TEST(IsExpression, MultipleTypeChecks)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
@@ -227,7 +227,7 @@ TEST(IsExpression, BindingExtractsI32Value)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
 }
@@ -250,7 +250,7 @@ TEST(IsExpression, BindingNotUsedWhenTypeMismatch)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, -1);
 }
@@ -276,7 +276,7 @@ TEST(IsExpression, BindingWithDifferentTypes)
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }

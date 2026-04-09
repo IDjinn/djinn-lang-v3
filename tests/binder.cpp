@@ -17,7 +17,8 @@ TEST(Binder, AllowsValidCode) {
     )";
 
     const auto result = DjinnCompiler::run(source, {
-                                               .optimizationLevel = 0, .useTempDirectory = true, .runAfterCompile = true
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true,
+                                               .runAfterCompile = true
                                            });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 30);
@@ -32,7 +33,8 @@ TEST(Binder, VariableDeclarationAndUsage) {
     )";
 
     const auto result = DjinnCompiler::run(source, {
-                                               .optimizationLevel = 0, .useTempDirectory = true, .runAfterCompile = true
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true,
+                                               .runAfterCompile = true
                                            });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 42);
@@ -50,7 +52,8 @@ TEST(Binder, FunctionCallWithCorrectArgs) {
     )";
 
     const auto result = DjinnCompiler::run(source, {
-                                               .optimizationLevel = 0, .useTempDirectory = true, .runAfterCompile = true
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true,
+                                               .runAfterCompile = true
                                            });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6);
@@ -65,7 +68,9 @@ TEST(Binder, NamespaceQualifiedNames) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .useTempDirectory = true});
+    const auto result = DjinnCompiler::run(source, {
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true
+                                           });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -81,7 +86,9 @@ TEST(Binder, NestedNamespaceQualifiedNames) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .useTempDirectory = true});
+    const auto result = DjinnCompiler::run(source, {
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true
+                                           });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -95,7 +102,9 @@ TEST(Binder, FileScopedNamespaceBinding) {
         }
     )";
 
-    const auto result = DjinnCompiler::run(source, {.optimizationLevel = 0, .useTempDirectory = true});
+    const auto result = DjinnCompiler::run(source, {
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true
+                                           });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 0);
 }
@@ -114,7 +123,8 @@ TEST(Binder, StructFieldAccess) {
     )";
 
     const auto result = DjinnCompiler::run(source, {
-                                               .optimizationLevel = 0, .useTempDirectory = true, .runAfterCompile = true
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true,
+                                               .runAfterCompile = true
                                            });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 15);
@@ -131,7 +141,8 @@ TEST(Binder, MultipleVariables) {
     )";
 
     const auto result = DjinnCompiler::run(source, {
-                                               .optimizationLevel = 0, .useTempDirectory = true, .runAfterCompile = true
+                                               .optimizationLevel = 0, .generateBinary = true, .useTempDirectory = true,
+                                               .runAfterCompile = true
                                            });
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 6);
