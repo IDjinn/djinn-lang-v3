@@ -27,10 +27,14 @@ See `todo.md` for full roadmap. Summary:
 - **Phase 1 (Foundation)**: COMPLETE — generics, FFI extern "C", malloc/free, sizeof
 - **Phase 2 (Structures)**: COMPLETE — enums, methods, constructors (incl. generic), array\<T\>, slices, string
 - **Phase 3 (Std)**: COMPLETE — I/O, array\<T\> collection, String, HashMap
-- **Phase 4 (Advanced)**: ~92% — interfaces, async/await, constexpr/consteval, macros, compile-time if,
+- **Phase 4 (Advanced)**: ~95% — interfaces, async/await, constexpr/consteval, macros, compile-time if,
   top-level CompileTimeBlock, `is` expression (pattern matching), attribute system (parameterized, validated,
   centralized LLVM mapping, `[llvm()]` escape hatch, built-in attrs defined in std) done. Missing: closures.
   TODO: `[platform(windows)]` attribute-based conditional compilation (implement as macro).
+- **Phase 5 (Libraries)**: COMPLETE — separate compilation (`--lib`), module linking (`-l`),
+  `--std-decl` mode, TypeInfo cross-module (`LinkOnceODR` + COMDAT), generic dedup,
+  RTTI/reflection (`TypeInfoExt` with fields/methods/attributes, `[Reflect]` attribute,
+  `reflection-mode: none|annotated|all` in .proj)
 
 Already implemented: control flow, arithmetic, mutability, ownership/copy semantics,
 name mangling, binder/scope, diagnostics, imports, namespaces, LSP server, intrinsics (sizeof, alignof, typeof,
@@ -110,6 +114,13 @@ docs/           Fumadocs (Next.js) documentation site
   `std/sys/intrinsics.djinn` with `[attribute(target)]` meta-attribute
 - **Static variables**: global variables with `static` keyword, immutable by default, `mut` for mutable,
   namespace-accessible, compile-time initialized, emitted as LLVM global variables
+- **Library compilation**: `--lib` mode (skip main/runtime), `-l file.ll` linking via `llvm::Linker`,
+  `--std-decl` (declarations only, link bodies from .ll), generic dedup via `LinkOnceODR` + COMDAT,
+  project file (`djinn.proj`) with `library-mode`, `libs`, `reflection-mode` settings
+- **RTTI/Reflection**: `TypeInfo` (16 bytes: id, size, name, kind) for boxing/variadics, deterministic FNV-1a
+  type IDs cross-module, `TypeInfoExt` (fields, methods, attributes) opt-in via `[Reflect]` attribute or
+  `reflection-mode: all`, zero-cost when unused (lazy generation), `AttributeInfo`, `FieldInfo`, `MethodInfo`
+  structs in `std::types`
 
 ## Grammar (EBNF)
 
