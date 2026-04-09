@@ -83,6 +83,7 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
                                  "unknown attribute '" + attr.name.token_name + "'",
                                  attr.name, attr.location);
                 }
+                validateAttributeTarget(attr.name.token_name, TargetMethod, attr.location);
                 methodSym->attributes.emplace_back(attr.name.token_name, attr.args);
             }
 

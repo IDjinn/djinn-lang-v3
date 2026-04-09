@@ -355,6 +355,16 @@ void BytecodeCompiler::compileBinaryExpression(const BinaryExpression& expr)
         break;
     case TokenType::GREATER_EQUAL: emit(OpCode::CMP_GE_INT);
         break;
+    case TokenType::LESS_LESS: emit(OpCode::SHL_INT);
+        break;
+    case TokenType::GREATER_GREATER: emit(OpCode::SHR_INT);
+        break;
+    case TokenType::AMPERSAND: emit(OpCode::AND_INT);
+        break;
+    case TokenType::PIPE: emit(OpCode::OR_INT);
+        break;
+    case TokenType::CARET: emit(OpCode::XOR_INT);
+        break;
     case TokenType::AND_AND: emit(OpCode::LOGIC_AND);
         break;
     case TokenType::OR_OR: emit(OpCode::LOGIC_OR);
@@ -374,6 +384,8 @@ void BytecodeCompiler::compileUnaryExpression(const UnaryExpression& expr)
     case TokenType::MINUS: emit(OpCode::NEG_INT);
         break;
     case TokenType::BANG: emit(OpCode::LOGIC_NOT);
+        break;
+    case TokenType::TILDE: emit(OpCode::NOT_INT);
         break;
     default: _hadError = true;
         break;
@@ -842,6 +854,47 @@ ConstValue ConstVM::execute(
             }
 
         // Logic
+        case OpCode::SHL_INT:
+            {
+                auto r = pop();
+                auto l = pop();
+                push(ConstValue::makeInt(l.toInt() << r.toInt()));
+                break;
+            }
+        case OpCode::SHR_INT:
+            {
+                auto r = pop();
+                auto l = pop();
+                push(ConstValue::makeInt(l.toInt() >> r.toInt()));
+                break;
+            }
+        case OpCode::AND_INT:
+            {
+                auto r = pop();
+                auto l = pop();
+                push(ConstValue::makeInt(l.toInt() & r.toInt()));
+                break;
+            }
+        case OpCode::OR_INT:
+            {
+                auto r = pop();
+                auto l = pop();
+                push(ConstValue::makeInt(l.toInt() | r.toInt()));
+                break;
+            }
+        case OpCode::XOR_INT:
+            {
+                auto r = pop();
+                auto l = pop();
+                push(ConstValue::makeInt(l.toInt() ^ r.toInt()));
+                break;
+            }
+        case OpCode::NOT_INT:
+            {
+                auto v = pop();
+                push(ConstValue::makeInt(~v.toInt()));
+                break;
+            }
         case OpCode::LOGIC_AND:
             {
                 auto r = pop();

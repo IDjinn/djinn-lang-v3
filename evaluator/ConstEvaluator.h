@@ -63,6 +63,14 @@ enum class OpCode : uint8_t
     CMP_GT_FLOAT,
     CMP_GE_FLOAT,
 
+    // Bitwise (pop 2, push 1)
+    SHL_INT, // left shift
+    SHR_INT, // right shift
+    AND_INT, // bitwise and
+    OR_INT, // bitwise or
+    XOR_INT, // bitwise xor
+    NOT_INT, // bitwise not (unary, pop 1, push 1)
+
     // Logic (pop 1 or 2, push bool)
     LOGIC_AND,
     LOGIC_OR,

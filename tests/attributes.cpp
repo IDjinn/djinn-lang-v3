@@ -251,3 +251,84 @@ TEST(Attributes, ErrorOnUnknownStructAttribute)
     const auto result = DjinnCompiler::run(source, {.includeStd = true});
     EXPECT_GT(result.diagnostics.size(), 0);
 }
+
+// ============================================================================
+// Attribute target validation
+// ============================================================================
+
+TEST(Attributes, WarningWhenFunctionAttributeOnStruct)
+{
+    const auto source = R"(
+        [ForceInline]
+        struct Foo {
+            i32 x;
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 1);
+    EXPECT_TRUE(result.diagnostics.at(0).message.contains("is not valid on struct"));
+}
+
+TEST(Attributes, WarningWhenStructAttributeOnMethod)
+{
+    const auto source = R"(
+        struct Foo {
+            [Align(16)]
+            public static i32 bar() {
+                return 0;
+            }
+        }
+
+        i32 main() {
+            return Foo.bar();
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 1);
+    EXPECT_TRUE(result.diagnostics.at(0).message.contains("is not valid on method"));
+}
+
+TEST(Attributes, NoWarningWhenAttributeOnValidTarget)
+{
+    const auto source = R"(
+        struct Foo {
+            [ForceInline]
+            public static i32 bar() {
+                return 42;
+            }
+        }
+
+        i32 main() {
+            return Foo.bar();
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+TEST(Attributes, DeprecatedValidOnAnyTarget)
+{
+    const auto source = R"(
+        [Deprecated(message = "use NewFoo")]
+        struct Foo {
+            [Deprecated(message = "use bar2")]
+            public static i32 bar() {
+                return 0;
+            }
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.includeStd = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}

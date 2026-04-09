@@ -21,7 +21,7 @@ BindingResult Binder::bind(const Program& program)
     collectDeclarations(program);
     processImports(program);
 
-    // Collect attribute declarations as structs
+    // Collect attribute declarations — register targets and structs
     {
         const std::string attrPrefix = program.getNamespacePrefix();
         for (const auto& attrDecl : program.attributeDecls)
@@ -36,6 +36,15 @@ BindingResult Binder::bind(const Program& program)
                 }
                 _global_scope->defineStruct(structSym);
             }
+
+            int32_t targetMask = 0;
+            for (const auto& arg : attrDecl->targetArgs)
+            {
+                if (auto* str = std::get_if<std::string>(&arg.value))
+                    targetMask |= resolveAttributeTargetString(*str);
+            }
+            if (targetMask == 0) targetMask = TargetAll;
+            _attributeTargets[attrDecl->name.token_name] = targetMask;
         }
     }
 
@@ -146,17 +155,7 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         }
     }
 
-    // Collect remaining declarations (skip std::types, already done)
-    for (const auto& program : programs)
-    {
-        if (program->fileNamespace == "std::types") continue;
-        LOG_DEBUG("[binder] collecting declarations: '%s' (ns='%s', structs=%zu, enums=%zu, functions=%zu)",
-                  program->name.c_str(), program->fileNamespace.c_str(),
-                  program->structs.size(), program->enums.size(), program->functions.size());
-        collectDeclarations(*program);
-    }
-
-    // Collect attribute declarations — register as structs for typed attributes (e.g., Location)
+    // Collect attribute declarations — register targets and structs for typed attributes
     for (const auto& program : programs)
     {
         const std::string prefix = program->getNamespacePrefix();
@@ -172,7 +171,26 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
                 }
                 _global_scope->defineStruct(structSym);
             }
+
+            int32_t targetMask = 0;
+            for (const auto& arg : attrDecl->targetArgs)
+            {
+                if (auto* str = std::get_if<std::string>(&arg.value))
+                    targetMask |= resolveAttributeTargetString(*str);
+            }
+            if (targetMask == 0) targetMask = TargetAll;
+            _attributeTargets[attrDecl->name.token_name] = targetMask;
         }
+    }
+
+    // Collect remaining declarations (skip std::types, already done)
+    for (const auto& program : programs)
+    {
+        if (program->fileNamespace == "std::types") continue;
+        LOG_DEBUG("[binder] collecting declarations: '%s' (ns='%s', structs=%zu, enums=%zu, functions=%zu)",
+                  program->name.c_str(), program->fileNamespace.c_str(),
+                  program->structs.size(), program->enums.size(), program->functions.size());
+        collectDeclarations(*program);
     }
 
     LOG_DEBUG("[binder] total symbols after collection: %zu", _global_scope->symbols().size());
@@ -286,5 +304,74 @@ void Binder::popScope()
     if (const auto parent = _current_scope->parentScope())
     {
         _current_scope = parent;
+    }
+}
+
+int32_t Binder::resolveAttributeTargetString(const std::string& targetStr)
+{
+    static const std::unordered_map<std::string, int32_t> targetMap = {
+        {"AttributeTarget.Function", TargetFunction},
+        {"AttributeTarget.Method", TargetMethod},
+        {"AttributeTarget.Struct", TargetStruct},
+        {"AttributeTarget.Field", TargetField},
+        {"AttributeTarget.Parameter", TargetParameter},
+        {"AttributeTarget.ReturnValue", TargetReturnValue},
+        {"AttributeTarget.Variable", TargetVariable},
+        {"AttributeTarget.All", TargetAll},
+    };
+
+    int32_t result = 0;
+    std::string remaining = targetStr;
+
+    while (!remaining.empty())
+    {
+        // Trim whitespace
+        size_t start = remaining.find_first_not_of(" ");
+        if (start == std::string::npos) break;
+        remaining = remaining.substr(start);
+
+        // Skip '|' separator
+        if (remaining[0] == '|')
+        {
+            remaining = remaining.substr(1);
+            continue;
+        }
+
+        // Find next token boundary (space or |)
+        size_t end = remaining.find_first_of(" |");
+        std::string token = remaining.substr(0, end);
+        remaining = end == std::string::npos ? "" : remaining.substr(end);
+
+        auto it = targetMap.find(token);
+        if (it != targetMap.end())
+            result |= it->second;
+    }
+
+    return result;
+}
+
+void Binder::validateAttributeTarget(const std::string& attrName, int32_t context, const SourceLocation& loc) const
+{
+    auto it = _attributeTargets.find(attrName);
+    if (it == _attributeTargets.end()) return;
+
+    if ((it->second & context) == 0)
+    {
+        static const std::unordered_map<int32_t, std::string> contextNames = {
+            {TargetFunction, "function"},
+            {TargetMethod, "method"},
+            {TargetStruct, "struct"},
+            {TargetField, "field"},
+            {TargetParameter, "parameter"},
+            {TargetReturnValue, "return value"},
+            {TargetVariable, "variable"},
+        };
+        std::string contextName = "unknown";
+        auto nameIt = contextNames.find(context);
+        if (nameIt != contextNames.end()) contextName = nameIt->second;
+
+        BINDER_WARNING(DiagnosticCode::INVALID_ATTRIBUTE_TARGET,
+                       "attribute '" + attrName + "' is not valid on " + contextName,
+                       loc);
     }
 }

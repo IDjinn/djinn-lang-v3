@@ -59,10 +59,13 @@ void Generator::forward_declare_struct(const StructSymbol& struct_symbol)
     currentScope->define_struct(struct_symbol.name, std::move(def));
 }
 
-llvm::Constant* Generator::evaluate_const_initializer(const Expression& expr) const
+llvm::Constant* Generator::evaluate_const_initializer(const Expression& expr,
+                                                      const std::unordered_map<std::string, ConstValue>& knownConstants)
+const
 {
-    // Try the stack-based VM first
     ConstEvaluator evaluator;
+    for (const auto& [name, val] : knownConstants)
+        evaluator.defineConstant(name, val);
     ConstValue result = evaluator.evaluate(expr);
     if (!result.isError()) return const_value_to_llvm(result);
 
@@ -151,6 +154,7 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
     }
 
     std::vector<llvm::Type*> fieldTypes;
+    std::unordered_map<std::string, ConstValue> resolvedConstants;
     LOG_DEBUG("[generator] resolve_struct_body: '%s' (fields=%zu, attrs=%zu)",
               struct_symbol.name.c_str(), struct_symbol.fields.size(), struct_symbol.attributes.size());
     for (const auto& attr : struct_symbol.attributes)
@@ -178,7 +182,7 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
                             std::vector<llvm::Constant*> fieldValues;
                             for (const auto& elem : braceInit->elements)
                             {
-                                llvm::Constant* elemVal = evaluate_const_initializer(*elem.value);
+                                llvm::Constant* elemVal = evaluate_const_initializer(*elem.value, resolvedConstants);
                                 if (!elemVal)
                                 {
                                     throw CompileError(DiagnosticCode::TYPE_MISMATCH,
@@ -193,11 +197,14 @@ void Generator::resolve_struct_body(const StructSymbol& struct_symbol)
                 }
 
                 if (!constVal)
-                    constVal = evaluate_const_initializer(*field.initializer);
+                    constVal = evaluate_const_initializer(*field.initializer, resolvedConstants);
 
                 if (constVal)
                 {
                     def->constFields[field.name] = constVal;
+                    if (auto* ci = llvm::dyn_cast<llvm::ConstantInt>(constVal);
+                        ci && ci->getBitWidth() <= 64)
+                        resolvedConstants[field.name] = ConstValue::makeInt(ci->getSExtValue());
                 }
                 else
                 {

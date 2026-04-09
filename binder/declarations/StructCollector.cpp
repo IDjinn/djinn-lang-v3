@@ -101,6 +101,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
                              "unknown attribute '" + attr.name.token_name + "'",
                              attr.name, attr.location);
             }
+            validateAttributeTarget(attr.name.token_name, TargetMethod, attr.location);
             methodSym->attributes.emplace_back(attr.name.token_name, attr.args);
         }
 
@@ -146,6 +147,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
                          "unknown attribute '" + attr.name.token_name + "'",
                          attr.name, attr.location);
         }
+        validateAttributeTarget(attr.name.token_name, TargetStruct, attr.location);
         structSym->attributes.emplace_back(attr.name.token_name, attr.args);
     }
 

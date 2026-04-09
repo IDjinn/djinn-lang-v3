@@ -81,6 +81,9 @@ namespace DiagnosticCode
 
     // Macro warnings (6xxx)
     constexpr uint32_t MACRO_POSSIBLE_SIDE_EFFECT = 6001;
+
+    // Attribute errors (8xxx)
+    constexpr uint32_t INVALID_ATTRIBUTE_TARGET = 8001;
 }
 
 struct SourceLocation

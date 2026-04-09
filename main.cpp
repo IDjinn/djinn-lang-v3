@@ -137,6 +137,10 @@ int main(int argc, char* argv[])
         {
             options.generateBinary = false;
         }
+        else if (arg == "--no-cache")
+        {
+            options.noCache = true;
+        }
         else if (arg == "-r")
         {
             recursive = true;

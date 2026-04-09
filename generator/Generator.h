@@ -160,7 +160,9 @@ private:
 
     llvm::Value* generate_expression(const Expression& expr);
 
-    llvm::Constant* evaluate_const_initializer(const Expression& expr) const;
+    llvm::Constant* evaluate_const_initializer(const Expression& expr,
+                                               const std::unordered_map<std::string, ConstValue>& knownConstants = {})
+    const;
 
     llvm::Constant* const_value_to_llvm(const ConstValue& val) const;
 

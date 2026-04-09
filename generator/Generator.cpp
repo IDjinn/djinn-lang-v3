@@ -96,16 +96,6 @@ void Generator::register_intrinsic_constants()
 
     defInt("Runtime", "PointerSize", sizeof(void*));
 
-    // AttributeTarget bitmask values
-    defInt("AttributeTarget", "Function", 1);
-    defInt("AttributeTarget", "Method", 2);
-    defInt("AttributeTarget", "Struct", 4);
-    defInt("AttributeTarget", "Field", 8);
-    defInt("AttributeTarget", "Parameter", 16);
-    defInt("AttributeTarget", "ReturnValue", 32);
-    defInt("AttributeTarget", "Variable", 64);
-    defInt("AttributeTarget", "All", 127);
-
     LOG_DEBUG("[generator] intrinsic constants registered");
 }
 
@@ -497,7 +487,14 @@ void Generator::run_passes(bool skipCoroPasses) const
         if (llvm::verifyModule(*module, &errorStream))
         {
             LOG_ERROR("[run_passes] LLVM module verification FAILED before passes:\n%s", errorStr.c_str());
-            return;
+            for (auto& fn : *module)
+            {
+                if (fn.isDeclaration()) continue;
+                std::string fnErr;
+                llvm::raw_string_ostream fnStream(fnErr);
+                if (llvm::verifyFunction(fn, &fnStream))
+                    LOG_ERROR("[run_passes]   broken function: '%s': %s", fn.getName().str().c_str(), fnErr.c_str());
+            }
         }
     }
 

@@ -306,16 +306,6 @@ static void register_intrinsic_values(ConstEvaluator& eval)
 #endif
 
     defInt("Runtime", "PointerSize", sizeof(void*));
-
-    // AttributeTarget bitmask values
-    defInt("AttributeTarget", "Function", 1);
-    defInt("AttributeTarget", "Method", 2);
-    defInt("AttributeTarget", "Struct", 4);
-    defInt("AttributeTarget", "Field", 8);
-    defInt("AttributeTarget", "Parameter", 16);
-    defInt("AttributeTarget", "ReturnValue", 32);
-    defInt("AttributeTarget", "Variable", 64);
-    defInt("AttributeTarget", "All", 127);
 }
 
 static ConstEvaluator create_comptime_evaluator(
@@ -479,6 +469,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         // Check source-level cache: if no source file changed, skip everything
         std::map<std::string, std::string> currentHashes;
         BuildCache cache;
+        if (!options.noCache)
         {
             auto _phase = summary.phase("cache");
             currentHashes = hash_source_files(allSourceFiles);
@@ -486,7 +477,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             LOG_DEBUG("[cache] hashed %zu source files, loaded cache from %s", currentHashes.size(), cachePath.c_str());
         }
 
-        if (cache.matches(currentHashes, options.optimizationLevel) && fs::exists(exePath))
+        if (!options.noCache && cache.matches(currentHashes, options.optimizationLevel) && fs::exists(exePath))
         {
             LOG_INFO("[cache] sources unchanged, skipping build");
 
@@ -644,7 +635,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         // Check IR-level cache: if generated IR unchanged, skip clang
         auto irHash = compute_hash(generatedIr);
-        bool skipClang = (cache.irHash == irHash
+        bool skipClang = (!options.noCache
+            && cache.irHash == irHash
             && cache.optimizationLevel == options.optimizationLevel
             && fs::exists(exePath));
 

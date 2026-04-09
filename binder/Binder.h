@@ -103,6 +103,22 @@ private:
     std::string currentFunction_;
     std::string currentStructName_;
     bool _bindingStdLib = false;
+    std::unordered_map<std::string, int32_t> _attributeTargets;
+
+    enum AttributeTargetFlag : int32_t
+    {
+        TargetFunction = 1 << 0,
+        TargetMethod = 1 << 1,
+        TargetStruct = 1 << 2,
+        TargetField = 1 << 3,
+        TargetParameter = 1 << 4,
+        TargetReturnValue = 1 << 5,
+        TargetVariable = 1 << 6,
+        TargetAll = 127,
+    };
+
+    static int32_t resolveAttributeTargetString(const std::string& targetStr);
+    void validateAttributeTarget(const std::string& attrName, int32_t context, const SourceLocation& loc) const;
     djinn::binder::ControlFlowContext _controlFlow;
     djinn::ownership::OwnershipTracker _ownership;
 

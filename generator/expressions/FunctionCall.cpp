@@ -107,6 +107,8 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
+            auto* deadBlock = llvm::BasicBlock::Create(*context, "after_trap", currentFunction);
+            builder->SetInsertPoint(deadBlock);
             return nullptr;
         }
 
@@ -120,6 +122,8 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
 
             builder->CreateCall(trapFunc);
             builder->CreateUnreachable();
+            auto* deadBlock = llvm::BasicBlock::Create(*context, "after_debugtrap", currentFunction);
+            builder->SetInsertPoint(deadBlock);
             return nullptr;
         }
 

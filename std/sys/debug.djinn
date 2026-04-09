@@ -21,6 +21,6 @@ struct Debug {
     private static void assert_fail(i8* message, Location sourceLocation) {
       printf("assertion failed: %s\n  at %s:%d:%d\n", message, sourceLocation.fileName, sourceLocation.line, sourceLocation.column);
       debugtrap();
-      unreacheable();
+      unreachable();
     }
 }
