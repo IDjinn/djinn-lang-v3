@@ -1,3 +1,4 @@
+
 # Djinn Lang
 
 ## Philosophy
@@ -34,7 +35,10 @@ See `todo.md` for full roadmap. Summary:
 - **Phase 5 (Libraries)**: COMPLETE — separate compilation (`--lib`), module linking (`-l`),
   `--std-decl` mode, TypeInfo cross-module (`LinkOnceODR` + COMDAT), generic dedup,
   RTTI/reflection (`TypeInfoExt` with fields/methods/attributes, `[Reflect]` attribute,
-  `reflection-mode: none|annotated|all` in .proj)
+  `reflection-mode: none|annotated|all` in .proj), `.djlib` format (binary: header + JSON metadata
+  + LLVM bitcode), `DjLibWriter`/`DjLibReader`, `--inspect` command, auto-detection via
+    `-o file.djlib` / `libs: [file.djlib]`, full metadata (structs, functions, enums, interfaces,
+    macros, impl blocks, attributes, constexprs, static vars), `isFromLibrary` symbol flag
 
 Already implemented: control flow, arithmetic, mutability, ownership/copy semantics,
 name mangling, binder/scope, diagnostics, imports, namespaces, LSP server, intrinsics (sizeof, alignof, typeof,
@@ -58,6 +62,7 @@ tests/          GoogleTest unit tests (~200+ cases across 31 files)
 playground/     Test files for manual testing
 examples/       Example .djinn programs
 runtime/        C runtime for async (event loop, thread pool, coroutine wrappers)
+lib/            .djlib library format (DjLibFormat, DjLibWriter, DjLibReader)
 docs/           Fumadocs (Next.js) documentation site
 ```
 
@@ -116,7 +121,11 @@ docs/           Fumadocs (Next.js) documentation site
   namespace-accessible, compile-time initialized, emitted as LLVM global variables
 - **Library compilation**: `--lib` mode (skip main/runtime), `-l file.ll` linking via `llvm::Linker`,
   `--std-decl` (declarations only, link bodies from .ll), generic dedup via `LinkOnceODR` + COMDAT,
-  project file (`djinn.proj`) with `library-mode`, `libs`, `reflection-mode` settings
+  project file (`djinn.proj`) with `library-mode`, `libs`, `reflection-mode` settings,
+  `.djlib` binary format (16B header + JSON metadata + LLVM bitcode), `DjLibWriter`/`DjLibReader`
+  in `lib/`, auto-detection via `-o file.djlib` and `libs: [file.djlib]`, `--inspect` command
+  (summary + `--json` full dump), `isFromLibrary` flag on symbols (generator emits declarations
+  only, bodies come from bitcode), primitive type filtering for parser registration
 - **RTTI/Reflection**: `TypeInfo` (16 bytes: id, size, name, kind) for boxing/variadics, deterministic FNV-1a
   type IDs cross-module, `TypeInfoExt` (fields, methods, attributes) opt-in via `[Reflect]` attribute or
   `reflection-mode: all`, zero-cost when unused (lazy generation), `AttributeInfo`, `FieldInfo`, `MethodInfo`

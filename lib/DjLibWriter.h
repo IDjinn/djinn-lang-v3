@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include "../binder/SymbolTable.h"
 #include "../parser/ast/Declaration.h"
+#include "../diagnostics/Diagnostic.h"
 
 namespace llvm { class Module; }
 
@@ -21,6 +22,8 @@ namespace djlib
         void collectImplBlocks(const std::vector<std::shared_ptr<Program>>& programs);
         void collectConstExprs(const ScopedSymbolTable& symbols);
         void collectStaticVars(const ScopedSymbolTable& symbols);
+        void collectGenericSources(const std::vector<std::shared_ptr<Program>>& programs,
+                                   const std::unordered_map<std::string, SourceFile>& sources);
 
         [[nodiscard]] nlohmann::json serializeMetadata() const;
 
@@ -37,6 +40,7 @@ namespace djlib
         nlohmann::json _implBlocks = nlohmann::json::array();
         nlohmann::json _constExprs = nlohmann::json::array();
         nlohmann::json _staticVars = nlohmann::json::array();
+        nlohmann::json _genericSources = nlohmann::json::array();
     };
 }
 

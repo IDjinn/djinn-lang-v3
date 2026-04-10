@@ -203,6 +203,8 @@ public:
 
     [[nodiscard]] const std::vector<Diagnostic>& get_diagnostics() const;
 
+    [[nodiscard]] const std::unordered_map<std::string, SourceFile>& getSources() const { return _sources; }
+
     void printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry>>& stack) const;
 
 private:

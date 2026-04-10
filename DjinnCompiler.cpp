@@ -620,6 +620,41 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
                         if (shortName != name)
                             stdTypeNames.push_back(shortName);
                     }
+
+                if (meta.contains("genericSources"))
+                {
+                    for (const auto& gs : meta["genericSources"])
+                    {
+                        auto source = gs.at("source").get<std::string>();
+                        auto file = gs.at("file").get<std::string>();
+                        auto ns = gs.value("namespace", std::string{});
+                        auto libFileName = "[djlib]:" + file;
+
+                        diagnostics.registerSource(libFileName, source);
+                        Lexer lexer(source, libFileName);
+                        auto tokens = lexer.tokenize();
+
+                        Parser parser(tokens, diagnostics);
+                        for (const auto& name : preludeTypeNames)
+                            parser.registerKnownType(name);
+                        for (const auto& name : stdTypeNames)
+                            parser.registerKnownType(name);
+
+                        auto program = parser.parse(libFileName);
+                        program->fileNamespace = ns;
+
+                        // Keep only generic declarations + attributes — non-generics already injected by DjLibReader
+                        std::erase_if(program->structs, [](const auto& s) { return s->genericParams.empty(); });
+                        std::erase_if(program->enums, [](const auto& e) { return e->genericParams.empty(); });
+                        program->functions.clear();
+                        program->externFunctions.clear();
+                        program->staticVars.clear();
+                        program->constExprs.clear();
+
+                        programs.emplace_back(std::move(program));
+                        LOG_DEBUG("[djlib] re-parsed generic source: %s (ns=%s)", file.c_str(), ns.c_str());
+                    }
+                }
             }
         }
 
@@ -775,6 +810,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             writer.collectImplBlocks(programs);
             writer.collectConstExprs(*bindResult.globalScope);
             writer.collectStaticVars(*bindResult.globalScope);
+            writer.collectGenericSources(programs, diagnostics.getSources());
 
             auto djlibName = options.outputFileName.empty() ? "output" : options.outputFileName;
             auto djlibPath = fs::path(options.outputDirectory) / (djlibName + ".djlib");

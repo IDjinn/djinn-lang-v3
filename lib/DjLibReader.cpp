@@ -103,12 +103,15 @@ namespace djlib
             }
         }
 
+        bool hasGenericSources = _metadata.contains("genericSources") && !_metadata["genericSources"].empty();
+
         if (_metadata.contains("structs"))
         {
             for (const auto& j : _metadata["structs"])
             {
                 auto sym = deserializeStruct(j);
                 sym->isFromLibrary = true;
+                if (hasGenericSources && sym->isGeneric()) continue;
                 scope.defineStruct(sym);
 
                 if (auto pos = sym->name.rfind("::"); pos != std::string::npos)
@@ -126,6 +129,7 @@ namespace djlib
             {
                 auto sym = deserializeEnum(j);
                 sym->isFromLibrary = true;
+                if (hasGenericSources && sym->isGeneric()) continue;
                 scope.defineEnum(sym);
 
                 if (auto pos = sym->name.rfind("::"); pos != std::string::npos)
@@ -257,17 +261,19 @@ namespace djlib
             auto type = j.at("type").get<Type>();
             bool mut = j.value("mut", false);
 
-            scope.staticVars[name] = {type, nullptr, mut};
+            // Only define Symbol for binder lookup — do NOT add to staticVars map
+            // The generator would create duplicate GlobalVariable conflicting with bitcode
             auto sym = std::make_shared<Symbol>(SymbolKind::Variable, name, type);
             sym->isMutable = mut;
+            sym->isFromLibrary = true;
             scope.define(sym);
 
             if (auto pos = name.rfind("::"); pos != std::string::npos)
             {
                 auto shortName = name.substr(pos + 2);
-                scope.staticVars[shortName] = {type, nullptr, mut};
                 auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, shortName, type);
                 shortSym->isMutable = mut;
+                shortSym->isFromLibrary = true;
                 scope.define(shortSym);
             }
         }

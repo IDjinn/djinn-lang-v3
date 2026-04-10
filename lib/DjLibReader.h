@@ -27,6 +27,7 @@ namespace djlib
         [[nodiscard]] const std::string& getBitcodeData() const { return _bitcodeData; }
         [[nodiscard]] const nlohmann::json& metadata() const { return _metadata; }
         [[nodiscard]] bool isValid() const { return _valid; }
+        [[nodiscard]] bool hasGenericSources() const { return _valid && _metadata.contains("genericSources"); }
 
     private:
         nlohmann::json _metadata;

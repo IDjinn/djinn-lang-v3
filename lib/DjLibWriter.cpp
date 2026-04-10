@@ -8,6 +8,7 @@
 
 #include <fstream>
 #include <cstring>
+#include <set>
 
 namespace djlib
 {
@@ -182,6 +183,43 @@ namespace djlib
         }
     }
 
+    void DjLibWriter::collectGenericSources(const std::vector<std::shared_ptr<Program>>& programs,
+                                            const std::unordered_map<std::string, SourceFile>& sources)
+    {
+        std::set<std::string> includedFiles;
+
+        for (const auto& program : programs)
+        {
+            bool hasGenerics = false;
+            for (const auto& s : program->structs)
+                if (!s->genericParams.empty())
+                {
+                    hasGenerics = true;
+                    break;
+                }
+            if (!hasGenerics)
+                for (const auto& e : program->enums)
+                    if (!e->genericParams.empty())
+                    {
+                        hasGenerics = true;
+                        break;
+                    }
+
+            if (!hasGenerics) continue;
+            if (includedFiles.contains(program->name)) continue;
+            includedFiles.insert(program->name);
+
+            auto it = sources.find(program->name);
+            if (it == sources.end()) continue;
+
+            nlohmann::json j;
+            j["file"] = program->name;
+            j["namespace"] = program->fileNamespace;
+            j["source"] = it->second.source;
+            _genericSources.push_back(std::move(j));
+        }
+    }
+
     nlohmann::json DjLibWriter::serializeMetadata() const
     {
         nlohmann::json meta;
@@ -195,6 +233,7 @@ namespace djlib
         meta["attributeDecls"] = _attributeDecls;
         meta["implBlocks"] = _implBlocks;
         meta["constExprs"] = _constExprs;
+        if (!_genericSources.empty()) meta["genericSources"] = _genericSources;
         meta["staticVars"] = _staticVars;
         return meta;
     }
