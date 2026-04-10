@@ -6,6 +6,7 @@
 #include "DjinnCompiler.h"
 #include "config/ProjectConfig.h"
 #include "utils/Logger.h"
+#include "lib/DjLibReader.h"
 
 #define BINDER_DEBUG 1
 #define PARSER_DEBUG 1
@@ -33,6 +34,7 @@ void printUsage(const char* programName)
         << "  --reflect-annotated Generate TypeInfoExt only for [Reflect] structs\n"
         << "  --no-std      Don't include standard library\n"
         << "  --std-decl    Include std declarations only (use with -l std.ll)\n"
+        << "  --inspect <file.djlib>  Inspect djlib metadata\n"
         << "  -h, --help    Show this help message\n"
         << "\nExamples:\n"
         << "  " << programName << " main.djinn\n"
@@ -104,6 +106,40 @@ int main(int argc, char* argv[])
         if (arg == "-h" || arg == "--help")
         {
             printUsage(argv[0]);
+            return 0;
+        }
+        else if (arg == "--inspect" && i + 1 < argc)
+        {
+            djlib::DjLibReader reader;
+            if (!reader.read(argv[++i]))
+            {
+                std::cerr << "Failed to read djlib file\n";
+                return 1;
+            }
+            const auto& meta = reader.metadata();
+            auto structs = meta.value("structs", nlohmann::json::array()).size();
+            auto functions = meta.value("functions", nlohmann::json::array()).size();
+            auto externFns = meta.value("externFunctions", nlohmann::json::array()).size();
+            auto enums = meta.value("enums", nlohmann::json::array()).size();
+            auto interfaces = meta.value("interfaces", nlohmann::json::array()).size();
+            auto macros = meta.value("macros", nlohmann::json::array()).size();
+            auto implBlocks = meta.value("implBlocks", nlohmann::json::array()).size();
+
+            std::cout << "=== djlib inspect ===\n"
+                << "  structs:    " << structs << "\n"
+                << "  functions:  " << functions << "\n"
+                << "  externs:    " << externFns << "\n"
+                << "  enums:      " << enums << "\n"
+                << "  interfaces: " << interfaces << "\n"
+                << "  macros:     " << macros << "\n"
+                << "  impl blocks:" << implBlocks << "\n"
+                << "  bitcode:    " << reader.getBitcodeData().size() << " bytes\n";
+
+            if (argc > i + 1 && std::string(argv[i + 1]) == "--json")
+            {
+                ++i;
+                std::cout << "\n" << meta.dump(2) << "\n";
+            }
             return 0;
         }
         else if (arg == "-o" && i + 1 < argc)
