@@ -168,6 +168,18 @@ void Generator::generate_continue_statement()
 
 void Generator::generate_block(const Block& block)
 {
+    if (block.flatten)
+    {
+        for (const auto& stmt : block.statements)
+        {
+            generate_statement(*stmt);
+            if (builder->GetInsertBlock()->getTerminator())
+            {
+                break;
+            }
+        }
+        return;
+    }
     push_scope();
     for (const auto& stmt : block.statements)
     {

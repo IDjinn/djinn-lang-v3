@@ -48,6 +48,7 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"consteval", TokenType::CONST_EVAL},
     {"macro", TokenType::MACRO},
     {"is", TokenType::IS},
+    {"null", TokenType::NULL_KW},
 };
 
 Lexer::Lexer(std::string source, std::string fileId)
@@ -117,6 +118,29 @@ Token Lexer::read_string()
 {
     const uint32_t startLine = line;
     const uint32_t startColumn = column;
+
+    // Block string: """...""" — multi-line, no escape processing for backslashes,
+    // closing terminator is """. Inner double quotes are literal.
+    if (pos + 2 < source.size() && source[pos + 1] == '"' && source[pos + 2] == '"')
+    {
+        advance(); // first "
+        advance(); // second "
+        advance(); // third "
+        std::string value;
+        while (pos < source.size())
+        {
+            if (peek() == '"' && pos + 2 < source.size() && source[pos + 1] == '"' && source[pos + 2] == '"')
+            {
+                advance();
+                advance();
+                advance();
+                return make_token(TokenType::STRING_LITERAL, value, startLine, startColumn);
+            }
+            value += advance();
+        }
+        return make_token(TokenType::STRING_LITERAL, value, startLine, startColumn);
+    }
+
     advance();
     std::string value;
     while (peek() != '"' && peek() != '\0')
@@ -462,9 +486,42 @@ std::vector<Token> Lexer::tokenize()
                     advance();
                     advance();
                 }
+                else if (peekNext() == '.')
+                {
+                    tokens.push_back(make_token(TokenType::BANG_DOT, "!."));
+                    advance();
+                    advance();
+                }
                 else
                 {
                     tokens.push_back(make_token(TokenType::BANG, "!"));
+                    advance();
+                }
+                break;
+            case '?':
+                if (peekNext() == '?')
+                {
+                    advance();
+                    advance();
+                    if (peek() == '=')
+                    {
+                        tokens.push_back(make_token(TokenType::QUESTION_QUESTION_EQUAL, "??="));
+                        advance();
+                    }
+                    else
+                    {
+                        tokens.push_back(make_token(TokenType::QUESTION_QUESTION, "??"));
+                    }
+                }
+                else if (peekNext() == '.')
+                {
+                    tokens.push_back(make_token(TokenType::QUESTION_DOT, "?."));
+                    advance();
+                    advance();
+                }
+                else
+                {
+                    tokens.push_back(make_token(TokenType::QUESTION, "?"));
                     advance();
                 }
                 break;

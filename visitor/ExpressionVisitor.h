@@ -7,6 +7,7 @@
 
 // Forward declarations of all expression types (global namespace)
 struct BooleanLiteral;
+struct NullLiteral;
 struct IntegerLiteral;
 struct FloatLiteral;
 struct StringLiteral;
@@ -47,6 +48,8 @@ namespace djinn
         virtual void visit(const StringLiteral& expr) = 0;
 
         virtual void visit(const BooleanLiteral& expr) = 0;
+
+        virtual void visit(const NullLiteral& expr) = 0;
 
         virtual void visit(const Identifier& expr) = 0;
 

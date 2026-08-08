@@ -11,6 +11,41 @@
 
 llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
 {
+    if (expr.op == TokenType::QUESTION_QUESTION)
+    {
+        auto* left = generate_expression(*expr.left);
+        if (!left) return nullptr;
+        if (!left->getType()->isPointerTy())
+        {
+            return left; // non-nullable: pass-through
+        }
+        llvm::Function* func = builder->GetInsertBlock()->getParent();
+        auto* thenBB = llvm::BasicBlock::Create(*context, "coal.null", func);
+        auto* elseBB = llvm::BasicBlock::Create(*context, "coal.notnull", func);
+        auto* mergeBB = llvm::BasicBlock::Create(*context, "coal.merge", func);
+        auto* nullV = llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(left->getType()));
+        auto* cond = builder->CreateICmpEQ(left, nullV, "isnull");
+        builder->CreateCondBr(cond, thenBB, elseBB);
+
+        builder->SetInsertPoint(thenBB);
+        auto* right = generate_expression(*expr.right);
+        if (right && right->getType() != left->getType() && right->getType()->isPointerTy())
+        {
+            right = builder->CreateBitCast(right, left->getType(), "coal.cast");
+        }
+        auto* thenEnd = builder->GetInsertBlock();
+        builder->CreateBr(mergeBB);
+
+        builder->SetInsertPoint(elseBB);
+        builder->CreateBr(mergeBB);
+
+        builder->SetInsertPoint(mergeBB);
+        auto* phi = builder->CreatePHI(left->getType(), 2, "coal");
+        phi->addIncoming(right ? right : left, thenEnd);
+        phi->addIncoming(left, elseBB);
+        return phi;
+    }
+
     auto* left = generate_expression(*expr.left);
     auto* right = generate_expression(*expr.right);
 

@@ -114,6 +114,13 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
         return Type::struct_type("str");
     }
 
+    if (dynamic_cast<const NullLiteral*>(&expr))
+    {
+        Type t = Type::pointer(Type(TypeKind::VOID, 0, false));
+        t.nullable = true;
+        return t;
+    }
+
     if (const auto* ident = dynamic_cast<const Identifier*>(&expr))
     {
         if (const auto sym = _current_scope->lookupVariable(ident->identifier.token_name))
@@ -146,11 +153,46 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
         }
     }
 
+    if (const auto* fieldAccess = dynamic_cast<const FieldAccess*>(&expr))
+    {
+        auto objType = inferExpressionType(*fieldAccess->object);
+        if (objType)
+        {
+            std::string structName;
+            if (objType->kind == TypeKind::STRUCT) structName = objType->structName;
+            else if (objType->kind == TypeKind::POINTER && objType->elementType)
+                structName = objType->elementType->structName;
+            if (!structName.empty())
+            {
+                if (const auto structSym = _current_scope->lookupStruct(structName))
+                {
+                    if (const auto field = structSym->findField(fieldAccess->fieldName.token_name))
+                    {
+                        return field->type;
+                    }
+                }
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
 void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr, SourceLocation loc)
 {
+    if (dynamic_cast<const NullLiteral*>(&expr))
+    {
+        if (!expected.nullable)
+        {
+            BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                         "cannot assign 'null' to non-nullable type — use '" +
+                         std::string(expected.kind == TypeKind::STRUCT ? expected.structName : "T") +
+                         "?' to allow null",
+                         expr, loc);
+        }
+        return;
+    }
+
     if (const auto* call = dynamic_cast<const FunctionCall*>(&expr))
     {
         if (const auto funcSym = _global_scope->lookupFunction(call->name.token_name))

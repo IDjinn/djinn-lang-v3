@@ -150,6 +150,16 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
 
     const bool hasGeneric = involvesGeneric(leftResolved) || involvesGeneric(rightResolved);
 
+    // Null-coalescing: skip type mismatch check; result type follows left's non-nullable form
+    if (expr.op == TokenType::QUESTION_QUESTION)
+    {
+        Type resultType = leftResolved;
+        resultType.nullable = false;
+        return std::make_shared<BinaryExpressionSymbol>(
+            tokenTypeToString(expr.op), std::move(left), std::move(right), resultType, location
+        );
+    }
+
     // Type mismatch check (allow integer width differences - generator handles widening)
     // Skip for generic types (validated at monomorphization)
     if (leftResolved != rightResolved && !hasGeneric && !hasOperatorOverride)

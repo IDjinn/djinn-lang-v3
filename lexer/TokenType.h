@@ -143,6 +143,14 @@ enum class TokenType
 
     // PATTERN MATCHING
     IS, // is (type check for object)
+
+    // NULL HANDLING
+    NULL_KW, // null
+    QUESTION, // ?
+    QUESTION_DOT, // ?.
+    QUESTION_QUESTION, // ??
+    QUESTION_QUESTION_EQUAL, // ??=
+    BANG_DOT, // !.
 };
 
 

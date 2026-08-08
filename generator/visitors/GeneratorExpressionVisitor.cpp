@@ -28,6 +28,12 @@ namespace djinn
         _result = llvm::ConstantInt::get(_generator.builder->getInt1Ty(), expr.value == "true" ? 1 : 0);
     }
 
+    void GeneratorExpressionVisitor::visit(const NullLiteral&)
+    {
+        _result = llvm::ConstantPointerNull::get(
+            llvm::PointerType::get(_generator.builder->getInt8Ty(), 0));
+    }
+
     void GeneratorExpressionVisitor::visit(const Identifier& expr)
     {
         _result = _generator.generate_identifier(expr);

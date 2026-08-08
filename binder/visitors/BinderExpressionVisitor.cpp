@@ -24,6 +24,13 @@ namespace djinn
             IntegerLiteralSymbol>(std::to_string(expr.value == "true" ? 1 : 0), 1, expr.location);
     }
 
+    void BinderExpressionVisitor::visit(const NullLiteral& expr)
+    {
+        Type t = Type::pointer(Type(TypeKind::VOID, 0, false));
+        t.nullable = true;
+        _result = std::make_shared<Symbol>(SymbolKind::Variable, "null", t, expr.location);
+    }
+
     void BinderExpressionVisitor::visit(const StringLiteral& expr)
     {
         _result = std::make_shared<StringLiteralSymbol>(expr.value, expr.location);
@@ -129,6 +136,20 @@ namespace djinn
     void BinderExpressionVisitor::visit(const CastExpression& expr)
     {
         auto operand = _binder.bindExpression(*expr.operand);
+        if (!expr.targetType.nullable)
+        {
+            const auto operandType = _binder.inferExpressionType(*expr.operand);
+            if (operandType && operandType->nullable)
+            {
+                _binder._diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Warning,
+                    DiagnosticCode::TYPE_MISMATCH,
+                    std::string("casting from nullable to non-nullable — value will be null-checked at runtime; ")
+                    + "use '?" "?' to provide a fallback to avoid this warning",
+                    expr.location
+                ));
+            }
+        }
         _result = std::make_shared<Symbol>(SymbolKind::Variable, "cast", expr.targetType, expr.location);
     }
 

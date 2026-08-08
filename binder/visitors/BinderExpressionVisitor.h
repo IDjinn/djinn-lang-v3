@@ -33,6 +33,8 @@ namespace djinn
 
         void visit(const BooleanLiteral& expr) override;
 
+        void visit(const NullLiteral& expr) override;
+
         void visit(const Identifier& expr) override;
 
         void visit(const FunctionCall& expr) override;

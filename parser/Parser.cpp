@@ -12,6 +12,7 @@
 #include <cassert>
 
 #include "../utils/Logger.h"
+#include "../lexer/Lexer.h"
 
 
 #define PARSER_ERROR(code, msg, location) do { \
@@ -269,7 +270,12 @@ std::unique_ptr<Type> Parser::parse_type()
     if (match(TokenType::LBRACKET))
     {
         expect("Expected ']' after '['", TokenType::RBRACKET);
-        return std::make_unique<Type>(Type::array(std::move(*baseType)));
+        baseType = std::make_unique<Type>(Type::array(std::move(*baseType)));
+    }
+
+    if (match(TokenType::QUESTION))
+    {
+        baseType->nullable = true;
     }
 
     return baseType;
@@ -1332,6 +1338,47 @@ std::unique_ptr<Statement> Parser::parse_statement()
         return parse_block();
     }
 
+    // Struct destructuring: auto { name1, name2, ... } = expr;
+    if (check(TokenType::AUTO) && current + 1 < tokens.size() &&
+        tokens[current + 1].type == TokenType::LBRACE)
+    {
+        advance(); // auto
+        advance(); // {
+        std::vector<SourceIdentifier> names;
+        if (!check(TokenType::RBRACE))
+        {
+            do
+            {
+                const Token& t = expect("Esperado nome de campo na desestruturação", TokenType::IDENTIFIER);
+                names.push_back(makeSourceIdentifier(t));
+            }
+            while (match(TokenType::COMMA));
+        }
+        expect("Esperado '}'", TokenType::RBRACE);
+        expect("Esperado '=' após padrão de desestruturação", TokenType::EQUAL);
+        auto rhs = parse_expression();
+        expect("Esperado ';'", TokenType::SEMICOLON);
+
+        static size_t destructureCounter = 0;
+        std::string tempName = "__destructure_" + std::to_string(destructureCounter++);
+        SourceLocation tempLoc = rhs->location;
+        SourceIdentifier tempIdent(tempName, tempLoc);
+        Type autoType = Type::auto_type();
+
+        auto block = std::make_unique<Block>();
+        block->flatten = true;
+        block->statements.push_back(std::make_unique<ExpressionStatement>(
+            std::make_unique<VariableInit>(autoType, tempIdent, std::move(rhs), false)));
+        for (auto& n : names)
+        {
+            auto src = std::make_unique<Identifier>(tempIdent);
+            auto fa = std::make_unique<FieldAccess>(std::move(src), n);
+            block->statements.push_back(std::make_unique<ExpressionStatement>(
+                std::make_unique<VariableInit>(autoType, n, std::move(fa), false)));
+        }
+        return block;
+    }
+
     // Expression statement
     auto expr = parse_expression();
     expect("Esperado ';'", TokenType::SEMICOLON);
@@ -1641,7 +1688,15 @@ std::unique_ptr<SwitchStatement> Parser::parse_switch_statement()
 
 std::unique_ptr<Expression> Parser::parse_expression()
 {
-    return parse_or();
+    auto left = parse_or();
+    while (match(TokenType::QUESTION_QUESTION))
+    {
+        TokenType op = previous().type;
+        auto right = parse_or();
+        auto finalLocation = right->location - left->location;
+        left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
+    }
+    return left;
 }
 
 std::unique_ptr<Expression> Parser::parse_or()
@@ -1880,6 +1935,33 @@ std::unique_ptr<Expression> Parser::parse_postfix()
 
     while (true)
     {
+        if (check(TokenType::QUESTION_DOT) || check(TokenType::BANG_DOT))
+        {
+            const FieldAccessKind kind = check(TokenType::QUESTION_DOT)
+                                             ? FieldAccessKind::NullConditional
+                                             : FieldAccessKind::NullForgiving;
+            advance();
+            const Token& memberTok = expect("Esperado nome do campo após '?.'/'!.'", TokenType::IDENTIFIER);
+            SourceIdentifier memberName = makeSourceIdentifier(memberTok);
+            if (match(TokenType::LPAREN))
+            {
+                std::vector<std::unique_ptr<Expression>> args;
+                if (!check(TokenType::RPAREN))
+                {
+                    do { args.push_back(parse_expression()); }
+                    while (match(TokenType::COMMA));
+                }
+                expect("Esperado ')' após argumentos", TokenType::RPAREN);
+                expand_interpolation_args(args);
+                auto call = std::make_unique<FunctionCall>(std::move(memberName), std::move(args), std::move(expr));
+                expr = std::move(call);
+            }
+            else
+            {
+                expr = std::make_unique<FieldAccess>(std::move(expr), std::move(memberName), kind);
+            }
+            continue;
+        }
         if (match(TokenType::DOT))
         {
             // Accept identifier or keywords as field/method names after '.'
@@ -1923,6 +2005,7 @@ std::unique_ptr<Expression> Parser::parse_postfix()
                     while (match(TokenType::COMMA));
                 }
                 expect("Esperado ')' após argumentos", TokenType::RPAREN);
+                expand_interpolation_args(args);
                 auto call = std::make_unique<FunctionCall>(std::move(memberName), std::move(args), std::move(expr));
                 call->hasVariadicForward = hasVariadicForward;
                 expr = std::move(call);
@@ -2013,6 +2096,11 @@ std::unique_ptr<Expression> Parser::parse_primary()
         return std::make_unique<BooleanLiteral>(previous().value, currentLocation);
     }
 
+    if (match(TokenType::NULL_KW))
+    {
+        return std::make_unique<NullLiteral>(currentLocation);
+    }
+
     if (match(TokenType::STRING_LITERAL))
     {
         return std::make_unique<StringLiteral>(previous().value, currentLocation);
@@ -2074,6 +2162,12 @@ std::unique_ptr<Expression> Parser::parse_primary()
             }
         }
 
+        bool isNullable = false;
+        if (!isAuto && isKnownType && !existingVar && match(TokenType::QUESTION))
+        {
+            isNullable = true;
+        }
+
         bool isArray = false;
         if (!isAuto && isKnownType && !existingVar && match(TokenType::LBRACKET))
         {
@@ -2127,6 +2221,13 @@ std::unique_ptr<Expression> Parser::parse_primary()
             isMutable = true;
         }
 
+        // Trailing ? after pointer/array — applies before identifier (i32[]? arr, User*? u)
+        if (!isNullable && !isAuto && isKnownType && !existingVar && (pointerDepth > 0 || isArray) &&
+            match(TokenType::QUESTION))
+        {
+            isNullable = true;
+        }
+
         // Step 4: Decide if this is a variable declaration or an expression
         const bool isTypeInference = isAuto && !existingVar &&
             (check(TokenType::EQUAL) || check(TokenType::SEMICOLON));
@@ -2151,6 +2252,13 @@ std::unique_ptr<Expression> Parser::parse_primary()
                 varType = Type::pointer(std::move(varType));
             }
             if (isArray) varType = Type::array(std::move(varType));
+
+            // Trailing ? after array/pointer — i32[]?, User*?
+            if (!isNullable && match(TokenType::QUESTION))
+            {
+                isNullable = true;
+            }
+            if (isNullable) varType.nullable = true;
 
             currentScope->define_variable(varName.token_name, varType);
             LOG_DEBUG(
@@ -2217,6 +2325,7 @@ std::unique_ptr<Expression> Parser::parse_primary()
             }
 
             expect("Esperado ')' após argumentos", TokenType::RPAREN);
+            expand_interpolation_args(args);
 
             std::unique_ptr<FunctionCall> call;
             if (!genericArgs.empty())
@@ -2237,6 +2346,16 @@ std::unique_ptr<Expression> Parser::parse_primary()
         {
             auto value = parse_expression();
             return std::make_unique<Assignment>(std::move(nameIdentifier), std::move(value));
+        }
+
+        // Null-coalescing assignment: name ??= expr  →  name = name ?? expr
+        if (match(TokenType::QUESTION_QUESTION_EQUAL))
+        {
+            auto rhs = parse_expression();
+            auto lhsCopy = std::make_unique<Identifier>(nameIdentifier);
+            auto coalesce = std::make_unique<BinaryExpression>(
+                std::move(lhsCopy), TokenType::QUESTION_QUESTION, std::move(rhs), nameIdentifier.location);
+            return std::make_unique<Assignment>(std::move(nameIdentifier), std::move(coalesce));
         }
 
         // Compound assignment: name += expr → name = name + expr
@@ -3469,4 +3588,65 @@ std::unique_ptr<Expression> Parser::expand_macro(const MacroDeclaration& macro)
     current = savedCurrent;
 
     return result;
+}
+
+void Parser::expand_interpolation_args(std::vector<std::unique_ptr<Expression>>& args)
+{
+    if (args.empty()) return;
+    auto* str = dynamic_cast<StringLiteral*>(args[0].get());
+    if (!str) return;
+    const std::string src = str->value;
+    if (src.find('{') == std::string::npos) return;
+
+    std::string newFmt;
+    std::vector<std::unique_ptr<Expression>> extras;
+    size_t i = 0;
+    int idx = static_cast<int>(args.size()) - 1;
+    bool any = false;
+
+    while (i < src.size())
+    {
+        const char c = src[i];
+        if (c == '{')
+        {
+            const size_t end = src.find('}', i + 1);
+            if (end == std::string::npos)
+            {
+                newFmt += c;
+                ++i;
+                continue;
+            }
+            std::string inner = src.substr(i + 1, end - i - 1);
+            if (inner.empty() || std::isdigit(static_cast<unsigned char>(inner[0])))
+            {
+                newFmt += '{';
+                newFmt += inner;
+                newFmt += '}';
+                i = end + 1;
+                continue;
+            }
+
+            Lexer subLex(inner, str->location.fileId);
+            auto subTokens = subLex.tokenize();
+            Parser sub(std::move(subTokens), _diagnostics);
+            auto e = sub.parse_expression();
+            extras.push_back(std::move(e));
+
+            newFmt += '{';
+            newFmt += std::to_string(idx);
+            newFmt += '}';
+            ++idx;
+            any = true;
+            i = end + 1;
+        }
+        else
+        {
+            newFmt += c;
+            ++i;
+        }
+    }
+
+    if (!any) return;
+    args[0] = std::make_unique<StringLiteral>(newFmt, str->location);
+    for (auto& e : extras) args.push_back(std::move(e));
 }

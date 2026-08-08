@@ -180,6 +180,8 @@ private:
     std::unique_ptr<Expression> expand_macro(const MacroDeclaration& macro);
 
     std::vector<Token> collect_macro_arg_tokens();
+
+    void expand_interpolation_args(std::vector<std::unique_ptr<Expression>>& args);
 };
 
 #endif //DJINN_PARSER_H

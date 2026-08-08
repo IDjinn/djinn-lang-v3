@@ -1014,8 +1014,8 @@ TEST(Intrinsic, ConstexprStructAllFieldsAreConst)
 {
     const auto source = R"(
         constexpr struct Limits {
-            i32 MIN = 1;
-            i32 MAX = 100;
+            const i32 MIN = 1;
+            const i32 MAX = 100;
         }
 
         i32 main() {

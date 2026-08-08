@@ -349,6 +349,22 @@ struct BooleanLiteral : Expression
     }
 };
 
+struct NullLiteral : Expression
+{
+    explicit NullLiteral(const SourceLocation& location)
+    {
+        this->location = location;
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "NullLiteral";
+    }
+};
+
 struct Identifier : Expression
 {
     SourceIdentifier identifier;
@@ -370,13 +386,27 @@ struct Identifier : Expression
     }
 };
 
+enum class FieldAccessKind : uint8_t
+{
+    Normal, // a.b
+    NullConditional, // a?.b
+    NullForgiving // a!.b
+};
+
 struct FieldAccess : Expression
 {
     std::unique_ptr<Expression> object;
     SourceIdentifier fieldName;
+    FieldAccessKind accessKind = FieldAccessKind::Normal;
 
     FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field)
         : object(std::move(obj)), fieldName(std::move(field))
+    {
+        location = field.location;
+    }
+
+    FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field, FieldAccessKind kind)
+        : object(std::move(obj)), fieldName(std::move(field)), accessKind(kind)
     {
         location = field.location;
     }
@@ -386,7 +416,12 @@ struct FieldAccess : Expression
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
-        os << "FieldAccess(." << fieldName.token_name << ")\n";
+        const char* op = accessKind == FieldAccessKind::NullConditional
+                             ? "?."
+                             : accessKind == FieldAccessKind::NullForgiving
+                             ? "!."
+                             : ".";
+        os << "FieldAccess(" << op << fieldName.token_name << ")\n";
         object->print(os, indent + 2);
     }
 };

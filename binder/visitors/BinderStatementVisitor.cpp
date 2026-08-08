@@ -23,6 +23,11 @@ namespace djinn
 
     void BinderStatementVisitor::visit(const Block& stmt)
     {
+        if (stmt.flatten)
+        {
+            _binder.bindBlock(stmt);
+            return;
+        }
         _binder.pushScope();
         _binder.bindBlock(stmt);
         _binder.popScope();

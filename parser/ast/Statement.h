@@ -57,6 +57,7 @@ struct ReturnStatement : Statement
 struct Block : Statement
 {
     std::vector<std::unique_ptr<Statement>> statements;
+    bool flatten = false;
 
     void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
