@@ -292,6 +292,19 @@ private:
                                                 const StructDef* def);
     void generate_spawn_statement(const SpawnStatement& stmt);
 
+    void generate_throw_statement(const ThrowStatement& stmt);
+
+    llvm::Value* generate_ternary_expression(const TernaryExpression& expr);
+
+    llvm::Value* generate_try_expression(const TryExpression& expr);
+
+    // Error handling globals (errno-style for throws functions)
+    bool currentFunctionThrows = false;
+    llvm::GlobalVariable* errorFlagGlobal = nullptr;
+    llvm::GlobalVariable* errorTagGlobal = nullptr;
+    void ensure_error_globals_declared();
+    llvm::Value* get_default_value(llvm::Type* type);
+
     // [intrinsic] struct method support
     llvm::Value* generate_intrinsic_method(const FunctionCall& call, const StructDef* def,
                                            const std::string& methodName);

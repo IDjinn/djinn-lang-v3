@@ -203,4 +203,22 @@ namespace djinn
         }
         _result = _binder.bindExpression(*expr.body);
     }
+
+    void BinderExpressionVisitor::visit(const TernaryExpression& expr)
+    {
+        _binder.bindExpression(*expr.condition);
+        auto trueSym = _binder.bindExpression(*expr.trueExpr);
+        _binder.bindExpression(*expr.falseExpr);
+        _result = trueSym;
+    }
+
+    void BinderExpressionVisitor::visit(const TryExpression& expr)
+    {
+        _binder.bindExpression(*expr.expr);
+        if (expr.fallback)
+        {
+            _binder.bindExpression(*expr.fallback);
+        }
+        _result = nullptr;
+    }
 } // namespace djinn

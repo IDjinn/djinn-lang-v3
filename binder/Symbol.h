@@ -176,6 +176,8 @@ struct FunctionSymbol : Symbol
     std::unique_ptr<Block> body;
     bool constEval;
     bool constExpr;
+    bool throwsAny = false;
+    std::vector<Type> throwsTypes;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation& loc = {})
         : Symbol(SymbolKind::Function, std::move(name), retType, loc),
@@ -199,6 +201,7 @@ struct FunctionSymbol : Symbol
 
     [[nodiscard]] bool hasBody() const { return body != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
+    [[nodiscard]] bool isThrowing() const { return throwsAny || !throwsTypes.empty(); }
 
     [[nodiscard]] size_t callerArity() const
     {
@@ -266,6 +269,8 @@ struct MethodSymbol : Symbol
     std::string operatorCanonicalName;
     std::string structName;
     std::vector<AttributeSymbol> attributes;
+    bool throwsAny = false;
+    std::vector<Type> throwsTypes;
 
     Block* body = nullptr;
     Expression* expressionBody = nullptr;
@@ -298,6 +303,7 @@ struct MethodSymbol : Symbol
     [[nodiscard]] bool hasBody() const { return body != nullptr || expressionBody != nullptr; }
     [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
+    [[nodiscard]] bool isThrowing() const { return throwsAny || !throwsTypes.empty(); }
 
     [[nodiscard]] size_t callerArity() const
     {

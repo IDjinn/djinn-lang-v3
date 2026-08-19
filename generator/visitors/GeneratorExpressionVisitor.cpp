@@ -144,4 +144,14 @@ namespace djinn
     {
         _result = _generator.generate_macro_expansion(expr);
     }
+
+    void GeneratorExpressionVisitor::visit(const TernaryExpression& expr)
+    {
+        _result = _generator.generate_ternary_expression(expr);
+    }
+
+    void GeneratorExpressionVisitor::visit(const TryExpression& expr)
+    {
+        _result = _generator.generate_try_expression(expr);
+    }
 } // namespace djinn

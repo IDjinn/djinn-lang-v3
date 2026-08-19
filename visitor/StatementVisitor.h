@@ -19,6 +19,7 @@ struct BreakStatement;
 struct ContinueStatement;
 struct YieldStatement;
 struct SpawnStatement;
+struct ThrowStatement;
 
 namespace djinn
 {
@@ -52,6 +53,8 @@ namespace djinn
         virtual void visit(const YieldStatement& stmt) = 0;
 
         virtual void visit(const SpawnStatement& stmt) = 0;
+
+        virtual void visit(const ThrowStatement& stmt) = 0;
     };
 } // namespace djinn
 

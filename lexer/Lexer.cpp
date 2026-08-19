@@ -49,6 +49,9 @@ static std::unordered_map<std::string, TokenType> keywords = {
     {"macro", TokenType::MACRO},
     {"is", TokenType::IS},
     {"null", TokenType::NULL_KW},
+    {"throw", TokenType::THROW},
+    {"throws", TokenType::THROWS},
+    {"try", TokenType::TRY},
 };
 
 Lexer::Lexer(std::string source, std::string fileId)

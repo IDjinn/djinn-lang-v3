@@ -84,6 +84,13 @@ namespace DiagnosticCode
 
     // Attribute errors (8xxx)
     constexpr uint32_t INVALID_ATTRIBUTE_TARGET = 8001;
+
+    // Error handling (9xxx)
+    constexpr uint32_t MISSING_TRY = 9001;
+    constexpr uint32_t THROW_OUTSIDE_THROWS = 9002;
+    constexpr uint32_t THROWS_TYPE_MISMATCH = 9003;
+    constexpr uint32_t TRY_ON_NON_THROWING = 9004;
+    constexpr uint32_t TRY_WITHOUT_FALLBACK = 9005;
 }
 
 struct SourceLocation

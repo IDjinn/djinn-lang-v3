@@ -80,7 +80,22 @@ namespace djinn
 
     void BinderStatementVisitor::visit(const SpawnStatement& stmt)
     {
-        // Validate the spawned expression (should be a function call)
+        if (stmt.expression)
+        {
+            _binder.bindExpression(*stmt.expression);
+        }
+    }
+
+    void BinderStatementVisitor::visit(const ThrowStatement& stmt)
+    {
+        if (!_binder.currentFunctionThrows_)
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::THROW_OUTSIDE_THROWS,
+                "'throw' statement outside of a 'throws' function",
+                stmt.expression ? stmt.expression->location : SourceLocation{}
+            ));
+        }
         if (stmt.expression)
         {
             _binder.bindExpression(*stmt.expression);

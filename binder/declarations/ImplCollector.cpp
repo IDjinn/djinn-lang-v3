@@ -73,6 +73,8 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             methodSym->isAsync = method->isAsync;
             methodSym->isOperator = method->isOperatorMethod;
             methodSym->operatorCanonicalName = method->operatorCanonicalName;
+            methodSym->throwsAny = method->throwsAny;
+            methodSym->throwsTypes = method->throwsTypes;
 
             // Copy and validate attributes from AST
             for (const auto& attr : method->attributes)

@@ -44,6 +44,8 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
     funcSym->isAsync = decl.isAsync;
     funcSym->constEval = decl.constEval;
     funcSym->constExpr = decl.constExpr;
+    funcSym->throwsAny = decl.throwsAny;
+    funcSym->throwsTypes = decl.throwsTypes;
 
     // function cannot be async and compile time constraint
     if (funcSym->isAsync && (funcSym->constEval || funcSym->constExpr))

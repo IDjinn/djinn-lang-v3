@@ -495,6 +495,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
     }
 
     currentFunction = llvmFunc;
+    currentFunctionThrows = method.isThrowing();
 
     const bool isStatic = method.isStatic;
     llvm::Type* returnType = generate_type(method.returnType);
@@ -576,6 +577,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
     }
 
     currentStructName = savedStructName;
+    currentFunctionThrows = false;
     pop_scope();
 }
 

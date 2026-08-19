@@ -77,6 +77,10 @@ namespace djinn
         void visit(const IsExpression& expr) override;
 
         void visit(const MacroExpansionExpression& expr) override;
+
+        void visit(const TernaryExpression& expr) override;
+
+        void visit(const TryExpression& expr) override;
     };
 } // namespace djinn
 

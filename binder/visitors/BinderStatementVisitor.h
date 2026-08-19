@@ -45,6 +45,8 @@ namespace djinn
         void visit(const YieldStatement& stmt) override;
 
         void visit(const SpawnStatement& stmt) override;
+
+        void visit(const ThrowStatement& stmt) override;
     };
 } // namespace djinn
 

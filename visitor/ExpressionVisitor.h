@@ -33,6 +33,8 @@ struct AwaitExpression;
 struct FixedArrayExpression;
 struct IsExpression;
 struct MacroExpansionExpression;
+struct TernaryExpression;
+struct TryExpression;
 
 namespace djinn
 {
@@ -94,6 +96,10 @@ namespace djinn
         virtual void visit(const IsExpression& expr) = 0;
 
         virtual void visit(const MacroExpansionExpression& expr) = 0;
+
+        virtual void visit(const TernaryExpression& expr) = 0;
+
+        virtual void visit(const TryExpression& expr) = 0;
     };
 } // namespace djinn
 

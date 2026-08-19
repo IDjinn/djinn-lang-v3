@@ -105,6 +105,8 @@ private:
 
     std::vector<Parameter> parse_parameters();
 
+    void parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes);
+
     std::unique_ptr<Block> parse_block();
 
     std::unique_ptr<Statement> parse_statement();
@@ -120,6 +122,8 @@ private:
     std::unique_ptr<SwitchStatement> parse_switch_statement();
 
     std::unique_ptr<Expression> parse_expression();
+
+    std::unique_ptr<Expression> parse_ternary();
 
     std::unique_ptr<Expression> parse_or();
 

@@ -367,6 +367,8 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     }
     expect("Esperado ')'", TokenType::RPAREN);
 
+    parse_throws_clause(method->throwsAny, method->throwsTypes);
+
     if (!allowBody)
     {
         // Interface method - just a semicolon
@@ -1029,12 +1031,17 @@ void Parser::parse_constexpr_declaration(Program* program, std::vector<Attribute
         auto params = parse_parameters();
         for (const auto& param : params)
             currentScope->define_variable(param.name.token_name, *param.type);
+        bool throwsAny = false;
+        std::vector<Type> throwsTypes;
+        parse_throws_clause(throwsAny, throwsTypes);
         auto body = parse_block();
         popScope();
         auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
                                                           params, std::move(body));
         func->constEval = isConstEval;
         func->constExpr = isConstExpr;
+        func->throwsAny = throwsAny;
+        func->throwsTypes = std::move(throwsTypes);
         program->functions.push_back(std::move(func));
     }
     else if (isIntrinsic && check(TokenType::SEMICOLON))
@@ -1207,13 +1214,20 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
         currentScope->define_variable(param.name.token_name, *param.type);
     }
 
+    bool throwsAny = false;
+    std::vector<Type> throwsTypes;
+    parse_throws_clause(throwsAny, throwsTypes);
+
     auto body = parse_block();
 
     popScope();
 
     LOG_DEBUG("[parser] function declared: '%s' with %zu params", nameToken.value.c_str(), params.size());
-    return std::make_unique<FunctionDeclaration>(std::move(returnType), makeSourceIdentifier(nameToken), params,
-                                                 std::move(body));
+    auto funcDecl = std::make_unique<FunctionDeclaration>(std::move(returnType), makeSourceIdentifier(nameToken),
+                                                          params, std::move(body));
+    funcDecl->throwsAny = throwsAny;
+    funcDecl->throwsTypes = std::move(throwsTypes);
+    return funcDecl;
 }
 
 std::vector<Parameter> Parser::parse_parameters()
@@ -1236,6 +1250,27 @@ std::vector<Parameter> Parser::parse_parameters()
 
     expect("Esperado ')'", TokenType::RPAREN);
     return parameters;
+}
+
+void Parser::parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes)
+{
+    if (match(TokenType::THROWS))
+    {
+        if (match(TokenType::LPAREN))
+        {
+            do
+            {
+                auto type = parse_type();
+                throwsTypes.push_back(*type);
+            }
+            while (match(TokenType::COMMA));
+            expect("Esperado ')' após tipos de throws", TokenType::RPAREN);
+        }
+        else
+        {
+            throwsAny = true;
+        }
+    }
 }
 
 std::unique_ptr<Block> Parser::parse_block()
@@ -1330,6 +1365,17 @@ std::unique_ptr<Statement> Parser::parse_statement()
     {
         expect("Esperado ';' após yield", TokenType::SEMICOLON);
         return std::make_unique<YieldStatement>();
+    }
+
+    if (match(TokenType::THROW))
+    {
+        std::unique_ptr<Expression> value = nullptr;
+        if (!check(TokenType::SEMICOLON))
+        {
+            value = parse_expression();
+        }
+        expect("Esperado ';' após throw", TokenType::SEMICOLON);
+        return std::make_unique<ThrowStatement>(std::move(value));
     }
 
     // Bare block: { ... }
@@ -1688,15 +1734,30 @@ std::unique_ptr<SwitchStatement> Parser::parse_switch_statement()
 
 std::unique_ptr<Expression> Parser::parse_expression()
 {
-    auto left = parse_or();
+    auto left = parse_ternary();
     while (match(TokenType::QUESTION_QUESTION))
     {
         TokenType op = previous().type;
-        auto right = parse_or();
+        auto right = parse_ternary();
         auto finalLocation = right->location - left->location;
         left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), finalLocation);
     }
     return left;
+}
+
+std::unique_ptr<Expression> Parser::parse_ternary()
+{
+    auto condition = parse_or();
+    if (match(TokenType::QUESTION))
+    {
+        auto trueExpr = parse_ternary();
+        expect("Esperado ':' no operador ternário", TokenType::COLON);
+        auto falseExpr = parse_ternary();
+        auto finalLocation = falseExpr->location - condition->location;
+        return std::make_unique<TernaryExpression>(std::move(condition), std::move(trueExpr),
+                                                   std::move(falseExpr), finalLocation);
+    }
+    return condition;
 }
 
 std::unique_ptr<Expression> Parser::parse_or()
@@ -1893,6 +1954,24 @@ std::unique_ptr<Expression> Parser::parse_unary()
         auto operand = parse_unary();
         auto finalLocation = operand->location - awaitLocation;
         return std::make_unique<AwaitExpression>(std::move(operand), finalLocation);
+    }
+
+    if (match(TokenType::TRY))
+    {
+        auto tryLocation = SourceLocation(previous().position, previous().value.length());
+        auto operand = parse_unary();
+        std::unique_ptr<Expression> fallback = nullptr;
+
+        if (check(TokenType::QUESTION) && current + 1 < tokens.size() &&
+            tokens[current + 1].type == TokenType::COLON)
+        {
+            advance();
+            advance();
+            fallback = parse_ternary();
+        }
+
+        auto finalLocation = fallback ? (fallback->location - tryLocation) : (operand->location - tryLocation);
+        return std::make_unique<TryExpression>(std::move(operand), std::move(fallback), finalLocation);
     }
 
     if (match(TokenType::NEW))

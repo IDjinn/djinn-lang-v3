@@ -109,6 +109,7 @@ private:
 
     std::string currentFunction_;
     std::string currentStructName_;
+    bool currentFunctionThrows_ = false;
     bool _bindingStdLib = false;
     std::unordered_map<std::string, int32_t> _attributeTargets;
 

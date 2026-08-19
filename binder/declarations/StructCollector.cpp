@@ -87,6 +87,8 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         methodSym->isAsync = method->isAsync;
         methodSym->isOperator = method->isOperatorMethod;
         methodSym->operatorCanonicalName = method->operatorCanonicalName;
+        methodSym->throwsAny = method->throwsAny;
+        methodSym->throwsTypes = method->throwsTypes;
         methodSym->isConstructor = isConstructorMethod;
         if (isConstructorMethod)
         {

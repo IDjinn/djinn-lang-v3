@@ -224,6 +224,25 @@ struct SpawnStatement : Statement
     }
 };
 
+struct ThrowStatement : Statement
+{
+    std::unique_ptr<Expression> expression;
+
+    explicit ThrowStatement(std::unique_ptr<Expression> expr)
+        : expression(std::move(expr))
+    {
+    }
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "ThrowStatement\n";
+        if (expression) expression->print(os, indent + 2);
+    }
+};
+
 struct SwitchCaseStatement : Statement
 {
     std::unique_ptr<Expression> expression;

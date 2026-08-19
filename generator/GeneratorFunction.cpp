@@ -34,9 +34,12 @@ void Generator::forward_declare_function(const FunctionSymbol& func)
 
 void Generator::generate_function_body(const FunctionSymbol& func)
 {
+    currentFunctionThrows = func.isThrowing();
+
     if (func.isAsync)
     {
         generate_async_function_body(func);
+        currentFunctionThrows = false;
         return;
     }
 
@@ -77,6 +80,7 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     if (builder->GetInsertBlock()->getTerminator())
     {
         pop_scope();
+        currentFunctionThrows = false;
         return;
     }
 
@@ -87,11 +91,13 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     {
         builder->CreateRetVoid();
         pop_scope();
+        currentFunctionThrows = false;
         return;
     }
 
     builder->CreateRet(llvm::Constant::getNullValue(returnType));
     pop_scope();
+    currentFunctionThrows = false;
 }
 
 void Generator::ensure_malloc_free_declared()

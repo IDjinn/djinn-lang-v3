@@ -72,4 +72,9 @@ namespace djinn
     {
         _generator.generate_spawn_statement(stmt);
     }
+
+    void GeneratorStatementVisitor::visit(const ThrowStatement& stmt)
+    {
+        _generator.generate_throw_statement(stmt);
+    }
 } // namespace djinn

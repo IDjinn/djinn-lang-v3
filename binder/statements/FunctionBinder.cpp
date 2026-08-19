@@ -34,11 +34,13 @@ void Binder::bindProgram(const Program& program)
 
 void Binder::bindFunction(const FunctionDeclaration& func, const std::string& prefix)
 {
-    // Build qualified name same as in collectFunctionWithPrefix
     const std::string qualifiedName = (func.name.token_name == "main" || prefix.empty())
                                           ? func.name.token_name
                                           : prefix + "::" + func.name.token_name;
     currentFunction_ = qualifiedName;
+
+    const auto funcSym = _global_scope->lookupFunction(qualifiedName);
+    currentFunctionThrows_ = funcSym ? funcSym->isThrowing() : false;
 
     pushScope();
 
@@ -67,7 +69,6 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     }
 
     // Get the body from the FunctionSymbol (ownership was transferred during collection)
-    const auto funcSym = _global_scope->lookupFunction(qualifiedName);
     if (funcSym && funcSym->body)
     {
         bindBlock(*funcSym->body);
@@ -75,12 +76,14 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
 
     popScope();
     currentFunction_.clear();
+    currentFunctionThrows_ = false;
 }
 
 void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration& struc)
 {
     currentFunction_ = struc.name.token_name + "::" + method.name.token_name;
     currentStructName_ = struc.name.token_name;
+    currentFunctionThrows_ = method.isThrowing();
 
     pushScope();
 
@@ -163,6 +166,7 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     popScope();
     currentFunction_.clear();
     currentStructName_.clear();
+    currentFunctionThrows_ = false;
 }
 
 void Binder::bindNamespace(const NamespaceDeclaration& ns, const std::string& prefix)

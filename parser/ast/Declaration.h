@@ -143,6 +143,8 @@ struct StructMethodDeclaration : Location
     bool isOperatorMethod = false;
     std::string operatorCanonicalName; // "__op_add", "__op_eq", "__op_index_get"
     std::vector<AttributeUsageDeclaration> attributes;
+    bool throwsAny = false;
+    std::vector<Type> throwsTypes;
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
@@ -157,6 +159,7 @@ struct StructMethodDeclaration : Location
     [[nodiscard]] bool isExpressionBody() const { return expression != nullptr; }
     [[nodiscard]] bool isAbstract() const { return body == nullptr && expression == nullptr; }
     [[nodiscard]] bool isConstructor() const { return isConstructorMethod; }
+    [[nodiscard]] bool isThrowing() const { return throwsAny || !throwsTypes.empty(); }
 
     [[nodiscard]] bool isStatic() const
     {
@@ -490,6 +493,8 @@ struct FunctionDeclaration : Location
     bool isAsync = false;
     bool constExpr = false;
     bool constEval = false;
+    bool throwsAny = false;
+    std::vector<Type> throwsTypes;
 
     FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)
@@ -497,6 +502,8 @@ struct FunctionDeclaration : Location
           body(std::move(block))
     {
     }
+
+    [[nodiscard]] bool isThrowing() const { return throwsAny || !throwsTypes.empty(); }
 
     void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
     {
@@ -515,7 +522,19 @@ struct FunctionDeclaration : Location
             if (i > 0) os << ", ";
             os << parameters[i].type << " " << parameters[i].name.token_name;
         }
-        os << ")\n";
+        os << ")";
+        if (throwsAny) os << " throws";
+        if (!throwsTypes.empty())
+        {
+            os << " throws(";
+            for (size_t i = 0; i < throwsTypes.size(); ++i)
+            {
+                if (i > 0) os << ", ";
+                throwsTypes[i].print(os, 0);
+            }
+            os << ")";
+        }
+        os << "\n";
         if (body) body->print(os, indent + 2);
     }
 };

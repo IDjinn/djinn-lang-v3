@@ -151,6 +151,11 @@ enum class TokenType
     QUESTION_QUESTION, // ??
     QUESTION_QUESTION_EQUAL, // ??=
     BANG_DOT, // !.
+
+    // ERROR HANDLING
+    THROW, // throw
+    THROWS, // throws
+    TRY, // try
 };
 
 

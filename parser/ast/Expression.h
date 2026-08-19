@@ -117,6 +117,9 @@ constexpr std::string tokenTypeToString(const TokenType type)
     case TokenType::INTEGER_LITERAL: return "integer_literal";
     case TokenType::FLOAT_LITERAL: return "float_literal";
     case TokenType::IS: return "is";
+    case TokenType::THROW: return "throw";
+    case TokenType::THROWS: return "throws";
+    case TokenType::TRY: return "try";
     case TokenType::END_OF_FILE: return "EOF";
     default: return "?";
     }
@@ -876,6 +879,59 @@ struct AwaitExpression : Expression
         writeIndent(os, indent);
         os << "AwaitExpression\n";
         operand->print(os, indent + 2);
+    }
+};
+
+struct TernaryExpression : Expression
+{
+    std::unique_ptr<Expression> condition;
+    std::unique_ptr<Expression> trueExpr;
+    std::unique_ptr<Expression> falseExpr;
+
+    TernaryExpression(std::unique_ptr<Expression> cond, std::unique_ptr<Expression> trueE,
+                      std::unique_ptr<Expression> falseE, const SourceLocation& loc)
+        : condition(std::move(cond)), trueExpr(std::move(trueE)), falseExpr(std::move(falseE))
+    {
+        location = loc;
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "TernaryExpression\n";
+        condition->print(os, indent + 2);
+        os << "\n";
+        trueExpr->print(os, indent + 2);
+        os << "\n";
+        falseExpr->print(os, indent + 2);
+    }
+};
+
+struct TryExpression : Expression
+{
+    std::unique_ptr<Expression> expr;
+    std::unique_ptr<Expression> fallback;
+
+    TryExpression(std::unique_ptr<Expression> e, std::unique_ptr<Expression> fb, const SourceLocation& loc)
+        : expr(std::move(e)), fallback(std::move(fb))
+    {
+        location = loc;
+    }
+
+    void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "TryExpression\n";
+        expr->print(os, indent + 2);
+        if (fallback)
+        {
+            os << "\n";
+            fallback->print(os, indent + 2);
+        }
     }
 };
 
