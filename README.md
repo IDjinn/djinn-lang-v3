@@ -1,5 +1,7 @@
 # Djinn
 
+[![Build](https://github.com/IDjinn/djinn-lang-v3/actions/workflows/build.yml/badge.svg)](https://github.com/IDjinn/djinn-lang-v3/actions/workflows/build.yml)
+
 A compiled, statically-typed systems language that targets LLVM IR with a C runtime. Inspired by C, C++ and C#, Djinn
 focuses on developer experience, simplicity, and high performance — with async-by-default codegen.
 
