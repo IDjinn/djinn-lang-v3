@@ -21,7 +21,7 @@ jobs:
         include:
           - name: windows-msvc
             os: windows-latest
-            llvm-dir: "C:/Program Files/LLVM/lib/cmake/llvm"
+            llvm-dir: "C:/LLVM/lib/cmake/llvm"
           - name: linux-gcc
             os: ubuntu-24.04
             llvm-dir: "/usr/lib/llvm-22/lib/cmake/llvm"
@@ -35,9 +35,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install llvm --version=22.1.0 -y --no-progress
-          if (-not (Test-Path "C:\Program Files\LLVM\lib\cmake\llvm\LLVMConfig.cmake")) { throw "LLVMConfig.cmake not found after install" }
-          Add-Content $env:GITHUB_PATH "C:\Program Files\LLVM\bin"
+          $archive = "$env:RUNNER_TEMP\llvm.tar.xz"
+          curl.exe -L -o $archive "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.0/clang+llvm-22.1.0-x86_64-pc-windows-msvc.tar.xz"
+          New-Item -ItemType Directory -Force C:\LLVM | Out-Null
+          tar -xJf $archive -C C:\LLVM --strip-components=1
+          if (-not (Test-Path "C:\LLVM\lib\cmake\llvm\LLVMConfig.cmake")) { throw "LLVMConfig.cmake not found after extraction" }
+          Add-Content $env:GITHUB_PATH "C:\LLVM\bin"
 
       - name: Install LLVM 22 (Linux)
         if: runner.os == 'Linux'

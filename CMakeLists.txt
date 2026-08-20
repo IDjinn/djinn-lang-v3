@@ -186,6 +186,14 @@ target_link_libraries(djinn_lib PUBLIC ryml::ryml)
 target_link_libraries(djinn_lib PUBLIC nlohmann_json::nlohmann_json)
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
 
+# std::stacktrace requires the backtrace support library on GCC >= 14 / Clang with libstdc++
+if (UNIX AND NOT APPLE)
+    find_library(STDCXX_LIBBACKTRACE NAMES stdc++_libbacktrace)
+    if (STDCXX_LIBBACKTRACE)
+        target_link_libraries(djinn_lib PUBLIC ${STDCXX_LIBBACKTRACE})
+    endif ()
+endif ()
+
 add_executable(djinn main.cpp)
 target_compile_options(djinn PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(djinn PRIVATE djinn_lib)
