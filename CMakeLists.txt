@@ -181,15 +181,19 @@ target_include_directories(djinn_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(djinn_lib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_options(djinn_lib PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(djinn_lib PRIVATE ${LLVM_LIBS})
-target_link_libraries(djinn_lib PRIVATE ${LIBXML2_LIBRARY})
+if (LIBXML2_LIBRARY)
+    target_link_libraries(djinn_lib PRIVATE ${LIBXML2_LIBRARY})
+endif ()
 target_link_libraries(djinn_lib PUBLIC ryml::ryml)
 target_link_libraries(djinn_lib PUBLIC nlohmann_json::nlohmann_json)
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
 
-# std::stacktrace requires the backtrace support library on GCC >= 14 / Clang with libstdc++
+# std::stacktrace requires the backtrace support library, shipped as a separate
+# static library next to the GCC-specific libstdc++ install
 if (UNIX AND NOT APPLE)
-    find_library(STDCXX_LIBBACKTRACE NAMES stdc++_libbacktrace)
+    file(GLOB STDCXX_LIBBACKTRACE "/usr/lib/gcc/*-linux-gnu/*/libstdc++_libbacktrace.a")
     if (STDCXX_LIBBACKTRACE)
+        list(GET STDCXX_LIBBACKTRACE 0 STDCXX_LIBBACKTRACE)
         target_link_libraries(djinn_lib PUBLIC ${STDCXX_LIBBACKTRACE})
     endif ()
 endif ()
