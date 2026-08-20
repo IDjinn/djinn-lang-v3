@@ -10,6 +10,7 @@
 #include <optional>
 #include <algorithm>
 #include <cctype>
+#include <stdexcept>
 #include <unordered_map>
 #include "ASTNode.h"
 #include "../../lexer/Token.h"
@@ -242,7 +243,7 @@ struct Type : Location
         case static_cast<size_t>(32): return Type{TypeKind::F32, 32, true};
         case static_cast<size_t>(64): return Type{TypeKind::F64, 64, true};
         case static_cast<size_t>(128): return Type{TypeKind::F128, 128, true};
-        default: throw std::exception("invalid type bit size kind for float");
+        default: throw std::runtime_error("invalid type bit size kind for float");
         }
     }
 
