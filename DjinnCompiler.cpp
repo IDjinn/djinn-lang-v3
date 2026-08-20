@@ -5,6 +5,7 @@
 #include "DjinnCompiler.h"
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -1108,7 +1109,10 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
         if (options.useTempDirectory)
         {
-            outputDir = (fs::temp_directory_path() / "djinn_build" / std::to_string(rand())).string();
+            // unique per invocation: rand() alone collides across processes (parallel test runs)
+            const auto dirName = std::to_string(std::chrono::system_clock::now().time_since_epoch().count())
+                + "_" + std::to_string(rand());
+            outputDir = (fs::temp_directory_path() / "djinn_build" / dirName).string();
             fs::create_directories(outputDir);
         }
 
