@@ -81,3 +81,14 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure --parallel 4
+
+      - name: Report invalid leftover IR (Linux)
+        if: failure() && runner.os == 'Linux'
+        run: |
+          for f in $(find /tmp/djinn_build -name '*.ll' 2>/dev/null); do
+            out=$(clang -c -O0 "$f" -o /dev/null 2>&1) || if echo "$out" | grep -q "doesn't match"; then
+              echo "=== $f ==="
+              line=$(echo "$out" | grep -oE "main.ll:[0-9]+" | head -1 | cut -d: -f2)
+              sed -n "$((line-8)),$((line+4))p" "$f"
+            fi
+          done

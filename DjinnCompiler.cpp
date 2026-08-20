@@ -30,7 +30,11 @@
 #define DJINN_CLANG_PATH "clang"
 #endif
 
+#ifdef _WIN32
 #define CLANG_LINK_ARGS "-flto -fuse-ld=lld"
+#else
+#define CLANG_LINK_ARGS "-flto -fuse-ld=lld -lm -lpthread"
+#endif
 
 namespace
 {
