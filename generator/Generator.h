@@ -48,6 +48,9 @@ public:
 
     std::string print() const;
 
+    // Releases module + context ownership for in-process JIT execution.
+    std::pair<std::unique_ptr<llvm::Module>, std::unique_ptr<llvm::LLVMContext>> takeModule();
+
     bool verify() const;
 
     void generate();

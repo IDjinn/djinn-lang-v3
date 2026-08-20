@@ -59,9 +59,8 @@ llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, llvm::V
         }
 
         overflowBit = signedDivRemOverflowBit(*builder, left, right);
-        result = op == TokenType::SLASH
-                     ? builder->CreateSDiv(left, right, "divtmp")
-                     : builder->CreateSRem(left, right, "modtmp");
+        // div/rem is emitted in the ok-block below: executing it before the
+        // overflow check would fault on INT_MIN / -1 before the trap runs
     }
     else
     {
@@ -91,6 +90,10 @@ llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, llvm::V
     }
 
     builder->SetInsertPoint(okBB);
+    if (op == TokenType::SLASH)
+        result = builder->CreateSDiv(left, right, "divtmp");
+    else if (op == TokenType::PERCENT)
+        result = builder->CreateSRem(left, right, "modtmp");
     return result;
 }
 

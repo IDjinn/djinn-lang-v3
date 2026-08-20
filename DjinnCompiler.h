@@ -43,6 +43,7 @@ struct CompilerOptions
     bool bundleModules = false;
     bool useTempDirectory = true; // Use system temp directory for output files
     bool runAfterCompile = true; // Run the compiled binary and capture exit code
+    bool jitExecution = true; // Execute in-process via ORC JIT instead of spawning clang (run() only)
     bool noCache = false;
     bool debugMode = true;
     bool releaseMode = false;

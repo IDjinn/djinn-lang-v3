@@ -567,6 +567,12 @@ std::string Generator::print() const
     return str;
 }
 
+std::pair<std::unique_ptr<llvm::Module>, std::unique_ptr<llvm::LLVMContext>> Generator::takeModule()
+{
+    builder.reset(); // IRBuilder borrows module/context; drop it before moving them out
+    return {std::move(module), std::move(context)};
+}
+
 bool Generator::verify() const
 {
     std::string errorStr;

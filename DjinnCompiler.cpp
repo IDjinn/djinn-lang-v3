@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,6 +26,7 @@
 #include "utils/StopWatch.h"
 #include "lib/DjLibReader.h"
 #include "lib/DjLibWriter.h"
+#include "jit/JitRunner.h"
 
 #ifndef DJINN_CLANG_PATH
 #define DJINN_CLANG_PATH "clang"
@@ -1109,9 +1111,13 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         generatedIr = generator.print();
 
+        const bool useJit = options.jitExecution && options.generateBinary && options.runAfterCompile
+            && std::getenv("DJINN_DISABLE_JIT") == nullptr
+            && djinn::jitRuntimeAvailable();
+
         std::string outputDir = options.outputDirectory;
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
-        if (options.useTempDirectory)
+        if (!useJit && options.useTempDirectory)
         {
             // unique per invocation: rand() alone collides across processes (parallel test runs)
             const auto dirName = std::to_string(std::chrono::system_clock::now().time_since_epoch().count())
@@ -1142,6 +1148,20 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         if (!options.generateBinary)
         {
             return makeResult(5555, std::stacktrace::current());
+        }
+
+        if (useJit)
+        {
+            auto [jitModule, jitContext] = generator.takeModule();
+            const auto jitExitCode = djinn::executeModule(std::move(jitModule), std::move(jitContext),
+                                                          options.optimizationLevel);
+            if (jitExitCode >= 0)
+            {
+                LOG_DEBUG("jit exit code %d", jitExitCode);
+                return makeResult(jitExitCode, std::stacktrace::current());
+            }
+            LOG_ERROR("In-process JIT execution failed (code %d)", jitExitCode);
+            return makeResult(jitExitCode, std::stacktrace::current());
         }
 
         std::string runtimeArg;

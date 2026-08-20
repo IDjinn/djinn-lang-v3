@@ -104,6 +104,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         evaluator/*.cpp
         utils/*.cpp
         lib/*.cpp
+        jit/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS
@@ -156,6 +157,7 @@ llvm_map_components_to_libnames(LLVM_LIBS
         IRReader
         ExecutionEngine
         MCJIT
+        ORCJIT
         native
         Passes
         Linker
@@ -270,6 +272,12 @@ target_compile_features(tests PRIVATE cxx_std_23)
 
 include(GoogleTest)
 gtest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# Aggregate entry: the whole suite in one process, so the runtime bitcode
+# compile and other per-process setup are paid once. Use for local iteration:
+#   ctest --test-dir build -L aggregate
+add_test(NAME djinn_all_tests COMMAND tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(djinn_all_tests PROPERTIES LABELS aggregate)
 
 add_custom_target(clean_djinn_build
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{TEMP}/djinn_build"

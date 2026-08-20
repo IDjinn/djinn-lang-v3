@@ -1,0 +1,30 @@
+//
+// In-process execution of generated modules via ORC LLJIT.
+// Replaces the per-test "clang + system(exe)" round-trip used by tests.
+//
+
+#ifndef DJINN_JITRUNNER_H
+#define DJINN_JITRUNNER_H
+
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+
+namespace djinn
+{
+    // Loads (and lazily compiles via clang -emit-llvm, cached on disk by content
+    // hash) the C runtime as bitcode. Returns false if the runtime bitcode
+    // cannot be produced — callers should fall back to the clang executable path.
+    bool jitRuntimeAvailable();
+
+    // Runs `main` from the module under LLJIT with the runtime bitcode linked in.
+    // Takes ownership of the module and its context. Returns the program exit
+    // code; negative on internal JIT failure (caller should treat as an error).
+    int executeModule(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
+                      int optimizationLevel);
+}
+
+#endif //DJINN_JITRUNNER_H
