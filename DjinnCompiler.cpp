@@ -445,9 +445,10 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
     std::set<fs::path> parsedFiles;
 
-    const auto out_file_path = options.outputDirectory + "\\" + options.outputFileName;
+    const std::string outputSep(1, static_cast<char>(fs::path::preferred_separator));
+    const auto out_file_path = options.outputDirectory + outputSep + options.outputFileName;
     const std::string llPath = out_file_path + ".ll";
-    const std::string cachePath = options.outputDirectory + "\\.djinn.cache";
+    const std::string cachePath = options.outputDirectory + outputSep + ".djinn.cache";
     auto exePath = out_file_path +
 #ifdef _WIN32
         ".exe";
@@ -1111,8 +1112,9 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             fs::create_directories(outputDir);
         }
 
-        const std::string llPath = outputDir + "\\" + outputFileName + ".ll";
-        const std::string exePath = outputDir + "\\" + outputFileName +
+        const std::string outputSep(1, static_cast<char>(fs::path::preferred_separator));
+        const std::string llPath = outputDir + outputSep + outputFileName + ".ll";
+        const std::string exePath = outputDir + outputSep + outputFileName +
 #ifdef _WIN32
             ".exe";
 #else

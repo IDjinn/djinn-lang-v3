@@ -52,6 +52,27 @@ jobs:
           sudo ln -sf /usr/lib/llvm-22/bin/clang-22 /usr/local/bin/clang
           sudo ln -sf /usr/lib/llvm-22/bin/clang++-22 /usr/local/bin/clang++
 
+      - name: Provide DIA SDK diaguids.lib (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $expected = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\DIA SDK\lib\amd64\diaguids.lib"
+          if (Test-Path $expected) { Write-Host "diaguids.lib already present"; exit 0 }
+          $found = Get-ChildItem "C:\Program Files\Microsoft Visual Studio", "${env:ProgramFiles(x86)}\Microsoft Visual Studio" -Recurse -Filter diaguids.lib -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) {
+            New-Item -ItemType Directory -Force (Split-Path $expected) | Out-Null
+            Copy-Item $found.FullName $expected
+            Write-Host "Copied diaguids.lib from $($found.FullName)"
+          } else {
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+            $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            $libexe = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\lib.exe" | Select-Object -First 1 -ExpandProperty FullName
+            "LIBRARY diaguids" | Set-Content "$env:RUNNER_TEMP\diaguids.def"
+            New-Item -ItemType Directory -Force (Split-Path $expected) | Out-Null
+            & $libexe /def:"$env:RUNNER_TEMP\diaguids.def" /machine:x64 /out:$expected
+          }
+          if (-not (Test-Path $expected)) { throw "diaguids.lib could not be provided" }
+
       - name: Configure CMake
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR="${{ matrix.llvm-dir }}" ${{ matrix.extra-configure }}
 
