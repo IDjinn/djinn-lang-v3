@@ -127,6 +127,23 @@ struct MethodParameter
     }
 };
 
+// Contracts: require/ensure clauses between a function signature and its body
+struct ContractClause
+{
+    enum class Kind
+    {
+        Require,
+        Ensure
+    };
+
+    Kind kind;
+    std::unique_ptr<Expression> condition; // require(expr) / ensure(expr)
+    std::unique_ptr<Block> block; // require { ... } block form
+
+    [[nodiscard]] bool isRequire() const { return kind == Kind::Require; }
+    [[nodiscard]] bool isEnsure() const { return kind == Kind::Ensure; }
+};
+
 struct StructMethodDeclaration : Location
 {
     std::unique_ptr<Type> returnType;
@@ -145,6 +162,7 @@ struct StructMethodDeclaration : Location
     std::vector<AttributeUsageDeclaration> attributes;
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
+    std::vector<ContractClause> contracts;
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
@@ -495,6 +513,7 @@ struct FunctionDeclaration : Location
     bool constEval = false;
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
+    std::vector<ContractClause> contracts;
 
     FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)

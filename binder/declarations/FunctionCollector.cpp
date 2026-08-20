@@ -46,6 +46,22 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
     funcSym->constExpr = decl.constExpr;
     funcSym->throwsAny = decl.throwsAny;
     funcSym->throwsTypes = decl.throwsTypes;
+    for (const auto& contract : decl.contracts)
+    {
+        funcSym->contracts.push_back(&contract);
+    }
+    // Contracts implicitly throw ContractViolation on violation
+    if (!decl.contracts.empty() && !funcSym->throwsAny)
+    {
+        const auto contractViolation = Type::struct_type("ContractViolation");
+        if (std::ranges::find_if(funcSym->throwsTypes, [](const Type& t)
+        {
+            return t.kind == TypeKind::STRUCT && t.structName == "ContractViolation";
+        }) == funcSym->throwsTypes.end())
+        {
+            funcSym->throwsTypes.push_back(contractViolation);
+        }
+    }
 
     // function cannot be async and compile time constraint
     if (funcSym->isAsync && (funcSym->constEval || funcSym->constExpr))

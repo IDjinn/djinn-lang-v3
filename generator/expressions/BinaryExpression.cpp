@@ -235,10 +235,14 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
                    ? builder->CreateFMul(left, right, "multmp")
                    : builder->CreateMul(left, right, "multmp");
     case TokenType::SLASH:
+        if (!isFloat)
+            emit_div_by_zero_check(right);
         return isFloat
                    ? builder->CreateFDiv(left, right, "divtmp")
                    : builder->CreateSDiv(left, right, "divtmp");
     case TokenType::PERCENT:
+        if (!isFloat)
+            emit_div_by_zero_check(right);
         return isFloat
                    ? builder->CreateFRem(left, right, "modtmp")
                    : builder->CreateSRem(left, right, "modtmp");

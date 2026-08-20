@@ -188,6 +188,7 @@ typedef struct djinn_continuation
 #define DJINN_MAX_WAITING 256
 
 void __djinn_runtime_init(int num_threads);
+void __djinn_runtime_error(const char* message);
 void __djinn_runtime_shutdown(void);
 
 extern void __djinn_coro_resume(void* handle);

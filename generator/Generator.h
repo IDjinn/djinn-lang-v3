@@ -22,7 +22,7 @@
 
 #define GENERATOR_ERROR(code, msg, location) do { \
 _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
-throw CompileError(code, msg); \
+throw CompileError(code, msg, location); \
 assert(false); \
 } while (false)
 
@@ -202,6 +202,15 @@ private:
 
     llvm::Value* generate_method_call_internal(const FunctionCall& call);
 
+    // Resolves (or forward-declares on demand) the LLVM function for a static
+    // struct method, mirroring the method-call resolution order.
+    llvm::Function* resolve_static_method_function(const std::string& structName, const std::string& methodName);
+
+    // Boxes the arguments after the first `normalParamCount` into an
+    // arr<object> value (auto-boxing for Djinn variadic methods).
+    llvm::Value* emit_boxed_varargs_array(const std::vector<std::unique_ptr<Expression>>& args,
+                                          size_t normalParamCount);
+
     llvm::Value* generate_intrinsic_call(const FunctionCall& call);
 
     static bool is_intrinsic(const std::string& name);
@@ -300,10 +309,25 @@ private:
 
     // Error handling globals (errno-style for throws functions)
     bool currentFunctionThrows = false;
+    bool insideTryOperand_ = false;
     llvm::GlobalVariable* errorFlagGlobal = nullptr;
     llvm::GlobalVariable* errorTagGlobal = nullptr;
+    llvm::GlobalVariable* errorPayloadGlobal = nullptr;
     void ensure_error_globals_declared();
     llvm::Value* get_default_value(llvm::Type* type);
+    std::shared_ptr<StructSymbol> resolve_error_struct(const std::string& name) const;
+    llvm::Value* generate_error_construction(const FunctionCall& call);
+    llvm::Value* generate_interpolated_error_message(const FunctionCall& call);
+    void emit_error_propagation_check();
+    void emit_div_by_zero_check(llvm::Value* divisor);
+    void emit_error_throw_with_tag(int32_t tag);
+
+    // Contracts (require/ensure)
+    std::vector<const ContractClause*> currentContracts_;
+    llvm::AllocaInst* contractReturnAlloca = nullptr;
+    void setup_contracts(const std::vector<const ContractClause*>& contracts, llvm::Function* llvmFunc);
+    void emit_contract_requirements();
+    void emit_contract_ensures();
 
     // [intrinsic] struct method support
     llvm::Value* generate_intrinsic_method(const FunctionCall& call, const StructDef* def,

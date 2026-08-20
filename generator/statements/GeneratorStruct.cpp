@@ -496,6 +496,8 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 
     currentFunction = llvmFunc;
     currentFunctionThrows = method.isThrowing();
+    currentContracts_.clear();
+    contractReturnAlloca = nullptr;
 
     const bool isStatic = method.isStatic;
     llvm::Type* returnType = generate_type(method.returnType);
@@ -542,6 +544,9 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         ++paramIdx;
     }
 
+    // Contracts: require checks at entry + `return` binding for ensure clauses
+    setup_contracts(method.contracts, llvmFunc);
+
     if (method.body)
     {
         for (const auto& stmt : method.body->statements)
@@ -561,6 +566,9 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
             builder->CreateRetVoid();
         }
     }
+
+    currentContracts_.clear();
+    contractReturnAlloca = nullptr;
 
     if (!builder->GetInsertBlock()->getTerminator())
     {

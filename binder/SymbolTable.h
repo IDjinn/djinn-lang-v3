@@ -305,6 +305,10 @@ public:
         std::set<std::shared_ptr<Symbol>> unique_structs;
         for (const auto& symbol : _symbols | std::views::values)
         {
+            // Error types are builtin: no LLVM struct is emitted for them
+            // (error values are generated inline by throw/construction sites)
+            if (symbol->isStruct() && std::dynamic_pointer_cast<StructSymbol>(symbol)->isErrorType)
+                continue;
             if (symbol->isStruct()) unique_structs.insert(symbol);
         }
         return {unique_structs.begin(), unique_structs.end()};

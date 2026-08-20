@@ -68,6 +68,9 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
     }
 
     currentFunction = llvmFunc;
+    currentFunctionThrows = false;
+    currentContracts_.clear();
+    contractReturnAlloca = nullptr;
 
     auto* entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);

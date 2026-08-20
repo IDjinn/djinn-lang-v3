@@ -376,6 +376,8 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         return method;
     }
 
+    method->contracts = parse_contract_clauses();
+
     // Add parameters to scope before parsing body
     pushScope();
     for (const auto& param : method->parameters)
@@ -1034,6 +1036,7 @@ void Parser::parse_constexpr_declaration(Program* program, std::vector<Attribute
         bool throwsAny = false;
         std::vector<Type> throwsTypes;
         parse_throws_clause(throwsAny, throwsTypes);
+        auto contracts = parse_contract_clauses();
         auto body = parse_block();
         popScope();
         auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
@@ -1042,6 +1045,7 @@ void Parser::parse_constexpr_declaration(Program* program, std::vector<Attribute
         func->constExpr = isConstExpr;
         func->throwsAny = throwsAny;
         func->throwsTypes = std::move(throwsTypes);
+        func->contracts = std::move(contracts);
         program->functions.push_back(std::move(func));
     }
     else if (isIntrinsic && check(TokenType::SEMICOLON))
@@ -1218,6 +1222,8 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
     std::vector<Type> throwsTypes;
     parse_throws_clause(throwsAny, throwsTypes);
 
+    auto contracts = parse_contract_clauses();
+
     auto body = parse_block();
 
     popScope();
@@ -1227,6 +1233,7 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
                                                           params, std::move(body));
     funcDecl->throwsAny = throwsAny;
     funcDecl->throwsTypes = std::move(throwsTypes);
+    funcDecl->contracts = std::move(contracts);
     return funcDecl;
 }
 
@@ -1271,6 +1278,63 @@ void Parser::parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes
             throwsAny = true;
         }
     }
+}
+
+// Parses require(...)/ensure(...) clauses between a signature and its body.
+// Block form (`require { return ...; }`) is normalized to the returned
+// expression, so downstream phases only deal with a single condition.
+std::vector<ContractClause> Parser::parse_contract_clauses()
+{
+    std::vector<ContractClause> clauses;
+
+    while (check(TokenType::REQUIRE) || check(TokenType::ENSURE))
+    {
+        ContractClause clause;
+        clause.kind = check(TokenType::REQUIRE)
+                          ? ContractClause::Kind::Require
+                          : ContractClause::Kind::Ensure;
+        const Token& kw = advance(); // require / ensure
+
+        if (match(TokenType::LPAREN))
+        {
+            clause.condition = parse_expression();
+            expect("Esperado ')' após condição do contrato", TokenType::RPAREN);
+        }
+        else if (check(TokenType::LBRACE))
+        {
+            clause.block = parse_block();
+
+            // Normalize: take the first `return expr;` as the condition
+            if (clause.block)
+            {
+                for (auto& stmt : clause.block->statements)
+                {
+                    if (auto* ret = dynamic_cast<ReturnStatement*>(stmt.get());
+                        ret && ret->value)
+                    {
+                        clause.condition = std::move(ret->value);
+                        break;
+                    }
+                }
+            }
+            if (!clause.condition)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "contract block must contain a 'return <condition>;' statement",
+                             SourceLocation(kw.position.fileId, kw.position.line, kw.position.column, 1));
+            }
+        }
+        else
+        {
+            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "expected '(' or '{' after '" + kw.value + "' contract clause",
+                         SourceLocation(kw.position.fileId, kw.position.line, kw.position.column, 1));
+        }
+
+        clauses.push_back(std::move(clause));
+    }
+
+    return clauses;
 }
 
 std::unique_ptr<Block> Parser::parse_block()
@@ -2187,6 +2251,13 @@ std::unique_ptr<Expression> Parser::parse_primary()
 
     // Handle 'this' keyword as a simple identifier
     if (match(TokenType::THIS))
+    {
+        return std::make_unique<Identifier>(makeSourceIdentifier(previous()));
+    }
+
+    // Handle 'return' as an identifier — only meaningful inside ensure clauses,
+    // where it refers to the function's return value
+    if (match(TokenType::RETURN))
     {
         return std::make_unique<Identifier>(makeSourceIdentifier(previous()));
     }

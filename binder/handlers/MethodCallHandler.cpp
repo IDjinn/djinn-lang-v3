@@ -69,6 +69,12 @@ namespace djinn::binder
             }
         }
 
+        // Calls to throwing methods require `try` (or a throwing caller to propagate)
+        if (const auto method = std::dynamic_pointer_cast<MethodSymbol>(methodSym))
+        {
+            binder.check_throwing_call(call.name.token_name, method->isThrowing(), call.name.location);
+        }
+
         auto result = std::make_shared<FunctionCallSymbol>(
             call.name.token_name, receiver, methodSym,
             std::move(parameters), call.name.location

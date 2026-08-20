@@ -28,15 +28,8 @@ enum result<T, E> {
     Error(E)
 }
 
-enum Exception {
-    Generic(str),
-    DivisionByZero(str),
-    Argument(str),
-    Overflow(str),
-    OutOfBounds(str),
-    InvalidArgument(str),
-    ContractViolation(str)
-}
+// Exceptions are builtin core types (Exception root + derived errors);
+// see docs — no std enum needed anymore.
 
 impl Hashable, Equatable for arr<T> {
     u64 hash() {

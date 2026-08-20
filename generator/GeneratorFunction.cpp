@@ -35,6 +35,8 @@ void Generator::forward_declare_function(const FunctionSymbol& func)
 void Generator::generate_function_body(const FunctionSymbol& func)
 {
     currentFunctionThrows = func.isThrowing();
+    currentContracts_.clear();
+    contractReturnAlloca = nullptr;
 
     if (func.isAsync)
     {
@@ -69,6 +71,9 @@ void Generator::generate_function_body(const FunctionSymbol& func)
         idx++;
     }
 
+    // Contracts: require checks at entry + `return` binding for ensure clauses
+    setup_contracts(func.contracts, llvmFunc);
+
     if (func.body)
     {
         for (const auto& stmt : func.body->statements)
@@ -76,6 +81,9 @@ void Generator::generate_function_body(const FunctionSymbol& func)
             generate_statement(*stmt);
         }
     }
+
+    currentContracts_.clear();
+    contractReturnAlloca = nullptr;
 
     if (builder->GetInsertBlock()->getTerminator())
     {

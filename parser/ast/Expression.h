@@ -120,6 +120,8 @@ constexpr std::string tokenTypeToString(const TokenType type)
     case TokenType::THROW: return "throw";
     case TokenType::THROWS: return "throws";
     case TokenType::TRY: return "try";
+    case TokenType::REQUIRE: return "require";
+    case TokenType::ENSURE: return "ensure";
     case TokenType::END_OF_FILE: return "EOF";
     default: return "?";
     }

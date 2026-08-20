@@ -13,6 +13,7 @@
 #include "SymbolTable.h"
 #include "scope/ControlFlowContext.h"
 #include "ownership/OwnershipTracker.h"
+#include "ErrorTypes.h"
 #include "../parser/ast/Declaration.h"
 #include "../parser/ast/Statement.h"
 #include "../parser/ast/Expression.h"
@@ -27,7 +28,7 @@ namespace djlib
 
 #define BINDER_ERROR(code, msg, token, location) do { \
     _diagnostics.emitAndPrint(Diagnostic(Severity::Error, code, msg, location)); \
-    throw CompileError(code, msg); \
+    throw CompileError(code, msg, location); \
 } while (false)
 
 #define BINDER_WARNING(code, msg, location) do { \
@@ -110,6 +111,10 @@ private:
     std::string currentFunction_;
     std::string currentStructName_;
     bool currentFunctionThrows_ = false;
+    bool currentFunctionThrowsAny_ = false;
+    std::vector<Type> currentFunctionThrowsTypes_;
+    bool insideTryExpression_ = false;
+    mutable int32_t nextErrorTag_ = djinn::errors::FirstUserErrorTag;
     bool _bindingStdLib = false;
     std::unordered_map<std::string, int32_t> _attributeTargets;
 
@@ -176,6 +181,8 @@ private:
 
     void bindMethod(StructMethodDeclaration& method, const StructDeclaration& struc);
 
+    void bind_contract_conditions(const std::vector<const ContractClause*>& contracts, const Type& returnType);
+
     void bindBlock(const Block& block);
 
     void bindNamespace(const NamespaceDeclaration& ns, const std::string& prefix);
@@ -225,6 +232,12 @@ private:
     std::shared_ptr<Symbol> bindNewExpression(const NewExpression& expr);
 
     std::unique_ptr<Type> resolveType(const Type& type) const;
+
+    bool is_error_derived_from(const std::string& structName, const std::string& baseName) const;
+
+    // Error handling checks: enforce `try` on calls to throwing functions
+    bool tryOperandSawThrowingCall_ = false;
+    void check_throwing_call(const std::string& calleeName, bool calleeThrows, const SourceLocation& loc);
 
     static bool is_generic_type(const Type& type, const StructDeclaration& struc);
 

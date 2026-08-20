@@ -89,6 +89,21 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         methodSym->operatorCanonicalName = method->operatorCanonicalName;
         methodSym->throwsAny = method->throwsAny;
         methodSym->throwsTypes = method->throwsTypes;
+        for (const auto& contract : method->contracts)
+        {
+            methodSym->contracts.push_back(&contract);
+        }
+        // Contracts implicitly throw ContractViolation on violation
+        if (!method->contracts.empty() && !methodSym->throwsAny)
+        {
+            if (std::ranges::find_if(methodSym->throwsTypes, [](const Type& t)
+            {
+                return t.kind == TypeKind::STRUCT && t.structName == "ContractViolation";
+            }) == methodSym->throwsTypes.end())
+            {
+                methodSym->throwsTypes.push_back(Type::struct_type("ContractViolation"));
+            }
+        }
         methodSym->isConstructor = isConstructorMethod;
         if (isConstructorMethod)
         {
@@ -134,10 +149,22 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         structSym->addMethod(methodSym);
     }
 
-    // Implements
-    for (const auto& ifaceName : decl.implements)
+    // Implements / error inheritance: `struct MyError : Exception;`
+    // If a base name resolves to an error struct, it becomes the error base
+    // instead of an interface constraint.
+    for (const auto& baseName : decl.implements)
     {
-        structSym->addImplements(ifaceName);
+        const auto baseStruct = _current_scope->lookupStruct(baseName);
+        if (baseStruct && baseStruct->isErrorType)
+        {
+            structSym->isErrorType = true;
+            structSym->errorBase = baseStruct->name;
+            structSym->errorTag = nextErrorTag_++;
+        }
+        else
+        {
+            structSym->addImplements(baseName);
+        }
     }
 
     // Attributes

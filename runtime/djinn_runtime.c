@@ -652,6 +652,13 @@ static DWORD WINAPI worker_thread(LPVOID arg)
 #endif
 }
 
+void __djinn_runtime_error(const char* message)
+{
+    fprintf(stderr, "djinn runtime error: %s\n", message ? message : "unknown");
+    fflush(stderr);
+    abort();
+}
+
 void __djinn_runtime_init(int num_threads)
 {
     memset(&runtime, 0, sizeof(runtime));

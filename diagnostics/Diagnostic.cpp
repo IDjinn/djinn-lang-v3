@@ -103,6 +103,21 @@ std::string DiagnosticEngine::formatCode(const uint32_t code)
 
 void DiagnosticEngine::emit(const Diagnostic& diag)
 {
+    // Skip exact duplicates: some paths emit a diagnostic and then re-throw it
+    // as a CompileError that gets emitted again by a top-level catch handler
+    for (const auto& existing : diagnostics)
+    {
+        if (existing.severity == diag.severity &&
+            existing.code == diag.code &&
+            existing.message == diag.message &&
+            existing.location.fileId == diag.location.fileId &&
+            existing.location.line == diag.location.line &&
+            existing.location.column == diag.location.column)
+        {
+            return;
+        }
+    }
+
     diagnostics.push_back(diag);
 
     if (diag.severity == Severity::Error)

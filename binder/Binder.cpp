@@ -6,12 +6,23 @@
 
 #include "../utils/Logger.h"
 #include "../lib/DjLibReader.h"
+#include "ErrorTypes.h"
 
 Binder::Binder(DiagnosticEngine& diagnostics)
     : _diagnostics(diagnostics)
 {
     _global_scope = std::make_shared<ScopedSymbolTable>();
     _current_scope = _global_scope;
+
+    // Seed builtin error types — always available, no std import required
+    for (const auto& err : djinn::errors::builtin_errors())
+    {
+        auto sym = std::make_shared<StructSymbol>(err.name);
+        sym->isErrorType = true;
+        sym->errorTag = err.tag;
+        sym->errorBase = err.base ? err.base : "";
+        _global_scope->defineStruct(sym);
+    }
 }
 
 void Binder::injectLibrarySymbols(const djlib::DjLibReader& reader)
@@ -306,6 +317,41 @@ void Binder::pushScope()
 {
     _current_scope = _current_scope->createChildScope();
     _ownership.pushScope();
+}
+
+bool Binder::is_error_derived_from(const std::string& structName, const std::string& baseName) const
+{
+    const auto base = _global_scope->lookupStruct(baseName);
+    if (!base || !base->isErrorType) return false;
+
+    auto current = _global_scope->lookupStruct(structName);
+    while (current)
+    {
+        if (current == base) return true;
+        if (!current->isErrorType || current->errorBase.empty()) return false;
+        current = _global_scope->lookupStruct(current->errorBase);
+    }
+    return false;
+}
+
+void Binder::check_throwing_call(const std::string& calleeName, const bool calleeThrows, const SourceLocation& loc)
+{
+    if (!calleeThrows) return;
+
+    if (insideTryExpression_)
+    {
+        tryOperandSawThrowingCall_ = true;
+        return;
+    }
+
+    // Unchecked call inside another throwing function: error propagates
+    if (currentFunctionThrows_) return;
+
+    _diagnostics.emitAndPrint(Diagnostic(
+        Severity::Error, DiagnosticCode::MISSING_TRY,
+        "call to throwing function '" + calleeName + "' must be wrapped in 'try'",
+        loc
+    ));
 }
 
 void Binder::popScope()

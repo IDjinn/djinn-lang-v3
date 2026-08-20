@@ -96,9 +96,62 @@ namespace djinn
                 stmt.expression ? stmt.expression->location : SourceLocation{}
             ));
         }
+        std::shared_ptr<Symbol> thrownSym;
         if (stmt.expression)
         {
-            _binder.bindExpression(*stmt.expression);
+            thrownSym = _binder.bindExpression(*stmt.expression);
+        }
+
+        // Resolve the thrown error type and validate it against the throws clause
+        std::string thrownTypeName;
+        if (stmt.expression)
+        {
+            if (const auto* call = dynamic_cast<const FunctionCall*>(stmt.expression.get()))
+            {
+                if (const auto errStruct = _binder._global_scope->lookupStruct(call->name.token_name);
+                    errStruct && errStruct->isErrorType)
+                {
+                    thrownTypeName = errStruct->name;
+                }
+            }
+            if (thrownTypeName.empty() && thrownSym && thrownSym->type.kind == TypeKind::STRUCT)
+            {
+                thrownTypeName = thrownSym->type.structName;
+            }
+        }
+
+        if (thrownTypeName.empty()) return;
+
+        const auto thrownStruct = _binder._global_scope->lookupStruct(thrownTypeName);
+        if (!thrownStruct || !thrownStruct->isErrorType)
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::THROWS_TYPE_MISMATCH,
+                "can only throw error types (structs deriving from 'Exception'), got '" + thrownTypeName + "'",
+                stmt.expression ? stmt.expression->location : SourceLocation{}
+            ));
+            return;
+        }
+
+        if (!_binder.currentFunctionThrowsAny_ && !_binder.currentFunctionThrowsTypes_.empty())
+        {
+            bool covered = false;
+            for (const auto& t : _binder.currentFunctionThrowsTypes_)
+            {
+                if (t.kind == TypeKind::STRUCT && _binder.is_error_derived_from(thrownTypeName, t.structName))
+                {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered)
+            {
+                _binder._diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Error, DiagnosticCode::THROWS_TYPE_MISMATCH,
+                    "thrown error '" + thrownTypeName + "' is not covered by the function's throws clause",
+                    stmt.expression ? stmt.expression->location : SourceLocation{}
+                ));
+            }
         }
     }
 } // namespace djinn

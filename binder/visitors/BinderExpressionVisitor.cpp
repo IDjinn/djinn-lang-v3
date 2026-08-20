@@ -208,17 +208,61 @@ namespace djinn
     {
         _binder.bindExpression(*expr.condition);
         auto trueSym = _binder.bindExpression(*expr.trueExpr);
-        _binder.bindExpression(*expr.falseExpr);
+        auto falseSym = _binder.bindExpression(*expr.falseExpr);
+
+        if (trueSym && falseSym)
+        {
+            const bool compatible = trueSym->type.kind == falseSym->type.kind &&
+                (trueSym->type.kind != TypeKind::STRUCT ||
+                 trueSym->type.structName == falseSym->type.structName);
+            if (!compatible)
+            {
+                _binder._diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Error, DiagnosticCode::TYPE_MISMATCH,
+                    "ternary branches have incompatible types '" + trueSym->type.toHumanString() +
+                    "' and '" + falseSym->type.toHumanString() + "'",
+                    expr.location
+                ));
+            }
+        }
         _result = trueSym;
     }
 
     void BinderExpressionVisitor::visit(const TryExpression& expr)
     {
-        _binder.bindExpression(*expr.expr);
+        const bool prevInsideTry = _binder.insideTryExpression_;
+        const bool prevSawThrowing = _binder.tryOperandSawThrowingCall_;
+        _binder.insideTryExpression_ = true;
+        _binder.tryOperandSawThrowingCall_ = false;
+
+        auto operandSym = _binder.bindExpression(*expr.expr);
+
+        _binder.insideTryExpression_ = prevInsideTry;
+        const bool sawThrowing = _binder.tryOperandSawThrowingCall_;
+        _binder.tryOperandSawThrowingCall_ = prevSawThrowing;
+
+        if (!sawThrowing)
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::TRY_ON_NON_THROWING,
+                "'try' applied to an expression that cannot throw",
+                expr.location
+            ));
+        }
+
+        if (!expr.fallback && !_binder.currentFunctionThrows_)
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::TRY_WITHOUT_FALLBACK,
+                "'try' without '?:' fallback is only allowed inside a 'throws' function (to re-throw)",
+                expr.location
+            ));
+        }
+
         if (expr.fallback)
         {
             _binder.bindExpression(*expr.fallback);
         }
-        _result = nullptr;
+        _result = operandSym;
     }
 } // namespace djinn

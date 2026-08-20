@@ -376,6 +376,12 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
         }
     }
 
+    // Error construction: MyError("message") — builtin-style implicit constructor
+    if (resolve_error_struct(expr.name.token_name))
+    {
+        return generate_error_construction(expr);
+    }
+
     // Check if this is a constructor call: Type(args) or Type<T>(args)
     // Resolve alias first (e.g., "Point" -> "mymodule::Point")
     const std::string resolvedTypeName = currentScope->resolve_alias(expr.name.token_name);
@@ -454,10 +460,20 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     //     return generate_variadic_forward_call(expr);
     // }
 
-    const auto it = functions.find(expr.name.token_name);
+    // Resolve short-name aliases (namespace / file namespace) to the qualified
+    // name used as the functions-map key (e.g. "division" -> "test::division")
+    std::string calleeName = expr.name.token_name;
+    if (!functions.contains(calleeName))
+    {
+        calleeName = currentScope->resolve_alias(calleeName);
+    }
+
+    const auto it = functions.find(calleeName);
     if (it == functions.end())
     {
-        throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION, "função não encontrada: " + expr.name.token_name);
+        GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
+                        "função não encontrada: " + expr.name.token_name,
+                        expr.name.location);
     }
 
     llvm::Function* func = it->second;
@@ -544,6 +560,13 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
         func->setMemoryEffects(llvm::MemoryEffects::unknown());
         call->setCannotDuplicate();
         call->setTailCall(false);
+    }
+
+    // Unchecked call to a throwing function inside another throwing function:
+    // re-throw when the callee failed (error propagation)
+    if (currentFunctionThrows && !insideTryOperand_ && funcSym && funcSym->isThrowing())
+    {
+        emit_error_propagation_check();
     }
 
     return call;
@@ -1051,64 +1074,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         }
 
         // Box remaining arguments into arr<object>
-        const std::string resolvedObject = currentScope->resolve_alias("object");
-        StructDef* objectDef = currentScope->lookup_struct(resolvedObject);
-
-        const size_t numVariadicArgs = call.arguments.size() > normalParamCount
-                                           ? call.arguments.size() - normalParamCount
-                                           : 0;
-
-        // Monomorphize arr<object>
-        Type objectType = Type::struct_type("object");
-        std::vector<Type> typeArgs = {objectType};
-        llvm::StructType* arrObjectType = monomorphize_struct("arr", typeArgs);
-        StructDef* arrDef = currentScope->lookup_struct(arrObjectType->getName().str());
-
-        if (numVariadicArgs > 0)
-        {
-            // Stack-allocate array of objects
-            auto* arrayData = builder->CreateAlloca(
-                objectDef->llvmType,
-                builder->getInt32(static_cast<uint32_t>(numVariadicArgs)),
-                "varargs_data"
-            );
-
-            // Box each variadic argument
-            for (size_t i = 0; i < numVariadicArgs; ++i)
-            {
-                const auto& argExpr = *call.arguments[normalParamCount + i];
-                llvm::Value* argVal = generate_expression(argExpr);
-                std::string typeName = get_djinn_type_name(argExpr, argVal);
-                llvm::Value* boxed = box_value(argVal, typeName);
-
-                auto* gep = builder->CreateGEP(objectDef->llvmType, arrayData,
-                                               builder->getInt32(static_cast<uint32_t>(i)), "vararg_slot");
-                builder->CreateStore(boxed, gep);
-            }
-
-            // Build arr<object> struct: { object* data, size length }
-            auto* arrAlloca = builder->CreateAlloca(arrObjectType, nullptr, "varargs_arr");
-            auto* dataField = builder->CreateStructGEP(arrObjectType, arrAlloca, 0, "arr.data");
-            builder->CreateStore(arrayData, dataField);
-            auto* lenField = builder->CreateStructGEP(arrObjectType, arrAlloca, 1, "arr.len");
-            builder->CreateStore(builder->getInt32(static_cast<uint32_t>(numVariadicArgs)), lenField);
-
-            // Load and pass the arr<object> value
-            llvm::Value* arrVal = builder->CreateLoad(arrObjectType, arrAlloca, "varargs");
-            args.push_back(arrVal);
-        }
-        else
-        {
-            // Empty varargs: pass empty arr<object>
-            auto* arrAlloca = builder->CreateAlloca(arrObjectType, nullptr, "varargs_arr");
-            auto* dataField = builder->CreateStructGEP(arrObjectType, arrAlloca, 0, "arr.data");
-            builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()), dataField);
-            auto* lenField = builder->CreateStructGEP(arrObjectType, arrAlloca, 1, "arr.len");
-            builder->CreateStore(builder->getInt32(0), lenField);
-
-            llvm::Value* arrVal = builder->CreateLoad(arrObjectType, arrAlloca, "varargs");
-            args.push_back(arrVal);
-        }
+        args.push_back(emit_boxed_varargs_array(call.arguments, normalParamCount));
     }
     else
     {
@@ -1165,7 +1131,21 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         }
     }
 
-    return builder->CreateCall(func, args);
+    auto* methodCall = builder->CreateCall(func, args);
+
+    // Unchecked call to a throwing method inside another throwing function:
+    // re-throw when the callee failed (error propagation)
+    if (currentFunctionThrows && !insideTryOperand_)
+    {
+        const auto structSym = symbols->lookupStruct(structName);
+        const auto methodSym = structSym ? structSym->getMethod(call.name.token_name) : nullptr;
+        if (methodSym && methodSym->isThrowing())
+        {
+            emit_error_propagation_check();
+        }
+    }
+
+    return methodCall;
 }
 
 void Generator::inject_location_argument(std::vector<llvm::Value*>& args, const SourceLocation& callSite)
@@ -1191,4 +1171,122 @@ void Generator::inject_location_argument(std::vector<llvm::Value*>& args, const 
         args.push_back(lineConst);
         args.push_back(colConst);
     }
+}
+
+llvm::Function* Generator::resolve_static_method_function(const std::string& structName,
+                                                          const std::string& methodName)
+{
+    StructDef* def = currentScope->lookup_struct(structName);
+    const std::string resolvedName = def ? def->name : structName;
+    const std::string mangledName = resolvedName + "__" + methodName;
+
+    if (const auto it = functions.find(mangledName); it != functions.end())
+    {
+        return it->second;
+    }
+
+    if (def)
+    {
+        if (const auto it = def->methodFunctions.find(methodName); it != def->methodFunctions.end())
+        {
+            return it->second;
+        }
+
+        if (llvm::Function* fn = module->getFunction(mangledName))
+        {
+            functions[mangledName] = fn;
+            def->methodFunctions[methodName] = fn;
+            return fn;
+        }
+
+        // Method exists in the symbol table but was not generated yet:
+        // forward-declare it on demand
+        for (const auto& method : def->methods)
+        {
+            if (method->name != methodName) continue;
+
+            llvm::Type* retType = method->isAsync
+                                      ? llvm::PointerType::getUnqual(*context)
+                                      : generate_type(method->returnType);
+
+            std::vector<llvm::Type*> paramTypes;
+            if (!method->isStatic)
+            {
+                paramTypes.push_back(llvm::PointerType::get(def->llvmType, 0));
+            }
+            for (const auto& pt : method->paramTypes)
+            {
+                paramTypes.push_back(generate_type(pt));
+            }
+
+            auto* funcType = llvm::FunctionType::get(retType, paramTypes, false);
+            auto* fn = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, mangledName, *module);
+
+            apply_attributes(fn, method->attributes);
+            apply_implicit_attributes(fn);
+
+            functions[mangledName] = fn;
+            def->methodFunctions[methodName] = fn;
+            return fn;
+        }
+    }
+
+    return nullptr;
+}
+
+llvm::Value* Generator::emit_boxed_varargs_array(const std::vector<std::unique_ptr<Expression>>& args,
+                                                 const size_t normalParamCount)
+{
+    const std::string resolvedObject = currentScope->resolve_alias("object");
+    StructDef* objectDef = currentScope->lookup_struct(resolvedObject);
+
+    const size_t numVariadicArgs = args.size() > normalParamCount
+                                       ? args.size() - normalParamCount
+                                       : 0;
+
+    // Monomorphize arr<object>
+    Type objectType = Type::struct_type("object");
+    std::vector<Type> typeArgs = {objectType};
+    llvm::StructType* arrObjectType = monomorphize_struct("arr", typeArgs);
+
+    if (numVariadicArgs == 0)
+    {
+        // Empty varargs: pass empty arr<object>
+        auto* arrAlloca = builder->CreateAlloca(arrObjectType, nullptr, "varargs_arr");
+        auto* dataField = builder->CreateStructGEP(arrObjectType, arrAlloca, 0, "arr.data");
+        builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()), dataField);
+        auto* lenField = builder->CreateStructGEP(arrObjectType, arrAlloca, 1, "arr.len");
+        builder->CreateStore(builder->getInt32(0), lenField);
+
+        return builder->CreateLoad(arrObjectType, arrAlloca, "varargs");
+    }
+
+    // Stack-allocate array of objects
+    auto* arrayData = builder->CreateAlloca(
+        objectDef->llvmType,
+        builder->getInt32(static_cast<uint32_t>(numVariadicArgs)),
+        "varargs_data"
+    );
+
+    // Box each variadic argument
+    for (size_t i = 0; i < numVariadicArgs; ++i)
+    {
+        const auto& argExpr = *args[normalParamCount + i];
+        llvm::Value* argVal = generate_expression(argExpr);
+        std::string typeName = get_djinn_type_name(argExpr, argVal);
+        llvm::Value* boxed = box_value(argVal, typeName);
+
+        auto* gep = builder->CreateGEP(objectDef->llvmType, arrayData,
+                                       builder->getInt32(static_cast<uint32_t>(i)), "vararg_slot");
+        builder->CreateStore(boxed, gep);
+    }
+
+    // Build arr<object> struct: { object* data, size length }
+    auto* arrAlloca = builder->CreateAlloca(arrObjectType, nullptr, "varargs_arr");
+    auto* dataField = builder->CreateStructGEP(arrObjectType, arrAlloca, 0, "arr.data");
+    builder->CreateStore(arrayData, dataField);
+    auto* lenField = builder->CreateStructGEP(arrObjectType, arrAlloca, 1, "arr.len");
+    builder->CreateStore(builder->getInt32(static_cast<uint32_t>(numVariadicArgs)), lenField);
+
+    return builder->CreateLoad(arrObjectType, arrAlloca, "varargs");
 }

@@ -96,11 +96,35 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
             }
         }
         val = cast_value(val, returnType, sourceSigned);
+
+        // ensure(...) contracts: check postconditions before actually returning
+        if (!currentContracts_.empty())
+        {
+            bool hasEnsure = false;
+            for (const auto& contract : currentContracts_)
+            {
+                if (contract && contract->isEnsure() && contract->condition) hasEnsure = true;
+            }
+            if (hasEnsure)
+            {
+                if (contractReturnAlloca)
+                {
+                    builder->CreateStore(val, contractReturnAlloca);
+                }
+                emit_contract_ensures();
+            }
+        }
+
         emit_all_scope_cleanup();
         builder->CreateRet(val);
     }
     else
     {
+        // Void functions may still have side-condition ensure clauses
+        if (!currentContracts_.empty())
+        {
+            emit_contract_ensures();
+        }
         emit_all_scope_cleanup();
         builder->CreateRetVoid();
     }

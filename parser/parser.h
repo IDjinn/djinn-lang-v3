@@ -107,6 +107,8 @@ private:
 
     void parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes);
 
+    std::vector<ContractClause> parse_contract_clauses();
+
     std::unique_ptr<Block> parse_block();
 
     std::unique_ptr<Statement> parse_statement();

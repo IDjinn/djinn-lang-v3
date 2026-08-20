@@ -15,6 +15,11 @@ namespace djinn::binder {
 
         // Check if the call name matches a struct that has a constructor
         if (const auto structSym = scope->lookupStruct(call.name.token_name)) {
+            // Error types have no declared constructor — `MyError("message")`
+            // is handled here as an implicit (str) constructor.
+            if (structSym->isErrorType) {
+                return true;
+            }
             for (const auto &method : structSym->methods) {
                 if (method->isConstructor && method->name == call.name.token_name) {
                     return true;
@@ -39,6 +44,21 @@ namespace djinn::binder {
                 ctor = method;
                 break;
             }
+        }
+
+        // Error construction: MyError("message") — implicit (str) constructor when
+        // no explicit constructor is declared. More than 1 argument means an
+        // interpolated message: the parser desugars "x {expr} y" into
+        // ("x {0} y", expr), so arg 0 is the format string and the rest are values.
+        if (!ctor && structSym->isErrorType) {
+            std::vector<std::shared_ptr<Symbol>> parameters;
+            for (const auto &arg : call.arguments) {
+                parameters.emplace_back(binder.bindExpression(*arg));
+            }
+
+            return std::make_shared<FunctionCallSymbol>(
+                call.name.token_name, nullptr, std::move(parameters), call.name.location
+            );
         }
 
         // Validate argument count

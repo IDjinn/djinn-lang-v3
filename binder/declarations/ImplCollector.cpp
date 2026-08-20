@@ -75,6 +75,21 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             methodSym->operatorCanonicalName = method->operatorCanonicalName;
             methodSym->throwsAny = method->throwsAny;
             methodSym->throwsTypes = method->throwsTypes;
+            for (const auto& contract : method->contracts)
+            {
+                methodSym->contracts.push_back(&contract);
+            }
+            // Contracts implicitly throw ContractViolation on violation
+            if (!method->contracts.empty() && !methodSym->throwsAny)
+            {
+                if (std::ranges::find_if(methodSym->throwsTypes, [](const Type& t)
+                {
+                    return t.kind == TypeKind::STRUCT && t.structName == "ContractViolation";
+                }) == methodSym->throwsTypes.end())
+                {
+                    methodSym->throwsTypes.push_back(Type::struct_type("ContractViolation"));
+                }
+            }
 
             // Copy and validate attributes from AST
             for (const auto& attr : method->attributes)

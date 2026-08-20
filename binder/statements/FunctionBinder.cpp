@@ -41,6 +41,8 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
 
     const auto funcSym = _global_scope->lookupFunction(qualifiedName);
     currentFunctionThrows_ = funcSym ? funcSym->isThrowing() : false;
+    currentFunctionThrowsAny_ = funcSym ? funcSym->throwsAny : false;
+    currentFunctionThrowsTypes_ = funcSym ? funcSym->throwsTypes : std::vector<Type>();
 
     pushScope();
 
@@ -68,6 +70,12 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
         }
     }
 
+    // Bind require/ensure contract conditions (params are in scope)
+    if (funcSym)
+    {
+        bind_contract_conditions(funcSym->contracts, *func.returnType);
+    }
+
     // Get the body from the FunctionSymbol (ownership was transferred during collection)
     if (funcSym && funcSym->body)
     {
@@ -77,6 +85,8 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     popScope();
     currentFunction_.clear();
     currentFunctionThrows_ = false;
+    currentFunctionThrowsAny_ = false;
+    currentFunctionThrowsTypes_.clear();
 }
 
 void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration& struc)
@@ -84,6 +94,8 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     currentFunction_ = struc.name.token_name + "::" + method.name.token_name;
     currentStructName_ = struc.name.token_name;
     currentFunctionThrows_ = method.isThrowing();
+    currentFunctionThrowsAny_ = method.throwsAny;
+    currentFunctionThrowsTypes_ = method.throwsTypes;
 
     pushScope();
 
@@ -138,6 +150,14 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     {
         method.returnType = std::move(returnType);
     }
+    // Bind require/ensure contract conditions (this and params are in scope)
+    {
+        std::vector<const ContractClause*> methodContracts;
+        for (const auto& contract : method.contracts)
+            methodContracts.push_back(&contract);
+        bind_contract_conditions(methodContracts, *method.returnType);
+    }
+
     if (method.body)
     {
         bindBlock(*method.body);
@@ -167,6 +187,30 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     currentFunction_.clear();
     currentStructName_.clear();
     currentFunctionThrows_ = false;
+    currentFunctionThrowsAny_ = false;
+    currentFunctionThrowsTypes_.clear();
+}
+
+void Binder::bind_contract_conditions(const std::vector<const ContractClause*>& contracts,
+                                      const Type& returnType)
+{
+    for (const auto& contract : contracts)
+    {
+        if (!contract || !contract->condition) continue;
+
+        if (contract->isEnsure())
+        {
+            // Inside ensure, `return` refers to the function's return value
+            pushScope();
+            _current_scope->defineVariable("return", returnType, false);
+            bindExpression(*contract->condition);
+            popScope();
+        }
+        else
+        {
+            bindExpression(*contract->condition);
+        }
+    }
 }
 
 void Binder::bindNamespace(const NamespaceDeclaration& ns, const std::string& prefix)

@@ -156,6 +156,10 @@ enum class TokenType
     THROW, // throw
     THROWS, // throws
     TRY, // try
+
+    // CONTRACTS
+    REQUIRE, // require (contract precondition)
+    ENSURE, // ensure (contract postcondition)
 };
 
 

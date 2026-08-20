@@ -178,6 +178,7 @@ struct FunctionSymbol : Symbol
     bool constExpr;
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
+    std::vector<const ContractClause*> contracts;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation& loc = {})
         : Symbol(SymbolKind::Function, std::move(name), retType, loc),
@@ -271,6 +272,7 @@ struct MethodSymbol : Symbol
     std::vector<AttributeSymbol> attributes;
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
+    std::vector<const ContractClause*> contracts;
 
     Block* body = nullptr;
     Expression* expressionBody = nullptr;
@@ -383,6 +385,12 @@ struct StructSymbol : Symbol
     std::vector<std::string> implements;
     std::vector<AttributeSymbol> attributes;
     std::unique_ptr<Type> baseType;
+
+    // Error type support: structs deriving (directly or transitively) from the
+    // builtin `Exception` type. Error values have the layout { i32 tag, i8* message }.
+    bool isErrorType = false;
+    int32_t errorTag = -1;
+    std::string errorBase; // qualified name of the error base; empty for the root
 
     [[nodiscard]] bool isGeneric() const
     {
