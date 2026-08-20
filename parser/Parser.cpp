@@ -2583,6 +2583,19 @@ std::unique_ptr<Expression> Parser::parse_primary()
             }
         }
 
+        // Struct literal: TypeName { .field = value, ... }
+        // Only when the name is a declared struct type (and not shadowed by a
+        // variable), so paren-less `if cond { ... }` still parses as a block
+        if (check(TokenType::LBRACE) && isDeclaredStruct && !existingVar)
+        {
+            auto literal = parse_brace_initializer();
+            if (auto* brace = dynamic_cast<BraceInitializer*>(literal.get()))
+            {
+                brace->structTypeName = nameIdentifier.token_name;
+            }
+            return literal;
+        }
+
         // Simple identifier reference
         return std::make_unique<Identifier>(std::move(nameIdentifier));
     }

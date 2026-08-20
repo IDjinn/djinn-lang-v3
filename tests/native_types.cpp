@@ -109,14 +109,14 @@ TEST(NativeTypes, NintMaxValueConstant)
     const auto source = R"(
         i32 main() {
             nint m = nint.MAX_VALUE;
-            return m / 1000000000;
+            return m / 1000000000000000000;
         }
     )";
 
     const auto result = DjinnCompiler::run(
         source, {.optimizationLevel = 0, .generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, 9); // 9223372036854775807 / 1e9
+    EXPECT_EQ(result.returnCode, 9); // 9223372036854775807 / 1e18
 }
 
 TEST(NativeTypes, NintTakesOverflowSuffixes)

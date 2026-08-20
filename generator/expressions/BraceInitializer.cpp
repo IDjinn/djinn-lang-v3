@@ -5,6 +5,23 @@
 #include "../Generator.h"
 
 llvm::Value *Generator::generate_brace_initializer(const BraceInitializer &expr) {
+    // Typed struct literal (e.g. `Packet { .size = 42 }`) in a general
+    // expression context: build the struct value from the named type
+    if (!expr.structTypeName.empty()) {
+        const auto resolved = currentScope->resolve_alias(expr.structTypeName);
+        auto *structType = currentScope->get_llvm_struct(resolved);
+        if (!structType) {
+            if (auto *declared = llvm::dyn_cast<llvm::StructType>(generate_type(Type::struct_type(resolved)))) {
+                structType = declared;
+            }
+        }
+        if (!structType) {
+            throw CompileError(DiagnosticCode::UNDEFINED_STRUCT,
+                               "struct não encontrada: " + expr.structTypeName);
+        }
+        return generate_brace_init_for_struct(expr, structType, resolved);
+    }
+
     if (expr.elements.empty()) {
         return nullptr;
     }

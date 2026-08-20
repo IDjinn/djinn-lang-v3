@@ -56,6 +56,18 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
     Type leftResolved = resolveTransparent(left->type);
     Type rightResolved = resolveTransparent(right->type);
 
+    // Untyped integer literals adapt to the other operand's type (width and
+    // sign) at codegen, so they never trigger implicit conversion warnings
+    const auto isIntLiteral = [](const Expression& e) -> bool
+    {
+        if (dynamic_cast<const IntegerLiteral*>(&e)) return true;
+        if (const auto* unary = dynamic_cast<const UnaryExpression*>(&e))
+            return unary->op == TokenType::MINUS && dynamic_cast<const IntegerLiteral*>(unary->operand.get());
+        return false;
+    };
+    const bool leftIsLiteral = isIntLiteral(*expr.left);
+    const bool rightIsLiteral = isIntLiteral(*expr.right);
+
     // Check if a STRUCT type is a generic param (not registered as struct/enum)
     auto isGenericParam = [this](const Type& type) -> bool // TODO: VALID FUNCTION FOR TYPE GENERIC CHECK
     {
@@ -199,20 +211,27 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         // Check integer narrowing: larger type cannot implicitly fit in smaller
         if (bothIntegers && leftResolved.size != rightResolved.size)
         {
-            const auto& larger = leftResolved.size > rightResolved.size ? leftResolved : rightResolved;
-            const auto& smaller = leftResolved.size > rightResolved.size ? rightResolved : leftResolved;
+            const bool leftIsLarger = leftResolved.size > rightResolved.size;
+            const auto& larger = leftIsLarger ? leftResolved : rightResolved;
+            const auto& smaller = leftIsLarger ? rightResolved : leftResolved;
+            const bool smallerIsLiteral = leftIsLarger ? rightIsLiteral : leftIsLiteral;
 
-            BINDER_WARNING(
-                DiagnosticCode::TYPE_MISMATCH,
-                "implicit integer widening in binary expression: " +
-                smaller.toHumanString() + " -> " + larger.toHumanString() +
-                "; consider explicit cast",
-                location
-            );
+            // Literal operands adapt to the larger type silently
+            if (!smallerIsLiteral)
+            {
+                BINDER_WARNING(
+                    DiagnosticCode::TYPE_MISMATCH,
+                    "implicit integer widening in binary expression: " +
+                    smaller.toHumanString() + " -> " + larger.toHumanString() +
+                    "; consider explicit cast",
+                    location
+                );
+            }
         }
 
         // Check sign mismatch (e.g., i32 vs u32)
-        if (bothIntegers && leftResolved.size == rightResolved.size && leftResolved.sign != rightResolved.sign)
+        if (bothIntegers && !leftIsLiteral && !rightIsLiteral
+            && leftResolved.size == rightResolved.size && leftResolved.sign != rightResolved.sign)
         {
             BINDER_WARNING(
                 DiagnosticCode::TYPE_MISMATCH,
@@ -275,6 +294,12 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         break;
     default:
         resultType = leftResolved;
+        // Literal on the left adopts the right operand's type (e.g. `0 - nintVar`)
+        if (leftIsLiteral && !rightIsLiteral
+            && leftResolved.kind == TypeKind::INTEGER && rightResolved.kind == TypeKind::INTEGER)
+        {
+            resultType = rightResolved;
+        }
         if (overflowMode != OverflowMode::None && resultType.overflowMode == OverflowMode::None)
         {
             resultType.overflowMode = overflowMode;

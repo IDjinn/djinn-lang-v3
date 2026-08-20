@@ -636,6 +636,9 @@ struct InitializerElement : Location
 struct BraceInitializer : Expression
 {
     std::vector<InitializerElement> elements;
+    // Set for typed struct literals (`Packet { .size = 42 }`); empty for bare
+    // brace initializers whose type comes from context (`Packet p = { ... }`)
+    std::string structTypeName;
 
     explicit BraceInitializer(std::vector<InitializerElement> elements, const SourceLocation& loc)
         : elements(std::move(elements))
@@ -648,7 +651,12 @@ struct BraceInitializer : Expression
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
-        os << "BraceInitializer {\n";
+        os << "BraceInitializer";
+        if (!structTypeName.empty())
+        {
+            os << " " << structTypeName;
+        }
+        os << " {\n";
         for (const auto& elem : elements)
         {
             elem.print(os, indent + 2);

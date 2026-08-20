@@ -16,6 +16,22 @@ void Binder::bindProgram(const Program& program)
         ext->accept(visitor, program.fileNamespace);
     }
 
+    // Bind constexpr initializers so overflow modes and types are recorded on
+    // the AST before the generator's ConstEvaluator runs (it relies on the
+    // binder-set overflowMode for saturating/trapped arithmetic)
+    for (const auto& ce : program.constExprs)
+    {
+        if (ce->isIntrinsic || !ce->value) continue;
+        try
+        {
+            bindExpression(*ce->value);
+        }
+        catch (const CompileError&)
+        {
+            // already reported as a diagnostic; keep binding the rest
+        }
+    }
+
     for (const auto& struc : program.structs)
     {
         struc->accept(visitor, program.fileNamespace);

@@ -77,6 +77,40 @@ std::shared_ptr<Symbol> Binder::bindFieldAssignment(const FieldAssignment& assig
 
 std::shared_ptr<Symbol> Binder::bindBraceInitializer(const BraceInitializer& init, const Type* expectedType)
 {
+    // Typed struct literal (e.g. `Packet { .size = 42 }`): validate the prefix
+    // and use it for field checking when no (or no struct) expected type exists
+    Type prefixType;
+    if (!init.structTypeName.empty())
+    {
+        if (!_current_scope->lookupStruct(init.structTypeName))
+        {
+            BINDER_ERROR(
+                DiagnosticCode::UNDEFINED_STRUCT,
+                "struct with name '" + init.structTypeName + "' could not be located!",
+                init,
+                init.location
+            );
+        }
+
+        if (expectedType && expectedType->kind == TypeKind::STRUCT
+            && expectedType->structName != init.structTypeName)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::TYPE_MISMATCH,
+                "struct literal '" + init.structTypeName + "' does not match expected type '" +
+                expectedType->structName + "'",
+                init,
+                init.location
+            );
+        }
+
+        prefixType = Type::struct_type(init.structTypeName);
+        if (!expectedType || expectedType->kind != TypeKind::STRUCT)
+        {
+            expectedType = &prefixType;
+        }
+    }
+
     if (expectedType && expectedType->kind == TypeKind::STRUCT)
     {
         const auto structSym = _global_scope->lookupStruct(expectedType->structName);

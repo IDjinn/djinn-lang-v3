@@ -738,7 +738,14 @@ ConstValue ConstVM::execute(
 
         switch (instr.op)
         {
-        case OpCode::PUSH_INT: push(ConstValue::makeInt(intPool[instr.operand]));
+        case OpCode::PUSH_INT:
+            {
+                const int64_t v = intPool[instr.operand];
+                // Width follows magnitude so 64-bit constants (e.g. nint.MAX_VALUE)
+                // don't silently truncate to i32 when materialized
+                const unsigned bits = (v >= INT32_MIN && v <= INT32_MAX) ? 32 : 64;
+                push(ConstValue::makeInt(v, bits));
+            }
             break;
         case OpCode::PUSH_INT128: push(ConstValue::makeInt128(int128Pool[instr.operand]));
             break;
