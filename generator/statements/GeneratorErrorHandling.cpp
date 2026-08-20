@@ -1,5 +1,5 @@
 #include "../Generator.h"
-#include "../utils/Logger.h"
+#include "../../utils/Logger.h"
 #include "../../binder/ErrorTypes.h"
 
 llvm::StructType* djinn_error_value_type(llvm::LLVMContext& context, llvm::IRBuilder<>& builder)
