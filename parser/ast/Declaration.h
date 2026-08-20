@@ -762,15 +762,7 @@ struct ImplDeclaration : Location
     {
         const auto targetType = targetTypes.at(index);
         if (targetType.kind == TypeKind::STRUCT) return targetType.structName;
-        // For primitive types, build the name from kind+size
-        if (targetType.kind == TypeKind::INTEGER)
-        {
-            return (targetType.sign ? "i" : "u") + std::to_string(targetType.size);
-        }
-        if (targetType.kind == TypeKind::F32) return "f32";
-        if (targetType.kind == TypeKind::F64) return "f64";
-        if (targetType.kind == TypeKind::F16) return "f16";
-        if (targetType.kind == TypeKind::F128) return "f128";
+        // For primitives use the human name (covers nint/nfloat/ndouble and w/t/c/s suffixes)
         return targetType.toHumanString();
     }
 

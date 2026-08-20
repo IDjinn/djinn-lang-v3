@@ -7,9 +7,87 @@
 
 #include <string>
 #include <memory>
+#include <optional>
+#include <algorithm>
+#include <cctype>
 #include <unordered_map>
 #include "ASTNode.h"
 #include "../../lexer/Token.h"
+
+enum class OverflowMode: uint8_t
+{
+    None,
+    Wrapped,
+    Trapped,
+    Checked,
+    Saturating
+};
+
+inline const char* overflow_mode_suffix(const OverflowMode mode)
+{
+    switch (mode)
+    {
+    case OverflowMode::Wrapped: return "w";
+    case OverflowMode::Trapped: return "t";
+    case OverflowMode::Checked: return "c";
+    case OverflowMode::Saturating: return "s";
+    default: return "";
+    }
+}
+
+// Native-width types follow the host target (no cross-compilation yet)
+inline constexpr size_t native_int_bits = sizeof(void*) * 8;
+
+struct IntegerTypeName
+{
+    size_t bits;
+    bool sign;
+    OverflowMode mode;
+    bool native = false;
+};
+
+// Parses "i32", "u8", "i32w", "nint", "nintt" into components; nullopt for non-integer names
+inline std::optional<IntegerTypeName> parse_integer_type_name(const std::string& name)
+{
+    const auto modeFromChar = [](const char c) -> std::optional<OverflowMode>
+    {
+        switch (c)
+        {
+        case 'w': return OverflowMode::Wrapped;
+        case 't': return OverflowMode::Trapped;
+        case 'c': return OverflowMode::Checked;
+        case 's': return OverflowMode::Saturating;
+        default: return std::nullopt;
+        }
+    };
+
+    if (name == "nint")
+        return IntegerTypeName{native_int_bits, true, OverflowMode::None, true};
+    if (name.length() == 5 && name.starts_with("nint"))
+    {
+        if (const auto mode = modeFromChar(name[4]))
+            return IntegerTypeName{native_int_bits, true, *mode, true};
+    }
+
+    if (name.length() < 2) return std::nullopt;
+    const char prefix = name[0];
+    if (prefix != 'i' && prefix != 'u') return std::nullopt;
+
+    std::string digits = name.substr(1);
+    OverflowMode mode = OverflowMode::None;
+    if (!digits.empty())
+    {
+        if (const auto m = modeFromChar(digits.back()))
+        {
+            mode = *m;
+            digits.pop_back();
+        }
+    }
+    if (digits.empty() || !std::ranges::all_of(digits, [](const unsigned char c) { return std::isdigit(c); }))
+        return std::nullopt;
+
+    return IntegerTypeName{static_cast<size_t>(std::stol(digits)), prefix == 'i', mode};
+}
 
 enum class TypeKind: uint8_t
 {
@@ -43,6 +121,8 @@ struct Type : Location
     bool nullable = false;
     bool readOnly = false;
     bool isTransparent = false; // true for transparent types (struct size : u32) — copy semantics
+    bool native = false; // display only: nint/nfloat/ndouble (excluded from identity)
+    OverflowMode overflowMode = OverflowMode::None; // behavioral annotation (excluded from identity)
     std::unique_ptr<Type> elementType;
     std::string structName;
     std::vector<Type> genericArgs;
@@ -63,6 +143,8 @@ struct Type : Location
           sign(other.sign),
           nullable(other.nullable),
           isTransparent(other.isTransparent),
+          native(other.native),
+          overflowMode(other.overflowMode),
           elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr),
           structName(other.structName),
           genericArgs(other.genericArgs)
@@ -79,6 +161,8 @@ struct Type : Location
             sign = other.sign;
             nullable = other.nullable;
             isTransparent = other.isTransparent;
+            native = other.native;
+            overflowMode = other.overflowMode;
             elementType = other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr;
             structName = other.structName;
             genericArgs = other.genericArgs;
@@ -181,9 +265,25 @@ struct Type : Location
         return ptr;
     }
 
-    static Type integer(const size_t bits, const bool sign)
+    static Type integer(const size_t bits, const bool sign, const OverflowMode mode = OverflowMode::None)
     {
-        return Type(TypeKind::INTEGER, bits, sign);
+        Type t(TypeKind::INTEGER, bits, sign);
+        t.overflowMode = mode;
+        return t;
+    }
+
+    static Type native_integer()
+    {
+        Type t(TypeKind::INTEGER, native_int_bits, true);
+        t.native = true;
+        return t;
+    }
+
+    static Type native_floating(const size_t size)
+    {
+        Type t = floating(size);
+        t.native = true;
+        return t;
     }
 
     static std::string kindToString(const TypeKind k)
@@ -209,10 +309,11 @@ struct Type : Location
         switch (kind)
         {
         case TypeKind::INTEGER:
-            return (sign ? "i" : "u") + std::to_string(size);
+            if (native) return "nint";
+            return (sign ? "i" : "u") + std::to_string(size) + overflow_mode_suffix(overflowMode);
         case TypeKind::F16: return "f16";
-        case TypeKind::F32: return "f32";
-        case TypeKind::F64: return "f64";
+        case TypeKind::F32: return native ? "nfloat" : "f32";
+        case TypeKind::F64: return native ? "ndouble" : "f64";
         case TypeKind::F128: return "f128";
         case TypeKind::VOID: return "void";
         case TypeKind::AUTO: return "auto";
@@ -277,12 +378,17 @@ struct Type : Location
 
     static Type fromToken(const Token& token)
     {
-        if (token.value.starts_with("i") || token.value.starts_with("u"))
+        if (const auto intName = parse_integer_type_name(token.value))
         {
-            const auto bits = std::stol(token.value.substr(1));
-            return Type(TypeKind::INTEGER, bits, token.value.starts_with("i"));
+            Type t = intName->native
+                         ? native_integer()
+                         : Type(TypeKind::INTEGER, intName->bits, intName->sign);
+            t.overflowMode = intName->mode;
+            return t;
         }
 
+        if (token.value == "nfloat") return Type::native_floating(32);
+        if (token.value == "ndouble") return Type::native_floating(64);
         if (token.value == "f16") return Type(TypeKind::F16, 16, true);
         if (token.value == "f32") return Type(TypeKind::F32, 32, true);
         if (token.value == "f64") return Type(TypeKind::F64, 64, true);

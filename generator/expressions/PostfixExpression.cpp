@@ -25,7 +25,17 @@ llvm::Value* Generator::generate_postfix_expression(const PostfixExpression& exp
     if (type->isIntegerTy())
     {
         llvm::Value* one = llvm::ConstantInt::get(type, 1);
-        if (expr.op == TokenType::PLUS_PLUS)
+        const TokenType arithOp = expr.op == TokenType::PLUS_PLUS ? TokenType::PLUS : TokenType::MINUS;
+
+        if (expr.overflowMode == OverflowMode::Trapped || expr.overflowMode == OverflowMode::Checked)
+        {
+            newVal = emit_int_arith_with_overflow(arithOp, oldVal, one, expr.overflowSigned, expr.overflowMode);
+        }
+        else if (expr.overflowMode == OverflowMode::Saturating)
+        {
+            newVal = emit_saturating_int_arith(arithOp, oldVal, one, expr.overflowSigned);
+        }
+        else if (expr.op == TokenType::PLUS_PLUS)
             newVal = builder->CreateAdd(oldVal, one, "inc");
         else
             newVal = builder->CreateSub(oldVal, one, "dec");

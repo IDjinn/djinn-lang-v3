@@ -127,17 +127,26 @@ bool Parser::isType(const Token& token) const
 
     if (token.type != TokenType::IDENTIFIER) return false;
 
+    // Native-width types (nint, nfloat, ndouble — nint also takes w/t/c/s suffixes)
+    if (token.value == "nfloat" || token.value == "ndouble")
+    {
+        return true;
+    }
+    if (token.value.starts_with("nint"))
+    {
+        return parse_integer_type_name(token.value).has_value();
+    }
+
     // Built-in float types
     if (token.value.starts_with('f'))
     {
         return string_to_type_kind.contains(token.value);
     }
 
-    // Built-in integer types (i32, u64, etc.)
+    // Built-in integer types (i32, u64, i32w, ...)
     if (token.value.starts_with('i') || token.value.starts_with('u'))
     {
-        const auto bits = token.value.substr(1);
-        return !bits.empty() && std::ranges::all_of(bits, [](const unsigned char c) { return std::isdigit(c); });
+        return parse_integer_type_name(token.value).has_value();
     }
 
     // Already declared struct in current scope
@@ -216,22 +225,40 @@ std::unique_ptr<Type> Parser::parse_type()
 
     std::unique_ptr<Type> baseType;
 
-    if (identifier.value.starts_with('f') && string_to_type_kind.contains(identifier.value))
+    // Reject overflow suffix on float type names (f32w) with a clear message
+    const auto isModeSuffix = [](const char c)
+    {
+        return c == 'w' || c == 't' || c == 'c' || c == 's';
+    };
+
+    if (identifier.value == "nfloat")
+    {
+        baseType = std::make_unique<Type>(Type::native_floating(32));
+    }
+    else if (identifier.value == "ndouble")
+    {
+        baseType = std::make_unique<Type>(Type::native_floating(64));
+    }
+    else if (identifier.value.starts_with('f') && string_to_type_kind.contains(identifier.value))
     {
         const size_t bits = std::stol(identifier.value.substr(1));
         baseType = std::make_unique<Type>(Type::floating(bits));
     }
-    else if (identifier.value.starts_with('i') && identifier.value.length() > 1 &&
-        std::ranges::all_of(identifier.value.substr(1), [](const unsigned char c) { return std::isdigit(c); }))
+    else if (identifier.value.starts_with('f') && identifier.value.length() > 3
+        && isModeSuffix(identifier.value.back())
+        && string_to_type_kind.contains(identifier.value.substr(0, identifier.value.length() - 1)))
     {
-        const auto bits = std::stol(identifier.value.substr(1));
-        baseType = std::make_unique<Type>(Type::integer(bits, true));
+        PARSER_ERROR(DiagnosticCode::INVALID_TYPE,
+                     "overflow suffix '" + std::string(1, identifier.value.back()) +
+                     "' is only valid on integer types",
+                     SourceLocation(identifier.position, identifier.value.length()));
     }
-    else if (identifier.value.starts_with('u') && identifier.value.length() > 1 &&
-        std::ranges::all_of(identifier.value.substr(1), [](const unsigned char c) { return std::isdigit(c); }))
+    else if (const auto intName = parse_integer_type_name(identifier.value))
     {
-        const auto bits = std::stol(identifier.value.substr(1));
-        baseType = std::make_unique<Type>(Type::integer(bits, false));
+        baseType = std::make_unique<Type>(intName->native
+                                              ? Type::native_integer()
+                                              : Type::integer(intName->bits, intName->sign));
+        baseType->overflowMode = intName->mode;
     }
     else if (identifier.value == "void" || identifier.type == TokenType::VOID)
     {
@@ -2215,6 +2242,8 @@ std::unique_ptr<Expression> Parser::parse_primary()
     if (match(TokenType::INTEGER_LITERAL))
     {
         const auto value = previous().value;
+        // 'c' is a hex digit: in hex literals it can never be a mode suffix
+        const bool hexLiteral = value.length() > 2 && value[0] == '0' && (value[1] == 'x' || value[1] == 'X');
         if (value.ends_with("i"))
         {
             // Signed integer suffix (e.g., 10i)
@@ -2224,6 +2253,26 @@ std::unique_ptr<Expression> Parser::parse_primary()
         {
             // Unsigned integer suffix (e.g., 10u)
             return std::make_unique<IntegerLiteral>(value.substr(0, value.length() - 1), false, currentLocation);
+        }
+        if (value.length() > 1 && (value.ends_with("w") || value.ends_with("t")
+            || value.ends_with("s") || (!hexLiteral && value.ends_with("c"))))
+        {
+            // Overflow mode suffix (e.g., 123w, 123t, 123c, 123s)
+            OverflowMode mode = OverflowMode::Wrapped;
+            switch (value.back())
+            {
+            case 't': mode = OverflowMode::Trapped;
+                break;
+            case 'c': mode = OverflowMode::Checked;
+                break;
+            case 's': mode = OverflowMode::Saturating;
+                break;
+            default: break;
+            }
+            auto literal = std::make_unique<IntegerLiteral>(
+                value.substr(0, value.length() - 1), true, currentLocation);
+            literal->overflowMode = mode;
+            return literal;
         }
         // Default: signed integer
         return std::make_unique<IntegerLiteral>(value, true, currentLocation);

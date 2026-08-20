@@ -4,8 +4,91 @@
 
 #include "ConstEvaluator.h"
 #include "../utils/Logger.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
+
+namespace
+{
+    struct IntLimits
+    {
+        int64_t min;
+        int64_t max;
+        uint64_t umax;
+    };
+
+    IntLimits limitsFor(const unsigned bits, const bool isSigned)
+    {
+        IntLimits l;
+        if (bits >= 64)
+        {
+            l.min = INT64_MIN;
+            l.max = INT64_MAX;
+            l.umax = UINT64_MAX;
+        }
+        else
+        {
+            const uint64_t mask = (1ULL << bits) - 1;
+            l.umax = mask;
+            l.max = isSigned ? static_cast<int64_t>(mask >> 1) : static_cast<int64_t>(mask);
+            l.min = isSigned ? static_cast<int64_t>(~(mask >> 1)) : 0;
+        }
+        return l;
+    }
+
+    bool addOverflows64(const int64_t a, const int64_t b)
+    {
+        return (b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b);
+    }
+
+    bool subOverflows64(const int64_t a, const int64_t b)
+    {
+        return (b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b);
+    }
+
+    bool mulOverflows64(const int64_t a, const int64_t b)
+    {
+        if (a == 0 || b == 0) return false;
+        if (a == INT64_MIN || b == INT64_MIN) return true;
+        const int64_t r = a * b;
+        return r / b != a;
+    }
+
+    // Fits `raw` (may already have wrapped at 64-bit when overflowHint is true)
+    // into bits/sign applying the overflow mode. Returns error for t/c on
+    // overflow, clamps for s, wraps for w/none.
+    ConstValue fitInt(int64_t raw, const bool overflowHint, const bool negative,
+                      const unsigned bits, const bool isSigned, const OverflowMode mode)
+    {
+        const IntLimits lim = limitsFor(bits, isSigned);
+
+        bool out = overflowHint;
+        if (!out)
+        {
+            if (isSigned) out = raw < lim.min || raw > lim.max;
+            else out = static_cast<uint64_t>(raw) > lim.umax;
+        }
+
+        if (out && mode != OverflowMode::None && mode != OverflowMode::Wrapped)
+        {
+            if (mode == OverflowMode::Trapped || mode == OverflowMode::Checked)
+            {
+                return ConstValue::error();
+            }
+            return ConstValue::makeInt(negative ? lim.min : lim.max, bits, isSigned);
+        }
+
+        // wrap to width (two's complement)
+        if (bits < 64)
+        {
+            const uint64_t mask = (1ULL << bits) - 1;
+            uint64_t u = static_cast<uint64_t>(raw) & mask;
+            if (isSigned && (u & (1ULL << (bits - 1)))) u |= ~mask;
+            raw = static_cast<int64_t>(u);
+        }
+        return ConstValue::makeInt(raw, bits, isSigned);
+    }
+}
 
 // ============================================================
 // BytecodeCompiler: helpers
@@ -331,17 +414,23 @@ void BytecodeCompiler::compileBinaryExpression(const BinaryExpression& expr)
     compileExpression(*expr.right);
     if (_hadError) return;
 
+    // operand carries the overflow mode set by the binder (w/t/c/s)
+    const auto modeOp = [](const BinaryExpression& e) -> uint32_t
+    {
+        return static_cast<uint32_t>(e.overflowMode);
+    };
+
     switch (expr.op)
     {
-    case TokenType::PLUS: emit(OpCode::ADD_INT);
+    case TokenType::PLUS: emit(OpCode::ADD_INT, modeOp(expr));
         break;
-    case TokenType::MINUS: emit(OpCode::SUB_INT);
+    case TokenType::MINUS: emit(OpCode::SUB_INT, modeOp(expr));
         break;
-    case TokenType::STAR: emit(OpCode::MUL_INT);
+    case TokenType::STAR: emit(OpCode::MUL_INT, modeOp(expr));
         break;
-    case TokenType::SLASH: emit(OpCode::DIV_INT);
+    case TokenType::SLASH: emit(OpCode::DIV_INT, modeOp(expr));
         break;
-    case TokenType::PERCENT: emit(OpCode::MOD_INT);
+    case TokenType::PERCENT: emit(OpCode::MOD_INT, modeOp(expr));
         break;
     case TokenType::EQUAL_EQUAL: emit(OpCode::CMP_EQ_INT);
         break;
@@ -381,7 +470,7 @@ void BytecodeCompiler::compileUnaryExpression(const UnaryExpression& expr)
 
     switch (expr.op)
     {
-    case TokenType::MINUS: emit(OpCode::NEG_INT);
+    case TokenType::MINUS: emit(OpCode::NEG_INT, static_cast<uint32_t>(expr.overflowMode));
         break;
     case TokenType::BANG: emit(OpCode::LOGIC_NOT);
         break;
@@ -668,7 +757,13 @@ ConstValue ConstVM::execute(
                 if (l.kind == ConstValue::Float || r.kind == ConstValue::Float)
                     push(ConstValue::makeFloat(l.toFloat() + r.toFloat()));
                 else
-                    push(ConstValue::makeInt(l.toInt() + r.toInt()));
+                {
+                    const auto mode = static_cast<OverflowMode>(instr.operand);
+                    const int64_t a = l.toInt(), b = r.toInt();
+                    const bool ovf = addOverflows64(a, b);
+                    push(fitInt(a + b, ovf, a < 0 && b < 0,
+                                std::max(l.bitWidth, r.bitWidth), l.isSigned && r.isSigned, mode));
+                }
                 break;
             }
         case OpCode::SUB_INT:
@@ -678,7 +773,13 @@ ConstValue ConstVM::execute(
                 if (l.kind == ConstValue::Float || r.kind == ConstValue::Float)
                     push(ConstValue::makeFloat(l.toFloat() - r.toFloat()));
                 else
-                    push(ConstValue::makeInt(l.toInt() - r.toInt()));
+                {
+                    const auto mode = static_cast<OverflowMode>(instr.operand);
+                    const int64_t a = l.toInt(), b = r.toInt();
+                    const bool ovf = subOverflows64(a, b);
+                    push(fitInt(a - b, ovf, a < 0 && b > 0,
+                                std::max(l.bitWidth, r.bitWidth), l.isSigned && r.isSigned, mode));
+                }
                 break;
             }
         case OpCode::MUL_INT:
@@ -688,7 +789,13 @@ ConstValue ConstVM::execute(
                 if (l.kind == ConstValue::Float || r.kind == ConstValue::Float)
                     push(ConstValue::makeFloat(l.toFloat() * r.toFloat()));
                 else
-                    push(ConstValue::makeInt(l.toInt() * r.toInt()));
+                {
+                    const auto mode = static_cast<OverflowMode>(instr.operand);
+                    const int64_t a = l.toInt(), b = r.toInt();
+                    const bool ovf = mulOverflows64(a, b);
+                    push(fitInt(a * b, ovf, (a < 0) != (b < 0),
+                                std::max(l.bitWidth, r.bitWidth), l.isSigned && r.isSigned, mode));
+                }
                 break;
             }
         case OpCode::DIV_INT:
@@ -703,9 +810,25 @@ ConstValue ConstVM::execute(
                 }
                 else
                 {
-                    int64_t ri = r.toInt();
-                    if (ri == 0) return ConstValue::error();
-                    push(ConstValue::makeInt(l.toInt() / ri));
+                    const auto mode = static_cast<OverflowMode>(instr.operand);
+                    const int64_t a = l.toInt(), b = r.toInt();
+                    if (b == 0) return ConstValue::error();
+
+                    // INT_MIN / -1 overflows (and is UB in C++)
+                    if (a == INT64_MIN && b == -1)
+                    {
+                        if (mode == OverflowMode::Trapped || mode == OverflowMode::Checked)
+                            return ConstValue::error();
+                        if (mode == OverflowMode::Saturating)
+                        {
+                            push(ConstValue::makeInt(
+                                INT64_MAX, std::max(l.bitWidth, r.bitWidth), l.isSigned && r.isSigned));
+                            break;
+                        }
+                    }
+                    const int64_t q = (a == INT64_MIN && b == -1) ? INT64_MIN : a / b;
+                    push(fitInt(q, false, false,
+                                std::max(l.bitWidth, r.bitWidth), l.isSigned && r.isSigned, mode));
                 }
                 break;
             }
@@ -713,9 +836,15 @@ ConstValue ConstVM::execute(
             {
                 auto r = pop();
                 auto l = pop();
-                int64_t ri = r.toInt();
+                const auto mode = static_cast<OverflowMode>(instr.operand);
+                const int64_t a = l.toInt();
+                const int64_t ri = r.toInt();
                 if (ri == 0) return ConstValue::error();
-                push(ConstValue::makeInt(l.toInt() % ri));
+
+                // INT_MIN % -1 == 0 mathematically (and is UB in C++)
+                const int64_t m = (a == INT64_MIN && ri == -1) ? 0 : a % ri;
+                push(fitInt(m, false, false,
+                            std::max(l.bitWidth, r.bitWidth), l.isSigned && r.isSigned, mode));
                 break;
             }
         case OpCode::NEG_INT:
@@ -724,7 +853,17 @@ ConstValue ConstVM::execute(
                 if (v.kind == ConstValue::Float)
                     push(ConstValue::makeFloat(-v.floatVal, v.bitWidth));
                 else
-                    push(ConstValue::makeInt(-v.toInt(), v.bitWidth, v.isSigned));
+                {
+                    const auto mode = static_cast<OverflowMode>(instr.operand);
+                    const int64_t x = v.toInt();
+                    const bool ovf = x == INT64_MIN || (
+                        v.bitWidth < 64 && x == limitsFor(v.bitWidth, v.isSigned).min);
+                    // -MIN overflows positively: saturates to MAX
+                    const int64_t raw = (x == INT64_MIN) ? INT64_MIN : -x;
+                    const auto fitted = fitInt(raw, ovf, false, v.bitWidth, v.isSigned, mode);
+                    if (fitted.isError()) return fitted;
+                    push(fitted);
+                }
                 break;
             }
 

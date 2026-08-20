@@ -302,6 +302,7 @@ struct IntegerLiteral : Expression
 {
     std::string value;
     bool sign;
+    OverflowMode overflowMode = OverflowMode::None; // from the w/t/c/s literal suffix
 
     explicit IntegerLiteral(std::string val, const bool sign, const SourceLocation& location) : value(std::move(val)),
         sign(sign)
@@ -524,6 +525,8 @@ struct UnaryExpression : Expression
 {
     TokenType op;
     std::unique_ptr<Expression> operand;
+    OverflowMode overflowMode = OverflowMode::None; // set by the binder for integer negate
+    bool overflowSigned = true; // set by the binder: signedness used by mode-aware codegen
 
     UnaryExpression(const TokenType op, std::unique_ptr<Expression> operand, const SourceLocation& location)
         : op(op), operand(std::move(operand))
@@ -545,6 +548,8 @@ struct PostfixExpression : Expression
 {
     TokenType op;
     std::unique_ptr<Expression> operand;
+    OverflowMode overflowMode = OverflowMode::None; // set by the binder for ++
+    bool overflowSigned = true; // set by the binder: signedness used by mode-aware codegen
 
     PostfixExpression(const TokenType op, std::unique_ptr<Expression> operand, const SourceLocation& location)
         : op(op), operand(std::move(operand))
@@ -567,6 +572,8 @@ struct BinaryExpression : Expression
     std::unique_ptr<Expression> left;
     TokenType op;
     std::unique_ptr<Expression> right;
+    OverflowMode overflowMode = OverflowMode::None; // set by the binder for integer arithmetic
+    bool overflowSigned = true; // set by the binder: signedness used by mode-aware codegen
 
     BinaryExpression(
         std::unique_ptr<Expression> left,

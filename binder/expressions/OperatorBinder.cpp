@@ -4,6 +4,15 @@
 
 #include "../Binder.h"
 
+namespace
+{
+    bool isArithmeticOp(const TokenType op)
+    {
+        return op == TokenType::PLUS || op == TokenType::MINUS || op == TokenType::STAR
+            || op == TokenType::SLASH || op == TokenType::PERCENT;
+    }
+}
+
 std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& expr)
 {
     auto location = expr.location;
@@ -214,6 +223,42 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         }
     }
 
+    // Integer arithmetic: resolve overflow mode from the operands (left wins),
+    // reject conflicting explicit modes and checked mode outside 'throws' functions
+    OverflowMode overflowMode = OverflowMode::None;
+    if (isArithmeticOp(expr.op)
+        && leftResolved.kind == TypeKind::INTEGER && rightResolved.kind == TypeKind::INTEGER)
+    {
+        const OverflowMode leftMode = leftResolved.overflowMode;
+        const OverflowMode rightMode = rightResolved.overflowMode;
+
+        if (leftMode != OverflowMode::None && rightMode != OverflowMode::None && leftMode != rightMode)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::TYPE_MISMATCH,
+                "conflicting overflow modes in binary expression: " +
+                leftResolved.toHumanString() + " vs " + rightResolved.toHumanString(),
+                left,
+                location
+            );
+        }
+
+        overflowMode = leftMode != OverflowMode::None ? leftMode : rightMode;
+
+        if (overflowMode == OverflowMode::Checked && !currentFunctionThrows_)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::TYPE_MISMATCH,
+                "checked overflow ('c' suffix) requires the enclosing function to declare 'throws'",
+                left,
+                location
+            );
+        }
+
+        const_cast<BinaryExpression&>(expr).overflowMode = overflowMode;
+        const_cast<BinaryExpression&>(expr).overflowSigned = leftResolved.sign && rightResolved.sign;
+    }
+
     // Determine result type: comparison/logical ops return bool, arithmetic returns operand type
     Type resultType;
     switch (expr.op)
@@ -230,6 +275,10 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         break;
     default:
         resultType = leftResolved;
+        if (overflowMode != OverflowMode::None && resultType.overflowMode == OverflowMode::None)
+        {
+            resultType.overflowMode = overflowMode;
+        }
         break;
     }
 
@@ -241,6 +290,24 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
 std::shared_ptr<Symbol> Binder::bindUnaryExpression(const UnaryExpression& expr)
 {
     auto operand = bindExpression(*expr.operand);
+
+    // Integer negate: propagate the operand's overflow mode (-INT_MIN overflows)
+    if (expr.op == TokenType::MINUS && operand && operand->type.kind == TypeKind::INTEGER)
+    {
+        const OverflowMode mode = operand->type.overflowMode;
+        const_cast<UnaryExpression&>(expr).overflowMode = mode;
+        const_cast<UnaryExpression&>(expr).overflowSigned = operand->type.sign;
+
+        if (mode == OverflowMode::Checked && !currentFunctionThrows_)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::TYPE_MISMATCH,
+                "checked overflow ('c' suffix) requires the enclosing function to declare 'throws'",
+                operand,
+                expr.location
+            );
+        }
+    }
 
     Type resultType = operand ? operand->type : Type::voided();
 
@@ -267,6 +334,25 @@ std::shared_ptr<Symbol> Binder::bindPostfixExpression(const PostfixExpression& e
     }
 
     auto operand = bindExpression(*expr.operand);
+
+    // ++/--: propagate the operand's overflow mode
+    if (operand && operand->type.kind == TypeKind::INTEGER)
+    {
+        const OverflowMode mode = operand->type.overflowMode;
+        const_cast<PostfixExpression&>(expr).overflowMode = mode;
+        const_cast<PostfixExpression&>(expr).overflowSigned = operand->type.sign;
+
+        if (mode == OverflowMode::Checked && !currentFunctionThrows_)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::TYPE_MISMATCH,
+                "checked overflow ('c' suffix) requires the enclosing function to declare 'throws'",
+                operand,
+                expr.location
+            );
+        }
+    }
+
     Type resultType = operand ? operand->type : Type::voided();
 
     return std::make_shared<UnaryExpressionSymbol>(

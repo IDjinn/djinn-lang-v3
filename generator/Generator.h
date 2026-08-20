@@ -322,6 +322,13 @@ private:
     void emit_div_by_zero_check(llvm::Value* divisor);
     void emit_error_throw_with_tag(int32_t tag);
 
+    // Integer overflow modes (w/t/c/s suffixes)
+    llvm::Function* get_or_declare_runtime_error_fn();
+    llvm::Value* emit_int_arith_with_overflow(TokenType op, llvm::Value* left, llvm::Value* right,
+                                              bool isSigned, OverflowMode mode);
+    llvm::Value* emit_saturating_int_arith(TokenType op, llvm::Value* left, llvm::Value* right, bool isSigned);
+    llvm::Value* emit_int_neg_with_overflow(llvm::Value* value, bool isSigned, OverflowMode mode);
+
     // Contracts (require/ensure)
     std::vector<const ContractClause*> currentContracts_;
     llvm::AllocaInst* contractReturnAlloca = nullptr;

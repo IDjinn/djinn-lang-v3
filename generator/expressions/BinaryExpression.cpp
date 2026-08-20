@@ -220,32 +220,45 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
         }
     }
 
+    // Integer overflow modes (w/t/c/s): t/c check and trap/throw, s saturates.
+    // Returns nullptr for the default wrapped behavior.
+    const auto modeArith = [&](const TokenType op) -> llvm::Value*
+    {
+        if (expr.overflowMode == OverflowMode::Trapped || expr.overflowMode == OverflowMode::Checked)
+        {
+            return emit_int_arith_with_overflow(op, left, right, expr.overflowSigned, expr.overflowMode);
+        }
+        if (expr.overflowMode == OverflowMode::Saturating)
+        {
+            return emit_saturating_int_arith(op, left, right, expr.overflowSigned);
+        }
+        return nullptr;
+    };
+
     switch (expr.op)
     {
     case TokenType::PLUS:
-        return isFloat
-                   ? builder->CreateFAdd(left, right, "addtmp")
-                   : builder->CreateAdd(left, right, "addtmp");
+        if (isFloat) return builder->CreateFAdd(left, right, "addtmp");
+        if (auto* v = modeArith(expr.op)) return v;
+        return builder->CreateAdd(left, right, "addtmp");
     case TokenType::MINUS:
-        return isFloat
-                   ? builder->CreateFSub(left, right, "subtmp")
-                   : builder->CreateSub(left, right, "subtmp");
+        if (isFloat) return builder->CreateFSub(left, right, "subtmp");
+        if (auto* v = modeArith(expr.op)) return v;
+        return builder->CreateSub(left, right, "subtmp");
     case TokenType::STAR:
-        return isFloat
-                   ? builder->CreateFMul(left, right, "multmp")
-                   : builder->CreateMul(left, right, "multmp");
+        if (isFloat) return builder->CreateFMul(left, right, "multmp");
+        if (auto* v = modeArith(expr.op)) return v;
+        return builder->CreateMul(left, right, "multmp");
     case TokenType::SLASH:
-        if (!isFloat)
-            emit_div_by_zero_check(right);
-        return isFloat
-                   ? builder->CreateFDiv(left, right, "divtmp")
-                   : builder->CreateSDiv(left, right, "divtmp");
+        if (isFloat) return builder->CreateFDiv(left, right, "divtmp");
+        emit_div_by_zero_check(right);
+        if (auto* v = modeArith(expr.op)) return v;
+        return builder->CreateSDiv(left, right, "divtmp");
     case TokenType::PERCENT:
-        if (!isFloat)
-            emit_div_by_zero_check(right);
-        return isFloat
-                   ? builder->CreateFRem(left, right, "modtmp")
-                   : builder->CreateSRem(left, right, "modtmp");
+        if (isFloat) return builder->CreateFRem(left, right, "modtmp");
+        emit_div_by_zero_check(right);
+        if (auto* v = modeArith(expr.op)) return v;
+        return builder->CreateSRem(left, right, "modtmp");
 
     case TokenType::EQUAL_EQUAL:
         return isFloat

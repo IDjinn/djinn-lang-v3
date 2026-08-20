@@ -108,7 +108,13 @@ docs/           Fumadocs (Next.js) documentation site
 - **Constructors**: stack + heap (new), generic constructors, forward references (two-pass)
 - **Name mangling**: C++ compatible, demangling support
 - **Diagnostics**: error codes, suggestions, multiple concurrent errors
-- **Number literals**: underscore separators (420_000), tick separators (800'000'000), scientific notation (1e9)
+- **Number literals**: underscore separators (420_000), tick separators (800'000'000), scientific notation (1e9),
+  overflow-mode suffixes (123w / 123t / 123c / 123s matching the w/t/c/s type suffixes)
+- **Integer overflow modes**: `w` wrapped (default), `t` trapped (panic), `c` checked (throws builtin `Overflow`,
+  requires `throws` function), `s` saturating — on types (`i32s`) and literals (`42s`); applies to + - * / %, unary
+  negation and ++/--; compile-time checked for literals and constexpr; conflicting modes are a compile error
+- **Native-width types**: `nint` (pointer-sized integer, also takes overflow suffixes), `nfloat` (C float, f32),
+  `ndouble` (C double, f64) — display their native names in typeof/diagnostics
 - **Macros**: declaration with `macro name { (params) => { body } }`, `expression` and `identifier` fragment types,
   literal token matching in rules, `local` modifier (per-param or rule-level), token-level substitution with parser
   re-parse, nested macro calls, multi-rule pattern matching by arity + literal tokens (first match wins, ambiguous
@@ -295,9 +301,14 @@ generic_args         = "<" type { "," type } ">" ;
 type                 = base_type { "*" } [ "[" "]" ] ;
 base_type            = primitive_type | IDENTIFIER [ generic_args ] | "void" | "string" | "auto" ;
 
-primitive_type       = integer_type | float_type ;
-integer_type         = ( "i" | "u" ) DIGITS ;     (* i8, i16, i32, i64, u8, u16, u32, u64 *)
-float_type           = "f" DIGITS ;                (* f32, f64 *)
+primitive_type       = integer_type | float_type | native_type ;
+integer_type         = ( "i" | "u" ) DIGITS [ overflow_suffix ] ;  (* i8..i64, u8..u64, i32w, u32s, ... *)
+float_type           = "f" DIGITS ;                                (* f16, f32, f64, f128 *)
+native_type          = "nint" [ overflow_suffix ] | "nfloat" | "ndouble" ;
+overflow_suffix      = "w" | "t" | "c" | "s" ;
+                     (* w = wrapped (default, C-style), t = trapped (panic on overflow),
+                        c = checked (throws Overflow, requires 'throws' function),
+                        s = saturating (clamps to MIN/MAX) *)
 ```
 
 ### Statements

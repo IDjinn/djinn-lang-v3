@@ -79,16 +79,14 @@ static LPFN_ACCEPTEX pfnAcceptEx = NULL;
 static LPFN_CONNECTEX pfnConnectEx = NULL;
 #endif
 
-__attribute__((nonnull(1)))
+DJINN_ATTR_NONNULL_1
 void __djinn_free(void* pointer)
 {
     DJINN_TRACE("de-allocating heap memory at %p", pointer);
     free(pointer);
 }
 
-__attribute__((alloc_size(2), warn_unused_result)
-
-)
+DJINN_ATTR_REALLOC
 void* __djinn_realloc(void* pointer, size_t new_size)
 {
     void* chunk = realloc(pointer, new_size);
@@ -97,8 +95,7 @@ void* __djinn_realloc(void* pointer, size_t new_size)
     return chunk;
 }
 
-__attribute__((malloc, alloc_size(1), returns_nonnull)
-)
+DJINN_ATTR_MALLOC
 void* __djinn_malloc(size_t size)
 {
     DJINN_ASSERT(size > 0, "Size need be greater than zero!");

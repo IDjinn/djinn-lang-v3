@@ -235,6 +235,115 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     else
     {
         type = generate_type(expr.type);
+
+        // Saturating integer literal: clamp the raw magnitude to the target
+        // range before the narrowing truncation below (trapped/checked already
+        // errored in the binder). Parsing from the literal string avoids the
+        // pre-truncation done by generate_integer_literal for values >= 2^31.
+        const IntegerLiteral* satLit = nullptr;
+        bool satNegated = false;
+        if (expr.type.kind == TypeKind::INTEGER)
+        {
+            if (const auto* l = dynamic_cast<const IntegerLiteral*>(expr.value.get()))
+            {
+                satLit = l;
+            }
+            else if (const auto* u = dynamic_cast<const UnaryExpression*>(expr.value.get()))
+            {
+                if (u->op == TokenType::MINUS)
+                {
+                    if (const auto* innerLit = dynamic_cast<const IntegerLiteral*>(u->operand.get()))
+                    {
+                        satLit = innerLit;
+                        satNegated = true;
+                    }
+                }
+            }
+        }
+        if (satLit)
+        {
+            const OverflowMode mode = expr.type.overflowMode != OverflowMode::None
+                                          ? expr.type.overflowMode
+                                          : satLit->overflowMode;
+            if (mode == OverflowMode::Saturating && expr.type.size <= 64)
+            {
+                std::string digits;
+                for (const char c : satLit->value)
+                {
+                    if (c != '_' && c != '\'') digits += c;
+                }
+
+                int radix = 10;
+                bool parseOk = true;
+                if (digits.size() > 2 && digits[0] == '0' && (digits[1] == 'x' || digits[1] == 'X'))
+                {
+                    radix = 16;
+                    digits = digits.substr(2);
+                }
+                else if (digits.size() > 2 && digits[0] == '0' && (digits[1] == 'b' || digits[1] == 'B'))
+                {
+                    radix = 2;
+                    digits = digits.substr(2);
+                }
+
+                uint64_t magnitude = 0;
+                bool over64 = false;
+                for (const char c : digits)
+                {
+                    int d = -1;
+                    if (c >= '0' && c <= '9') d = c - '0';
+                    else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+                    else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+                    if (d < 0 || d >= radix)
+                    {
+                        parseOk = false;
+                        break;
+                    }
+                    if (magnitude > (UINT64_MAX - d) / radix)
+                    {
+                        over64 = true;
+                        break;
+                    }
+                    magnitude = magnitude * radix + d;
+                }
+
+                if (parseOk)
+                {
+                    const unsigned dstBits = static_cast<unsigned>(expr.type.size);
+                    auto* dstTy = builder->getIntNTy(dstBits);
+
+                    if (expr.type.sign)
+                    {
+                        const uint64_t posMax = (dstBits == 64)
+                                                    ? static_cast<uint64_t>(INT64_MAX)
+                                                    : (1ULL << (dstBits - 1)) - 1;
+                        const uint64_t negMax = (dstBits == 64) ? (1ULL << 63) : (1ULL << (dstBits - 1));
+
+                        if (satNegated)
+                        {
+                            initVal = (!over64 && magnitude <= negMax)
+                                          ? llvm::ConstantInt::get(dstTy, llvm::APInt(dstBits, 0) - llvm::APInt(
+                                                                       dstBits, magnitude))
+                                          : llvm::ConstantInt::get(dstTy, llvm::APInt::getSignedMinValue(dstBits));
+                        }
+                        else
+                        {
+                            initVal = (!over64 && magnitude <= posMax)
+                                          ? llvm::ConstantInt::get(dstTy, llvm::APInt(dstBits, magnitude))
+                                          : llvm::ConstantInt::get(dstTy, llvm::APInt::getSignedMaxValue(dstBits));
+                        }
+                    }
+                    else
+                    {
+                        const uint64_t umax = (dstBits == 64) ? UINT64_MAX : (1ULL << dstBits) - 1;
+                        initVal = (!satNegated && !over64 && magnitude <= umax)
+                                      ? llvm::ConstantInt::get(dstTy, llvm::APInt(dstBits, magnitude))
+                                      : llvm::ConstantInt::get(dstTy, llvm::APInt::getMaxValue(dstBits));
+                    }
+                }
+            }
+        }
+
         initVal = cast_value(initVal, type, expr.type.sign);
 
         // Track pointee type for pointer/array variables

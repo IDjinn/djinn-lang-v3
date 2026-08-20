@@ -91,14 +91,16 @@ llvm::Value* Generator::generate_unary_expression(const UnaryExpression& expr)
                 return builder->CreateFNeg(operand, "negtmp");
             }
 
-            // For integer constants, fold at compile time
+            // For integer constants, fold at compile time — modular negation
+            // yields the right bits (the binder already rejected out-of-range
+            // literals; runtime negation handles t/c/s modes below)
             if (auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(operand))
             {
                 return llvm::ConstantInt::get(operand->getType(), -constInt->getValue());
             }
 
             // For integer runtime values
-            return builder->CreateNeg(operand, "negtmp");
+            return emit_int_neg_with_overflow(operand, expr.overflowSigned, expr.overflowMode);
         }
 
     case TokenType::BANG:

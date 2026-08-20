@@ -295,6 +295,12 @@ impl i64 {
     const i64 MIN_VALUE = 0x8000000000000000;
 }
 
+// Native-width integer (pointer-sized: i64 on 64-bit targets, i32 on 32-bit)
+impl nint {
+    const nint MAX_VALUE = 0x7FFFFFFFFFFFFFFF;
+    const nint MIN_VALUE = 0x8000000000000000;
+}
+
 // TODO: i128/u128 const fields disabled — primitive impl for 128-bit types
 // triggers LLVM verification error (this passed as ptr instead of i128 value)
 // impl i128 { const i128 MAX_VALUE = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; }

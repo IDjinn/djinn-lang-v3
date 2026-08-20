@@ -194,6 +194,16 @@ Token Lexer::read_number()
 
     std::string value;
 
+    // One trailing suffix char: sign (u/i) or overflow mode (w/t/c/s)
+    const auto readSuffix = [this, &value](const bool allowCHexDigit = true)
+    {
+        const char c = peek();
+        if (c == 'u' || c == 'i' || c == 'w' || c == 't' || c == 's' || (allowCHexDigit && c == 'c'))
+        {
+            value += advance();
+        }
+    };
+
     // Check for hex (0x) or binary (0b) prefix
     if (peek() == '0' && (peekNext() == 'x' || peekNext() == 'X'))
     {
@@ -203,6 +213,7 @@ Token Lexer::read_number()
         {
             value += advance();
         }
+        readSuffix(false); // 'c' is a hex digit, never a suffix here
         return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
     }
 
@@ -214,6 +225,7 @@ Token Lexer::read_number()
         {
             value += advance();
         }
+        readSuffix();
         return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
     }
 
@@ -263,10 +275,7 @@ Token Lexer::read_number()
         return make_token(TokenType::FLOAT_LITERAL, value, startLine, startColumn);
     }
 
-    if (peek() == 'u' || peek() == 'i')
-    {
-        value += advance();
-    }
+    readSuffix();
 
     return make_token(TokenType::INTEGER_LITERAL, value, startLine, startColumn);
 }

@@ -187,7 +187,7 @@ void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr
             BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
                          "cannot assign 'null' to non-nullable type — use '" +
                          std::string(expected.kind == TypeKind::STRUCT ? expected.structName : "T") +
-                         "?' to allow null",
+                         "'? to allow null",
                          expr, loc);
         }
         return;
@@ -206,6 +206,107 @@ void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr
             }
         }
     }
+
+    // Integer literal vs integer target: reject out-of-range literals for
+    // trapped/checked targets (saturating clamps in the generator, wrapped
+    // keeps the silent C-style truncation)
+    if (expected.kind == TypeKind::INTEGER && expected.size <= 64)
+    {
+        const IntegerLiteral* lit = nullptr;
+        bool negated = false;
+        if (const auto* l = dynamic_cast<const IntegerLiteral*>(&expr))
+        {
+            lit = l;
+        }
+        else if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
+        {
+            if (unary->op == TokenType::MINUS)
+            {
+                if (const auto* innerLit = dynamic_cast<const IntegerLiteral*>(unary->operand.get()))
+                {
+                    lit = innerLit;
+                    negated = true;
+                }
+            }
+        }
+
+        if (lit && !(negated && !expected.sign))
+        {
+            uint64_t magnitude = 0;
+            bool parseOk = true;
+            bool fitsUint64 = true;
+            {
+                std::string cleaned;
+                for (const char c : lit->value)
+                {
+                    if (c != '_' && c != '\'') cleaned += c;
+                }
+
+                int radix = 10;
+                std::string digits = cleaned;
+                if (cleaned.size() > 2 && cleaned[0] == '0' && (cleaned[1] == 'x' || cleaned[1] == 'X'))
+                {
+                    radix = 16;
+                    digits = cleaned.substr(2);
+                }
+                else if (cleaned.size() > 2 && cleaned[0] == '0' && (cleaned[1] == 'b' || cleaned[1] == 'B'))
+                {
+                    radix = 2;
+                    digits = cleaned.substr(2);
+                }
+
+                for (const char c : digits)
+                {
+                    int d = -1;
+                    if (c >= '0' && c <= '9') d = c - '0';
+                    else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+                    else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+                    if (d < 0 || d >= radix)
+                    {
+                        parseOk = false;
+                        break;
+                    }
+                    if (magnitude > (UINT64_MAX - d) / radix)
+                    {
+                        fitsUint64 = false;
+                        break;
+                    }
+                    magnitude = magnitude * radix + d;
+                }
+            }
+
+            if (parseOk)
+            {
+                const unsigned bits = static_cast<unsigned>(expected.size);
+                uint64_t limit;
+                if (expected.sign)
+                {
+                    limit = negated
+                                ? (1ULL << (bits - 1)) // |INT_MIN|
+                                : (bits == 64 ? INT64_MAX : (1ULL << (bits - 1)) - 1);
+                }
+                else
+                {
+                    limit = bits == 64 ? UINT64_MAX : (1ULL << bits) - 1;
+                }
+
+                if (!fitsUint64 || magnitude > limit)
+                {
+                    const OverflowMode mode = expected.overflowMode != OverflowMode::None
+                                                  ? expected.overflowMode
+                                                  : lit->overflowMode;
+                    if (mode == OverflowMode::Trapped || mode == OverflowMode::Checked)
+                    {
+                        BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                                     std::string("integer literal ") + (negated ? "-" : "") + lit->value +
+                                     " overflows '" + expected.toHumanString() + "'",
+                                     expr, loc);
+                    }
+                }
+            }
+        }
+    }
+
 
     const auto inferredOpt = inferExpressionType(expr);
     if (!inferredOpt)

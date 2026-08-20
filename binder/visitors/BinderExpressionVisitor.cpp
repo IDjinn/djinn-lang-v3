@@ -10,7 +10,7 @@ namespace djinn
 {
     void BinderExpressionVisitor::visit(const IntegerLiteral& expr)
     {
-        _result = std::make_shared<IntegerLiteralSymbol>(expr.value, expr.sign, expr.location);
+        _result = std::make_shared<IntegerLiteralSymbol>(expr.value, expr.sign, expr.location, expr.overflowMode);
     }
 
     void BinderExpressionVisitor::visit(const FloatLiteral& expr)

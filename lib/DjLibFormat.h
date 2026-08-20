@@ -261,6 +261,8 @@ inline void to_json(nlohmann::json& j, const Type& t)
     if (t.nullable) j["nullable"] = true;
     if (t.readOnly) j["readOnly"] = true;
     if (t.isTransparent) j["transparent"] = true;
+    if (t.native) j["native"] = true;
+    if (t.overflowMode != OverflowMode::None) j["overflowMode"] = static_cast<uint8_t>(t.overflowMode);
     if (!t.structName.empty()) j["structName"] = t.structName;
     if (!t.genericArgs.empty()) j["genericArgs"] = t.genericArgs;
     if (t.elementType) j["elementType"] = *t.elementType;
@@ -285,6 +287,8 @@ inline void from_json(const nlohmann::json& j, Type& t)
     t.nullable = j.value("nullable", false);
     t.readOnly = j.value("readOnly", false);
     t.isTransparent = j.value("transparent", false);
+    t.native = j.value("native", false);
+    t.overflowMode = static_cast<OverflowMode>(j.value("overflowMode", static_cast<uint8_t>(OverflowMode::None)));
     t.structName = j.value("structName", std::string{});
     if (j.contains("genericArgs"))
         t.genericArgs = j.at("genericArgs").get<std::vector<Type>>();

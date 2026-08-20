@@ -87,7 +87,9 @@ constexpr i32 BUFFER = 64 * 1024;
 
 ## Features
 
-- **Types**: i8–i64, u8–u64, f32/f64, bool, str, string, arrays, slices, pointers, `object`, `auto` inference
+- **Types**: i8–i64, u8–u64, f32/f64, `nint`/`nfloat`/`ndouble` (native-width), integer overflow modes (`w`rapped / `t`
+  rapped / `c`hecked / `s`aturating), bool, str, string, arrays, slices, pointers, `object`,
+  `auto` inference
 - **Control flow**: if/else, while, do-while, for (classic + range), switch/case, break/continue
 - **Range-for**: `for (i32 i in 0..10)`, `..=` inclusive, bracket bounds `[0..10)`
 - **Structs**: brace init (positional + designated), methods (block / `=>`), static methods, properties, transparent
@@ -105,7 +107,8 @@ constexpr i32 BUFFER = 64 * 1024;
 - **Attributes**: parameterized (`[align(16)]`), named args, `[llvm("...")]` escape hatch, built-in mappings
   (force-inline, no-inline, hot, cold, noreturn, …)
 - **Static variables**: namespace-accessible globals, `mut` opt-in
-- **Number literals**: `420_000`, `800'000'000`, `1e9`, `2.5e-3`
+- **Number literals**: `420_000`, `800'000'000`, `1e9`, `2.5e-3`, overflow-mode suffixes (`123w`, `123t`, `123c`,
+  `123s`)
 - **Intrinsics**: `sizeof`, `alignof`, `typeof`, `likely`, `unlikely`, `expect`
 - **Libraries**: `--lib` mode, `.djlib` binary format, project file (`djinn.proj`), cross-module generic dedup via
   `LinkOnceODR` + COMDAT

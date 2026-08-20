@@ -728,10 +728,12 @@ struct IntegerLiteralSymbol : Symbol
 {
     std::string value;
     bool isSigned;
+    OverflowMode overflowMode;
 
-    IntegerLiteralSymbol(std::string val, bool sign = true, const SourceLocation loc = {})
-        : Symbol(SymbolKind::IntegerLiteral, val, Type::integer(32, sign), loc),
-          value(std::move(val)), isSigned(sign)
+    IntegerLiteralSymbol(std::string val, bool sign = true, const SourceLocation loc = {},
+                         const OverflowMode mode = OverflowMode::None)
+        : Symbol(SymbolKind::IntegerLiteral, val, Type::integer(32, sign, mode), loc),
+          value(std::move(val)), isSigned(sign), overflowMode(mode)
     {
     }
 

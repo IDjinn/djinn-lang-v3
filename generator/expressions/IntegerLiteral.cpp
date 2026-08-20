@@ -15,7 +15,7 @@ llvm::Value* Generator::generate_integer_literal(const IntegerLiteral& expr) con
     }
 
     // Determine radix from prefix
-    unsigned radix = 10;
+    uint8_t radix = 10;
     std::string digits = cleaned;
     if (cleaned.size() > 2 && cleaned[0] == '0')
     {

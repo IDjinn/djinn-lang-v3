@@ -32,15 +32,23 @@
 extern "C" {
 #endif
 
+#if defined(_MSC_VER)
+#define likely(x)   (x)
+#define unlikely(x) (x)
+#define assume(x)   __assume(x)
+#define djinn_trap()        __assume(0)
+#define djinn_unreachable() __assume(0)
+#define DJINN_ASSERT_COLD_NORETURN __declspec(noreturn)
+#else
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #define assume(x)   __builtin_assume((x))
+#define djinn_trap()        __builtin_trap()
+#define djinn_unreachable() __builtin_unreachable()
+#define DJINN_ASSERT_COLD_NORETURN __attribute__((cold, __noreturn__))
+#endif
 
-__attribute__ ((cold
-,
-__noreturn__
-)
-)
+DJINN_ASSERT_COLD_NORETURN
 static void djinn_assert_fail(const char* msg, const char* file, const int line, const char* function_name)
 {
     fprintf(stderr, "[RUNTIME] ASSERTION ERROR: %s\nFile: %s:%d\nFunction: %s\n", msg, file, line, function_name);
@@ -51,11 +59,21 @@ static void djinn_assert_fail(const char* msg, const char* file, const int line,
 do {                                                              \
     if (unlikely(!(cond))) {                                      \
         djinn_assert_fail(msg, __FILE__, __LINE__, __FUNCTION__); \
-        __builtin_trap();                                         \
-        __builtin_unreachable();                                  \
+        djinn_trap();                                             \
+        djinn_unreachable();                                      \
     }                                                             \
     assume(cond);                                                 \
 } while (0)
+
+#if defined(_MSC_VER)
+#define DJINN_ATTR_NONNULL_1
+#define DJINN_ATTR_REALLOC
+#define DJINN_ATTR_MALLOC
+#else
+#define DJINN_ATTR_NONNULL_1 __attribute__((nonnull(1)))
+#define DJINN_ATTR_REALLOC   __attribute__((alloc_size(2), warn_unused_result))
+#define DJINN_ATTR_MALLOC    __attribute__((malloc, alloc_size(1), returns_nonnull))
+#endif
 
 uint64_t __djinn_hash_string(const char* data, uint32_t length);
 
