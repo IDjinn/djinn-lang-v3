@@ -35,10 +35,12 @@ auto makeSourceIdentifier = [](const Token& token)
 auto isPrimitiveType = [](const std::string& name)
 {
     if (name == "void" || name == "auto") return true;
+    if (name == "nfloat" || name == "ndouble") return true;
+    if (name.starts_with("nint")) return parse_integer_type_name(name).has_value();
     if (name.starts_with('f') && string_to_type_kind.contains(name)) return true;
     if ((name.starts_with('i') || name.starts_with('u')) && name.length() > 1)
     {
-        return std::ranges::all_of(name.substr(1), [](const unsigned char c) { return std::isdigit(c); });
+        return parse_integer_type_name(name).has_value();
     }
     return false;
 };
