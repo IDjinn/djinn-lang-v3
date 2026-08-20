@@ -1,3 +1,6 @@
+#ifndef _WIN32
+#define _GNU_SOURCE
+#endif
 #include "djinn_runtime.h"
 #include <stdlib.h>
 #include <string.h>
@@ -5,7 +8,6 @@
 #include "logger.h"
 Logger* logger;
 
-#define _POSIX_C_SOURCE 199309L
 #include <time.h>
 #include <stdint.h>
 

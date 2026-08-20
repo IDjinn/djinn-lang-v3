@@ -93,7 +93,11 @@ static void emit_format(FILE* out, const char* format, LogLevel level,
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     struct tm t;
+#ifdef _WIN32
     localtime_s(&t, &ts.tv_sec);
+#else
+    localtime_r(&ts.tv_sec, &t);
+#endif
     int millis = (int)(ts.tv_nsec / 1000000);
 
     size_t i = 0;
@@ -161,7 +165,11 @@ static void log_internal(Logger* logger, LogLevel level, const char* fmt, va_lis
         char timebuf[32];
         time_t now = time(NULL);
         struct tm t;
+#ifdef _WIN32
         localtime_s(&t, &now);
+#else
+        localtime_r(&now, &t);
+#endif
         strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &t);
 
         fprintf(logger->output, "[%s] [%-5s] [%s] ",
