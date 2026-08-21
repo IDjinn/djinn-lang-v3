@@ -3,6 +3,7 @@
 //
 
 #include <gtest/gtest.h>
+#include "TestHelpers.h"
 
 #include "../DjinnCompiler.h"
 
@@ -277,7 +278,7 @@ TEST(Enum, PatternMatchEmpty)
     const auto result = DjinnCompiler::run(
         source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, -1);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
 }
 
 TEST(Enum, PatternMatchResult)

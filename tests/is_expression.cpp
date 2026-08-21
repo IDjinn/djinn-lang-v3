@@ -3,6 +3,7 @@
 //
 
 #include <gtest/gtest.h>
+#include "TestHelpers.h"
 
 #include "../DjinnCompiler.h"
 
@@ -252,7 +253,7 @@ TEST(IsExpression, BindingNotUsedWhenTypeMismatch)
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true, .includeStd = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, -1);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
 }
 
 TEST(IsExpression, BindingWithDifferentTypes)

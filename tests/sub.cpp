@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "TestHelpers.h"
 
 #include "../DjinnCompiler.h"
 
@@ -42,6 +43,6 @@ TEST(Math, IntegerSubNegative) {
     )";
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    // -7 em complemento de 2 como código de retorno
-    EXPECT_EQ(result.returnCode, -7);
+    
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-7));
 }

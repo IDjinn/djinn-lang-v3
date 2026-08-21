@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "TestHelpers.h"
 
 #include "../DjinnCompiler.h"
 
@@ -27,7 +28,7 @@ TEST(ErrorHandling, ThrowWithTryFallback)
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, -1);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
 }
 
 TEST(ErrorHandling, TryReturnsValueOnSuccess)
@@ -201,7 +202,7 @@ TEST(ErrorHandling, DivisionByZeroThrowsInThrowingFunction)
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, -3);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-3));
 }
 
 TEST(ErrorHandling, InterpolatedErrorMessage)
@@ -224,7 +225,7 @@ TEST(ErrorHandling, InterpolatedErrorMessage)
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, -1);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
 }
 
 TEST(ErrorHandling, ConsoleFormatBuildsString)

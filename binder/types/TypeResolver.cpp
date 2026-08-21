@@ -187,7 +187,7 @@ void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr
             BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
                          "cannot assign 'null' to non-nullable type — use '" +
                          std::string(expected.kind == TypeKind::STRUCT ? expected.structName : "T") +
-                         "'? to allow null",
+                         "?' to allow null",
                          expr, loc);
         }
         return;

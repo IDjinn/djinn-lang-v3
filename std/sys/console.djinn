@@ -10,7 +10,6 @@ extern "C" {
     i64    __djinn_console_read_line   (void* str, void* coro_handle);
     i64    __djinn_async_write         (i32 fd, void* buf, i64 count, void* coro_handle);
     i64    __djinn_async_read          (i32 fd, void* buf, i64 count, void* coro_handle);
-    i8*    itoa                        (i32 value, i8* str, i32 base);
 }
 
 struct Console {
@@ -75,8 +74,7 @@ struct Console {
                       // int
                       if (tsize <= 4) {
                           i32* ip = (i32*)arg.data;
-                          i8* tmp = itoa(*ip, buf + bpos, 10);
-                          i32 len = strlen(buf + bpos);
+                          i32 len = snprintf(buf + bpos, 32, "%d", *ip);
                           bpos = bpos + len;
                       } else {
                           i64* lp = (i64*)arg.data;
@@ -163,8 +161,7 @@ struct Console {
                       // int
                       if (tsize <= 4) {
                           i32* ip = (i32*)arg.data;
-                          i8* tmp = itoa(*ip, buf + bpos, 10);
-                          i32 len = strlen(buf + bpos);
+                          i32 len = snprintf(buf + bpos, 32, "%d", *ip);
                           bpos = bpos + len;
                       } else {
                           i64* lp = (i64*)arg.data;
@@ -233,8 +230,7 @@ struct Console {
                       // int
                       if (tsize <= 4) {
                           i32* ip = (i32*)arg.data;
-                          i8* tmp = itoa(*ip, buf + bpos, 10);
-                          i32 len = strlen(buf + bpos);
+                          i32 len = snprintf(buf + bpos, 32, "%d", *ip);
                           bpos = bpos + len;
                       } else {
                           i64* lp = (i64*)arg.data;

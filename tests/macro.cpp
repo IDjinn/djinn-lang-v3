@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "TestHelpers.h"
 
 #include "../DjinnCompiler.h"
 
@@ -658,5 +659,5 @@ TEST(Macro, LiteralTokenWithLiteralFragment)
     )";
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    EXPECT_EQ(result.returnCode, 1130); // 1024 + 64 + 42
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(1130)); // 1024 + 64 + 42
 }
