@@ -348,3 +348,116 @@ TEST(ErrorHandling, TryWithoutFallbackOutsideThrowsDiagnostic)
     const auto result = DjinnCompiler::run(source, {});
     EXPECT_GE(result.diagnostics.size(), 1);
 }
+
+//
+// Compile-time enforcement: a constexpr call with constant arguments that
+// provably throws is a compile error (9006) when unhandled, and a warning
+// (9008) inside `try ... ?:` because the fallback is always taken.
+//
+
+TEST(ErrorHandling, ConstexprCallThatAlwaysThrowsIsCompileError)
+{
+    // The compiler evaluates division(1, 0) at compile time: divisor == 0 is
+    // decided, so the throw is unavoidable — even though main declares throws
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        constexpr i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (unlikely(divisor == 0)) {
+                throw DivisionByZeroException("Division {value}/0 is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 test = division(1, 0);
+            return test;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {});
+    EXPECT_EQ(errorCount(result), 1);
+    EXPECT_TRUE(hasErrorCode(result, 9006));
+    for (const auto& diagnostic : result.diagnostics)
+    {
+        if (diagnostic.code == 9006)
+            EXPECT_NE(diagnostic.message.find("DivisionByZeroException"), std::string::npos);
+    }
+}
+
+TEST(ErrorHandling, ConstexprCallInsideTryWarnsAndTakesFallback)
+{
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        constexpr i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division {value}/0 is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 result = try division(1, 0) ?: 7;
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(errorCount(result), 0);
+    EXPECT_EQ(warningCount(result), 1);
+    EXPECT_TRUE(hasErrorCode(result, 9008));
+    EXPECT_EQ(result.returnCode, 7);
+}
+
+TEST(ErrorHandling, ConstexprCallWithRuntimeArgumentsStaysRuntime)
+{
+    // A non-constant divisor is not analyzable at compile time: no
+    // diagnostics, the runtime fallback decides
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        constexpr i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division {value}/0 is not allowed");
+            }
+            return value / divisor;
+        }
+
+        static mut i32 runtime_divisor = 2;
+
+        i32 main() {
+            i32 result = try division(10, runtime_divisor) ?: -1;
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ErrorHandling, ConstexprCallThatSucceedsHasNoDiagnostics)
+{
+    // Constant arguments that do NOT throw: the evaluation succeeds and
+    // nothing is reported
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        constexpr i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division {value}/0 is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 test = division(10, 2);
+            return test;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}

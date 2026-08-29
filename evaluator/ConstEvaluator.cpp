@@ -123,6 +123,14 @@ uint32_t BytecodeCompiler::addFloatConstant(double val)
     return static_cast<uint32_t>(_floatPool.size() - 1);
 }
 
+uint32_t BytecodeCompiler::addStringConstant(const std::string& val)
+{
+    for (uint32_t i = 0; i < _stringPool.size(); i++)
+        if (_stringPool[i] == val) return i;
+    _stringPool.push_back(val);
+    return static_cast<uint32_t>(_stringPool.size() - 1);
+}
+
 uint32_t BytecodeCompiler::getOrCreateLocal(const std::string& name)
 {
     auto it = _localSlots.find(name);
@@ -154,6 +162,7 @@ bool BytecodeCompiler::compile(const Expression& expr)
     _intPool.clear();
     _int128Pool.clear();
     _floatPool.clear();
+    _stringPool.clear();
     _localSlots.clear();
     _nextLocalSlot = 0;
     _hadError = false;
@@ -170,6 +179,33 @@ void BytecodeCompiler::defineConstant(const std::string& name, ConstValue value)
 
 uint32_t BytecodeCompiler::registerFunction(const std::string& name, const FunctionDeclaration& func)
 {
+    std::vector<std::string> paramNames;
+    for (const auto& param : func.parameters)
+        paramNames.push_back(param.name.token_name);
+
+    if (!func.body)
+    {
+        // Declaration only: register an entry that errors if ever called
+        auto it = _functionIndex.find(name);
+        if (it != _functionIndex.end()) return it->second;
+
+        const uint32_t idx = static_cast<uint32_t>(_functionTable.size());
+        _functionIndex[name] = idx;
+
+        CompiledFunction cf;
+        cf.name = name;
+        cf.numParams = static_cast<uint32_t>(paramNames.size());
+        cf.codeStart = CompiledFunction::InvalidCodeStart;
+        _functionTable.push_back(cf);
+        return idx;
+    }
+
+    return registerFunction(name, paramNames, *func.body);
+}
+
+uint32_t BytecodeCompiler::registerFunction(const std::string& name, const std::vector<std::string>& paramNames,
+                                            const Block& body)
+{
     // Check if already registered
     auto it = _functionIndex.find(name);
     if (it != _functionIndex.end()) return it->second;
@@ -179,23 +215,36 @@ uint32_t BytecodeCompiler::registerFunction(const std::string& name, const Funct
 
     CompiledFunction cf;
     cf.name = name;
-    cf.numParams = static_cast<uint32_t>(func.parameters.size());
+    cf.numParams = static_cast<uint32_t>(paramNames.size());
     _functionTable.push_back(cf);
+
+    ConstFunction pending;
+    pending.paramNames = paramNames;
+    pending.body = &body;
+    _pendingFunctions[name] = pending;
 
     return idx;
 }
 
-bool BytecodeCompiler::compileFunction(const FunctionDeclaration& func)
+bool BytecodeCompiler::compileFunction(const std::string& name)
 {
-    _hadError = false;
-
-    auto it = _functionIndex.find(func.name.token_name);
-    if (it == _functionIndex.end())
+    auto idxIt = _functionIndex.find(name);
+    if (idxIt == _functionIndex.end())
     {
         _hadError = true;
         return false;
     }
-    uint32_t funcIdx = it->second;
+    const uint32_t funcIdx = idxIt->second;
+
+    auto pendIt = _pendingFunctions.find(name);
+    if (pendIt == _pendingFunctions.end() || !pendIt->second.body)
+    {
+        _functionTable[funcIdx].codeStart = CompiledFunction::InvalidCodeStart;
+        _hadError = true;
+        return false;
+    }
+
+    _hadError = false;
 
     // Save and reset local state
     auto savedLocals = std::move(_localSlots);
@@ -207,16 +256,13 @@ bool BytecodeCompiler::compileFunction(const FunctionDeclaration& func)
     _functionTable[funcIdx].codeStart = static_cast<uint32_t>(_instructions.size());
 
     // Allocate slots for parameters
-    for (const auto& param : func.parameters)
+    for (const auto& paramName : pendIt->second.paramNames)
     {
-        getOrCreateLocal(param.name.token_name);
+        getOrCreateLocal(paramName);
     }
 
     // Compile body
-    if (func.body)
-    {
-        compileBlock(*func.body);
-    }
+    compileBlock(*pendIt->second.body);
 
     // Implicit return void if no explicit return
     emit(OpCode::PUSH_INT, addIntConstant(0));
@@ -228,7 +274,55 @@ bool BytecodeCompiler::compileFunction(const FunctionDeclaration& func)
     _localSlots = std::move(savedLocals);
     _nextLocalSlot = savedNextSlot;
 
-    return !_hadError;
+    if (_hadError)
+    {
+        // Unreachable: CALL rejects invalid entries
+        _functionTable[funcIdx].codeStart = CompiledFunction::InvalidCodeStart;
+        return false;
+    }
+    return true;
+}
+
+bool BytecodeCompiler::compileAllFunctions()
+{
+    bool all = true;
+    for (const auto& [name, pending] : _pendingFunctions)
+    {
+        if (!compileFunction(name)) all = false;
+    }
+    return all;
+}
+
+bool BytecodeCompiler::compileCallDriver(const std::string& name, const std::vector<ConstValue>& args)
+{
+    auto it = _functionIndex.find(name);
+    if (it == _functionIndex.end())
+    {
+        LOG_DEBUG("[consteval] function '%s' not registered for constexpr", name.c_str());
+        return false;
+    }
+
+    for (const auto& arg : args)
+    {
+        switch (arg.kind)
+        {
+        case ConstValue::Integer: emit(OpCode::PUSH_INT, addIntConstant(arg.intVal));
+            break;
+        case ConstValue::Integer128: emit(OpCode::PUSH_INT128, addInt128Constant(arg.int128Val));
+            break;
+        case ConstValue::Float: emit(OpCode::PUSH_FLOAT, addFloatConstant(arg.floatVal));
+            break;
+        case ConstValue::Bool: emit(OpCode::PUSH_BOOL, arg.boolVal ? 1 : 0);
+            break;
+        default:
+            LOG_DEBUG("[consteval] argument of kind %d not supported as call argument", static_cast<int>(arg.kind));
+            return false;
+        }
+    }
+
+    emit(OpCode::CALL, it->second);
+    emit(OpCode::HALT);
+    return true;
 }
 
 // ============================================================
@@ -506,6 +600,13 @@ void BytecodeCompiler::compileFunctionCall(const FunctionCall& expr)
 {
     const std::string& name = expr.name.token_name;
 
+    // Branch-prediction intrinsics are identity at compile time
+    if ((name == "likely" || name == "unlikely") && expr.arguments.size() == 1)
+    {
+        compileExpression(*expr.arguments[0]);
+        return;
+    }
+
     auto it = _functionIndex.find(name);
     if (it == _functionIndex.end())
     {
@@ -558,6 +659,8 @@ void BytecodeCompiler::compileStatement(const Statement& stmt)
 
     if (const auto* retStmt = dynamic_cast<const ReturnStatement*>(&stmt))
         return compileReturnStatement(*retStmt);
+    if (const auto* throwStmt = dynamic_cast<const ThrowStatement*>(&stmt))
+        return compileThrowStatement(*throwStmt);
     if (const auto* ifStmt = dynamic_cast<const IfStatement*>(&stmt))
         return compileIfStatement(*ifStmt);
     if (const auto* whileStmt = dynamic_cast<const WhileStatement*>(&stmt))
@@ -593,6 +696,22 @@ void BytecodeCompiler::compileReturnStatement(const ReturnStatement& stmt)
         emit(OpCode::PUSH_INT, addIntConstant(0)); // void return
     }
     emit(OpCode::RET);
+}
+
+void BytecodeCompiler::compileThrowStatement(const ThrowStatement& stmt)
+{
+    // The thrown error type is recorded statically; the payload expression
+    // (interpolated strings, constructors) is not const-evaluable, so it is
+    // never compiled. THROW terminates the VM with a Thrown result.
+    std::string errorName;
+    if (stmt.expression)
+    {
+        if (const auto* call = dynamic_cast<const FunctionCall*>(stmt.expression.get()))
+            errorName = call->name.token_name;
+        else if (const auto* ident = dynamic_cast<const Identifier*>(stmt.expression.get()))
+            errorName = ident->name();
+    }
+    emit(OpCode::THROW, addStringConstant(errorName));
 }
 
 void BytecodeCompiler::compileIfStatement(const IfStatement& stmt)
@@ -711,6 +830,7 @@ ConstValue ConstVM::execute(
     const std::vector<int64_t>& intPool,
     const std::vector<Int128>& int128Pool,
     const std::vector<double>& floatPool,
+    const std::vector<std::string>& stringPool,
     const std::vector<CompiledFunction>& functions)
 {
     _stack.clear();
@@ -1157,6 +1277,12 @@ ConstValue ConstVM::execute(
                 if (instr.operand >= functions.size()) return ConstValue::error();
                 const CompiledFunction& func = functions[instr.operand];
 
+                if (func.codeStart == CompiledFunction::InvalidCodeStart)
+                {
+                    LOG_DEBUG("[consteval] call to function '%s' that failed to compile", func.name.c_str());
+                    return ConstValue::error();
+                }
+
                 if (_callFrames.size() >= _config.maxCallDepth)
                 {
                     LOG_DEBUG("[consteval] VM call depth exceeded (max %u)", _config.maxCallDepth);
@@ -1213,6 +1339,15 @@ ConstValue ConstVM::execute(
         case OpCode::HALT:
             if (_stack.empty()) return ConstValue::makeVoid();
             return _stack.back();
+
+        // --- Errors ---
+        case OpCode::THROW:
+            {
+                // Terminates the whole evaluation (propagates through CALL frames)
+                std::string name = instr.operand < stringPool.size() ? stringPool[instr.operand] : "";
+                LOG_DEBUG("[consteval] VM reached throw of '%s'", name.c_str());
+                return ConstValue::thrown(std::move(name));
+            }
         }
 
         ip++;
@@ -1231,8 +1366,11 @@ void ConstEvaluator::syncToCompiler(BytecodeCompiler& compiler) const
     for (const auto& [name, val] : _constants)
         compiler.defineConstant(name, val);
 
-    for (const auto& [name, funcPtr] : _functions)
-        compiler.registerFunction(name, *funcPtr);
+    for (const auto& [name, func] : _functions)
+    {
+        if (func.body)
+            compiler.registerFunction(name, func.paramNames, *func.body);
+    }
 }
 
 ConstValue ConstEvaluator::evaluate(const Expression& expr)
@@ -1240,103 +1378,40 @@ ConstValue ConstEvaluator::evaluate(const Expression& expr)
     BytecodeCompiler compiler;
     syncToCompiler(compiler);
 
-    // Compile all registered functions first
-    for (const auto& [name, funcPtr] : _functions)
-        compiler.compileFunction(*funcPtr);
-
+    // Driver code first, function bodies appended after it
     if (!compiler.compile(expr))
         return ConstValue::error();
 
+    // Individual function compile failures mark the entry invalid; only a
+    // CALL reaching such an entry turns into an evaluation error
+    compiler.compileAllFunctions();
+
     ConstVM vm(_config);
     return vm.execute(compiler.instructions(), compiler.intPool(), compiler.int128Pool(), compiler.floatPool(),
-                      compiler.functionTable());
+                      compiler.stringPool(), compiler.functionTable());
 }
 
-ConstValue ConstEvaluator::evaluateFunction(const FunctionDeclaration& func, const std::vector<ConstValue>& args)
+ConstValue ConstEvaluator::evaluateFunction(const std::string& name, const std::vector<ConstValue>& args)
 {
+    auto it = _functions.find(name);
+    if (it == _functions.end() || !it->second.body)
+    {
+        LOG_DEBUG("[consteval] function '%s' not registered for constexpr evaluation", name.c_str());
+        return ConstValue::error();
+    }
+
     BytecodeCompiler compiler;
     syncToCompiler(compiler);
 
-    // Register and compile this function
-    uint32_t funcIdx = compiler.registerFunction(func.name.token_name, func);
+    // Driver code first (push args, call, halt), function bodies appended after it
+    if (!compiler.compileCallDriver(name, args))
+        return ConstValue::error();
 
-    // Compile all registered functions
-    for (const auto& [name, funcPtr] : _functions)
-        compiler.compileFunction(*funcPtr);
-    compiler.compileFunction(func);
-
-    // Emit: push args, call, halt
-    for (const auto& arg : args)
-    {
-        switch (arg.kind)
-        {
-        case ConstValue::Integer: compiler.defineConstant("__arg", arg);
-            break; // use inline push
-        case ConstValue::Float: compiler.defineConstant("__arg", arg);
-            break;
-        case ConstValue::Bool: compiler.defineConstant("__arg", arg);
-            break;
-        default: return ConstValue::error();
-        }
-    }
-
-    // Build a mini program: push each arg, CALL, HALT
-    // We need to emit this into the instruction stream
-    // Simpler approach: directly use the VM with args pre-loaded
-
-    // Actually, let's just build call bytecode manually:
-    std::vector<Instruction> callCode;
-    std::vector<int64_t> intPool = {compiler.intPool().begin(), compiler.intPool().end()};
-    std::vector<Int128> int128Pool = {compiler.int128Pool().begin(), compiler.int128Pool().end()};
-    std::vector<double> floatPool = {compiler.floatPool().begin(), compiler.floatPool().end()};
-
-    // Push args
-    for (const auto& arg : args)
-    {
-        if (arg.kind == ConstValue::Integer128)
-        {
-            uint32_t idx = static_cast<uint32_t>(int128Pool.size());
-            int128Pool.push_back(arg.int128Val);
-            callCode.emplace_back(OpCode::PUSH_INT128, idx);
-        }
-        else if (arg.kind == ConstValue::Integer)
-        {
-            uint32_t idx = static_cast<uint32_t>(intPool.size());
-            intPool.push_back(arg.intVal);
-            callCode.emplace_back(OpCode::PUSH_INT, idx);
-        }
-        else if (arg.kind == ConstValue::Float)
-        {
-            uint32_t idx = static_cast<uint32_t>(floatPool.size());
-            floatPool.push_back(arg.floatVal);
-            callCode.emplace_back(OpCode::PUSH_FLOAT, idx);
-        }
-        else if (arg.kind == ConstValue::Bool)
-        {
-            callCode.emplace_back(OpCode::PUSH_BOOL, arg.boolVal ? 1u : 0u);
-        }
-    }
-    callCode.emplace_back(OpCode::CALL, funcIdx);
-    callCode.emplace_back(OpCode::HALT);
-
-    // Prepend function bytecode from compiler
-    std::vector<Instruction> fullCode;
-    // Jump over function bodies to call code
-    fullCode.emplace_back(OpCode::JMP, static_cast<uint32_t>(compiler.instructions().size()));
-    // Append compiled function code
-    for (const auto& instr : compiler.instructions())
-        fullCode.push_back(instr);
-    // Append call code (adjust function codeStart offsets by +1 for the JMP)
-    auto funcs = compiler.functionTable();
-    for (auto& f : funcs) f.codeStart += 1; // offset by the JMP instruction
-
-    uint32_t callCodeStart = static_cast<uint32_t>(fullCode.size());
-    fullCode[0].operand = callCodeStart; // patch JMP target
-    for (const auto& instr : callCode)
-        fullCode.push_back(instr);
+    compiler.compileAllFunctions();
 
     ConstVM vm(_config);
-    return vm.execute(fullCode, intPool, int128Pool, floatPool, funcs);
+    return vm.execute(compiler.instructions(), compiler.intPool(), compiler.int128Pool(), compiler.floatPool(),
+                      compiler.stringPool(), compiler.functionTable());
 }
 
 void ConstEvaluator::defineConstant(const std::string& name, ConstValue value)
@@ -1344,9 +1419,34 @@ void ConstEvaluator::defineConstant(const std::string& name, ConstValue value)
     _constants[name] = value;
 }
 
+void ConstEvaluator::removeConstant(const std::string& name)
+{
+    _constants.erase(name);
+}
+
 void ConstEvaluator::defineFunction(const std::string& name, const FunctionDeclaration& func)
 {
-    _functions[name] = &func;
+    if (!func.body) return;
+
+    std::vector<std::string> paramNames;
+    for (const auto& param : func.parameters)
+        paramNames.push_back(param.name.token_name);
+    defineFunction(name, paramNames, *func.body);
+}
+
+void ConstEvaluator::defineFunction(const std::string& name, const std::vector<std::string>& paramNames,
+                                    const Block& body)
+{
+    ConstFunction func;
+    func.paramNames = paramNames;
+    func.body = &body;
+    _functions[name] = func;
+}
+
+bool ConstEvaluator::hasFunction(const std::string& name) const
+{
+    const auto it = _functions.find(name);
+    return it != _functions.end() && it->second.body != nullptr;
 }
 
 std::optional<ConstValue> ConstEvaluator::lookupConstant(const std::string& name) const

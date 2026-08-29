@@ -403,5 +403,9 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
         currentScope->set_variable_signed(expr.name.token_name, expr.type.sign);
     }
     builder->CreateStore(initVal, alloca);
+    if (expr.type.kind == TypeKind::INTEGER)
+    {
+        emit_var_track(alloca, expr.name.token_name, expr.name.location);
+    }
     return alloca;
 }

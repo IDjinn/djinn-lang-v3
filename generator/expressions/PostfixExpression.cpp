@@ -29,7 +29,9 @@ llvm::Value* Generator::generate_postfix_expression(const PostfixExpression& exp
 
         if (expr.overflowMode == OverflowMode::Trapped || expr.overflowMode == OverflowMode::Checked)
         {
-            newVal = emit_int_arith_with_overflow(arithOp, oldVal, one, expr.overflowSigned, expr.overflowMode,
+            TrapOperand var{oldVal, alloca, ident->identifier.token_name};
+            TrapOperand oneOp{one, nullptr, std::string()};
+            newVal = emit_int_arith_with_overflow(arithOp, var, oneOp, expr.overflowSigned, expr.overflowMode,
                                                   expr.location);
         }
         else if (expr.overflowMode == OverflowMode::Saturating)

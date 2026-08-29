@@ -91,6 +91,9 @@ namespace DiagnosticCode
     constexpr uint32_t THROWS_TYPE_MISMATCH = 9003;
     constexpr uint32_t TRY_ON_NON_THROWING = 9004;
     constexpr uint32_t TRY_WITHOUT_FALLBACK = 9005;
+    constexpr uint32_t CONSTEXPR_CALL_THROWS = 9006;
+    constexpr uint32_t CONTRACT_VIOLATION_COMPILE_TIME = 9007;
+    constexpr uint32_t ALWAYS_THROWS_HANDLED = 9008;
 }
 
 struct SourceLocation

@@ -13,6 +13,7 @@
 #include "diagnostics/Diagnostic.h"
 #include "lexer/Token.h"
 #include "parser/AST.h"
+#include "ErrorEnforcement.h"
 
 struct RuntimeProperties
 {
@@ -48,6 +49,7 @@ struct CompilerOptions
     bool debugMode = true;
     bool releaseMode = false;
     bool outputDjLib = false;
+    ErrorEnforcement errorEnforcement = ErrorEnforcement::CompileTime;
     std::string reflectionMode = "none"; // none | annotated | all
     std::string outputFileName{};
     std::string outputDirectory{"build"};

@@ -80,6 +80,7 @@ struct ConstValue
         Float,
         Bool,
         Void,
+        Thrown, // evaluation reached a `throw` statement (errorName holds the thrown type)
         Error
     };
 
@@ -88,6 +89,7 @@ struct ConstValue
     Int128 int128Val;
     double floatVal = 0.0;
     bool boolVal = false;
+    std::string errorName;
     unsigned bitWidth = 32;
     bool isSigned = true;
 
@@ -141,7 +143,16 @@ struct ConstValue
         return ConstValue{};
     }
 
+    static ConstValue thrown(const std::string& name)
+    {
+        ConstValue v;
+        v.kind = Thrown;
+        v.errorName = name;
+        return v;
+    }
+
     [[nodiscard]] bool isError() const { return kind == Error; }
+    [[nodiscard]] bool isThrown() const { return kind == Thrown; }
     [[nodiscard]] bool isNumeric() const { return kind == Integer || kind == Integer128 || kind == Float; }
     [[nodiscard]] bool isInteger() const { return kind == Integer || kind == Integer128; }
 

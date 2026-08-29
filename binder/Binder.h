@@ -18,6 +18,8 @@
 #include "../parser/ast/Statement.h"
 #include "../parser/ast/Expression.h"
 #include "../diagnostics/Diagnostic.h"
+#include "../evaluator/ConstEvaluator.h"
+#include "../ErrorEnforcement.h"
 #include <cassert>
 
 namespace djlib
@@ -90,7 +92,8 @@ class Binder
     friend class djinn::binder::RegularFunctionCallHandler;
 
 public:
-    explicit Binder(DiagnosticEngine& diagnostics);
+    explicit Binder(DiagnosticEngine& diagnostics,
+                    ErrorEnforcement enforcement = ErrorEnforcement::CompileTime);
 
     BindingResult bind(const Program& program);
 
@@ -238,6 +241,16 @@ private:
     // Error handling checks: enforce `try` on calls to throwing functions
     bool tryOperandSawThrowingCall_ = false;
     void check_throwing_call(const std::string& calleeName, bool calleeThrows, const SourceLocation& loc);
+
+    // Compile-time enforcement: a call whose outcome is provable (constexpr
+    // callee that always throws, or a require clause violated by constant
+    // arguments). Returns true when it emitted a compile-time error, so the
+    // caller skips the less specific MISSING_TRY diagnostic.
+    bool check_compile_time_call(const FunctionSymbol& funcSym, const FunctionCall& call);
+    ErrorEnforcement enforcement_ = ErrorEnforcement::CompileTime;
+    mutable std::unique_ptr<ConstEvaluator> compileTimeEvaluator_;
+    mutable bool compileTimeEvaluatorReady_ = false;
+    ConstEvaluator& getCompileTimeEvaluator() const;
 
     static bool is_generic_type(const Type& type, const StructDeclaration& struc);
 

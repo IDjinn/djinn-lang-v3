@@ -212,13 +212,47 @@ void Generator::emit_error_propagation_check()
     builder->SetInsertPoint(contBB);
 }
 
-// Division/remission by zero: throws DivisionByZero in throwing functions,
-// traps via __djinn_runtime_error otherwise.
-void Generator::emit_div_by_zero_check(llvm::Value* dividend, llvm::Value* divisor, const SourceLocation& loc)
+// After user main returns: an error flag still set means an exception
+// escaped main() throws — report it and abort instead of exiting silently.
+void Generator::emit_uncaught_error_check()
 {
     ensure_error_globals_declared();
 
-    auto* isZero = builder->CreateICmpEQ(divisor, llvm::ConstantInt::get(divisor->getType(), 0), "div_zero");
+    auto* uncaughtFn = module->getFunction("__djinn_uncaught_error");
+    if (!uncaughtFn)
+    {
+        auto* uncaughtTy = llvm::FunctionType::get(builder->getVoidTy(),
+                                                   {builder->getInt32Ty(), builder->getPtrTy()}, false);
+        uncaughtFn = llvm::Function::Create(uncaughtTy, llvm::Function::ExternalLinkage,
+                                            "__djinn_uncaught_error", *module);
+    }
+
+    auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "uncaught_flag");
+
+    auto* llvmFunc = builder->GetInsertBlock()->getParent();
+    auto* okBB = llvm::BasicBlock::Create(*context, "main.err.ok", llvmFunc);
+    auto* errBB = llvm::BasicBlock::Create(*context, "main.err.uncaught", llvmFunc);
+
+    builder->CreateCondBr(errorFlag, errBB, okBB);
+
+    builder->SetInsertPoint(errBB);
+    auto* tag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "uncaught_tag");
+    auto* payload = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "uncaught_msg");
+    builder->CreateCall(uncaughtFn, {tag, payload});
+    builder->CreateUnreachable();
+
+    builder->SetInsertPoint(okBB);
+}
+
+// Division/remission by zero: throws DivisionByZero in throwing functions,
+// traps via __djinn_runtime_error otherwise.
+void Generator::emit_div_by_zero_check(const TrapOperand& dividend, const TrapOperand& divisor,
+                                       const SourceLocation& loc)
+{
+    ensure_error_globals_declared();
+
+    auto* isZero = builder->CreateICmpEQ(divisor.value,
+                                         llvm::ConstantInt::get(divisor.value->getType(), 0), "div_zero");
 
     auto* llvmFunc = builder->GetInsertBlock()->getParent();
     auto* okBB = llvm::BasicBlock::Create(*context, "div.ok", llvmFunc);

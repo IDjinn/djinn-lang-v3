@@ -32,6 +32,7 @@ void printUsage(const char* programName)
         << "  --release     Set build mode to release (default)\n"
         << "  --reflect-all       Generate TypeInfoExt for all struct types\n"
         << "  --reflect-annotated Generate TypeInfoExt only for [Reflect] structs\n"
+        << "  --error-enforcement <off|runtime|compiletime|strict>  Error-flow checks (default: compiletime)\n"
         << "  --no-std      Don't include standard library\n"
         << "  --std-decl    Include std declarations only (use with -l std.ll)\n"
         << "  --inspect <file.djlib>  Inspect djlib metadata\n"
@@ -211,6 +212,20 @@ int main(int argc, char* argv[])
         else if (arg == "--reflect-annotated")
         {
             options.reflectionMode = "annotated";
+        }
+        else if (arg == "--error-enforcement" && i + 1 < argc)
+        {
+            const std::string level = argv[++i];
+            if (level == "off") options.errorEnforcement = ErrorEnforcement::Off;
+            else if (level == "runtime") options.errorEnforcement = ErrorEnforcement::Runtime;
+            else if (level == "compiletime") options.errorEnforcement = ErrorEnforcement::CompileTime;
+            else if (level == "strict") options.errorEnforcement = ErrorEnforcement::Strict;
+            else
+            {
+                LOG_ERROR("Unknown error enforcement level: %s (expected off|runtime|compiletime|strict)",
+                          level.c_str());
+                return 1;
+            }
         }
         else if (arg == "--debug")
         {

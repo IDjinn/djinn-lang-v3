@@ -230,6 +230,10 @@ typedef struct djinn_error_info
     uint8_t has_operands;  /* 0 => left/right are not meaningful */
     uint64_t left;         /* raw operand bits */
     uint64_t right;        /* raw operand bits (unused for 'n') */
+    const char* left_var_name; /* variable name; NULL when not a tracked variable */
+    const void* left_var_slot; /* variable storage (identity for its history) */
+    const char* right_var_name;
+    const void* right_var_slot;
 } djinn_error_info_t;
 
 #define DJINN_ERROR_REPORT_SIZE 2048
@@ -237,6 +241,22 @@ extern char __djinn_last_error_report[DJINN_ERROR_REPORT_SIZE];
 
 void __djinn_runtime_error(const djinn_error_info_t* info);
 void __djinn_runtime_error_message(const char* message); /* legacy simple trap */
+
+// Uncaught djinn exception escaping main() throws: renders a report with the
+// error tag/message and the shadow-stack trace into __djinn_last_error_report
+// (so JIT hosts can capture it), prints it to stderr and aborts.
+void __djinn_uncaught_error(int tag, const char* message);
+
+// ── Variable assignment history ──
+//
+// The generator records each integer variable declaration/assignment with its
+// source line; when an operand of a failing operation is a variable, the
+// report shows its last DJINN_VAR_HISTORY assignment sites.
+
+#define DJINN_MAX_TRACKED_VARS 128
+#define DJINN_VAR_HISTORY 2
+
+void __djinn_var_track(const void* slot, const char* name, const char* line_text, uint32_t line);
 
 // ── Shadow call stack for runtime stack traces ──
 //

@@ -57,10 +57,12 @@ namespace
     }
 }
 
-llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, llvm::Value* left, llvm::Value* right,
-                                                     const bool isSigned, const OverflowMode mode,
-                                                     const SourceLocation& loc)
+llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, const TrapOperand& leftOp,
+                                                     const TrapOperand& rightOp, const bool isSigned,
+                                                     const OverflowMode mode, const SourceLocation& loc)
 {
+    auto* left = leftOp.value;
+    auto* right = rightOp.value;
     auto* ty = left->getType();
 
     llvm::Value* result;
@@ -101,7 +103,7 @@ llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, llvm::V
     }
     else
     {
-        emit_runtime_error_trap(loc, "integer overflow", trapOpCode(op), left, right, isSigned);
+        emit_runtime_error_trap(loc, "integer overflow", trapOpCode(op), leftOp, rightOp, isSigned);
     }
 
     builder->SetInsertPoint(okBB);
@@ -183,9 +185,10 @@ llvm::Value* Generator::emit_saturating_int_arith(const TokenType op, llvm::Valu
 }
 
 // Unary negate: only signed MIN overflows (0 - MIN > MAX)
-llvm::Value* Generator::emit_int_neg_with_overflow(llvm::Value* value, const bool isSigned,
+llvm::Value* Generator::emit_int_neg_with_overflow(const TrapOperand& operand, const bool isSigned,
                                                    const OverflowMode mode, const SourceLocation& loc)
 {
+    auto* value = operand.value;
     if (mode == OverflowMode::None || mode == OverflowMode::Wrapped || !isSigned)
     {
         return builder->CreateNeg(value, "negtmp");
@@ -216,7 +219,7 @@ llvm::Value* Generator::emit_int_neg_with_overflow(llvm::Value* value, const boo
     }
     else
     {
-        emit_runtime_error_trap(loc, "integer overflow", 'n', value, nullptr, isSigned);
+        emit_runtime_error_trap(loc, "integer overflow", 'n', operand, {}, isSigned);
     }
 
     builder->SetInsertPoint(okBB);

@@ -349,6 +349,9 @@ void Generator::generate()
                 result = builder->getInt32(0);
             }
 
+            // An error flag still set means an exception escaped main() throws
+            emit_uncaught_error_check();
+
             // Destroy the main coroutine frame
             auto* coroDestroyFn = llvm::Intrinsic::getOrInsertDeclaration(
                 module.get(), llvm::Intrinsic::coro_destroy);
@@ -393,6 +396,9 @@ void Generator::generate()
             {
                 result = builder->CreateCall(syncMainFn, {}, "sync.result");
             }
+
+            // An error flag still set means an exception escaped main() throws
+            emit_uncaught_error_check();
 
             auto* shutdownFn = module->getFunction("__djinn_runtime_shutdown");
             builder->CreateCall(shutdownFn);

@@ -99,6 +99,9 @@ enum class OpCode : uint8_t
     CALL, // operand: function index in function table; pops N args from stack
     RET, // pop top of stack as return value, return to caller
 
+    // Errors
+    THROW, // operand: index into string pool; terminates execution with a Thrown result
+
     HALT, // stop execution, top of stack is result
 };
 
@@ -119,6 +122,17 @@ struct CompiledFunction
     uint32_t numParams = 0;
     uint32_t numLocals = 0; // total locals including params
     uint32_t codeStart = 0; // offset into the global instruction stream
+
+    static constexpr uint32_t InvalidCodeStart = 0xFFFFFFFF; // failed to compile
+};
+
+// Function registered for compile-time evaluation. Bodies live in the
+// FunctionSymbol (moved out of the AST during collection), so callers pass
+// parameter names and the body block directly.
+struct ConstFunction
+{
+    std::vector<std::string> paramNames;
+    const Block* body = nullptr;
 };
 
 // --- Bytecode Compiler (AST -> Instructions) ---
@@ -127,15 +141,21 @@ class BytecodeCompiler
 {
 public:
     bool compile(const Expression& expr);
-    bool compileFunction(const FunctionDeclaration& func);
+
+    uint32_t registerFunction(const std::string& name, const FunctionDeclaration& func);
+    uint32_t registerFunction(const std::string& name, const std::vector<std::string>& paramNames,
+                              const Block& body);
+    bool compileFunction(const std::string& name);
+    bool compileAllFunctions();
+    bool compileCallDriver(const std::string& name, const std::vector<ConstValue>& args);
 
     void defineConstant(const std::string& name, ConstValue value);
-    uint32_t registerFunction(const std::string& name, const FunctionDeclaration& func);
 
     [[nodiscard]] const std::vector<Instruction>& instructions() const { return _instructions; }
     [[nodiscard]] const std::vector<int64_t>& intPool() const { return _intPool; }
     [[nodiscard]] const std::vector<Int128>& int128Pool() const { return _int128Pool; }
     [[nodiscard]] const std::vector<double>& floatPool() const { return _floatPool; }
+    [[nodiscard]] const std::vector<std::string>& stringPool() const { return _stringPool; }
     [[nodiscard]] const std::vector<CompiledFunction>& functionTable() const { return _functionTable; }
 
     [[nodiscard]] bool hadError() const { return _hadError; }
@@ -145,9 +165,11 @@ private:
     std::vector<int64_t> _intPool;
     std::vector<Int128> _int128Pool;
     std::vector<double> _floatPool;
+    std::vector<std::string> _stringPool;
     std::vector<CompiledFunction> _functionTable;
     std::unordered_map<std::string, ConstValue> _constants;
     std::unordered_map<std::string, uint32_t> _functionIndex; // name -> index in _functionTable
+    std::unordered_map<std::string, ConstFunction> _pendingFunctions; // name -> body to compile
 
     // Local variable tracking for current function
     std::unordered_map<std::string, uint32_t> _localSlots;
@@ -159,6 +181,7 @@ private:
     uint32_t addIntConstant(int64_t val);
     uint32_t addInt128Constant(Int128 val);
     uint32_t addFloatConstant(double val);
+    uint32_t addStringConstant(const std::string& val);
     uint32_t getOrCreateLocal(const std::string& name);
 
     // Patch a jump instruction's operand to point to current position
@@ -183,6 +206,7 @@ private:
     void compileStatement(const Statement& stmt);
     void compileBlock(const Block& block);
     void compileReturnStatement(const ReturnStatement& stmt);
+    void compileThrowStatement(const ThrowStatement& stmt);
     void compileIfStatement(const IfStatement& stmt);
     void compileWhileStatement(const WhileStatement& stmt);
     void compileForStatement(const ForStatement& stmt);
@@ -222,6 +246,7 @@ public:
         const std::vector<int64_t>& intPool,
         const std::vector<Int128>& int128Pool,
         const std::vector<double>& floatPool,
+        const std::vector<std::string>& stringPool,
         const std::vector<CompiledFunction>& functions
     );
 
@@ -250,14 +275,22 @@ public:
     // Evaluate an expression at compile time. Returns ConstValue::Error if not evaluable.
     ConstValue evaluate(const Expression& expr);
 
-    // Evaluate a constexpr function call with given constant arguments
-    ConstValue evaluateFunction(const FunctionDeclaration& func, const std::vector<ConstValue>& args);
+    // Evaluate a registered constexpr function with constant arguments.
+    // Returns ConstValue::Error if not evaluable, or Kind::Thrown if the
+    // function provably throws.
+    ConstValue evaluateFunction(const std::string& name, const std::vector<ConstValue>& args);
 
     // Register a known compile-time constant
     void defineConstant(const std::string& name, ConstValue value);
 
+    // Remove a known constant (restores state after temporary bindings)
+    void removeConstant(const std::string& name);
+
     // Register a constexpr function (so it can be called from other constexpr contexts)
     void defineFunction(const std::string& name, const FunctionDeclaration& func);
+    void defineFunction(const std::string& name, const std::vector<std::string>& paramNames, const Block& body);
+
+    [[nodiscard]] bool hasFunction(const std::string& name) const;
 
     // Check if a name is a known constant
     [[nodiscard]] std::optional<ConstValue> lookupConstant(const std::string& name) const;
@@ -268,7 +301,7 @@ public:
 private:
     ConstEvalConfig _config;
     std::unordered_map<std::string, ConstValue> _constants;
-    std::unordered_map<std::string, const FunctionDeclaration*> _functions;
+    std::unordered_map<std::string, ConstFunction> _functions;
 
     void syncToCompiler(BytecodeCompiler& compiler) const;
 };

@@ -10,6 +10,8 @@ llvm::Value *Generator::generate_assignment(const Assignment &expr) {
         if (val) {
             val = cast_value(val, alloca->getAllocatedType());
             builder->CreateStore(val, alloca);
+            if (alloca->getAllocatedType()->isIntegerTy())
+                emit_var_track(alloca, expr.name.token_name, expr.name.location);
         }
         return val;
     }

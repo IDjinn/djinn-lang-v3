@@ -36,6 +36,16 @@ namespace djinn
     class GeneratorStatementVisitor;
 }
 
+// One operand of a trapping operation: the value plus, when the operand is a
+// named local variable, its storage slot (identity for runtime assignment
+// history) and display name.
+struct TrapOperand
+{
+    llvm::Value* value = nullptr;
+    llvm::Value* slot = nullptr;
+    std::string name;
+};
+
 class Generator
 {
     friend class djinn::GeneratorExpressionVisitor;
@@ -322,23 +332,27 @@ private:
     llvm::Value* generate_error_construction(const FunctionCall& call);
     llvm::Value* generate_interpolated_error_message(const FunctionCall& call);
     void emit_error_propagation_check();
-    void emit_div_by_zero_check(llvm::Value* dividend, llvm::Value* divisor, const SourceLocation& loc);
+    void emit_uncaught_error_check();
+    void emit_div_by_zero_check(const TrapOperand& dividend, const TrapOperand& divisor, const SourceLocation& loc);
     void emit_error_throw_with_tag(int32_t tag);
 
     // Integer overflow modes (w/t/c/s suffixes)
     llvm::Function* get_or_declare_runtime_error_fn();
-    llvm::Value* emit_int_arith_with_overflow(TokenType op, llvm::Value* left, llvm::Value* right,
+    llvm::Value* emit_int_arith_with_overflow(TokenType op, const TrapOperand& left, const TrapOperand& right,
                                               bool isSigned, OverflowMode mode, const SourceLocation& loc);
     llvm::Value* emit_saturating_int_arith(TokenType op, llvm::Value* left, llvm::Value* right, bool isSigned);
-    llvm::Value* emit_int_neg_with_overflow(llvm::Value* value, bool isSigned, OverflowMode mode,
+    llvm::Value* emit_int_neg_with_overflow(const TrapOperand& operand, bool isSigned, OverflowMode mode,
                                             const SourceLocation& loc);
 
-    // Runtime diagnostics: rich traps (source location + operand values) and
-    // shadow call-stack frames for runtime stack traces
+    // Runtime diagnostics: rich traps (source location + operand values +
+    // variable assignment history) and shadow call-stack frames for runtime
+    // stack traces
     void emit_runtime_error_trap(const SourceLocation& loc, const char* message, char op,
-                                 llvm::Value* left, llvm::Value* right, bool isSigned);
+                                 const TrapOperand& left, const TrapOperand& right, bool isSigned);
     void emit_frame_push(const std::string& displayName, const SourceLocation& loc);
     void emit_frame_set_line(const SourceLocation& loc);
+    void emit_var_track(llvm::Value* slot, const std::string& name, const SourceLocation& loc);
+    TrapOperand make_trap_operand(const Expression& expr, llvm::Value* value);
 
     // Contracts (require/ensure)
     std::vector<const ContractClause*> currentContracts_;

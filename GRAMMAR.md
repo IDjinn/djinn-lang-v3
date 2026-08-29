@@ -73,10 +73,76 @@ attr_arg             = [ IDENTIFIER "=" ] ( INTEGER_LITERAL | FLOAT_LITERAL | ST
 ### Function
 
 ```ebnf
-function             = [ "async" ] [ "constexpr" | "consteval" ] type IDENTIFIER "(" [ param_list ] ")" block ;
+function             = [ "async" ] [ "constexpr" | "consteval" ] type IDENTIFIER "(" [ param_list ] ")" [ throws_clause ] { contract_clause } block ;
 param_list           = parameter { "," parameter } ;
 parameter            = type IDENTIFIER [ "mut" ] ;
+
+throws_clause        = "throws" | "throws" "(" type { "," type } ")" ;
+contract_clause      = ( "require" | "ensure" ) "(" expression ")"
+                     | ( "require" | "ensure" ) block ;
 ```
+
+### Error handling (throw / throws / try)
+
+```ebnf
+throw_statement      = "throw" expression ";" ;
+try_expression       = "try" expression [ "?:" expression ] ;
+```
+
+(* Error values are structs deriving a builtin error type (`Exception`,
+`Generic`, `DivisionByZero`, `Argument`, `Overflow`, `OutOfBounds`,
+`InvalidArgument`, `ContractViolation`, or user-defined `struct MyError : Base;`)
+with layout `{ tag: i32, message: str }`.
+
+- `throws(T...)` declares what a function may throw; bare `throws` = anything.
+- `throw ErrorType("message")` sets the error state and returns the default value.
+- `try expr ?: fallback` catches a failed operand and yields the fallback; a bare `try expr` propagates (allowed inside
+  a `throws` caller).
+- Calling a throwing function without `try` is an error outside `throws`
+  functions; inside them the error propagates automatically.
+- An exception escaping `main() throws` is reported at runtime and aborts.
+
+Error enforcement level (CompilerOptions::errorEnforcement):
+
+- `Off`: no error-flow checks.
+- `Runtime`: `try` enforcement + propagation only (no compile-time analysis).
+- `CompileTime` (default): additionally, calls whose outcome is provable are checked — a constexpr call that always
+  throws with constant arguments, or a
+  `require` clause violated by constant arguments, is a compile error when unhandled (diagnostics 9006/9007) and a
+  warning inside `try ... ?:` (9008).
+- `Strict`: like CompileTime, but every call to a throwing function must be wrapped in `try` (bare `try` to propagate),
+  even inside `throws` functions. *)
+
+### Contracts (require / ensure)
+
+```ebnf
+contract_clause      = ( "require" | "ensure" ) "(" expression ")"
+                     | ( "require" | "ensure" ) block ;
+```
+
+(* Contracts are clauses between a function's signature and its body:
+
+- `require(cond)` — checked at function entry; throws `ContractViolation` on failure. Block form
+  `require { return cond; }` is also allowed.
+- `ensure(return == expr)` — checked before each return; the return value is exposed through the `return`
+  pseudo-variable.
+- A function with contracts is implicitly throwing: call sites must use `try`.
+- With the default enforcement level, `require` clauses decided by constant arguments are verified at compile time (see
+  error enforcement above).
+
+Example:
+
+```djinn
+i32 clamp(i32 value, i32 lo, i32 hi)
+    require(lo <= hi)
+    ensure(return >= lo)
+{
+    return value;
+}
+i32 ok = try clamp(5, 1, 10) ?: 0;
+```
+
+*)
 
 ### Constexpr / Consteval
 

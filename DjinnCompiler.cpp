@@ -730,7 +730,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             }
         }
 
-        Binder binder(diagnostics);
+        Binder binder(diagnostics, options.errorEnforcement);
 
         for (const auto& reader : djlibReaders)
         {
@@ -1091,7 +1091,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         for (auto& prog : programs)
             resolve_compile_time_blocks(*prog, comptimeEval);
 
-        Binder binder(diagnostics);
+        Binder binder(diagnostics, options.errorEnforcement);
         const auto bindResult = binder.bindAll(programs);
         if (!bindResult.success)
         {

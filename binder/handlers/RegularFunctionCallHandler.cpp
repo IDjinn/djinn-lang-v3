@@ -27,8 +27,13 @@ namespace djinn::binder {
             return nullptr;
         }
 
-        // Calls to throwing functions require `try` (or a throwing caller to propagate)
-        binder.check_throwing_call(call.name.token_name, funcSym->isThrowing(), call.name.location);
+        // Compile-time enforcement runs first: a provable violation is more
+        // specific than the MISSING_TRY diagnostic it replaces
+        if (!binder.check_compile_time_call(*funcSym, call))
+        {
+            // Calls to throwing functions require `try` (or a throwing caller to propagate)
+            binder.check_throwing_call(call.name.token_name, funcSym->isThrowing(), call.name.location);
+        }
 
         const size_t expectedArgs = funcSym->callerArity();
         if (!funcSym->isVariadic && call.arguments.size() != expectedArgs)

@@ -8,8 +8,8 @@
 #include "../lib/DjLibReader.h"
 #include "ErrorTypes.h"
 
-Binder::Binder(DiagnosticEngine& diagnostics)
-    : _diagnostics(diagnostics)
+Binder::Binder(DiagnosticEngine& diagnostics, ErrorEnforcement enforcement)
+    : _diagnostics(diagnostics), enforcement_(enforcement)
 {
     _global_scope = std::make_shared<ScopedSymbolTable>();
     _current_scope = _global_scope;
@@ -336,6 +336,7 @@ bool Binder::is_error_derived_from(const std::string& structName, const std::str
 
 void Binder::check_throwing_call(const std::string& calleeName, const bool calleeThrows, const SourceLocation& loc)
 {
+    if (enforcement_ == ErrorEnforcement::Off) return;
     if (!calleeThrows) return;
 
     if (insideTryExpression_)
@@ -344,14 +345,171 @@ void Binder::check_throwing_call(const std::string& calleeName, const bool calle
         return;
     }
 
-    // Unchecked call inside another throwing function: error propagates
-    if (currentFunctionThrows_) return;
+    // Unchecked call inside another throwing function: error propagates.
+    // Strict mode rejects it — propagate explicitly with a bare `try`.
+    if (currentFunctionThrows_&& enforcement_ != ErrorEnforcement::Strict) return;
 
+    const bool strict = enforcement_ == ErrorEnforcement::Strict;
     _diagnostics.emitAndPrint(Diagnostic(
         Severity::Error, DiagnosticCode::MISSING_TRY,
-        "call to throwing function '" + calleeName + "' must be wrapped in 'try'",
+        "call to throwing function '" + calleeName + "' must be wrapped in 'try'" +
+        (strict ? " (strict error enforcement: use a bare 'try' to propagate)" : ""),
         loc
     ));
+}
+
+ConstEvaluator& Binder::getCompileTimeEvaluator() const
+{
+    if (compileTimeEvaluatorReady_) return *compileTimeEvaluator_;
+    compileTimeEvaluatorReady_ = true;
+
+    auto eval = std::make_unique<ConstEvaluator>();
+
+    for (const auto& [name, entry] : _global_scope->constExprConstants)
+    {
+        if (!entry.value) continue; // intrinsics carry no expression
+        const ConstValue val = eval->evaluate(*entry.value);
+        if (!val.isError() && !val.isThrown())
+            eval->defineConstant(name, val);
+    }
+
+    // Registered under the symbol name (qualified) — aliases in the symbol
+    // table point to the same FunctionSymbol, so each body registers once per
+    // distinct name, which is harmless.
+    for (const auto& [name, symbol] : _global_scope->symbols())
+    {
+        const auto funcSym = std::dynamic_pointer_cast<FunctionSymbol>(symbol);
+        if (!funcSym || !funcSym->hasBody()) continue;
+        if (!(funcSym->constExpr || funcSym->constEval)) continue;
+        if (funcSym->isAsync) continue;
+        eval->defineFunction(funcSym->name, funcSym->paramNames, *funcSym->body);
+    }
+
+    compileTimeEvaluator_ = std::move(eval);
+    return *compileTimeEvaluator_;
+}
+
+bool Binder::check_compile_time_call(const FunctionSymbol& funcSym, const FunctionCall& call)
+{
+    if (_bindingStdLib) return false;
+    if (enforcement_ != ErrorEnforcement::CompileTime && enforcement_ != ErrorEnforcement::Strict) return false;
+    if (!funcSym.hasBody()) return false;
+    if (call.arguments.size() != funcSym.paramNames.size()) return false;
+
+    auto& eval = getCompileTimeEvaluator();
+
+    const bool canAnalyzeThrow = (funcSym.constExpr || funcSym.constEval) && funcSym.isThrowing()
+        && eval.hasFunction(funcSym.name);
+
+    bool hasRequires = false;
+    for (const auto* contract : funcSym.contracts)
+    {
+        if (contract && contract->isRequire())
+        {
+            hasRequires = true;
+            break;
+        }
+    }
+    if (!canAnalyzeThrow && !hasRequires) return false;
+
+    // All arguments must be compile-time evaluable; otherwise the runtime
+    // checks still enforce everything
+    std::vector<ConstValue> args;
+    args.reserve(call.arguments.size());
+    for (const auto& arg : call.arguments)
+    {
+        ConstValue val = eval.evaluate(*arg);
+        if (val.isError() || val.isThrown()) return false;
+        args.push_back(val);
+    }
+
+    if (canAnalyzeThrow)
+    {
+        const ConstValue result = eval.evaluateFunction(funcSym.name, args);
+        if (result.isThrown())
+        {
+            const std::string thrownType = result.errorName.empty() ? "error" : result.errorName;
+            if (insideTryExpression_)
+            {
+                _diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Warning, DiagnosticCode::ALWAYS_THROWS_HANDLED,
+                    "call to '" + call.name.token_name + "' always throws '" + thrownType +
+                    "' (evaluated at compile time); the error path is always taken",
+                    call.name.location));
+            }
+            else
+            {
+                _diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Error, DiagnosticCode::CONSTEXPR_CALL_THROWS,
+                    "call to '" + call.name.token_name + "' always throws '" + thrownType +
+                    "' (evaluated at compile time)",
+                    call.name.location));
+                return true;
+            }
+            return false;
+        }
+    }
+
+    if (hasRequires)
+    {
+        // Bind parameter names to the constant arguments, evaluate each
+        // require clause, then restore the evaluator state
+        std::vector<std::optional<ConstValue>> previous;
+        previous.reserve(funcSym.paramNames.size());
+        for (size_t i = 0; i < funcSym.paramNames.size(); i++)
+        {
+            previous.push_back(eval.lookupConstant(funcSym.paramNames[i]));
+            eval.defineConstant(funcSym.paramNames[i], args[i]);
+        }
+        const auto restoreConstants = [&]
+        {
+            for (size_t i = 0; i < funcSym.paramNames.size(); i++)
+            {
+                if (previous[i]) eval.defineConstant(funcSym.paramNames[i], *previous[i]);
+                else eval.removeConstant(funcSym.paramNames[i]);
+            }
+        };
+
+        for (const auto* contract : funcSym.contracts)
+        {
+            if (!contract || !contract->isRequire()) continue;
+
+            const Expression* condition = contract->condition.get();
+            if (!condition && contract->block && contract->block->statements.size() == 1)
+            {
+                if (const auto* ret = dynamic_cast<const ReturnStatement*>(contract->block->statements[0].get()))
+                    condition = ret->value.get();
+            }
+            if (!condition) continue;
+
+            const ConstValue val = eval.evaluate(*condition);
+            if (val.kind == ConstValue::Bool && !val.boolVal)
+            {
+                restoreConstants();
+                if (insideTryExpression_)
+                {
+                    _diagnostics.emitAndPrint(Diagnostic(
+                        Severity::Warning, DiagnosticCode::ALWAYS_THROWS_HANDLED,
+                        "call to '" + call.name.token_name +
+                        "' always violates a 'require' clause (evaluated at compile time); the error path is always taken",
+                        call.name.location));
+                }
+                else
+                {
+                    _diagnostics.emitAndPrint(Diagnostic(
+                        Severity::Error, DiagnosticCode::CONTRACT_VIOLATION_COMPILE_TIME,
+                        "call to '" + call.name.token_name +
+                        "' violates a 'require' clause (evaluated at compile time)",
+                        call.name.location));
+                    return true;
+                }
+                return false;
+            }
+        }
+        restoreConstants();
+    }
+
+    return false;
 }
 
 void Binder::popScope()

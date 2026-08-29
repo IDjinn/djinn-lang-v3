@@ -692,6 +692,64 @@ void __djinn_frame_set_line(const uint32_t line)
         djinn_shadow_stack.frames[djinn_shadow_stack.depth - 1].line = line;
 }
 
+// ── Variable assignment history ──
+
+typedef struct
+{
+    const char* line_text;
+    uint32_t line;
+} djinn_var_event_t;
+
+typedef struct
+{
+    const void* slot;
+    const char* name;
+    djinn_var_event_t events[DJINN_VAR_HISTORY]; /* newest last */
+    int count; /* events stored (0..DJINN_VAR_HISTORY) */
+    int total; /* total assignments seen (drives the "..." marker) */
+} djinn_tracked_var_t;
+
+static struct
+{
+    djinn_tracked_var_t vars[DJINN_MAX_TRACKED_VARS];
+    int count;
+} djinn_var_registry;
+
+void __djinn_var_track(const void* slot, const char* name, const char* line_text, const uint32_t line)
+{
+    if (slot == NULL) return;
+
+    djinn_tracked_var_t* var = NULL;
+    for (int i = djinn_var_registry.count - 1; i >= 0; i--)
+    {
+        if (djinn_var_registry.vars[i].slot == slot)
+        {
+            var = &djinn_var_registry.vars[i];
+            break;
+        }
+    }
+    if (var == NULL)
+    {
+        if (djinn_var_registry.count >= DJINN_MAX_TRACKED_VARS) return;
+        var = &djinn_var_registry.vars[djinn_var_registry.count++];
+        memset(var, 0, sizeof *var);
+        var->slot = slot;
+        var->name = name;
+    }
+
+    if (var->count == DJINN_VAR_HISTORY)
+    {
+        var->events[0] = var->events[1];
+        var->count--;
+    }
+    var->events[var->count].line_text = line_text;
+    var->events[var->count].line = line;
+    var->count++;
+    var->total++;
+}
+
+static const djinn_tracked_var_t* djinn_find_tracked(const void* slot);
+
 static int djinn_report_append(char* buf, int used, const char* fmt, ...)
 {
     if (used >= DJINN_ERROR_REPORT_SIZE - 1) return used;
@@ -704,12 +762,33 @@ static int djinn_report_append(char* buf, int used, const char* fmt, ...)
     return used + (written > room ? room : written);
 }
 
+// Groups an integer string with '.' every three digits (2.000.000.000) so
+// large values stay readable in the report.
+static void djinn_group_digits(const char* digits, char* out, const size_t size)
+{
+    const char* p = digits;
+    size_t out_idx = 0;
+    if (*p == '-' && out_idx + 1 < size)
+        out[out_idx++] = *p++;
+    const size_t num_len = strlen(p);
+    for (size_t i = 0; p[i] != '\0'; i++)
+    {
+        if (i > 0 && (num_len - i) % 3 == 0 && out_idx + 1 < size)
+            out[out_idx++] = '.';
+        if (out_idx + 1 < size)
+            out[out_idx++] = p[i];
+    }
+    out[out_idx] = '\0';
+}
+
 static void djinn_format_value(const djinn_error_info_t* info, const uint64_t raw, char* out, const size_t size)
 {
+    char plain[32];
     if (info->is_signed)
-        snprintf(out, size, "%lld", (long long)(int64_t)raw);
+        snprintf(plain, sizeof plain, "%lld", (long long)(int64_t)raw);
     else
-        snprintf(out, size, "%llu", (unsigned long long)raw);
+        snprintf(plain, sizeof plain, "%llu", (unsigned long long)raw);
+    djinn_group_digits(plain, out, size);
 }
 
 // Max/min of the operand type, returned as raw two's-complement bits.
@@ -816,7 +895,11 @@ static int djinn_append_note(char* buf, int used, const djinn_error_info_t* info
     if (strcmp(direction, "max") == 0)
         djinn_format_value(info, djinn_type_max(info->bits, info->is_signed), bound, sizeof bound);
     else
-        snprintf(bound, sizeof bound, "%lld", (long long)(int64_t)djinn_type_min(info->bits));
+    {
+        char plain[32];
+        snprintf(plain, sizeof plain, "%lld", (long long)(int64_t)djinn_type_min(info->bits));
+        djinn_group_digits(plain, bound, sizeof bound);
+    }
 
     used = djinn_report_append(buf, used, " %s %s %s (%s)\n",
                                strcmp(direction, "max") == 0 ? "exceeds" : "is below",
@@ -855,6 +938,37 @@ static int djinn_append_snippet(char* buf, int used, const djinn_error_info_t* i
     }
 
     return djinn_report_append(buf, used, " %*s |\n", (int)gutter, "");
+}
+
+static const djinn_tracked_var_t* djinn_find_tracked(const void* slot)
+{
+    if (slot == NULL) return NULL;
+    for (int i = djinn_var_registry.count - 1; i >= 0; i--)
+        if (djinn_var_registry.vars[i].slot == slot)
+            return &djinn_var_registry.vars[i];
+    return NULL;
+}
+
+// The last assignment sites of a variable operand, e.g.:
+//    = note: history of 'a':
+//      ...
+//    3 |     i32t a = 2t;
+//    7 |     a = 2000000000t;
+static int djinn_append_var_history(char* buf, int used, const char* name, const void* slot)
+{
+    const djinn_tracked_var_t* var = djinn_find_tracked(slot);
+    if (var == NULL || var->count == 0) return used;
+
+    used = djinn_report_append(buf, used, "   = note: history of '%s':\n", name ? name : var->name);
+    if (var->total > var->count)
+        used = djinn_report_append(buf, used, "     ...\n");
+    for (int i = 0; i < var->count; i++)
+    {
+        used = djinn_report_append(buf, used, " %4u | %s\n",
+                                   (unsigned)var->events[i].line,
+                                   var->events[i].line_text ? var->events[i].line_text : "");
+    }
+    return used;
 }
 
 static int djinn_append_stack_trace(char* buf, int used)
@@ -896,6 +1010,10 @@ void __djinn_runtime_error(const djinn_error_info_t* info)
                                info->message ? info->message : "unknown");
     used = djinn_append_snippet(report, used, info);
     used = djinn_append_note(report, used, info);
+    if (info->left_var_slot != NULL)
+        used = djinn_append_var_history(report, used, info->left_var_name, info->left_var_slot);
+    if (info->right_var_slot != NULL && info->right_var_slot != info->left_var_slot)
+        used = djinn_append_var_history(report, used, info->right_var_name, info->right_var_slot);
     used = djinn_append_stack_trace(report, used);
 
     fputs(report, stderr);
@@ -910,6 +1028,21 @@ void __djinn_runtime_error_message(const char* message)
     memset(&info, 0, sizeof info);
     info.message = message ? message : "unknown";
     __djinn_runtime_error(&info);
+}
+
+void __djinn_uncaught_error(const int tag, const char* message)
+{
+    char* report = __djinn_last_error_report;
+    int used = 0;
+    used = djinn_report_append(report, used, "djinn runtime error: uncaught exception escaped 'main'\n");
+    used = djinn_report_append(report, used, "  error: %s (tag %d)\n",
+                               (message != NULL && message[0] != '\0') ? message : "<no message>",
+                               tag);
+    used = djinn_append_stack_trace(report, used);
+
+    fputs(report, stderr);
+    fflush(stderr);
+    abort();
 }
 
 void __djinn_runtime_init(int num_threads)

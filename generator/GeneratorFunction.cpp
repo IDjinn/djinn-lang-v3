@@ -483,6 +483,14 @@ void Generator::generate_runtime_declarations()
                                "__djinn_runtime_shutdown", *module);
     }
 
+    // void __djinn_uncaught_error(i32 tag, ptr message)
+    if (!module->getFunction("__djinn_uncaught_error"))
+    {
+        auto* uncaughtTy = llvm::FunctionType::get(voidTy, {i32Ty, ptrTy}, false);
+        llvm::Function::Create(uncaughtTy, llvm::Function::ExternalLinkage,
+                               "__djinn_uncaught_error", *module);
+    }
+
     // void __djinn_spawn(ptr handle)
     if (!module->getFunction("__djinn_spawn"))
     {

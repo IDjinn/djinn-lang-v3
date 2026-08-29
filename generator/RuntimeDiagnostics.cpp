@@ -15,11 +15,11 @@ namespace
             builder.getInt32Ty(), builder.getInt32Ty(), builder.getInt32Ty(),
             builder.getInt8Ty(), builder.getInt8Ty(), builder.getInt8Ty(), builder.getInt8Ty(),
             builder.getInt64Ty(), builder.getInt64Ty(),
-        });
+            builder.getPtrTy(), builder.getPtrTy(), builder.getPtrTy(), builder.getPtrTy(),
+                                     });
     }
 
-    llvm::Function* get_or_declare_runtime_fn(llvm::Module* module, llvm::IRBuilder<>& builder,
-                                              const char* name, llvm::FunctionType* type)
+    llvm::Function* get_or_declare_runtime_fn(llvm::Module* module, const char* name, llvm::FunctionType* type)
     {
         if (auto* fn = module->getFunction(name)) return fn;
         return llvm::Function::Create(type, llvm::Function::ExternalLinkage, name, *module);
@@ -34,6 +34,13 @@ namespace
         if (bits >= 64) return value;
         return builder.CreateZExt(value, builder.getInt64Ty());
     }
+
+    llvm::Value* global_or_null(llvm::IRBuilder<>& builder, const std::string& text, const char* prefix)
+    {
+        if (text.empty())
+            return llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(builder.getPtrTy()));
+        return builder.CreateGlobalStringPtr(text, prefix);
+    }
 }
 
 // Emits the trap call (__djinn_runtime_error + unreachable) with a fully
@@ -41,7 +48,7 @@ namespace
 // cold error block; operand values are read here, so there is zero cost on
 // the happy path.
 void Generator::emit_runtime_error_trap(const SourceLocation& loc, const char* message,
-                                        const char op, llvm::Value* left, llvm::Value* right,
+                                        const char op, const TrapOperand& left, const TrapOperand& right,
                                         const bool isSigned)
 {
     auto* trapFn = get_or_declare_runtime_error_fn();
@@ -71,12 +78,12 @@ void Generator::emit_runtime_error_trap(const SourceLocation& loc, const char* m
     storeInt(4, loc.column);
     storeInt(5, loc.length ? loc.length : 1);
 
-    llvm::Value* leftWide = widen_int_operand(*builder, left);
-    llvm::Value* rightWide = widen_int_operand(*builder, right);
+    llvm::Value* leftWide = widen_int_operand(*builder, left.value);
+    llvm::Value* rightWide = widen_int_operand(*builder, right.value);
     if (leftWide)
     {
         storeInt(6, static_cast<uint8_t>(op));
-        storeInt(7, left->getType()->getIntegerBitWidth());
+        storeInt(7, left.value->getType()->getIntegerBitWidth());
         storeInt(8, isSigned ? 1 : 0);
         storeInt(9, 1);
         builder->CreateStore(leftWide, field(10), "err.left");
@@ -92,6 +99,16 @@ void Generator::emit_runtime_error_trap(const SourceLocation& loc, const char* m
         builder->CreateStore(builder->getInt64(0), field(11), "err.right");
     }
 
+    // Variable identity for the assignment-history section of the report
+    storePtr(12, global_or_null(*builder, left.name, "err.left.var"));
+    storePtr(13, left.slot
+                     ? left.slot
+                     : llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(builder->getPtrTy())));
+    storePtr(14, global_or_null(*builder, right.name, "err.right.var"));
+    storePtr(15, right.slot
+                     ? right.slot
+                     : llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(builder->getPtrTy())));
+
     builder->CreateCall(trapFn, {info});
     builder->CreateUnreachable();
 }
@@ -103,7 +120,7 @@ void Generator::emit_frame_push(const std::string& displayName, const SourceLoca
     auto* fnType = llvm::FunctionType::get(builder->getVoidTy(),
                                            {builder->getPtrTy(), builder->getPtrTy(), builder->getInt32Ty()},
                                            false);
-    auto* pushFn = get_or_declare_runtime_fn(module.get(), *builder, "__djinn_frame_push", fnType);
+    auto* pushFn = get_or_declare_runtime_fn(module.get(), "__djinn_frame_push", fnType);
     builder->CreateCall(pushFn, {
         builder->CreateGlobalStringPtr(displayName, "frame.name"),
         builder->CreateGlobalStringPtr(loc.fileId, "frame.file"),
@@ -116,6 +133,42 @@ void Generator::emit_frame_push(const std::string& displayName, const SourceLoca
 void Generator::emit_frame_set_line(const SourceLocation& loc)
 {
     auto* fnType = llvm::FunctionType::get(builder->getVoidTy(), {builder->getInt32Ty()}, false);
-    auto* setLineFn = get_or_declare_runtime_fn(module.get(), *builder, "__djinn_frame_set_line", fnType);
+    auto* setLineFn = get_or_declare_runtime_fn(module.get(), "__djinn_frame_set_line", fnType);
     builder->CreateCall(setLineFn, {builder->getInt32(loc.line)});
+}
+
+// Resolves the operand's variable identity: when the expression is a named
+// local variable, the slot is its alloca and the runtime can show the last
+// assignment sites of that variable in the error report.
+TrapOperand Generator::make_trap_operand(const Expression& expr, llvm::Value* value)
+{
+    TrapOperand operand;
+    operand.value = value;
+    if (const auto* ident = dynamic_cast<const Identifier*>(&expr))
+    {
+        if (auto* alloca = currentScope->lookup_variable(ident->identifier.token_name))
+        {
+            operand.slot = alloca;
+            operand.name = ident->identifier.token_name;
+        }
+    }
+    return operand;
+}
+
+// Records an assignment site so runtime error reports can show how a
+// variable got its current value.
+void Generator::emit_var_track(llvm::Value* slot, const std::string& name, const SourceLocation& loc)
+{
+    if (!slot) return;
+    auto* fnType = llvm::FunctionType::get(
+        builder->getVoidTy(),
+        {builder->getPtrTy(), builder->getPtrTy(), builder->getPtrTy(), builder->getInt32Ty()}, false);
+    auto* trackFn = get_or_declare_runtime_fn(module.get(), "__djinn_var_track", fnType);
+    const std::string lineText = _diagnostics.getLine(loc.fileId, loc.line);
+    builder->CreateCall(trackFn, {
+                            slot,
+                            builder->CreateGlobalStringPtr(name, "var.name"),
+                            builder->CreateGlobalStringPtr(lineText, "var.line"),
+                            builder->getInt32(loc.line),
+                        });
 }
