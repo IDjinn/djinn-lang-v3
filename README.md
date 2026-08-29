@@ -146,22 +146,6 @@ tests/        GoogleTest unit tests (~200+ cases)
 docs/         Fumadocs documentation site
 ```
 
-## Status
-
-- **Phase 1 — Foundation**: complete (generics, FFI, malloc/free, sizeof)
-- **Phase 2 — Structures**: complete (enums, methods, constructors, `array<T>`, slices, string)
-- **Phase 3 — Standard library**: complete (I/O, collections, HashMap)
-- **Phase 4 — Advanced**: ~95% (interfaces, async/await, constexpr/consteval, macros, compile-time `if`,
-  `is` expression, attribute system). Remaining: closures, `[platform(...)]` conditional compilation.
-- **Phase 5 — Libraries**: complete (separate compilation, `.djlib`, RTTI/reflection, `--inspect`)
-
-See `todo.md` for the full roadmap.
-
-## Build
-
-CMake-based build with GoogleTest for unit tests. New `.cpp` files in existing directories are picked up automatically
-via `GLOB_RECURSE`.
-
 ## License
 
 See `LICENSE`.
