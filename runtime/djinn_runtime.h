@@ -206,8 +206,57 @@ typedef struct djinn_continuation
 #define DJINN_MAX_WAITING 256
 
 void __djinn_runtime_init(int num_threads);
-void __djinn_runtime_error(const char* message);
 void __djinn_runtime_shutdown(void);
+
+// ── Runtime error reporting (traps: integer overflow, division by zero) ──
+//
+// The generator bakes a djinn_error_info_t at each trap site and calls
+// __djinn_runtime_error, which renders a compile-time-style report
+// ( --> file:line:col, source snippet, caret underline, note with the
+// operand values) followed by the shadow-stack trace, stores it in
+// __djinn_last_error_report (so JIT hosts can capture it) and aborts.
+
+typedef struct djinn_error_info
+{
+    const char* message;   /* "integer overflow" / "division by zero" */
+    const char* file;      /* source file display name */
+    const char* line_text; /* source snippet; "" when unavailable */
+    uint32_t line;         /* 1-based */
+    uint32_t column;       /* 1-based */
+    uint32_t length;       /* caret span length (>= 1) */
+    uint8_t op;            /* '+','-','*','/','%','n' (negate), 0 = none */
+    uint8_t bits;          /* operand width: 8/16/32/64 */
+    uint8_t is_signed;
+    uint8_t has_operands;  /* 0 => left/right are not meaningful */
+    uint64_t left;         /* raw operand bits */
+    uint64_t right;        /* raw operand bits (unused for 'n') */
+} djinn_error_info_t;
+
+#define DJINN_ERROR_REPORT_SIZE 2048
+extern char __djinn_last_error_report[DJINN_ERROR_REPORT_SIZE];
+
+void __djinn_runtime_error(const djinn_error_info_t* info);
+void __djinn_runtime_error_message(const char* message); /* legacy simple trap */
+
+// ── Shadow call stack for runtime stack traces ──
+//
+// The generator pushes a frame at each (sync) function entry, updates the
+// top frame's line at call sites, and a post-codegen pass inserts a pop
+// before every return. Plain global (not thread-local): reliable for
+// single-threaded sync code; async/coroutine functions do not participate.
+
+#define DJINN_MAX_FRAMES 256
+
+typedef struct djinn_frame
+{
+    const char* function_name;
+    const char* file;
+    uint32_t line;
+} djinn_frame_t;
+
+void __djinn_frame_push(const char* function_name, const char* file, uint32_t line);
+void __djinn_frame_pop(void);
+void __djinn_frame_set_line(uint32_t line);
 
 extern void __djinn_coro_resume(void* handle);
 extern int __djinn_coro_done(void* handle);

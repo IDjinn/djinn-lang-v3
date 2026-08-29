@@ -345,6 +345,7 @@ struct PropertySymbol
 {
     std::string name;
     Type type;
+    SourceLocation location;
     bool hasGetter = false;
     bool hasSetter = false;
 
@@ -354,8 +355,9 @@ struct PropertySymbol
     std::unique_ptr<Block> setterBody;
     std::unique_ptr<Expression> setterExpr;
 
-    PropertySymbol(std::string n, Type t, bool getter, bool setter)
-        : name(std::move(n)), type(std::move(t)), hasGetter(getter), hasSetter(setter)
+    PropertySymbol(std::string n, Type t, bool getter, bool setter, SourceLocation loc = {})
+        : name(std::move(n)), type(std::move(t)), location(std::move(loc)),
+          hasGetter(getter), hasSetter(setter)
     {
     }
 
@@ -478,9 +480,10 @@ struct StructSymbol : Symbol
         return false;
     }
 
-    void addProperty(const std::string& propName, const Type& propType, bool hasGetter, bool hasSetter)
+    void addProperty(const std::string& propName, const Type& propType, bool hasGetter, bool hasSetter,
+                     const SourceLocation& loc = {})
     {
-        properties.push_back(std::make_shared<PropertySymbol>(propName, propType, hasGetter, hasSetter));
+        properties.push_back(std::make_shared<PropertySymbol>(propName, propType, hasGetter, hasSetter, loc));
     }
 
     [[nodiscard]] bool hasProperty(const std::string& memberName) const

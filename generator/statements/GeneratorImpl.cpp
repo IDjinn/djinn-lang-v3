@@ -75,6 +75,8 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
     auto* entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
+    emit_frame_push(struc.name + "." + method.name, method.location);
+
     auto argIt = llvmFunc->arg_begin();
 
     if (!isStatic)

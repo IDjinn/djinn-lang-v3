@@ -65,7 +65,8 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         }
         else
         {
-            structSym->addProperty(prop.name.token_name, *prop.type, prop.hasGetter, prop.hasSetter);
+            structSym->addProperty(prop.name.token_name, *prop.type, prop.hasGetter, prop.hasSetter,
+                                    prop.name.location);
         }
     }
 

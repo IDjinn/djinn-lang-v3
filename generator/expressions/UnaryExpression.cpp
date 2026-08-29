@@ -100,7 +100,7 @@ llvm::Value* Generator::generate_unary_expression(const UnaryExpression& expr)
             }
 
             // For integer runtime values
-            return emit_int_neg_with_overflow(operand, expr.overflowSigned, expr.overflowMode);
+            return emit_int_neg_with_overflow(operand, expr.overflowSigned, expr.overflowMode, expr.location);
         }
 
     case TokenType::BANG:

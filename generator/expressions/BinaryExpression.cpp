@@ -226,7 +226,8 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
     {
         if (expr.overflowMode == OverflowMode::Trapped || expr.overflowMode == OverflowMode::Checked)
         {
-            return emit_int_arith_with_overflow(op, left, right, expr.overflowSigned, expr.overflowMode);
+            return emit_int_arith_with_overflow(op, left, right, expr.overflowSigned, expr.overflowMode,
+                                               expr.location);
         }
         if (expr.overflowMode == OverflowMode::Saturating)
         {
@@ -251,12 +252,12 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
         return builder->CreateMul(left, right, "multmp");
     case TokenType::SLASH:
         if (isFloat) return builder->CreateFDiv(left, right, "divtmp");
-        emit_div_by_zero_check(right);
+        emit_div_by_zero_check(left, right, expr.location);
         if (auto* v = modeArith(expr.op)) return v;
         return builder->CreateSDiv(left, right, "divtmp");
     case TokenType::PERCENT:
         if (isFloat) return builder->CreateFRem(left, right, "modtmp");
-        emit_div_by_zero_check(right);
+        emit_div_by_zero_check(left, right, expr.location);
         if (auto* v = modeArith(expr.op)) return v;
         return builder->CreateSRem(left, right, "modtmp");
 

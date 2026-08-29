@@ -53,6 +53,8 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
+    emit_frame_push(func.name, func.location);
+
     size_t idx = 0;
     for (auto& arg : llvmFunc->args())
     {

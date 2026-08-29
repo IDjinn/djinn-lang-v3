@@ -256,11 +256,13 @@ endif ()
 
 enable_testing()
 
-file(GLOB_RECURSE TEST_SOURCES
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
         tests/*.cpp
 )
 
 add_executable(tests ${TEST_SOURCES})
+
+target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/tests)
 
 target_compile_options(tests PRIVATE ${DJINN_WARNINGS})
 target_link_libraries(tests PRIVATE

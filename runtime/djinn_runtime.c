@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include "logger.h"
 Logger* logger;
 
@@ -651,11 +652,264 @@ static DWORD WINAPI worker_thread(LPVOID arg)
 #endif
 }
 
-void __djinn_runtime_error(const char* message)
+// ---------------------------------------------------------------------------
+// Runtime error reporting: rich traps with source location, operand values
+// and a shadow call-stack trace. Mirrors the compile-time diagnostic style
+// ( --> file:line:col, snippet, caret underline, = note) so both look alike.
+// ---------------------------------------------------------------------------
+
+char __djinn_last_error_report[DJINN_ERROR_REPORT_SIZE];
+
+static struct
 {
-    fprintf(stderr, "djinn runtime error: %s\n", message ? message : "unknown");
+    djinn_frame_t frames[DJINN_MAX_FRAMES];
+    int depth;
+    int overflowed; /* frames were dropped past the cap */
+} djinn_shadow_stack;
+
+void __djinn_frame_push(const char* function_name, const char* file, const uint32_t line)
+{
+    if (djinn_shadow_stack.depth >= DJINN_MAX_FRAMES)
+    {
+        djinn_shadow_stack.overflowed = 1;
+        return;
+    }
+    djinn_frame_t* frame = &djinn_shadow_stack.frames[djinn_shadow_stack.depth++];
+    frame->function_name = function_name;
+    frame->file = file;
+    frame->line = line;
+}
+
+void __djinn_frame_pop(void)
+{
+    if (djinn_shadow_stack.depth > 0)
+        djinn_shadow_stack.depth--;
+}
+
+void __djinn_frame_set_line(const uint32_t line)
+{
+    if (djinn_shadow_stack.depth > 0)
+        djinn_shadow_stack.frames[djinn_shadow_stack.depth - 1].line = line;
+}
+
+static int djinn_report_append(char* buf, int used, const char* fmt, ...)
+{
+    if (used >= DJINN_ERROR_REPORT_SIZE - 1) return used;
+    va_list args;
+    va_start(args, fmt);
+    const int written = vsnprintf(buf + used, (size_t)(DJINN_ERROR_REPORT_SIZE - 1 - used), fmt, args);
+    va_end(args);
+    if (written < 0) return used;
+    const int room = DJINN_ERROR_REPORT_SIZE - 1 - used;
+    return used + (written > room ? room : written);
+}
+
+static void djinn_format_value(const djinn_error_info_t* info, const uint64_t raw, char* out, const size_t size)
+{
+    if (info->is_signed)
+        snprintf(out, size, "%lld", (long long)(int64_t)raw);
+    else
+        snprintf(out, size, "%llu", (unsigned long long)raw);
+}
+
+// Max/min of the operand type, returned as raw two's-complement bits.
+static uint64_t djinn_type_max(const uint8_t bits, const uint8_t is_signed)
+{
+    if (!is_signed) return (bits >= 64) ? UINT64_MAX : (UINT64_C(1) << bits) - 1;
+    return (bits >= 64) ? (uint64_t)INT64_MAX : (UINT64_C(1) << (bits - 1)) - 1;
+}
+
+static uint64_t djinn_type_min(const uint8_t bits)
+{
+    return (bits >= 64) ? (uint64_t)INT64_MIN : UINT64_C(1) << (bits - 1);
+}
+
+static int djinn_value_negative(const djinn_error_info_t* info, const uint64_t raw)
+{
+    return info->is_signed && (int64_t)raw < 0;
+}
+
+// The "= note:" line with the operand values and why they overflow.
+// The computed result is only shown when it is representable in 64-bit math.
+static int djinn_append_note(char* buf, int used, const djinn_error_info_t* info)
+{
+    if (!info->has_operands || info->op == 0 || info->bits == 0) return used;
+
+    char left[32], right[32], type_name[8], bound[32];
+    djinn_format_value(info, info->left, left, sizeof left);
+    djinn_format_value(info, info->right, right, sizeof right);
+    snprintf(type_name, sizeof type_name, "%s%u", info->is_signed ? "i" : "u", (unsigned)info->bits);
+
+    const int wide = info->bits >= 64; /* exact 64-bit results may wrap */
+    const uint8_t op = info->op;
+
+    if (op == 'n')
+    {
+        djinn_format_value(info, djinn_type_max(info->bits, info->is_signed), bound, sizeof bound);
+        return djinn_report_append(buf, used, "   = note: negate %s exceeds %s max (%s)\n",
+                                   left, type_name, bound);
+    }
+
+    if (op == '/' && info->right == 0)
+    {
+        return djinn_report_append(buf, used, "   = note: division by zero: %s / 0\n", left);
+    }
+
+    used = djinn_report_append(buf, used, "   = note: %s %c %s", left, op, right);
+
+    // Result of the overflowing operation, when it fits in 64-bit math.
+    const int neg_left = djinn_value_negative(info, info->left);
+    const int neg_right = djinn_value_negative(info, info->right);
+    uint64_t result = 0;
+    int have_result = 0;
+    if (op == '/' && !wide)
+    {
+        // INT_MIN / -1 is the only division overflow; the quotient is |INT_MIN|
+        result = neg_left ? (~info->left + 1) : info->left;
+        have_result = 1;
+    }
+    else if (op == '+' && !wide)
+    {
+        result = info->left + info->right;
+        have_result = 1;
+    }
+    else if (op == '-' && !wide)
+    {
+        result = info->left - info->right;
+        have_result = 1;
+    }
+    else if (op == '*' && info->left != 0 && info->right != 0
+             && info->left <= UINT64_MAX / info->right) /* fits in u64 */
+    {
+        const uint64_t product = info->left * info->right;
+        if (!info->is_signed || (int64_t)product >= 0 || product == (uint64_t)INT64_MIN)
+        {
+            result = product;
+            have_result = 1;
+        }
+    }
+
+    if (have_result)
+    {
+        char result_text[32];
+        djinn_format_value(info, result, result_text, sizeof result_text);
+        used = djinn_report_append(buf, used, " = %s", result_text);
+    }
+
+    // Which bound was crossed. For signed +: equal signs decide; for -: the
+    // operands' signs; for *: differing signs mean a negative product.
+    const char* direction = NULL;
+    if (info->is_signed)
+    {
+        const int exceeds_max =
+            (op == '+' && !neg_left && !neg_right) ||
+            (op == '-' && !neg_left && neg_right) ||
+            (op == '*' && neg_left == neg_right) ||
+            (op == '/' && neg_left);
+        direction = exceeds_max ? "max" : "min";
+    }
+    else
+    {
+        direction = (op == '-') ? "min" : "max";
+    }
+
+    if (strcmp(direction, "max") == 0)
+        djinn_format_value(info, djinn_type_max(info->bits, info->is_signed), bound, sizeof bound);
+    else
+        snprintf(bound, sizeof bound, "%lld", (long long)(int64_t)djinn_type_min(info->bits));
+
+    used = djinn_report_append(buf, used, " %s %s %s (%s)\n",
+                               strcmp(direction, "max") == 0 ? "exceeds" : "is below",
+                               type_name, direction, bound);
+    return used;
+}
+
+static int djinn_append_snippet(char* buf, int used, const djinn_error_info_t* info)
+{
+    if (info->line == 0 || info->file == NULL) return used;
+
+    char line_num[16];
+    snprintf(line_num, sizeof line_num, "%u", (unsigned)info->line);
+    const size_t gutter = strlen(line_num);
+
+    used = djinn_report_append(buf, used, "  --> %s:%u:%u\n", info->file,
+                               (unsigned)info->line, (unsigned)info->column);
+    used = djinn_report_append(buf, used, " %*s |\n", (int)gutter, "");
+
+    if (info->line_text != NULL && info->line_text[0] != '\0')
+    {
+        // Trim trailing whitespace from the snippet so the caret stays aligned
+        size_t len = strlen(info->line_text);
+        while (len > 0 && (info->line_text[len - 1] == ' '
+                           || info->line_text[len - 1] == '\t'
+                           || info->line_text[len - 1] == '\r'))
+            len--;
+        used = djinn_report_append(buf, used, " %s | %.*s\n", line_num, (int)len, info->line_text);
+
+        const unsigned caret_len = info->length ? info->length : 1;
+        const unsigned offset = info->column > 1 ? info->column - 1 : 0;
+        used = djinn_report_append(buf, used, " %*s | %*s", (int)gutter, "", (int)offset, "");
+        for (unsigned i = 0; i < caret_len && used < DJINN_ERROR_REPORT_SIZE - 2; i++)
+            used = djinn_report_append(buf, used, "^");
+        used = djinn_report_append(buf, used, "\n");
+    }
+
+    return djinn_report_append(buf, used, " %*s |\n", (int)gutter, "");
+}
+
+static int djinn_append_stack_trace(char* buf, int used)
+{
+    if (djinn_shadow_stack.depth == 0) return used;
+
+    used = djinn_report_append(buf, used, "stack trace (most recent call first):\n");
+    for (int i = djinn_shadow_stack.depth - 1; i >= 0; i--)
+    {
+        const djinn_frame_t* frame = &djinn_shadow_stack.frames[i];
+        used = djinn_report_append(buf, used, "  at %s (%s:%u)\n",
+                                   frame->function_name ? frame->function_name : "<unknown>",
+                                   frame->file ? frame->file : "?",
+                                   (unsigned)frame->line);
+    }
+    if (djinn_shadow_stack.overflowed)
+        used = djinn_report_append(buf, used, "  ... (more than %d frames, older frames omitted)\n",
+                                   DJINN_MAX_FRAMES);
+    return used;
+}
+
+void __djinn_runtime_error(const djinn_error_info_t* info)
+{
+    djinn_error_info_t fallback;
+    if (info == NULL)
+    {
+        memset(&fallback, 0, sizeof fallback);
+        fallback.message = "unknown";
+        info = &fallback;
+    }
+
+    // The innermost frame should point at the failing operation, not at the
+    // function definition line.
+    __djinn_frame_set_line(info->line);
+
+    char* report = __djinn_last_error_report;
+    int used = 0;
+    used = djinn_report_append(report, used, "djinn runtime error: %s\n",
+                               info->message ? info->message : "unknown");
+    used = djinn_append_snippet(report, used, info);
+    used = djinn_append_note(report, used, info);
+    used = djinn_append_stack_trace(report, used);
+
+    fputs(report, stderr);
     fflush(stderr);
     abort();
+}
+
+// Legacy simple trap: keeps pre-descriptor callers failing loudly.
+void __djinn_runtime_error_message(const char* message)
+{
+    djinn_error_info_t info;
+    memset(&info, 0, sizeof info);
+    info.message = message ? message : "unknown";
+    __djinn_runtime_error(&info);
 }
 
 void __djinn_runtime_init(int num_threads)

@@ -214,7 +214,7 @@ void Generator::emit_error_propagation_check()
 
 // Division/remission by zero: throws DivisionByZero in throwing functions,
 // traps via __djinn_runtime_error otherwise.
-void Generator::emit_div_by_zero_check(llvm::Value* divisor)
+void Generator::emit_div_by_zero_check(llvm::Value* dividend, llvm::Value* divisor, const SourceLocation& loc)
 {
     ensure_error_globals_declared();
 
@@ -243,17 +243,8 @@ void Generator::emit_div_by_zero_check(llvm::Value* divisor)
     }
     else
     {
-        // Trap with a message so non-throwing code fails loudly instead of UB
-        auto* trapFn = module->getFunction("__djinn_runtime_error");
-        if (!trapFn)
-        {
-            auto* trapType = llvm::FunctionType::get(builder->getVoidTy(), {builder->getPtrTy()}, false);
-            trapFn = llvm::Function::Create(trapType, llvm::Function::ExternalLinkage,
-                                            "__djinn_runtime_error", *module);
-        }
-        auto* msg = builder->CreateGlobalStringPtr("division by zero", "divz_msg");
-        builder->CreateCall(trapFn, {msg});
-        builder->CreateUnreachable();
+        // Trap with a rich report so non-throwing code fails loudly instead of UB
+        emit_runtime_error_trap(loc, "division by zero", '/', dividend, divisor, true);
     }
 
     builder->SetInsertPoint(okBB);

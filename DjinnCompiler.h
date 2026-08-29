@@ -66,6 +66,9 @@ struct CompilerResult
     std::string ir;
     std::vector<Diagnostic> diagnostics{};
     std::string expandedSource;
+    // Full rendered runtime error report (source snippet, caret, operand
+    // values, stack trace) when the program trapped; JIT path only.
+    std::string runtimeErrorReport;
 };
 
 

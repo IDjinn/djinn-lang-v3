@@ -142,7 +142,10 @@ lsp/          Language Server Protocol implementation
 lib/          .djlib library format (writer/reader)
 std/          Standard library (.djinn sources)
 runtime/      C runtime (event loop, thread pool, coroutine wrappers)
-tests/        GoogleTest unit tests (~200+ cases)
+tests/        GoogleTest suite (~640 cases), grouped by language area:
+              arithmetic, types, aggregates, functions, generics,
+              compile_time, control_flow, memory, async, modules,
+              strings, and compiler internals (binder, diagnostics, mangler)
 docs/         Fumadocs documentation site
 ```
 

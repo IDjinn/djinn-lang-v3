@@ -212,6 +212,8 @@ public:
 
     [[nodiscard]] const std::unordered_map<std::string, SourceFile>& getSources() const { return _sources; }
 
+    [[nodiscard]] std::string getLine(const std::string& fileId, uint32_t lineNum) const;
+
     void printToStderr(const std::basic_stacktrace<std::allocator<std::stacktrace_entry>>& stack) const;
 
 private:
@@ -221,8 +223,6 @@ private:
     size_t total_warnings = 0;
 
     static std::vector<size_t> buildLineIndex(const std::string& source);
-
-    [[nodiscard]] std::string getLine(const std::string& fileId, uint32_t lineNum) const;
 
     [[nodiscard]] std::string renderDiagnostic(const Diagnostic& diag) const;
 

@@ -317,7 +317,7 @@ namespace djinn
     }
 
     int executeModule(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                      const int optimizationLevel)
+                      const int optimizationLevel, std::string* outRuntimeErrorReport)
     {
         using namespace llvm;
         using namespace llvm::orc;
@@ -468,6 +468,17 @@ namespace djinn
         // referencing JIT'd code — leak the LLJIT instead of freeing code
         // under their feet.
         jitThread.detach();
+
+        // The runtime rendered its error report into a global buffer before
+        // calling abort(); copy it out for the host (tests) while the LLJIT
+        // is still reachable.
+        if (outRuntimeErrorReport)
+        {
+            if (auto report = jit->lookup("__djinn_last_error_report"))
+                *outRuntimeErrorReport = report->toPtr<const char*>();
+            else
+                consumeError(report.takeError());
+        }
         // True leak (heap, never destroyed): a function-local static would run
         // its destructor at process exit and tear down JIT'd code while the
         // parked thread and orphaned runtime pool threads still reference it.

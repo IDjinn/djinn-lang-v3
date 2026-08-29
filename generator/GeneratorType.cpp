@@ -358,6 +358,8 @@ void Generator::monomorphize_method(const MethodSymbol& method,
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
+    emit_frame_push(mangledStructName + "." + method.name, method.location);
+
     auto argIt = llvmFunc->arg_begin();
     if (!isStatic)
     {

@@ -23,8 +23,10 @@ namespace djinn
     // Runs `main` from the module under LLJIT with the runtime bitcode linked in.
     // Takes ownership of the module and its context. Returns the program exit
     // code; negative on internal JIT failure (caller should treat as an error).
+    // When the program traps, outRuntimeErrorReport (if given) receives the
+    // rendered runtime error report (source snippet, caret, values, stack trace).
     int executeModule(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                      int optimizationLevel);
+                      int optimizationLevel, std::string* outRuntimeErrorReport = nullptr);
 }
 
 #endif //DJINN_JITRUNNER_H

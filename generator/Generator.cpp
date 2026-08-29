@@ -21,6 +21,7 @@
 
 #include "../binder/SymbolTable.h"
 #include "../utils/Logger.h"
+#include "RuntimeDiagnostics.h"
 
 Generator::Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<ScopedSymbolTable>& symbols)
     : _diagnostics(diagnostics),
@@ -556,6 +557,14 @@ void Generator::run_passes(bool skipCoroPasses) const
     MPM.addPass(llvm::createModuleToPostOrderCGSCCPassAdaptor(std::move(CGPM)));
 
     MPM.addPass(llvm::CoroCleanupPass());
+
+    // Shadow-stack unwinding: insert __djinn_frame_pop() before every return
+    // of functions that push a frame (runs after coro lowering so it sees the
+    // final control flow; async functions never push and stay untouched)
+    llvm::FunctionPassManager FPM;
+    FPM.addPass(djinn::ShadowStackPopPass());
+    MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+
     MPM.run(*module, MAM);
 }
 

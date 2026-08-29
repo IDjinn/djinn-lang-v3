@@ -322,15 +322,23 @@ private:
     llvm::Value* generate_error_construction(const FunctionCall& call);
     llvm::Value* generate_interpolated_error_message(const FunctionCall& call);
     void emit_error_propagation_check();
-    void emit_div_by_zero_check(llvm::Value* divisor);
+    void emit_div_by_zero_check(llvm::Value* dividend, llvm::Value* divisor, const SourceLocation& loc);
     void emit_error_throw_with_tag(int32_t tag);
 
     // Integer overflow modes (w/t/c/s suffixes)
     llvm::Function* get_or_declare_runtime_error_fn();
     llvm::Value* emit_int_arith_with_overflow(TokenType op, llvm::Value* left, llvm::Value* right,
-                                              bool isSigned, OverflowMode mode);
+                                              bool isSigned, OverflowMode mode, const SourceLocation& loc);
     llvm::Value* emit_saturating_int_arith(TokenType op, llvm::Value* left, llvm::Value* right, bool isSigned);
-    llvm::Value* emit_int_neg_with_overflow(llvm::Value* value, bool isSigned, OverflowMode mode);
+    llvm::Value* emit_int_neg_with_overflow(llvm::Value* value, bool isSigned, OverflowMode mode,
+                                            const SourceLocation& loc);
+
+    // Runtime diagnostics: rich traps (source location + operand values) and
+    // shadow call-stack frames for runtime stack traces
+    void emit_runtime_error_trap(const SourceLocation& loc, const char* message, char op,
+                                 llvm::Value* left, llvm::Value* right, bool isSigned);
+    void emit_frame_push(const std::string& displayName, const SourceLocation& loc);
+    void emit_frame_set_line(const SourceLocation& loc);
 
     // Contracts (require/ensure)
     std::vector<const ContractClause*> currentContracts_;

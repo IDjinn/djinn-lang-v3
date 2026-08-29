@@ -40,8 +40,26 @@ llvm::Function* Generator::get_or_declare_runtime_error_fn()
 // Trapped: abort via __djinn_runtime_error on overflow.
 // Checked: raise the builtin Overflow error through the error-flag mechanism
 // (the binder guarantees the enclosing function declares 'throws').
+namespace
+{
+    // Descriptor opcode for the runtime error report ('n' = negate)
+    char trapOpCode(const TokenType op)
+    {
+        switch (op)
+        {
+        case TokenType::PLUS: return '+';
+        case TokenType::MINUS: return '-';
+        case TokenType::STAR: return '*';
+        case TokenType::SLASH: return '/';
+        case TokenType::PERCENT: return '%';
+        default: return 0;
+        }
+    }
+}
+
 llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, llvm::Value* left, llvm::Value* right,
-                                                     const bool isSigned, const OverflowMode mode)
+                                                     const bool isSigned, const OverflowMode mode,
+                                                     const SourceLocation& loc)
 {
     auto* ty = left->getType();
 
@@ -83,10 +101,7 @@ llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, llvm::V
     }
     else
     {
-        auto* trapFn = get_or_declare_runtime_error_fn();
-        auto* msg = builder->CreateGlobalStringPtr("integer overflow", "ovf_msg");
-        builder->CreateCall(trapFn, {msg});
-        builder->CreateUnreachable();
+        emit_runtime_error_trap(loc, "integer overflow", trapOpCode(op), left, right, isSigned);
     }
 
     builder->SetInsertPoint(okBB);
@@ -168,7 +183,8 @@ llvm::Value* Generator::emit_saturating_int_arith(const TokenType op, llvm::Valu
 }
 
 // Unary negate: only signed MIN overflows (0 - MIN > MAX)
-llvm::Value* Generator::emit_int_neg_with_overflow(llvm::Value* value, const bool isSigned, const OverflowMode mode)
+llvm::Value* Generator::emit_int_neg_with_overflow(llvm::Value* value, const bool isSigned,
+                                                   const OverflowMode mode, const SourceLocation& loc)
 {
     if (mode == OverflowMode::None || mode == OverflowMode::Wrapped || !isSigned)
     {
@@ -200,10 +216,7 @@ llvm::Value* Generator::emit_int_neg_with_overflow(llvm::Value* value, const boo
     }
     else
     {
-        auto* trapFn = get_or_declare_runtime_error_fn();
-        auto* msg = builder->CreateGlobalStringPtr("integer overflow", "ovf_msg");
-        builder->CreateCall(trapFn, {msg});
-        builder->CreateUnreachable();
+        emit_runtime_error_trap(loc, "integer overflow", 'n', value, nullptr, isSigned);
     }
 
     builder->SetInsertPoint(okBB);

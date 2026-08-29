@@ -329,6 +329,8 @@ void Generator::generate_property(const StructSymbol& struc, const PropertySymbo
         auto* entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
         builder->SetInsertPoint(entry);
 
+        emit_frame_push(struc.name + "." + prop.name + ".get", prop.location);
+
         const auto argIt = llvmFunc->arg_begin();
         argIt->setName("this");
         auto* thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
@@ -378,6 +380,8 @@ void Generator::generate_property(const StructSymbol& struc, const PropertySymbo
 
         auto* entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
         builder->SetInsertPoint(entry);
+
+        emit_frame_push(struc.name + "." + prop.name + ".set", prop.location);
 
         auto argIt = llvmFunc->arg_begin();
         argIt->setName("this");
@@ -512,6 +516,8 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
+
+    emit_frame_push(struc.name + "." + method.name, method.location);
 
     auto argIt = llvmFunc->arg_begin();
 

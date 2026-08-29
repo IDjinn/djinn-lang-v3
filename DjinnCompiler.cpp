@@ -917,6 +917,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
     std::string expandedSourceResult;
 
     bool irVerified = true;
+    std::string runtimeErrorReport;
     auto makeResult = [&](int returnCode, const std::stacktrace& trace)
     {
         if (!options.silentMode && !diagnostics.get_diagnostics().empty())
@@ -929,7 +930,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             .program = userProgram,
             .ir = generatedIr,
             .diagnostics = diagnostics.get_diagnostics(),
-            .expandedSource = expandedSourceResult
+            .expandedSource = expandedSourceResult,
+            .runtimeErrorReport = runtimeErrorReport
         };
     };
 
@@ -1154,7 +1156,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         {
             auto [jitModule, jitContext] = generator.takeModule();
             const auto jitExitCode = djinn::executeModule(std::move(jitModule), std::move(jitContext),
-                                                          options.optimizationLevel);
+                                                          options.optimizationLevel, &runtimeErrorReport);
             if (jitExitCode >= 0)
             {
                 LOG_DEBUG("jit exit code %d", jitExitCode);
