@@ -14,6 +14,13 @@ void Generator::generate_statement(const Statement& stmt)
 
 void Generator::generate_return_statement(const ReturnStatement& stmt)
 {
+    if (inSwitchArmBlock_)
+    {
+        GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                        "'return' is not allowed inside a switch arm block; use 'yield' or 'throw'",
+                        stmt.location);
+    }
+
     // In async functions: store return value in promise and branch to final suspend
     if (inAsyncFunction)
     {
@@ -130,29 +137,59 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
     }
 }
 
-void Generator::generate_yield_statement()
+void Generator::generate_yield_statement(const YieldStatement& stmt)
 {
-    if (!inAsyncFunction)
+    if (!stmt.value)
     {
-        throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "yield só é permitido em funções async");
+        if (!inAsyncFunction)
+        {
+            throw CompileError(DiagnosticCode::UNEXPECTED_TOKEN, "yield só é permitido em funções async");
+        }
+
+        // Intermediate suspend: i1 false (not final)
+        auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
+            module.get(), llvm::Intrinsic::coro_suspend);
+        llvm::Value* suspResult = builder->CreateCall(coroSuspendFn, {
+                                                          llvm::ConstantTokenNone::get(*context),
+                                                          builder->getFalse() // false = intermediate (not final)
+                                                      }, "coro.yield");
+
+        // Switch: 0 = resumed, 1 = destroyed, default = suspend (return to caller)
+        auto* resumeBB = llvm::BasicBlock::Create(*context, "yield.resume", currentFunction);
+        auto* switchInst = builder->CreateSwitch(suspResult, asyncSuspendBB, 2);
+        switchInst->addCase(builder->getInt8(0), resumeBB);
+        switchInst->addCase(builder->getInt8(1), asyncCleanupBB);
+
+        // Continue execution after yield
+        builder->SetInsertPoint(resumeBB);
+        return;
     }
 
-    // Intermediate suspend: i1 false (not final)
-    auto* coroSuspendFn = llvm::Intrinsic::getOrInsertDeclaration(
-        module.get(), llvm::Intrinsic::coro_suspend);
-    llvm::Value* suspResult = builder->CreateCall(coroSuspendFn, {
-                                                      llvm::ConstantTokenNone::get(*context),
-                                                      builder->getFalse() // false = intermediate (not final)
-                                                  }, "coro.yield");
+    if (!inSwitchArmBlock_ || !armYieldBlock_ ||
+        armYieldBlock_->getParent() != builder->GetInsertBlock()->getParent())
+    {
+        GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                        "'yield <value>' is only allowed inside a switch arm block", stmt.location);
+    }
 
-    // Switch: 0 = resumed, 1 = destroyed, default = suspend (return to caller)
-    auto* resumeBB = llvm::BasicBlock::Create(*context, "yield.resume", currentFunction);
-    auto* switchInst = builder->CreateSwitch(suspResult, asyncSuspendBB, 2);
-    switchInst->addCase(builder->getInt8(0), resumeBB);
-    switchInst->addCase(builder->getInt8(1), asyncCleanupBB);
+    auto* value = generate_expression(*stmt.value);
+    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
+    {
+        value = builder->CreateLoad(alloca->getAllocatedType(), alloca, "yield_load");
+    }
 
-    // Continue execution after yield
-    builder->SetInsertPoint(resumeBB);
+    if (!armYieldSlot_)
+    {
+        armYieldSlot_ = builder->CreateAlloca(value->getType(), nullptr, "yield_slot");
+    }
+    else if (armYieldSlot_->getAllocatedType() != value->getType())
+    {
+        GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH, "'yield' values must share one type", stmt.location);
+    }
+
+    builder->CreateStore(value, armYieldSlot_);
+    builder->CreateBr(armYieldBlock_);
+    armDidYield_ = true;
 }
 
 void Generator::generate_spawn_statement(const SpawnStatement& stmt)

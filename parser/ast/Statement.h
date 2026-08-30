@@ -196,12 +196,18 @@ struct ContinueStatement : Statement
 
 struct YieldStatement : Statement
 {
+    std::unique_ptr<Expression> value; // yielded switch arm value ("yield expr;"); null = coroutine suspend
+
     void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
 
     void print(std::ostream& os, const int indent = 0) const override
     {
         writeIndent(os, indent);
         os << "YieldStatement\n";
+        if (value)
+        {
+            value->print(os, indent + 2);
+        }
     }
 };
 

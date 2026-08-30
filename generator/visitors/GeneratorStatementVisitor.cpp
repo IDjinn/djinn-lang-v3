@@ -63,9 +63,9 @@ namespace djinn
         _generator.generate_continue_statement();
     }
 
-    void GeneratorStatementVisitor::visit(const YieldStatement&/*stmt*/)
+    void GeneratorStatementVisitor::visit(const YieldStatement& stmt)
     {
-        _generator.generate_yield_statement();
+        _generator.generate_yield_statement(stmt);
     }
 
     void GeneratorStatementVisitor::visit(const SpawnStatement& stmt)

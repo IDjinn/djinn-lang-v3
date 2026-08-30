@@ -12,11 +12,44 @@ llvm::Value* Generator::generate_expression(const Expression& expr)
     return visitor.result();
 }
 
+namespace
+{
+    bool error_derived_from(const ScopedSymbolTable& symbols, const StructSymbol& derived, const StructSymbol& base)
+    {
+        std::string current = derived.errorBase;
+        while (!current.empty())
+        {
+            if (current == base.name) return true;
+            const auto sym = symbols.lookupStruct(current);
+            if (!sym) return false;
+            current = sym->errorBase;
+        }
+        return false;
+    }
+
+    // Tags an arm of error type `armType` matches: its own tag plus the tags of
+    // every error type deriving from it (catch-style hierarchy matching)
+    std::vector<int32_t> error_arm_matched_tags(const ScopedSymbolTable& symbols, const StructSymbol& armType)
+    {
+        std::vector<int32_t> tags{armType.errorTag};
+        for (const auto& entry : symbols.symbols())
+        {
+            const auto& symbol = entry.second;
+            if (!symbol || !symbol->isStruct()) continue;
+            const auto structSym = std::dynamic_pointer_cast<StructSymbol>(symbol);
+            if (!structSym || !structSym->isErrorType || structSym->errorTag == armType.errorTag) continue;
+            if (error_derived_from(symbols, *structSym, armType))
+                tags.push_back(structSym->errorTag);
+        }
+        return tags;
+    }
+}
+
 // ============================================================================
-// Switch Expression Generation - Pattern Matching on Enums
+// Switch Expression Generation
 // ============================================================================
 //
-// For: switch opt { Value val -> val, Empty -> -1 }
+// For enums: switch opt { Value val -> val, Empty -> -1 }
 //
 // 1. Extract the tag from the enum
 // 2. Switch on the tag
@@ -25,131 +58,377 @@ llvm::Value* Generator::generate_expression(const Expression& expr)
 //    - Evaluates the result expression
 //    - Branches to merge
 // 4. Merge with phi node to collect results
+//
+// For throwing operands: switch division(1, 0) { Result v -> v, Error e -> -1 }
+//
+// 1. Evaluate the operand with propagation suppressed
+// 2. Branch on the error flag
+// 3. Success path: first Result/_ arm, binding the call result (enum operands
+//    keep their variant dispatch, with _ as the catch-all variant)
+// 4. Error path: arms matched in source order by error tag (specific types
+//    match derived errors too; Error matches anything), binding the thrown
+//    error value; an unmatched error propagates or aborts uncaught
 // ============================================================================
 llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
 {
-    // Generate the value being matched
-    llvm::Value* enumValue = generate_expression(*expr.value);
-    if (!enumValue)
+    ensure_error_globals_declared();
+
+    // The operand may be a throwing call whose outcome takes part in the match:
+    // clear the flag and suppress auto-propagation while it evaluates
+    builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 0), errorFlagGlobal, true);
+
+    const bool prevInsideTry = insideTryOperand_;
+    insideTryOperand_ = true;
+    llvm::Value* matchValue = generate_expression(*expr.value);
+    insideTryOperand_ = prevInsideTry;
+
+    if (!matchValue)
     {
         GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Failed to generate switch expression value",
                         expr.value->location);
     }
 
-    // Determine the enum type from the value
-    // The value should be an enum type
-    const llvm::Type* enumType = enumValue->getType();
-    if (!enumType->isStructTy())
+    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(matchValue))
     {
-        GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Switch expression value must be an enum type",
-                        expr.value->location);
+        matchValue = builder->CreateLoad(alloca->getAllocatedType(), alloca, "switch_load");
     }
 
-    // Find the enum definition
-    const std::string enumTypeName = enumType->getStructName().str();
-    const EnumDef* enumDef = currentScope->lookup_enum(enumTypeName);
-    if (!enumDef)
+    auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "switch_err_flag");
+
+    const EnumDef* enumDef = nullptr;
+    if (matchValue->getType()->isStructTy())
     {
-        GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Unknown enum type: " + enumTypeName,
-                        expr.value->location);
+        enumDef = currentScope->lookup_enum(matchValue->getType()->getStructName().str());
     }
 
-    // Extract the tag
-    llvm::Value* tag = extract_enum_tag(enumValue, *enumDef);
+    struct GeneratedArm
+    {
+        llvm::BasicBlock* block;
+        llvm::Value* value;
+        const SwitchArm* arm;
+    };
+    std::vector<GeneratedArm> armResults;
 
-    // Create blocks for each arm and the merge block
-    llvm::Function* func = builder->GetInsertBlock()->getParent();
-    llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(*context, "switch_merge", func);
-    llvm::BasicBlock* defaultBlock = llvm::BasicBlock::Create(*context, "switch_default", func);
+    // Block arms run their statements and end in 'throw' (diverging, no value)
+    // or 'yield expr' (arm value, execution continues at the merge);
+    // they contribute no incoming edge to the merge phi when diverging
+    auto generate_arm_body = [this](const SwitchArm& arm) -> llvm::Value*
+    {
+        if (arm.block)
+        {
+            auto* yieldBB = llvm::BasicBlock::Create(*context, "switch.arm.yield",
+                                                     builder->GetInsertBlock()->getParent());
+            const auto prevYieldBlock = armYieldBlock_;
+            const auto prevYieldSlot = armYieldSlot_;
+            const auto prevDidYield = armDidYield_;
+            const auto prevInArm = inSwitchArmBlock_;
+            armYieldBlock_ = yieldBB;
+            armYieldSlot_ = nullptr;
+            armDidYield_ = false;
+            inSwitchArmBlock_ = true;
 
-    std::vector<std::pair<llvm::BasicBlock*, llvm::Value*>> armResults;
+            generate_block(*arm.block);
 
-    // Create switch instruction
-    llvm::SwitchInst* switchInst = builder->CreateSwitch(tag, defaultBlock, expr.arms.size());
+            auto* yieldSlot = armYieldSlot_;
+            const bool didYield = armDidYield_;
+            armYieldBlock_ = prevYieldBlock;
+            armYieldSlot_ = prevYieldSlot;
+            armDidYield_ = prevDidYield;
+            inSwitchArmBlock_ = prevInArm;
 
-    // Process each arm
+            // Fall-through is only valid where no value is needed: the final
+            // block must be terminated, or already dead (e.g. both paths of
+            // an if/else threw) with the arm value delivered by a yield
+            auto* endBlock = builder->GetInsertBlock();
+            if (!endBlock->getTerminator() && !endBlock->hasNPredecessors(0))
+            {
+                GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                                "Switch arm block must end with 'throw' or 'yield'",
+                                arm.variantName.location);
+            }
+
+            if (didYield)
+            {
+                builder->SetInsertPoint(yieldBB);
+                return builder->CreateLoad(yieldSlot->getAllocatedType(), yieldSlot, "arm_yield_val");
+            }
+
+            yieldBB->eraseFromParent();
+            return nullptr;
+        }
+        return generate_expression(*arm.result);
+    };
+
+    const SwitchArm* okArm = nullptr;       // first Result/_ arm (non-enum success)
+    const SwitchArm* wildcardArm = nullptr; // enum catch-all arm
+    std::vector<const SwitchArm*> errorArms;
+
     for (const auto& arm : expr.arms)
     {
-        // Find the variant
-        const EnumVariantDef* variant = enumDef->getVariant(arm.variantName.token_name);
-        if (!variant)
+        const auto& name = arm.variantName.token_name;
+
+        if (enumDef)
         {
-            GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
-                            "Unknown variant: " + arm.variantName.token_name,
-                            arm.variantName.location);
-        }
-
-        // Create block for this arm
-        llvm::BasicBlock* armBlock = llvm::BasicBlock::Create(
-            *context, "case_" + arm.variantName.token_name, func);
-
-        // Add case to switch
-        llvm::ConstantInt* tagConstant = llvm::ConstantInt::get(
-            static_cast<llvm::IntegerType*>(enumDef->tagType), variant->tag);
-        switchInst->addCase(tagConstant, armBlock);
-
-        // Generate arm body
-        builder->SetInsertPoint(armBlock);
-
-        push_scope();
-
-        // If there's a binding, extract the payload and define the variable
-        if (arm.binding)
-        {
-            size_t variantIdx = 0;
-            for (size_t i = 0; i < enumDef->variants.size(); ++i)
+            if (name == "_")
             {
-                if (enumDef->variants[i].name.token_name == arm.variantName.token_name)
+                if (arm.binding)
                 {
-                    variantIdx = i;
-                    break;
+                    GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Wildcard arm cannot bind a value",
+                                    arm.variantName.location);
+                }
+                wildcardArm = &arm;
+            }
+            else if (enumDef->getVariant(name))
+            {
+                continue;
+            }
+            else if (name == "Error" || resolve_error_struct(name))
+            {
+                errorArms.push_back(&arm);
+            }
+            else
+            {
+                GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Unknown variant: " + name,
+                                arm.variantName.location);
+            }
+        }
+        else
+        {
+            if (name == "Result" || name == "_")
+            {
+                if (!okArm) okArm = &arm;
+            }
+            else if (name == "Error" || resolve_error_struct(name))
+            {
+                errorArms.push_back(&arm);
+            }
+            else
+            {
+                GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Unknown error type in switch arm: " + name,
+                                arm.variantName.location);
+            }
+        }
+    }
+
+    auto* func = builder->GetInsertBlock()->getParent();
+    auto* mergeBlock = llvm::BasicBlock::Create(*context, "switch_merge", func);
+    auto* okBB = llvm::BasicBlock::Create(*context, "switch.ok", func);
+    auto* errBB = llvm::BasicBlock::Create(*context, "switch.err", func);
+
+    builder->CreateCondBr(errorFlag, errBB, okBB);
+
+    // ---- Success path ----
+    builder->SetInsertPoint(okBB);
+
+    if (enumDef)
+    {
+        llvm::Value* tag = extract_enum_tag(matchValue, *enumDef);
+
+        auto* defaultBlock = llvm::BasicBlock::Create(*context, "switch_default", func);
+        llvm::SwitchInst* switchInst = builder->CreateSwitch(tag, defaultBlock, expr.arms.size());
+
+        for (const auto& arm : expr.arms)
+        {
+            const auto& name = arm.variantName.token_name;
+            if (name == "_" || !enumDef->getVariant(name)) continue;
+
+            const EnumVariantDef* variant = enumDef->getVariant(name);
+
+            auto* armBlock = llvm::BasicBlock::Create(*context, "case_" + name, func);
+            switchInst->addCase(llvm::ConstantInt::get(
+                static_cast<llvm::IntegerType*>(enumDef->tagType), variant->tag), armBlock);
+
+            builder->SetInsertPoint(armBlock);
+            push_scope();
+
+            if (arm.binding)
+            {
+                size_t variantIdx = 0;
+                for (size_t i = 0; i < enumDef->variants.size(); ++i)
+                {
+                    if (enumDef->variants[i].name.token_name == name)
+                    {
+                        variantIdx = i;
+                        break;
+                    }
+                }
+
+                llvm::Value* payload = extract_enum_payload(matchValue, *enumDef, variantIdx);
+                if (payload)
+                {
+                    auto* bindingAlloca = builder->CreateAlloca(payload->getType(), nullptr,
+                                                                arm.binding->token_name);
+                    builder->CreateStore(payload, bindingAlloca);
+                    currentScope->define_variable(arm.binding->token_name, bindingAlloca);
                 }
             }
 
-            llvm::Value* payload = extract_enum_payload(enumValue, *enumDef, variantIdx);
-            if (payload)
+            auto* result = generate_arm_body(arm);
+            pop_scope();
+            if (result)
             {
-                // Create alloca for the binding
-                llvm::AllocaInst* bindingAlloca = builder->CreateAlloca(
-                    payload->getType(), nullptr, arm.binding->token_name);
-                builder->CreateStore(payload, bindingAlloca);
-                currentScope->define_variable(arm.binding->token_name, bindingAlloca);
+                armResults.push_back({builder->GetInsertBlock(), result, &arm});
+                builder->CreateBr(mergeBlock);
             }
         }
 
-        // Generate the result expression
-        llvm::Value* result = generate_expression(*arm.result);
+        builder->SetInsertPoint(defaultBlock);
+        if (wildcardArm)
+        {
+            push_scope();
+            auto* result = generate_arm_body(*wildcardArm);
+            pop_scope();
+            if (result)
+            {
+                armResults.push_back({builder->GetInsertBlock(), result, wildcardArm});
+                builder->CreateBr(mergeBlock);
+            }
+        }
+        else
+        {
+            builder->CreateUnreachable();
+        }
+    }
+    else
+    {
+        if (!okArm)
+        {
+            GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                            "Switch over a non-enum value requires a 'Result' or '_' arm", expr.location);
+        }
 
+        push_scope();
+        if (okArm->binding && !matchValue->getType()->isVoidTy())
+        {
+            auto* bindingAlloca = builder->CreateAlloca(matchValue->getType(), nullptr,
+                                                        okArm->binding->token_name);
+            builder->CreateStore(matchValue, bindingAlloca);
+            currentScope->define_variable(okArm->binding->token_name, bindingAlloca);
+        }
+        auto* result = generate_arm_body(*okArm);
         pop_scope();
-
-        // Store result and current block (for phi)
-        llvm::BasicBlock* currentBlock = builder->GetInsertBlock();
-        armResults.emplace_back(currentBlock, result);
-
-        // Branch to merge
-        builder->CreateBr(mergeBlock);
+        if (result)
+        {
+            armResults.push_back({builder->GetInsertBlock(), result, okArm});
+            builder->CreateBr(mergeBlock);
+        }
     }
 
-    // Generate default block (unreachable — all variants should be covered)
-    builder->SetInsertPoint(defaultBlock);
-    builder->CreateUnreachable();
+    // ---- Error path ----
+    builder->SetInsertPoint(errBB);
+    auto* thrownTag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "switch_err_tag");
 
-    // Generate merge block with phi
+    bool caughtAll = false;
+    for (size_t i = 0; i < errorArms.size() && !caughtAll; ++i)
+    {
+        const SwitchArm* arm = errorArms[i];
+        auto* armBlock = llvm::BasicBlock::Create(*context, "switch.catch." + arm->variantName.token_name, func);
+        const auto errSym = resolve_error_struct(arm->variantName.token_name);
+
+        llvm::BasicBlock* continueBlock = nullptr;
+        if (errSym)
+        {
+            continueBlock = llvm::BasicBlock::Create(*context, "switch.catch.next", func);
+            llvm::Value* matched = nullptr;
+            for (const int32_t tag : error_arm_matched_tags(*symbols, *errSym))
+            {
+                auto* cmp = builder->CreateICmpEQ(thrownTag, builder->getInt32(tag), "switch_tag_cmp");
+                matched = matched ? builder->CreateOr(matched, cmp) : cmp;
+            }
+            builder->CreateCondBr(matched, armBlock, continueBlock);
+        }
+        else
+        {
+            if (i + 1 < errorArms.size())
+            {
+                GENERATOR_WARN(DiagnosticCode::SWITCH_ARM_UNREACHABLE,
+                               "switch arms after 'Error' can never match", arm->variantName.location);
+            }
+            builder->CreateBr(armBlock);
+            caughtAll = true;
+        }
+
+        builder->SetInsertPoint(armBlock);
+        builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 0), errorFlagGlobal, true);
+
+        push_scope();
+        if (arm->binding)
+        {
+            auto* errType = djinn_error_value_type(*context, *builder);
+            auto* errAlloca = builder->CreateAlloca(errType, nullptr, arm->binding->token_name);
+            auto* nameVal = builder->CreateLoad(builder->getPtrTy(), errorNameGlobal, true, "switch_err_type");
+            auto* msgVal = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "switch_err_msg");
+            builder->CreateStore(thrownTag, builder->CreateStructGEP(errType, errAlloca, 0, "bind_tag_ptr"));
+            builder->CreateStore(msgVal, builder->CreateStructGEP(errType, errAlloca, 1, "bind_msg_ptr"));
+            builder->CreateStore(nameVal, builder->CreateStructGEP(errType, errAlloca, 2, "bind_type_ptr"));
+            currentScope->define_variable(arm->binding->token_name, errAlloca);
+        }
+        auto* result = generate_arm_body(*arm);
+        pop_scope();
+        if (result)
+        {
+            armResults.push_back({builder->GetInsertBlock(), result, arm});
+            builder->CreateBr(mergeBlock);
+        }
+
+        if (continueBlock)
+        {
+            builder->SetInsertPoint(continueBlock);
+        }
+    }
+
+    // No error arm matched: propagate in throwing functions, abort uncaught otherwise
+    if (!caughtAll)
+    {
+        if (currentFunctionThrows)
+        {
+            store_error_origin(expr.location);
+            emit_all_scope_cleanup();
+            llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
+            if (returnType->isVoidTy())
+            {
+                builder->CreateRetVoid();
+            }
+            else
+            {
+                builder->CreateRet(get_default_value(returnType));
+            }
+        }
+        else
+        {
+            emit_uncaught_error_trap();
+        }
+    }
+
+    // ---- Merge ----
     builder->SetInsertPoint(mergeBlock);
 
     if (armResults.empty())
     {
-        GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Switch expression must have at least one arm",
-                        expr.location);
+        if (expr.arms.empty())
+        {
+            GENERATOR_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "Switch expression must have at least one arm",
+                            expr.location);
+        }
+        // Every arm diverged (throw): the merge point is unreachable
+        builder->CreateUnreachable();
+        return nullptr;
     }
 
-    // Create phi node to merge results
-    llvm::Type* resultType = armResults[0].second->getType();
-    llvm::PHINode* phi = builder->CreatePHI(resultType, armResults.size(), "switch_result");
-
-    for (const auto& [block, value] : armResults)
+    llvm::Type* resultType = armResults[0].value->getType();
+    for (const auto& generated : armResults)
     {
-        phi->addIncoming(value, block);
+        if (generated.value->getType() != resultType)
+        {
+            GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                            "Switch arms must yield the same type", generated.arm->result->location);
+        }
+    }
+
+    llvm::PHINode* phi = builder->CreatePHI(resultType, armResults.size(), "switch_result");
+    for (const auto& generated : armResults)
+    {
+        phi->addIncoming(generated.value, generated.block);
     }
 
     return phi;

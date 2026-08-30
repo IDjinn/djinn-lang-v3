@@ -418,3 +418,30 @@ TEST(Enum, PatternMatchInFunction)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 149);
 }
+
+TEST(Enum, PatternMatchWildcardArm)
+{
+    // _ matches any variant without binding a payload
+    const auto source = R"(
+        enum optional<T> {
+            Empty(),
+            Value(T)
+        }
+
+        i32 main() {
+            auto opt = optional<i32>::Empty();
+
+            i32 result = switch opt {
+                Value val -> val,
+                _ -> -1
+            };
+
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(
+        source, {.optimizationLevel = 0, .generateBinary = true, .includeStd = false});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
+}

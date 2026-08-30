@@ -56,6 +56,9 @@ enum class RuntimeDiagnostics
     Full
 };
 
+// Layout of error values: { tag: i32, message: ptr, type_name: ptr }
+llvm::StructType* djinn_error_value_type(llvm::LLVMContext& context, llvm::IRBuilder<>& builder);
+
 class Generator
 {
     friend class djinn::GeneratorExpressionVisitor;
@@ -293,7 +296,15 @@ private:
 
     void generate_continue_statement();
 
-    void generate_yield_statement();
+    void generate_yield_statement(const YieldStatement& stmt);
+
+    // Switch arm block yield context ("yield expr;" inside "-> { ... }"):
+    // values are stored to the slot and each yield branches to the block,
+    // which becomes the arm's contribution to the switch merge
+    bool inSwitchArmBlock_ = false;
+    llvm::BasicBlock* armYieldBlock_ = nullptr;
+    llvm::AllocaInst* armYieldSlot_ = nullptr;
+    bool armDidYield_ = false;
 
     // RAII cleanup
     llvm::Function* find_destroy_method(llvm::AllocaInst* alloca);
@@ -348,6 +359,7 @@ private:
     llvm::Value* generate_interpolated_error_message(const FunctionCall& call);
     void emit_error_propagation_check(const SourceLocation& loc);
     void emit_uncaught_error_check();
+    void emit_uncaught_error_trap();
     void emit_div_by_zero_check(const TrapOperand& dividend, const TrapOperand& divisor, const SourceLocation& loc);
     void emit_error_throw_with_tag(int32_t tag, const SourceLocation& loc);
     void store_error_origin(const SourceLocation& loc);

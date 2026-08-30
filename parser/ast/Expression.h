@@ -16,6 +16,8 @@
 #include "../../lexer/TokenType.h"
 #include "../../visitor/ExpressionVisitor.h"
 
+struct Block;
+
 constexpr std::string tokenTypeToString(const TokenType type)
 {
     switch (type)
@@ -777,18 +779,25 @@ struct IndexAssignment : Expression
     }
 };
 
-// Pattern matching switch arm: VariantName binding -> result_expr
+// Pattern matching switch arm: VariantName binding -> result_expr | block
 struct SwitchArm : Location
 {
     SourceIdentifier variantName; // The variant to match (e.g., "Value", "Empty")
     std::optional<SourceIdentifier> binding; // Optional binding name (e.g., "val" in "Value val")
     std::unique_ptr<Expression> result; // The result expression
+    std::unique_ptr<Block> block; // Block body: statements that must diverge (return/throw)
 
     SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Expression> res)
         : variantName(std::move(variant)), binding(std::move(bind)), result(std::move(res))
     {
         location = variant.location;
     }
+
+    SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Block> blk);
+
+    SwitchArm(SwitchArm&& other) noexcept;
+    SwitchArm& operator=(SwitchArm&& other) noexcept;
+    ~SwitchArm() override;
 
     void print(std::ostream& os, const int indent = 0) const override
     {
@@ -799,7 +808,15 @@ struct SwitchArm : Location
             os << " " << binding->token_name;
         }
         os << " ->\n";
-        result->print(os, indent + 2);
+        if (result)
+        {
+            result->print(os, indent + 2);
+        }
+        else
+        {
+            writeIndent(os, indent + 2);
+            os << "<block>\n";
+        }
         os << ")";
     }
 };

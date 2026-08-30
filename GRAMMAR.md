@@ -96,8 +96,10 @@ with layout `{ tag: i32, message: str, type_name: str }`.
 
 - `throws(T...)` declares what a function may throw; bare `throws` = anything.
 - `throw ErrorType("message")` sets the error state and returns the default value.
-- `try expr ?: fallback` catches a failed operand and yields the fallback; a bare `try expr` propagates (allowed inside
-  a `throws` caller).
+- `try expr ?: fallback` catches a failed operand and yields the fallback; a bare `try expr` propagates (allowed inside a
+  `throws` caller).
+- A `switch` over a throwing call matches its outcome (`Result`/`_` for
+  success, `Error`/error types for failures) — see Switch expressions.
 - Calling a throwing function without `try` is an error outside `throws`
   functions; inside them the error propagates automatically.
 - An exception escaping `main() throws` is reported at runtime (`Type: message`,
@@ -309,6 +311,7 @@ primary              = INTEGER_LITERAL
                      | "(" expression ")"
                      | brace_initializer
                      | type_expression
+                     | switch_expression
                      | variable_decl ;
 
 variable_decl        = type IDENTIFIER [ "=" expression ] ;
@@ -317,8 +320,54 @@ init_element         = [ "." IDENTIFIER "=" ] expression ;
 
 type_expression      = IDENTIFIER [ generic_args ] "::" IDENTIFIER "(" [ arg_list ] ")" ;
 
+switch_expression     = "switch" expression "{" { switch_arm [ "," ] } "}" ;
+switch_arm            = IDENTIFIER [ IDENTIFIER ] "->" arm_body ;
+arm_body              = expression | block ;
+
 arg_list             = expression { "," expression } ;
 ```
+
+(* Switch expressions pattern-match on two kinds of operands:
+
+**Enum values** — arms name variants; an optional binding extracts the payload:
+
+```
+i32 result = switch opt {
+    Value val -> val,
+    Empty -> -1
+};
+```
+
+`_` is a catch-all arm matching any variant (no binding). All arms must yield
+the same type.
+
+**Throwing calls** — the arms match the call's outcome, `try`-style:
+
+```
+i32 val = switch division(1, 0) {
+    _ v -> v,
+    DivisionByZeroException divByZero -> -1
+};
+```
+
+- `Result [v]` or `_ [v]` match success; the binding receives the call's
+  return value (first success arm wins).
+- `Error [e]` matches any error; the binding receives the thrown error value
+  (`{ tag, message, type_name }`).
+- An error type name (`DivisionByZeroException e`) matches that type and every
+  type deriving from it.
+- Error arms are tried in source order; if none matches, the error propagates
+  inside a `throws` function or aborts with the uncaught-exception report.
+- For enum-returning throwing calls, variant names win over the outcome arms,
+  so `switch makeResult() { Ok v -> v, Error e -> ... }` still matches variants.
+
+Any arm body may instead be a block of statements (`Error e -> { ... }`). Inside
+an arm block, `yield expr;` produces the arm's value and execution continues
+after the switch, and `throw` exits the enclosing function; every path through
+the block must end in one of them. `return` is not allowed inside an arm block —
+it would bypass the switch value and confuse the flow, so use `yield` (arm
+value) or `throw` (propagate) instead. (A bare `yield;` is the coroutine
+suspend and is unrelated to switch arms.) *)
 
 ### Literals
 

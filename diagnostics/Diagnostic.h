@@ -93,6 +93,7 @@ namespace DiagnosticCode
     constexpr uint32_t TRY_WITHOUT_FALLBACK = 9005;
     constexpr uint32_t CONSTEXPR_CALL_THROWS = 9006;
     constexpr uint32_t CONTRACT_VIOLATION_COMPILE_TIME = 9007;
+    constexpr uint32_t SWITCH_ARM_UNREACHABLE = 9008;
 }
 
 struct SourceLocation

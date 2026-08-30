@@ -459,3 +459,440 @@ TEST(ErrorHandling, ConstexprCallThatSucceedsHasNoDiagnostics)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 5);
 }
+
+// ============================================================================
+// Switch on error outcome (switch over a throwing call)
+// ============================================================================
+
+TEST(ErrorHandling, SwitchOnThrowingCallSuccessArm)
+{
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 result = switch division(10, 2) {
+                Result v -> v,
+                Error e -> -1
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallWildcardSuccess)
+{
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 result = switch division(10, 2) {
+                _ v -> v,
+                DivisionByZeroException divByZero -> -1
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallSpecificErrorArm)
+{
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 result = switch division(1, 0) {
+                _ v -> v,
+                DivisionByZeroException divByZero -> -1
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallGenericErrorArm)
+{
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 result = switch division(1, 0) {
+                Result v -> v,
+                Error e -> 42
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallSpecificArmBeforeErrorArm)
+{
+    // Source order: the specific arm wins over the catch-all
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 result = switch division(1, 0) {
+                Result v -> v,
+                DivisionByZeroException divByZero -> -1,
+                Error e -> 42
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallDerivedErrorMatchesBaseArm)
+{
+    // AliasError derives from BaseError: the BaseError arm must catch it
+    const auto source = R"(
+        struct BaseError : Exception;
+        struct AliasError : BaseError;
+
+        i32 fail() throws(AliasError) {
+            throw AliasError("alias failure");
+        }
+
+        i32 main() {
+            i32 result = switch fail() {
+                Result v -> v,
+                BaseError e -> -7
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-7));
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallNoArmMatchesPropagates)
+{
+    // Unlisted error type: propagates out of the switch, main catches with try
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+        struct OtherError : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 fail() throws(OtherError) {
+            throw OtherError("other failure");
+        }
+
+        i32 middle() throws {
+            i32 result = switch fail() {
+                Result v -> v,
+                DivisionByZeroException e -> -1
+            };
+            return result;
+        }
+
+        i32 main() {
+            i32 result = try middle() ?: 9;
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 9);
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallUnhandledAbortsOutsideThrows)
+{
+    // No arm matches in a non-throwing function: uncaught report + abort
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+        struct OtherError : Exception;
+
+        i32 fail() throws(OtherError) {
+            throw OtherError("other failure");
+        }
+
+        i32 main() {
+            i32 result = switch fail() {
+                Result v -> v,
+                DivisionByZeroException e -> -1
+            };
+            return result;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_NE(result.returnCode, 0);
+}
+
+TEST(ErrorHandling, SwitchOnConstexprThrowingCallTakesErrorArm)
+{
+    // Playground shape: constant args that provably throw stay silent because
+    // the switch handles the outcome
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        constexpr i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (unlikely(divisor == 0)) {
+                throw DivisionByZeroException("Division {value}/0 is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 val = switch division(1, 0) {
+                _ v -> v,
+                DivisionByZeroException divByZero -> -1
+            };
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(-1));
+}
+
+TEST(ErrorHandling, SwitchArmsTypeMismatchDiagnostic)
+{
+    // The error binding is an error value, not an i32: yielding it from one
+    // arm against i32 from the other must not compile
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() {
+            i32 val = switch division(1, 0) {
+                Result v -> v,
+                Error e -> e
+            };
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {});
+    EXPECT_GE(result.diagnostics.size(), 1);
+}
+
+TEST(ErrorHandling, SwitchBlockArmReturnDiagnostic)
+{
+    // 'return' inside an arm block would bypass the switch value and
+    // confuse the flow; arms must end in 'yield' or 'throw' instead
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 val = switch division(1, 0) {
+                Result v -> v,
+                Error e -> {
+                    return -1;
+                }
+            };
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {});
+    EXPECT_GE(result.diagnostics.size(), 1);
+}
+
+TEST(ErrorHandling, SwitchOnThrowingCallBlockArmSuccessContinues)
+{
+    // On success the block arm is skipped and the value flows to the merge
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 val = switch division(10, 2) {
+                Result v -> v,
+                Error e -> {
+                    i32 code = 4;
+                    yield 0 - code;
+                }
+            };
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 5);
+}
+
+TEST(ErrorHandling, SwitchBlockArmWithoutDivergenceDiagnostic)
+{
+    // A block arm that falls through has no value to feed the merge
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 val = switch division(1, 0) {
+                Result v -> v,
+                Error e -> {
+                    i32 code = 1;
+                }
+            };
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {});
+    EXPECT_GE(result.diagnostics.size(), 1);
+}
+
+TEST(ErrorHandling, SwitchBlockArmYieldContinuesAfterSwitch)
+{
+    // yield produces the arm value and execution continues after the switch
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 val = switch division(1, 0) {
+                Result v -> v,
+                Error e -> {
+                    yield 41;
+                }
+            };
+            return val + 1;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(ErrorHandling, SwitchBlockArmYieldAfterStatements)
+{
+    // Statements before the yield run; the binding is usable in the block
+    const auto source = R"(
+        struct DivisionByZeroException : Exception;
+
+        i32 division(i32 value, i32 divisor) throws(DivisionByZeroException) {
+            if (divisor == 0) {
+                throw DivisionByZeroException("Division by zero is not allowed");
+            }
+            return value / divisor;
+        }
+
+        i32 main() throws {
+            i32 val = switch division(1, 0) {
+                Result v -> v,
+                Error e -> {
+                    i32 code = 40;
+                    yield code + 2;
+                }
+            };
+            return val;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 42);
+}
+
+TEST(ErrorHandling, YieldWithValueOutsideSwitchArmDiagnostic)
+{
+    const auto source = R"(
+        i32 main() {
+            yield 1;
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {});
+    EXPECT_GE(result.diagnostics.size(), 1);
+}

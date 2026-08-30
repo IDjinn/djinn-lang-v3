@@ -269,9 +269,9 @@ void Generator::emit_error_propagation_check(const SourceLocation& loc)
     builder->SetInsertPoint(contBB);
 }
 
-// After user main returns: an error flag still set means an exception
-// escaped main() throws — report it and abort instead of exiting silently.
-void Generator::emit_uncaught_error_check()
+// Reports the error currently held in the error globals and aborts: loads
+// tag/type/message/origin and tail-calls __djinn_uncaught_error (noreturn).
+void Generator::emit_uncaught_error_trap()
 {
     ensure_error_globals_declared();
 
@@ -288,6 +288,22 @@ void Generator::emit_uncaught_error_check()
                                             "__djinn_uncaught_error", *module);
     }
 
+    auto* tag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "uncaught_tag");
+    auto* name = builder->CreateLoad(builder->getPtrTy(), errorNameGlobal, true, "uncaught_type");
+    auto* payload = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "uncaught_msg");
+    auto* originFile = builder->CreateLoad(builder->getPtrTy(), errorOriginFileGlobal, true, "uncaught_file");
+    auto* originLine = builder->CreateLoad(builder->getInt32Ty(), errorOriginLineGlobal, true, "uncaught_line");
+    auto* originCol = builder->CreateLoad(builder->getInt32Ty(), errorOriginColumnGlobal, true, "uncaught_col");
+    builder->CreateCall(uncaughtFn, {tag, name, payload, originFile, originLine, originCol});
+    builder->CreateUnreachable();
+}
+
+// After user main returns: an error flag still set means an exception
+// escaped main() throws — report it and abort instead of exiting silently.
+void Generator::emit_uncaught_error_check()
+{
+    ensure_error_globals_declared();
+
     auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "uncaught_flag");
 
     auto* llvmFunc = builder->GetInsertBlock()->getParent();
@@ -297,14 +313,7 @@ void Generator::emit_uncaught_error_check()
     builder->CreateCondBr(errorFlag, errBB, okBB);
 
     builder->SetInsertPoint(errBB);
-    auto* tag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "uncaught_tag");
-    auto* name = builder->CreateLoad(builder->getPtrTy(), errorNameGlobal, true, "uncaught_type");
-    auto* payload = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "uncaught_msg");
-    auto* originFile = builder->CreateLoad(builder->getPtrTy(), errorOriginFileGlobal, true, "uncaught_file");
-    auto* originLine = builder->CreateLoad(builder->getInt32Ty(), errorOriginLineGlobal, true, "uncaught_line");
-    auto* originCol = builder->CreateLoad(builder->getInt32Ty(), errorOriginColumnGlobal, true, "uncaught_col");
-    builder->CreateCall(uncaughtFn, {tag, name, payload, originFile, originLine, originCol});
-    builder->CreateUnreachable();
+    emit_uncaught_error_trap();
 
     builder->SetInsertPoint(okBB);
 }

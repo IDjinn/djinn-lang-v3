@@ -50,6 +50,37 @@ Parser::Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics) : token
 {
 }
 
+SwitchArm::SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Block> blk)
+    : variantName(std::move(variant)), binding(std::move(bind)), block(std::move(blk))
+{
+    location = variantName.location;
+}
+
+SwitchArm::SwitchArm(SwitchArm&& other) noexcept
+    : Location(other),
+      variantName(std::move(other.variantName)),
+      binding(std::move(other.binding)),
+      result(std::move(other.result)),
+      block(std::move(other.block))
+{
+    location = other.location;
+}
+
+SwitchArm& SwitchArm::operator=(SwitchArm&& other) noexcept
+{
+    if (this != &other)
+    {
+        variantName = std::move(other.variantName);
+        binding = std::move(other.binding);
+        result = std::move(other.result);
+        block = std::move(other.block);
+        location = other.location;
+    }
+    return *this;
+}
+
+SwitchArm::~SwitchArm() = default;
+
 void Parser::registerKnownType(const std::string& name)
 {
     currentScope->define_struct(name, Type::struct_type(name));
@@ -1457,8 +1488,15 @@ std::unique_ptr<Statement> Parser::parse_statement()
 
     if (match(TokenType::YIELD))
     {
+        const auto& yieldToken = previous();
+        auto stmt = std::make_unique<YieldStatement>();
+        stmt->location = SourceLocation(yieldToken.position, yieldToken.value.size());
+        if (!check(TokenType::SEMICOLON))
+        {
+            stmt->value = parse_expression();
+        }
         expect("Esperado ';' após yield", TokenType::SEMICOLON);
-        return std::make_unique<YieldStatement>();
+        return stmt;
     }
 
     if (match(TokenType::THROW))
@@ -2741,10 +2779,17 @@ std::unique_ptr<Expression> Parser::parse_switch_expression()
         // Expect ->
         expect("Esperado '->' após padrão", TokenType::THIN_ARROW);
 
-        // Parse result expression
-        auto result = parse_expression();
-
-        arms.emplace_back(std::move(variantName), std::move(binding), std::move(result));
+        // Parse result expression or block body
+        if (check(TokenType::LBRACE))
+        {
+            auto resultBlock = parse_block();
+            arms.emplace_back(std::move(variantName), std::move(binding), std::move(resultBlock));
+        }
+        else
+        {
+            auto result = parse_expression();
+            arms.emplace_back(std::move(variantName), std::move(binding), std::move(result));
+        }
 
         // Optional comma between arms
         if (!check(TokenType::RBRACE))

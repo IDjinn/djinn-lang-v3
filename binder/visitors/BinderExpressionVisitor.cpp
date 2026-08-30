@@ -93,8 +93,22 @@ namespace djinn
 
     void BinderExpressionVisitor::visit(const SwitchExpression& expr)
     {
-        // SwitchExpression binding not yet implemented in binder
-        _result = nullptr;
+        // The operand may be a throwing call whose outcome the arms handle:
+        // bind it under the try guard so the call counts as checked
+        const bool prevInsideTry = _binder.insideTryExpression_;
+        const bool prevSawThrowing = _binder.tryOperandSawThrowingCall_;
+        _binder.insideTryExpression_ = true;
+        _binder.tryOperandSawThrowingCall_ = false;
+
+        auto operandSym = _binder.bindExpression(*expr.value);
+
+        _binder.insideTryExpression_ = prevInsideTry;
+        const bool sawThrowing = _binder.tryOperandSawThrowingCall_;
+        _binder.tryOperandSawThrowingCall_ = prevSawThrowing;
+
+        // Error-outcome switches yield the operand's success type; enum
+        // switches stay untyped (arm bindings only exist at codegen scope)
+        _result = sawThrowing ? operandSym : nullptr;
     }
 
     void BinderExpressionVisitor::visit(const VariadicForward& expr)
