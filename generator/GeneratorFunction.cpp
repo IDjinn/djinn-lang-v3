@@ -69,7 +69,9 @@ void Generator::generate_function_body(const FunctionSymbol& func)
         if (paramType.kind == TypeKind::INTEGER)
         {
             currentScope->set_variable_signed(paramName, paramType.sign);
+            currentScope->set_variable_non_zero(paramName, paramType.nonZero);
         }
+        emit_non_zero_param_check(paramName, paramType);
         idx++;
     }
 
@@ -281,7 +283,10 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
         if (paramType.kind == TypeKind::INTEGER)
         {
             currentScope->set_variable_signed(paramName, paramType.sign);
+            currentScope->set_variable_non_zero(paramName, paramType.nonZero);
         }
+        // No non-zero entry check here: contracts are not emitted in async
+        // bodies yet (same as explicit require clauses)
         idx++;
     }
 
@@ -483,10 +488,11 @@ void Generator::generate_runtime_declarations()
                                "__djinn_runtime_shutdown", *module);
     }
 
-    // void __djinn_uncaught_error(i32 tag, ptr message)
+    // void __djinn_uncaught_error(i32 tag, ptr type_name, ptr message, ptr origin_file,
+    //                              i32 origin_line, i32 origin_column)
     if (!module->getFunction("__djinn_uncaught_error"))
     {
-        auto* uncaughtTy = llvm::FunctionType::get(voidTy, {i32Ty, ptrTy}, false);
+        auto* uncaughtTy = llvm::FunctionType::get(voidTy, {i32Ty, ptrTy, ptrTy, ptrTy, i32Ty, i32Ty}, false);
         llvm::Function::Create(uncaughtTy, llvm::Function::ExternalLinkage,
                                "__djinn_uncaught_error", *module);
     }

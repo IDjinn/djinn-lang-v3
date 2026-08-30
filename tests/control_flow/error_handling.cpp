@@ -351,8 +351,8 @@ TEST(ErrorHandling, TryWithoutFallbackOutsideThrowsDiagnostic)
 
 //
 // Compile-time enforcement: a constexpr call with constant arguments that
-// provably throws is a compile error (9006) when unhandled, and a warning
-// (9008) inside `try ... ?:` because the fallback is always taken.
+// provably throws is a compile error (9006) when unhandled; inside `try` the
+// error is handled, so nothing is reported.
 //
 
 TEST(ErrorHandling, ConstexprCallThatAlwaysThrowsIsCompileError)
@@ -385,7 +385,7 @@ TEST(ErrorHandling, ConstexprCallThatAlwaysThrowsIsCompileError)
     }
 }
 
-TEST(ErrorHandling, ConstexprCallInsideTryWarnsAndTakesFallback)
+TEST(ErrorHandling, ConstexprCallInsideTryIsSilentAndTakesFallback)
 {
     const auto source = R"(
         struct DivisionByZeroException : Exception;
@@ -404,9 +404,7 @@ TEST(ErrorHandling, ConstexprCallInsideTryWarnsAndTakesFallback)
     )";
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    EXPECT_EQ(errorCount(result), 0);
-    EXPECT_EQ(warningCount(result), 1);
-    EXPECT_TRUE(hasErrorCode(result, 9008));
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 7);
 }
 

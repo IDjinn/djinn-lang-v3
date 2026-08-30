@@ -9,9 +9,8 @@
 //
 // Compile-time enforcement (default ErrorEnforcement::CompileTime): a call
 // whose require clauses are decided by constant arguments is checked by the
-// compiler — an unhandled provable violation is a compile error (9007), a
-// handled one (inside `try ... ?:`) is a warning (9008) because the fallback
-// is always taken.
+// compiler — an unhandled provable violation is a compile error (9007); a
+// handled one (inside `try`) is silent because the error is treated.
 //
 
 TEST(Contracts, RequirePasses)
@@ -50,11 +49,8 @@ TEST(Contracts, RequireViolationThrowsContractViolation)
     )";
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    EXPECT_EQ(errorCount(result), 0);
-    // Provable violation with a constant argument, but handled by `try`:
-    // warn that the fallback is always taken
-    EXPECT_EQ(warningCount(result), 1);
-    EXPECT_TRUE(hasErrorCode(result, 9008));
+    // Provable violation with a constant argument, but handled by `try`
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 99);
 }
 
@@ -119,9 +115,8 @@ TEST(Contracts, MultipleClauses)
     )";
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    EXPECT_EQ(errorCount(result), 0);
-    EXPECT_EQ(warningCount(result), 1); // clamp(0, 1, 10) violates require(value >= lo)
-    EXPECT_TRUE(hasErrorCode(result, 9008));
+    // clamp(0, 1, 10) violates require(value >= lo), but `try` handles it
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 3);
 }
 
@@ -142,9 +137,8 @@ TEST(Contracts, RequireBlockForm)
     )";
 
     const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    EXPECT_EQ(errorCount(result), 0);
-    EXPECT_EQ(warningCount(result), 1); // safe_div(1, 0) violates the block-form require
-    EXPECT_TRUE(hasErrorCode(result, 9008));
+    // safe_div(1, 0) violates the block-form require, but `try` handles it
+    EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, 1);
 }
 

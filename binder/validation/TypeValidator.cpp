@@ -94,6 +94,14 @@ namespace djinn::binder
                                                const Expression& expr,
                                                SourceLocation loc)
     {
+        if (expected.kind == TypeKind::INTEGER && expected.nonZero && is_zero_literal(expr))
+        {
+            _diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::TYPE_MISMATCH,
+                "integer literal 0 is not assignable to non-zero type '" + expected.toHumanString() + "'",
+                loc));
+        }
+
         const auto inferredOpt = inferExpressionType(expr);
         if (!inferredOpt) return;
 
@@ -113,6 +121,27 @@ namespace djinn::binder
 
         if (expectedResolved->kind == TypeKind::INTEGER && inferred.kind == TypeKind::INTEGER)
         {
+            if (expectedResolved->nonZero && !inferred.nonZero)
+            {
+                bool isLiteralValue = dynamic_cast<const IntegerLiteral*>(&expr) != nullptr;
+                if (!isLiteralValue)
+                {
+                    if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
+                    {
+                        isLiteralValue = unary->op == TokenType::MINUS
+                            && dynamic_cast<const IntegerLiteral*>(unary->operand.get()) != nullptr;
+                    }
+                }
+                if (!isLiteralValue)
+                {
+                    _diagnostics.emitAndPrint(Diagnostic(
+                        Severity::Error, DiagnosticCode::TYPE_MISMATCH,
+                        "cannot implicitly convert '" + inferred.toHumanString() +
+                        "' to non-zero type '" + expectedResolved->toHumanString() +
+                        "'; use an explicit cast", loc));
+                }
+            }
+
             if (!expectedResolved->sign && inferred.sign)
             {
                 bool isNegative = false;
@@ -187,7 +216,14 @@ namespace djinn::binder
 
         if (const auto* binary = dynamic_cast<const BinaryExpression*>(&expr))
         {
-            return inferExpressionType(*binary->left); // TODO: THIS MAY NOT WORK AS EXPECTED
+            auto leftType = inferExpressionType(*binary->left); // TODO: THIS MAY NOT WORK AS EXPECTED
+            // Arithmetic may produce zero (e.g. a - a), so a non-zero operand type
+            // does not carry over to the result
+            if (leftType && leftType->kind == TypeKind::INTEGER)
+            {
+                leftType->nonZero = false;
+            }
+            return leftType;
         }
 
         if (const auto* call = dynamic_cast<const FunctionCall*>(&expr))

@@ -254,6 +254,7 @@ struct GeneratorScope
     std::unordered_map<std::string, std::string> variableStructTypes;
     std::unordered_map<std::string, llvm::Type*> variablePointeeTypes;
     std::unordered_map<std::string, bool> variableSigned; // tracks signedness for integer variables
+    std::unordered_map<std::string, bool> variableNonZero; // tracks the non-zero (i32n) guarantee
     // For pointer variables, stores the element type
 
     std::unordered_map<std::string, llvm::Function*> localFunctions;
@@ -506,6 +507,24 @@ struct GeneratorScope
         if (parent)
         {
             return parent->lookup_variable_signed(name);
+        }
+        return std::nullopt;
+    }
+
+    void set_variable_non_zero(const std::string& name, bool nonZero)
+    {
+        variableNonZero[name] = nonZero;
+    }
+
+    [[nodiscard]] std::optional<bool> lookup_variable_non_zero(const std::string& name) const
+    {
+        if (const auto it = variableNonZero.find(name); it != variableNonZero.end())
+        {
+            return it->second;
+        }
+        if (parent)
+        {
+            return parent->lookup_variable_non_zero(name);
         }
         return std::nullopt;
     }

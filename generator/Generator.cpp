@@ -566,10 +566,14 @@ void Generator::run_passes(bool skipCoroPasses) const
 
     // Shadow-stack unwinding: insert __djinn_frame_pop() before every return
     // of functions that push a frame (runs after coro lowering so it sees the
-    // final control flow; async functions never push and stay untouched)
-    llvm::FunctionPassManager FPM;
-    FPM.addPass(djinn::ShadowStackPopPass());
-    MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+    // final control flow; async functions never push and stay untouched).
+    // Minimal (release) builds emit no frames, so the pass has nothing to do.
+    if (runtimeDiagnostics == RuntimeDiagnostics::Full)
+    {
+        llvm::FunctionPassManager FPM;
+        FPM.addPass(djinn::ShadowStackPopPass());
+        MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+    }
 
     MPM.run(*module, MAM);
 }

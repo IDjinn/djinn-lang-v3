@@ -242,10 +242,23 @@ extern char __djinn_last_error_report[DJINN_ERROR_REPORT_SIZE];
 void __djinn_runtime_error(const djinn_error_info_t* info);
 void __djinn_runtime_error_message(const char* message); /* legacy simple trap */
 
+// Release-build trap: scalar-argument variant of __djinn_runtime_error. The
+// generator emits one call per site with no descriptor struct and no per-site
+// strings (file/message globals are deduplicated per module); the runtime
+// fills a djinn_error_info_t and renders location + operand note without the
+// source snippet, variable history or stack trace.
+void __djinn_runtime_error_min(const char* message, const char* file, uint32_t line, uint32_t column,
+                               uint8_t op, uint8_t bits, uint8_t is_signed, uint8_t has_operands,
+                               uint64_t left, uint64_t right);
+
 // Uncaught djinn exception escaping main() throws: renders a report with the
-// error tag/message and the shadow-stack trace into __djinn_last_error_report
-// (so JIT hosts can capture it), prints it to stderr and aborts.
-void __djinn_uncaught_error(int tag, const char* message);
+// error type name ("Type: message", falling back to the builtin tag names),
+// the outermost unhandled call site (the origin rises as the error
+// propagates) and — when frames exist — the stack snapshot captured at the
+// throw site, into __djinn_last_error_report (so JIT hosts can capture it),
+// prints it to stderr and aborts.
+void __djinn_uncaught_error(int tag, const char* type_name, const char* message,
+                            const char* origin_file, uint32_t origin_line, uint32_t origin_column);
 
 // ── Variable assignment history ──
 //
@@ -277,6 +290,10 @@ typedef struct djinn_frame
 void __djinn_frame_push(const char* function_name, const char* file, uint32_t line);
 void __djinn_frame_pop(void);
 void __djinn_frame_set_line(uint32_t line);
+
+// Snapshots the live shadow stack (top frame's line set to the throw site) so
+// the uncaught-exception report keeps the trace after the error unwinds.
+void __djinn_capture_error_stack(uint32_t line);
 
 extern void __djinn_coro_resume(void* handle);
 extern int __djinn_coro_done(void* handle);

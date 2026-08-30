@@ -544,7 +544,9 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         if (paramType.kind == TypeKind::INTEGER)
         {
             currentScope->set_variable_signed(paramName, paramType.sign);
+            currentScope->set_variable_non_zero(paramName, paramType.nonZero);
         }
+        emit_non_zero_param_check(paramName, paramType);
 
         ++argIt;
         ++paramIdx;

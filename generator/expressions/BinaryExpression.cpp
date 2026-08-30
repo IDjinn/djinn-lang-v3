@@ -9,6 +9,29 @@
 #include "../../utils/Logger.h"
 #include "../../utils/string_utils.h"
 
+// Non-zero analysis for division: a non-zero literal, a variable carrying the
+// i32n guarantee (declared type or proven by require(p != 0)) or a cast to a
+// non-zero type can never be a zero divisor
+bool Generator::is_provably_non_zero(const Expression& expr) const
+{
+    if (dynamic_cast<const IntegerLiteral*>(&expr))
+    {
+        return !is_zero_literal(expr);
+    }
+
+    if (const auto* cast = dynamic_cast<const CastExpression*>(&expr))
+    {
+        return cast->targetType.kind == TypeKind::INTEGER && cast->targetType.nonZero;
+    }
+
+    if (const auto* ident = dynamic_cast<const Identifier*>(&expr))
+    {
+        return currentScope->lookup_variable_non_zero(ident->identifier.token_name).value_or(false);
+    }
+
+    return false;
+}
+
 llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
 {
     if (expr.op == TokenType::QUESTION_QUESTION)
@@ -254,14 +277,20 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
         return builder->CreateMul(left, right, "multmp");
     case TokenType::SLASH:
         if (isFloat) return builder->CreateFDiv(left, right, "divtmp");
-        emit_div_by_zero_check(make_trap_operand(*expr.left, left),
-                               make_trap_operand(*expr.right, right), expr.location);
+        if (!is_provably_non_zero(*expr.right))
+        {
+            emit_div_by_zero_check(make_trap_operand(*expr.left, left),
+                                   make_trap_operand(*expr.right, right), expr.location);
+        }
         if (auto* v = modeArith(expr.op)) return v;
         return builder->CreateSDiv(left, right, "divtmp");
     case TokenType::PERCENT:
         if (isFloat) return builder->CreateFRem(left, right, "modtmp");
-        emit_div_by_zero_check(make_trap_operand(*expr.left, left),
-                               make_trap_operand(*expr.right, right), expr.location);
+        if (!is_provably_non_zero(*expr.right))
+        {
+            emit_div_by_zero_check(make_trap_operand(*expr.left, left),
+                                   make_trap_operand(*expr.right, right), expr.location);
+        }
         if (auto* v = modeArith(expr.op)) return v;
         return builder->CreateSRem(left, right, "modtmp");
 

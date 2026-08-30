@@ -43,6 +43,17 @@ namespace
     }
 }
 
+// Module-level string global dedup: identical texts (file paths, messages,
+// variable names) share one private global instead of one per call site.
+llvm::Constant* Generator::cached_global_string(const std::string& text, const char* prefix)
+{
+    if (const auto it = stringGlobalCache.find(text); it != stringGlobalCache.end())
+        return it->second;
+    auto* global = builder->CreateGlobalStringPtr(text, prefix);
+    stringGlobalCache.emplace(text, global);
+    return global;
+}
+
 // Emits the trap call (__djinn_runtime_error + unreachable) with a fully
 // populated error descriptor. Must be called with the insert point on the
 // cold error block; operand values are read here, so there is zero cost on
@@ -51,6 +62,12 @@ void Generator::emit_runtime_error_trap(const SourceLocation& loc, const char* m
                                         const char op, const TrapOperand& left, const TrapOperand& right,
                                         const bool isSigned)
 {
+    if (runtimeDiagnostics == RuntimeDiagnostics::Minimal)
+    {
+        emit_runtime_error_trap_min(loc, message, op, left, right, isSigned);
+        return;
+    }
+
     auto* trapFn = get_or_declare_runtime_error_fn();
 
     auto* infoTy = error_info_type(*builder);
@@ -71,8 +88,8 @@ void Generator::emit_runtime_error_trap(const SourceLocation& loc, const char* m
     };
 
     const std::string lineText = _diagnostics.getLine(loc.fileId, loc.line);
-    storePtr(0, builder->CreateGlobalStringPtr(message, "err.msg"));
-    storePtr(1, builder->CreateGlobalStringPtr(loc.fileId, "err.file"));
+    storePtr(0, cached_global_string(message, "err.msg"));
+    storePtr(1, cached_global_string(loc.fileId, "err.file"));
     storePtr(2, builder->CreateGlobalStringPtr(lineText, "err.line"));
     storeInt(3, loc.line);
     storeInt(4, loc.column);
@@ -113,17 +130,59 @@ void Generator::emit_runtime_error_trap(const SourceLocation& loc, const char* m
     builder->CreateUnreachable();
 }
 
+// Minimal (release) trap: no descriptor alloca, no per-site strings beyond the
+// shared file/message globals — file:line, operand values and the operator are
+// passed as plain scalar arguments and the runtime renders them without the
+// source snippet, variable history or stack trace.
+void Generator::emit_runtime_error_trap_min(const SourceLocation& loc, const char* message,
+                                            const char op, const TrapOperand& left, const TrapOperand& right,
+                                            const bool isSigned)
+{
+    auto* fnType = llvm::FunctionType::get(builder->getVoidTy(),
+                                           {
+                                               builder->getPtrTy(), builder->getPtrTy(),
+                                               builder->getInt32Ty(), builder->getInt32Ty(),
+                                               builder->getInt8Ty(), builder->getInt8Ty(),
+                                               builder->getInt8Ty(), builder->getInt8Ty(),
+                                               builder->getInt64Ty(), builder->getInt64Ty(),
+                                           }, false);
+    auto* trapFn = get_or_declare_runtime_fn(module.get(), "__djinn_runtime_error_min", fnType);
+
+    llvm::Value* leftWide = widen_int_operand(*builder, left.value);
+    llvm::Value* rightWide = widen_int_operand(*builder, right.value);
+    const bool hasOperands = leftWide != nullptr;
+
+    const uint64_t bits = hasOperands ? left.value->getType()->getIntegerBitWidth() : 0;
+
+    builder->CreateCall(trapFn, {
+        cached_global_string(message, "err.msg"),
+        cached_global_string(loc.fileId, "err.file"),
+        builder->getInt32(loc.line),
+        builder->getInt32(loc.column),
+        builder->getInt8(hasOperands ? static_cast<uint8_t>(op) : 0),
+        builder->getInt8(static_cast<uint8_t>(bits)),
+        builder->getInt8(hasOperands && isSigned ? 1 : 0),
+        builder->getInt8(hasOperands ? 1 : 0),
+        leftWide ? leftWide : builder->getInt64(0),
+        rightWide ? rightWide : builder->getInt64(0),
+    });
+    builder->CreateUnreachable();
+}
+
 // Pushes a shadow-stack frame at function entry; ShadowStackPopPass inserts
-// the matching pop before every return.
+// the matching pop before every return. Debug builds only — the frame name and
+// file strings plus push/pop calls are what make release binaries bloat.
 void Generator::emit_frame_push(const std::string& displayName, const SourceLocation& loc)
 {
+    if (runtimeDiagnostics == RuntimeDiagnostics::Minimal) return;
+
     auto* fnType = llvm::FunctionType::get(builder->getVoidTy(),
                                            {builder->getPtrTy(), builder->getPtrTy(), builder->getInt32Ty()},
                                            false);
     auto* pushFn = get_or_declare_runtime_fn(module.get(), "__djinn_frame_push", fnType);
     builder->CreateCall(pushFn, {
-        builder->CreateGlobalStringPtr(displayName, "frame.name"),
-        builder->CreateGlobalStringPtr(loc.fileId, "frame.file"),
+        cached_global_string(displayName, "frame.name"),
+        cached_global_string(loc.fileId, "frame.file"),
         builder->getInt32(loc.line),
     });
 }
@@ -132,9 +191,23 @@ void Generator::emit_frame_push(const std::string& displayName, const SourceLoca
 // instead of the function definition.
 void Generator::emit_frame_set_line(const SourceLocation& loc)
 {
+    if (runtimeDiagnostics == RuntimeDiagnostics::Minimal) return;
+
     auto* fnType = llvm::FunctionType::get(builder->getVoidTy(), {builder->getInt32Ty()}, false);
     auto* setLineFn = get_or_declare_runtime_fn(module.get(), "__djinn_frame_set_line", fnType);
     builder->CreateCall(setLineFn, {builder->getInt32(loc.line)});
+}
+
+// Snapshots the live shadow stack at a throw site: the error unwinds normally
+// afterwards, so this is the only chance to record where it came from for the
+// uncaught-exception report. Debug builds only (release has no frames).
+void Generator::emit_error_stack_capture(const SourceLocation& loc)
+{
+    if (runtimeDiagnostics == RuntimeDiagnostics::Minimal) return;
+
+    auto* fnType = llvm::FunctionType::get(builder->getVoidTy(), {builder->getInt32Ty()}, false);
+    auto* captureFn = get_or_declare_runtime_fn(module.get(), "__djinn_capture_error_stack", fnType);
+    builder->CreateCall(captureFn, {builder->getInt32(loc.line)});
 }
 
 // Resolves the operand's variable identity: when the expression is a named
@@ -156,10 +229,12 @@ TrapOperand Generator::make_trap_operand(const Expression& expr, llvm::Value* va
 }
 
 // Records an assignment site so runtime error reports can show how a
-// variable got its current value.
+// variable got its current value. Debug builds only — it embeds the source
+// line text per site and runs on the hot path.
 void Generator::emit_var_track(llvm::Value* slot, const std::string& name, const SourceLocation& loc)
 {
-    if (!slot) return;
+    if (runtimeDiagnostics == RuntimeDiagnostics::Minimal || !slot) return;
+
     auto* fnType = llvm::FunctionType::get(
         builder->getVoidTy(),
         {builder->getPtrTy(), builder->getPtrTy(), builder->getPtrTy(), builder->getInt32Ty()}, false);
@@ -167,7 +242,7 @@ void Generator::emit_var_track(llvm::Value* slot, const std::string& name, const
     const std::string lineText = _diagnostics.getLine(loc.fileId, loc.line);
     builder->CreateCall(trackFn, {
                             slot,
-                            builder->CreateGlobalStringPtr(name, "var.name"),
+                            cached_global_string(name, "var.name"),
                             builder->CreateGlobalStringPtr(lineText, "var.line"),
                             builder->getInt32(loc.line),
                         });

@@ -90,6 +90,16 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     if (funcSym)
     {
         bind_contract_conditions(funcSym->contracts, *func.returnType);
+
+        // `require(p != 0)` proves the parameter non-zero for the whole body
+        // (symbol/AST upgrades already ran in the bindAll pre-pass)
+        for (const auto& proven : apply_non_zero_contract_upgrades(*funcSym, func))
+        {
+            if (auto var = _current_scope->lookupVariable(proven))
+            {
+                var->type.nonZero = true;
+            }
+        }
     }
 
     // Get the body from the FunctionSymbol (ownership was transferred during collection)
@@ -172,6 +182,44 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
         for (const auto& contract : method.contracts)
             methodContracts.push_back(&contract);
         bind_contract_conditions(methodContracts, *method.returnType);
+
+        // `require(p != 0)` proves the parameter non-zero for the whole body
+        for (const auto* contract : methodContracts)
+        {
+            if (!contract || !contract->isRequire() || !contract->condition) continue;
+            const auto proven = non_zero_proven_identifier(*contract->condition);
+            if (!proven) continue;
+
+            bool isParam = false;
+            for (auto& param : method.parameters)
+            {
+                if (param.name.token_name != *proven) continue;
+                if (param.type->kind == TypeKind::INTEGER)
+                {
+                    param.type->nonZero = true;
+                    isParam = true;
+                }
+                break;
+            }
+            if (!isParam) continue;
+
+            if (auto var = _current_scope->lookupVariable(*proven))
+            {
+                var->type.nonZero = true;
+            }
+        }
+
+        // `ensure(return != 0)` proves the return value non-zero for callers
+        if (method.returnType->kind == TypeKind::INTEGER && !method.returnType->nonZero)
+        {
+            for (const auto* contract : methodContracts)
+            {
+                if (!contract || !contract->isEnsure() || !contract->condition) continue;
+                if (!ensures_non_zero_return(*contract->condition)) continue;
+                method.returnType->nonZero = true;
+                break;
+            }
+        }
     }
 
     if (method.body)
@@ -227,6 +275,60 @@ void Binder::bind_contract_conditions(const std::vector<const ContractClause*>& 
             bindExpression(*contract->condition);
         }
     }
+}
+
+// Contract-driven non-zero upgrades, applied to the symbol and AST:
+// `require(p != 0)` proves a parameter non-zero for the whole body, and
+// `ensure(return != 0)` proves the return value non-zero for callers.
+// Returns the names of the parameters proven non-zero (for scope upgrades).
+std::vector<std::string> Binder::apply_non_zero_contract_upgrades(FunctionSymbol& funcSym,
+                                                                  const FunctionDeclaration& func)
+{
+    std::vector<std::string> provenParams;
+
+    for (const auto* contract : funcSym.contracts)
+    {
+        if (!contract || !contract->isRequire() || !contract->condition) continue;
+        const auto proven = non_zero_proven_identifier(*contract->condition);
+        if (!proven) continue;
+
+        bool isParam = false;
+        for (size_t i = 0; i < funcSym.paramNames.size(); i++)
+        {
+            if (funcSym.paramNames[i] != *proven) continue;
+            if (funcSym.paramTypes[i].kind == TypeKind::INTEGER)
+            {
+                funcSym.paramTypes[i].nonZero = true;
+                isParam = true;
+            }
+            break;
+        }
+        if (!isParam) continue;
+
+        provenParams.push_back(*proven);
+        for (auto& param : const_cast<std::vector<Parameter>&>(func.parameters))
+        {
+            if (param.name.token_name == *proven && param.type->kind == TypeKind::INTEGER)
+            {
+                param.type->nonZero = true;
+            }
+        }
+    }
+
+    if (funcSym.returnType.kind == TypeKind::INTEGER && !funcSym.returnType.nonZero)
+    {
+        for (const auto* contract : funcSym.contracts)
+        {
+            if (!contract || !contract->isEnsure() || !contract->condition) continue;
+            if (!ensures_non_zero_return(*contract->condition)) continue;
+            funcSym.returnType.nonZero = true;
+            funcSym.type.nonZero = true;
+            const_cast<Type&>(*func.returnType).nonZero = true;
+            break;
+        }
+    }
+
+    return provenParams;
 }
 
 void Binder::bindNamespace(const NamespaceDeclaration& ns, const std::string& prefix)

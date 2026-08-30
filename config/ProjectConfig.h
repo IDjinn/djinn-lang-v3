@@ -244,10 +244,15 @@ struct ProjectConfig
                 options.debugMode = true;
                 options.releaseMode = false;
             }
-            else if (*cc.buildMode == "release")
+            else if (*cc.buildMode == "release" || *cc.buildMode == "production")
             {
                 options.debugMode = false;
                 options.releaseMode = true;
+            }
+            else
+            {
+                LOG_WARN("Unknown build-mode '%s' (expected debug|release), keeping current mode",
+                         cc.buildMode->c_str());
             }
         }
         if (cc.reflectionMode.has_value())

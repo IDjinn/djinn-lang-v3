@@ -15,6 +15,14 @@ std::shared_ptr<Symbol> Binder::bindVariableDeclaration(const VariableDeclaratio
         }
     }
 
+    if (decl.type.nonZero)
+    {
+        BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                     "variable '" + decl.name.token_name + "' of non-zero type '" + decl.type.toHumanString() +
+                     "' must be initialized",
+                     decl, decl.name.location);
+    }
+
     const auto variableSymbol = _current_scope->defineVariable(decl.name.token_name, decl.type, decl.isMutable);
     if (!variableSymbol)
     {

@@ -81,26 +81,29 @@ public:
     static std::string mangle_type(const Type &type) {
         switch (type.kind) {
             case TypeKind::VOID: return "v";
-            case TypeKind::INTEGER:
+            case TypeKind::INTEGER: {
+                std::string m;
                 if (type.sign) {
                     switch (type.size) {
-                        case 8: return "a"; // signed char
-                        case 16: return "s"; // short
-                        case 32: return "i"; // int
-                        case 64: return "l"; // long
-                        case 128: return "n"; // __int128
-                        default: return "i";
+                        case 8: m = "a"; break; // signed char
+                        case 16: m = "s"; break; // short
+                        case 32: m = "i"; break; // int
+                        case 64: m = "l"; break; // long
+                        case 128: m = "n"; break; // __int128
+                        default: m = "i"; break;
                     }
                 } else {
                     switch (type.size) {
-                        case 8: return "h"; // unsigned char
-                        case 16: return "t"; // unsigned short
-                        case 32: return "j"; // unsigned int
-                        case 64: return "m"; // unsigned long
-                        case 128: return "o"; // unsigned __int128
-                        default: return "j";
+                        case 8: m = "h"; break; // unsigned char
+                        case 16: m = "t"; break; // unsigned short
+                        case 32: m = "j"; break; // unsigned int
+                        case 64: m = "m"; break; // unsigned long
+                        case 128: m = "o"; break; // unsigned __int128
+                        default: m = "j"; break;
                     }
                 }
+                return type.nonZero ? "N" + m : m;
+            }
             case TypeKind::F16: return "Dh"; // half
             case TypeKind::F32: return "f"; // float
             case TypeKind::F64: return "d"; // double

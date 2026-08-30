@@ -692,6 +692,28 @@ void __djinn_frame_set_line(const uint32_t line)
         djinn_shadow_stack.frames[djinn_shadow_stack.depth - 1].line = line;
 }
 
+// ── Uncaught-exception stack snapshot ──
+//
+// Thrown errors unwind normally (every propagation path returns and pops its
+// frame), so the shadow stack is empty by the time the uncaught report
+// renders. Throw sites snapshot the live stack here so the report keeps the
+// trace of where the error came from.
+
+static struct
+{
+    djinn_frame_t frames[DJINN_MAX_FRAMES];
+    int depth;
+} djinn_error_stack;
+
+void __djinn_capture_error_stack(const uint32_t line)
+{
+    if (djinn_shadow_stack.depth > 0)
+        djinn_shadow_stack.frames[djinn_shadow_stack.depth - 1].line = line;
+    djinn_error_stack.depth = djinn_shadow_stack.depth;
+    memcpy(djinn_error_stack.frames, djinn_shadow_stack.frames,
+           (size_t)djinn_shadow_stack.depth * sizeof(djinn_frame_t));
+}
+
 // ── Variable assignment history ──
 
 typedef struct
@@ -971,19 +993,25 @@ static int djinn_append_var_history(char* buf, int used, const char* name, const
     return used;
 }
 
-static int djinn_append_stack_trace(char* buf, int used)
+static int djinn_render_frames(char* buf, int used, const djinn_frame_t* frames, const int depth)
 {
-    if (djinn_shadow_stack.depth == 0) return used;
+    if (depth == 0) return used;
 
-    used = djinn_report_append(buf, used, "stack trace (most recent call first):\n");
-    for (int i = djinn_shadow_stack.depth - 1; i >= 0; i--)
+    used = djinn_report_append(buf, used, "stack trace:\n");
+    for (int i = depth - 1; i >= 0; i--)
     {
-        const djinn_frame_t* frame = &djinn_shadow_stack.frames[i];
+        const djinn_frame_t* frame = &frames[i];
         used = djinn_report_append(buf, used, "  at %s (%s:%u)\n",
                                    frame->function_name ? frame->function_name : "<unknown>",
                                    frame->file ? frame->file : "?",
                                    (unsigned)frame->line);
     }
+    return used;
+}
+
+static int djinn_append_stack_trace(char* buf, int used)
+{
+    used = djinn_render_frames(buf, used, djinn_shadow_stack.frames, djinn_shadow_stack.depth);
     if (djinn_shadow_stack.overflowed)
         used = djinn_report_append(buf, used, "  ... (more than %d frames, older frames omitted)\n",
                                    DJINN_MAX_FRAMES);
@@ -1030,15 +1058,66 @@ void __djinn_runtime_error_message(const char* message)
     __djinn_runtime_error(&info);
 }
 
-void __djinn_uncaught_error(const int tag, const char* message)
+// Release-build trap: same rendering pipeline as __djinn_runtime_error, but
+// built from scalar arguments (no descriptor, no snippet, no var history).
+void __djinn_runtime_error_min(const char* message, const char* file, const uint32_t line,
+                               const uint32_t column, const uint8_t op, const uint8_t bits,
+                               const uint8_t is_signed, const uint8_t has_operands,
+                               const uint64_t left, const uint64_t right)
+{
+    djinn_error_info_t info;
+    memset(&info, 0, sizeof info);
+    info.message = message ? message : "unknown";
+    info.file = file;
+    info.line = line;
+    info.column = column;
+    info.op = op;
+    info.bits = bits;
+    info.is_signed = is_signed;
+    info.has_operands = has_operands;
+    info.left = left;
+    info.right = right;
+    __djinn_runtime_error(&info);
+}
+
+// Mirrors binder/ErrorTypes.h: tags 1..99 are reserved for builtin errors.
+static const char* djinn_builtin_error_name(const int tag)
+{
+    switch (tag)
+    {
+    case 1: return "Exception";
+    case 2: return "Generic";
+    case 3: return "DivisionByZero";
+    case 4: return "Argument";
+    case 5: return "Overflow";
+    case 6: return "OutOfBounds";
+    case 7: return "InvalidArgument";
+    case 8: return "ContractViolation";
+    default: return NULL;
+    }
+}
+
+void __djinn_uncaught_error(const int tag, const char* type_name, const char* message,
+                            const char* origin_file, const uint32_t origin_line,
+                            const uint32_t origin_column)
 {
     char* report = __djinn_last_error_report;
     int used = 0;
     used = djinn_report_append(report, used, "djinn runtime error: uncaught exception escaped 'main'\n");
-    used = djinn_report_append(report, used, "  error: %s (tag %d)\n",
-                               (message != NULL && message[0] != '\0') ? message : "<no message>",
-                               tag);
-    used = djinn_append_stack_trace(report, used);
+
+    const char* name = (type_name != NULL && type_name[0] != '\0') ? type_name : djinn_builtin_error_name(tag);
+    const char* text = (message != NULL && message[0] != '\0') ? message : "<no message>";
+    if (name != NULL)
+        used = djinn_report_append(report, used, "  error: %s: %s\n", name, text);
+    else
+        used = djinn_report_append(report, used, "  error: %s (tag %d)\n", text, tag);
+
+    if (origin_file != NULL && origin_file[0] != '\0')
+        used = djinn_report_append(report, used, "  --> %s:%u:%u\n", origin_file,
+                                   (unsigned)origin_line, (unsigned)origin_column);
+    // The live shadow stack is empty by now (the error unwound normally), so
+    // render the snapshot taken at the throw site instead
+    used = djinn_render_frames(report, used, djinn_error_stack.frames, djinn_error_stack.depth);
 
     fputs(report, stderr);
     fflush(stderr);

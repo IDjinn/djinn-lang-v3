@@ -150,6 +150,17 @@ namespace djinn
                 ));
             }
         }
+        if (expr.targetType.nonZero && is_zero_literal(*expr.operand))
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::TYPE_MISMATCH,
+                "cannot cast integer literal 0 to non-zero type '" + expr.targetType.toHumanString() + "'",
+                expr.location
+            ));
+            throw CompileError(DiagnosticCode::TYPE_MISMATCH,
+                               "cannot cast integer literal 0 to non-zero type '" + expr.targetType.toHumanString() +
+                               "'");
+        }
         _result = std::make_shared<Symbol>(SymbolKind::Variable, "cast", expr.targetType, expr.location);
     }
 

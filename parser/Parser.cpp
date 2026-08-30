@@ -227,10 +227,10 @@ std::unique_ptr<Type> Parser::parse_type()
 
     std::unique_ptr<Type> baseType;
 
-    // Reject overflow suffix on float type names (f32w) with a clear message
-    const auto isModeSuffix = [](const char c)
+    // Reject integer-only suffixes on float type names (f32w, f32n) with a clear message
+    const auto isIntSuffix = [](const char c)
     {
-        return c == 'w' || c == 't' || c == 'c' || c == 's';
+        return c == 'w' || c == 't' || c == 'c' || c == 's' || c == 'n';
     };
 
     if (identifier.value == "nfloat")
@@ -247,11 +247,11 @@ std::unique_ptr<Type> Parser::parse_type()
         baseType = std::make_unique<Type>(Type::floating(bits));
     }
     else if (identifier.value.starts_with('f') && identifier.value.length() > 3
-        && isModeSuffix(identifier.value.back())
+        && isIntSuffix(identifier.value.back())
         && string_to_type_kind.contains(identifier.value.substr(0, identifier.value.length() - 1)))
     {
         PARSER_ERROR(DiagnosticCode::INVALID_TYPE,
-                     "overflow suffix '" + std::string(1, identifier.value.back()) +
+                     "suffix '" + std::string(1, identifier.value.back()) +
                      "' is only valid on integer types",
                      SourceLocation(identifier.position, identifier.value.length()));
     }
@@ -261,6 +261,7 @@ std::unique_ptr<Type> Parser::parse_type()
                                               ? Type::native_integer()
                                               : Type::integer(intName->bits, intName->sign));
         baseType->overflowMode = intName->mode;
+        baseType->nonZero = intName->nonZero;
     }
     else if (identifier.value == "void" || identifier.type == TokenType::VOID)
     {
@@ -1462,13 +1463,17 @@ std::unique_ptr<Statement> Parser::parse_statement()
 
     if (match(TokenType::THROW))
     {
+        const auto& throwToken = previous();
+        const auto throwLocation = SourceLocation(throwToken.position, throwToken.value.size());
         std::unique_ptr<Expression> value = nullptr;
         if (!check(TokenType::SEMICOLON))
         {
             value = parse_expression();
         }
         expect("Esperado ';' após throw", TokenType::SEMICOLON);
-        return std::make_unique<ThrowStatement>(std::move(value));
+        auto stmt = std::make_unique<ThrowStatement>(std::move(value));
+        stmt->location = throwLocation;
+        return stmt;
     }
 
     // Bare block: { ... }

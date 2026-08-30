@@ -45,9 +45,10 @@ struct IntegerTypeName
     bool sign;
     OverflowMode mode;
     bool native = false;
+    bool nonZero = false;
 };
 
-// Parses "i32", "u8", "i32w", "nint", "nintt" into components; nullopt for non-integer names
+// Parses "i32", "u8", "i32w", "i32n", "nint", "nintt" into components; nullopt for non-integer names
 inline std::optional<IntegerTypeName> parse_integer_type_name(const std::string& name)
 {
     const auto modeFromChar = [](const char c) -> std::optional<OverflowMode>
@@ -76,18 +77,27 @@ inline std::optional<IntegerTypeName> parse_integer_type_name(const std::string&
 
     std::string digits = name.substr(1);
     OverflowMode mode = OverflowMode::None;
-    if (!digits.empty())
+    bool nonZero = false;
+    // Trailing 'n' (non-zero) and overflow suffix may appear in either order
+    for (int stripped = 0; stripped < 2 && !digits.empty(); ++stripped)
     {
-        if (const auto m = modeFromChar(digits.back()))
+        const char c = digits.back();
+        if (c == 'n' && !nonZero)
+        {
+            nonZero = true;
+            digits.pop_back();
+        }
+        else if (const auto m = modeFromChar(c); m && mode == OverflowMode::None)
         {
             mode = *m;
             digits.pop_back();
         }
+        else break;
     }
     if (digits.empty() || !std::ranges::all_of(digits, [](const unsigned char c) { return std::isdigit(c); }))
         return std::nullopt;
 
-    return IntegerTypeName{static_cast<size_t>(std::stol(digits)), prefix == 'i', mode};
+    return IntegerTypeName{static_cast<size_t>(std::stol(digits)), prefix == 'i', mode, false, nonZero};
 }
 
 enum class TypeKind: uint8_t
@@ -124,6 +134,7 @@ struct Type : Location
     bool isTransparent = false; // true for transparent types (struct size : u32) — copy semantics
     bool native = false; // display only: nint/nfloat/ndouble (excluded from identity)
     OverflowMode overflowMode = OverflowMode::None; // behavioral annotation (excluded from identity)
+    bool nonZero = false; // 'n' suffix (i32n/u32n): type cannot hold the value 0
     std::unique_ptr<Type> elementType;
     std::string structName;
     std::vector<Type> genericArgs;
@@ -146,6 +157,7 @@ struct Type : Location
           isTransparent(other.isTransparent),
           native(other.native),
           overflowMode(other.overflowMode),
+          nonZero(other.nonZero),
           elementType(other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr),
           structName(other.structName),
           genericArgs(other.genericArgs)
@@ -164,6 +176,7 @@ struct Type : Location
             isTransparent = other.isTransparent;
             native = other.native;
             overflowMode = other.overflowMode;
+            nonZero = other.nonZero;
             elementType = other.elementType ? std::make_unique<Type>(*other.elementType) : nullptr;
             structName = other.structName;
             genericArgs = other.genericArgs;
@@ -178,6 +191,7 @@ struct Type : Location
         if (sign != other.sign) return false;
         if (nullable != other.nullable) return false;
         if (readOnly != other.readOnly) return false;
+        if (nonZero != other.nonZero) return false;
         if (structName != other.structName) return false;
 
         if (elementType && other.elementType)
@@ -311,7 +325,8 @@ struct Type : Location
         {
         case TypeKind::INTEGER:
             if (native) return "nint";
-            return (sign ? "i" : "u") + std::to_string(size) + overflow_mode_suffix(overflowMode);
+            return (sign ? "i" : "u") + std::to_string(size) + (nonZero ? "n" : "") + overflow_mode_suffix(
+                overflowMode);
         case TypeKind::F16: return "f16";
         case TypeKind::F32: return native ? "nfloat" : "f32";
         case TypeKind::F64: return native ? "ndouble" : "f64";
@@ -385,6 +400,7 @@ struct Type : Location
                          ? native_integer()
                          : Type(TypeKind::INTEGER, intName->bits, intName->sign);
             t.overflowMode = intName->mode;
+            t.nonZero = intName->nonZero;
             return t;
         }
 

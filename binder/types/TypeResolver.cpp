@@ -142,7 +142,14 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
 
     if (const auto* binary = dynamic_cast<const BinaryExpression*>(&expr)) // TODO: THIS MAY NOT WORK AS EXPECTED
     {
-        return inferExpressionType(*binary->left);
+        auto leftType = inferExpressionType(*binary->left);
+        // Arithmetic may produce zero (e.g. a - a), so a non-zero operand type
+        // does not carry over to the result
+        if (leftType && leftType->kind == TypeKind::INTEGER)
+        {
+            leftType->nonZero = false;
+        }
+        return leftType;
     }
 
     if (const auto* call = dynamic_cast<const FunctionCall*>(&expr))
@@ -180,6 +187,15 @@ std::optional<Type> Binder::inferExpressionType(const Expression& expr) const
 
 void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr, SourceLocation loc)
 {
+    // Non-zero types reject the literal 0 in any width (the range check below
+    // only covers up to 64 bits)
+    if (expected.kind == TypeKind::INTEGER && expected.nonZero && is_zero_literal(expr))
+    {
+        BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                     "integer literal 0 is not assignable to non-zero type '" + expected.toHumanString() + "'",
+                     expr, loc);
+    }
+
     if (dynamic_cast<const NullLiteral*>(&expr))
     {
         if (!expected.nullable)
@@ -327,6 +343,28 @@ void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr
 
     if (expectedResolved->kind == TypeKind::INTEGER && inferred.kind == TypeKind::INTEGER)
     {
+        if (expectedResolved->nonZero && !inferred.nonZero)
+        {
+            // Literals are validated by value above; anything else must prove non-zero-ness
+            bool isLiteralValue = dynamic_cast<const IntegerLiteral*>(&expr) != nullptr;
+            if (!isLiteralValue)
+            {
+                if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
+                {
+                    isLiteralValue = unary->op == TokenType::MINUS
+                        && dynamic_cast<const IntegerLiteral*>(unary->operand.get()) != nullptr;
+                }
+            }
+            if (!isLiteralValue)
+            {
+                BINDER_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                             "cannot implicitly convert '" + inferred.toHumanString() +
+                             "' to non-zero type '" + expectedResolved->toHumanString() +
+                             "'; use an explicit cast",
+                             expr, loc);
+            }
+        }
+
         if (!expectedResolved->sign && inferred.sign)
         {
             bool isNegative = false;
@@ -385,7 +423,8 @@ void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr
                 compatible = false;
             }
             else if (expectedElem->kind == TypeKind::INTEGER &&
-                (expectedElem->size != inferredElem->size || expectedElem->sign != inferredElem->sign))
+                (expectedElem->size != inferredElem->size || expectedElem->sign != inferredElem->sign
+                    || expectedElem->nonZero != inferredElem->nonZero))
             {
                 compatible = false;
             }

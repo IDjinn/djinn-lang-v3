@@ -99,7 +99,7 @@ llvm::Value* Generator::emit_int_arith_with_overflow(const TokenType op, const T
     builder->SetInsertPoint(errBB);
     if (mode == OverflowMode::Checked)
     {
-        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("Overflow"));
+        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("Overflow"), loc);
     }
     else
     {
@@ -215,7 +215,7 @@ llvm::Value* Generator::emit_int_neg_with_overflow(const TrapOperand& operand, c
     builder->SetInsertPoint(errBB);
     if (mode == OverflowMode::Checked)
     {
-        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("Overflow"));
+        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("Overflow"), loc);
     }
     else
     {

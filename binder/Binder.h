@@ -186,6 +186,11 @@ private:
 
     void bind_contract_conditions(const std::vector<const ContractClause*>& contracts, const Type& returnType);
 
+    // `require(p != 0)` / `ensure(return != 0)` non-zero upgrades (symbol +
+    // AST); returns the parameter names proven non-zero
+    std::vector<std::string> apply_non_zero_contract_upgrades(FunctionSymbol& funcSym,
+                                                              const FunctionDeclaration& func);
+
     void bindBlock(const Block& block);
 
     void bindNamespace(const NamespaceDeclaration& ns, const std::string& prefix);

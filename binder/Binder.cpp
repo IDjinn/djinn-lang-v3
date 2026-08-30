@@ -299,6 +299,24 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         }
     }
 
+    // Contract pre-pass: apply require(p != 0)/ensure(return != 0) upgrades to
+    // every function symbol before bodies are bound, so callers see the
+    // non-zero guarantees regardless of declaration order
+    for (const auto& program : programs)
+    {
+        const std::string prefix = program->fileNamespace;
+        for (const auto& func : program->functions)
+        {
+            const std::string qualifiedName = (func->name.token_name == "main" || prefix.empty())
+                                                  ? func->name.token_name
+                                                  : prefix + "::" + func->name.token_name;
+            if (const auto funcSym = _global_scope->lookupFunction(qualifiedName))
+            {
+                apply_non_zero_contract_upgrades(*funcSym, *func);
+            }
+        }
+    }
+
     for (const auto& program : programs)
     {
         LOG_TRACE("binding program %s", program->name.c_str());
@@ -392,6 +410,9 @@ ConstEvaluator& Binder::getCompileTimeEvaluator() const
 bool Binder::check_compile_time_call(const FunctionSymbol& funcSym, const FunctionCall& call)
 {
     if (_bindingStdLib) return false;
+    // A call inside `try` is handled (fallback or propagation), so provable
+    // failures have nothing to report
+    if (insideTryExpression_) return false;
     if (enforcement_ != ErrorEnforcement::CompileTime && enforcement_ != ErrorEnforcement::Strict) return false;
     if (!funcSym.hasBody()) return false;
     if (call.arguments.size() != funcSym.paramNames.size()) return false;
@@ -410,7 +431,18 @@ bool Binder::check_compile_time_call(const FunctionSymbol& funcSym, const Functi
             break;
         }
     }
-    if (!canAnalyzeThrow && !hasRequires) return false;
+
+    // Non-zero parameters are implicit require(p != 0) clauses
+    bool hasNonZeroParams = false;
+    for (const auto& paramType : funcSym.paramTypes)
+    {
+        if (paramType.kind == TypeKind::INTEGER && paramType.nonZero)
+        {
+            hasNonZeroParams = true;
+            break;
+        }
+    }
+    if (!canAnalyzeThrow && !hasRequires && !hasNonZeroParams) return false;
 
     // All arguments must be compile-time evaluable; otherwise the runtime
     // checks still enforce everything
@@ -423,30 +455,35 @@ bool Binder::check_compile_time_call(const FunctionSymbol& funcSym, const Functi
         args.push_back(val);
     }
 
+    if (hasNonZeroParams)
+    {
+        for (size_t i = 0; i < funcSym.paramTypes.size() && i < args.size(); i++)
+        {
+            const auto& paramType = funcSym.paramTypes[i];
+            if (paramType.kind != TypeKind::INTEGER || !paramType.nonZero) continue;
+            if (!args[i].isInteger() || !args[i].toInt128().isZero()) continue;
+
+            _diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::CONTRACT_VIOLATION_COMPILE_TIME,
+                "call to '" + call.name.token_name + "' passes zero to non-zero parameter '" +
+                funcSym.paramNames[i] + "' (evaluated at compile time)",
+                call.name.location));
+            return true;
+        }
+    }
+
     if (canAnalyzeThrow)
     {
         const ConstValue result = eval.evaluateFunction(funcSym.name, args);
         if (result.isThrown())
         {
             const std::string thrownType = result.errorName.empty() ? "error" : result.errorName;
-            if (insideTryExpression_)
-            {
-                _diagnostics.emitAndPrint(Diagnostic(
-                    Severity::Warning, DiagnosticCode::ALWAYS_THROWS_HANDLED,
-                    "call to '" + call.name.token_name + "' always throws '" + thrownType +
-                    "' (evaluated at compile time); the error path is always taken",
-                    call.name.location));
-            }
-            else
-            {
-                _diagnostics.emitAndPrint(Diagnostic(
-                    Severity::Error, DiagnosticCode::CONSTEXPR_CALL_THROWS,
-                    "call to '" + call.name.token_name + "' always throws '" + thrownType +
-                    "' (evaluated at compile time)",
-                    call.name.location));
-                return true;
-            }
-            return false;
+            _diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::CONSTEXPR_CALL_THROWS,
+                "call to '" + call.name.token_name + "' always throws '" + thrownType +
+                "' (evaluated at compile time)",
+                call.name.location));
+            return true;
         }
     }
 
@@ -486,24 +523,12 @@ bool Binder::check_compile_time_call(const FunctionSymbol& funcSym, const Functi
             if (val.kind == ConstValue::Bool && !val.boolVal)
             {
                 restoreConstants();
-                if (insideTryExpression_)
-                {
-                    _diagnostics.emitAndPrint(Diagnostic(
-                        Severity::Warning, DiagnosticCode::ALWAYS_THROWS_HANDLED,
-                        "call to '" + call.name.token_name +
-                        "' always violates a 'require' clause (evaluated at compile time); the error path is always taken",
-                        call.name.location));
-                }
-                else
-                {
-                    _diagnostics.emitAndPrint(Diagnostic(
-                        Severity::Error, DiagnosticCode::CONTRACT_VIOLATION_COMPILE_TIME,
-                        "call to '" + call.name.token_name +
-                        "' violates a 'require' clause (evaluated at compile time)",
-                        call.name.location));
-                    return true;
-                }
-                return false;
+                _diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Error, DiagnosticCode::CONTRACT_VIOLATION_COMPILE_TIME,
+                    "call to '" + call.name.token_name +
+                    "' violates a 'require' clause (evaluated at compile time)",
+                    call.name.location));
+                return true;
             }
         }
         restoreConstants();

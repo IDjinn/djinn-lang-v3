@@ -401,6 +401,7 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     if (expr.type.kind == TypeKind::INTEGER)
     {
         currentScope->set_variable_signed(expr.name.token_name, expr.type.sign);
+        currentScope->set_variable_non_zero(expr.name.token_name, expr.type.nonZero);
     }
     builder->CreateStore(initVal, alloca);
     if (expr.type.kind == TypeKind::INTEGER)

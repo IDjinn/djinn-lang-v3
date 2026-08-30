@@ -758,6 +758,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         generator.stdDeclOnly = options.stdDeclOnly;
         generator.moduleName = options.outputFileName.empty() ? "djinn_module" : options.outputFileName;
         generator.reflectionMode = options.reflectionMode;
+        generator.runtimeDiagnostics =
+            options.debugMode ? RuntimeDiagnostics::Full : RuntimeDiagnostics::Minimal;
         {
             auto _phase = summary.phase("codegen");
             generator.generate();
@@ -1103,6 +1105,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         generator.stdDeclOnly = options.stdDeclOnly;
         generator.moduleName = options.outputFileName.empty() ? "djinn_module" : options.outputFileName;
         generator.reflectionMode = options.reflectionMode;
+        generator.runtimeDiagnostics =
+            options.debugMode ? RuntimeDiagnostics::Full : RuntimeDiagnostics::Minimal;
         generator.generate();
         irVerified = generator.verify();
 

@@ -92,7 +92,7 @@ try_expression       = "try" expression [ "?:" expression ] ;
 (* Error values are structs deriving a builtin error type (`Exception`,
 `Generic`, `DivisionByZero`, `Argument`, `Overflow`, `OutOfBounds`,
 `InvalidArgument`, `ContractViolation`, or user-defined `struct MyError : Base;`)
-with layout `{ tag: i32, message: str }`.
+with layout `{ tag: i32, message: str, type_name: str }`.
 
 - `throws(T...)` declares what a function may throw; bare `throws` = anything.
 - `throw ErrorType("message")` sets the error state and returns the default value.
@@ -100,7 +100,18 @@ with layout `{ tag: i32, message: str }`.
   a `throws` caller).
 - Calling a throwing function without `try` is an error outside `throws`
   functions; inside them the error propagates automatically.
-- An exception escaping `main() throws` is reported at runtime and aborts.
+- An exception escaping `main() throws` is reported at runtime (`Type: message`,
+  pointing at the outermost unhandled call — the origin rises as the error
+  propagates; debug builds also print the stack trace captured at the throw
+  site) and aborts.
+
+Runtime error reporting detail is gated by build mode (`--debug`/`--release`,
+`build-mode:` in `djinn.proj`; default is debug):
+
+- Debug: full reports — source snippet with caret, operand values, variable
+  assignment history and a shadow-stack trace.
+- Release: minimal reports — message, `file:line` and operand values only; no
+  per-site source strings, frames or tracking, keeping binaries small.
 
 Error enforcement level (CompilerOptions::errorEnforcement):
 
@@ -108,8 +119,8 @@ Error enforcement level (CompilerOptions::errorEnforcement):
 - `Runtime`: `try` enforcement + propagation only (no compile-time analysis).
 - `CompileTime` (default): additionally, calls whose outcome is provable are checked — a constexpr call that always
   throws with constant arguments, or a
-  `require` clause violated by constant arguments, is a compile error when unhandled (diagnostics 9006/9007) and a
-  warning inside `try ... ?:` (9008).
+  `require` clause violated by constant arguments, is a compile error when unhandled (diagnostics 9006/9007); inside
+  `try` the error is handled and nothing is reported.
 - `Strict`: like CompileTime, but every call to a throwing function must be wrapped in `try` (bare `try` to propagate),
   even inside `throws` functions. *)
 
@@ -229,9 +240,13 @@ type                 = base_type { "*" } [ "[" "]" ] ;
 base_type            = primitive_type | IDENTIFIER [ generic_args ] | "void" | "string" | "auto" ;
 
 primitive_type       = integer_type | float_type | native_type ;
-integer_type         = ( "i" | "u" ) DIGITS [ overflow_suffix ] ;  (* i8..i64, u8..u64, i32w, u32s, ... *)
+integer_type         = ( "i" | "u" ) DIGITS { integer_suffix } ;  (* i8..i64, u8..u64, i32w, u32n, i32nt, ... *)
 float_type           = "f" DIGITS ;                                (* f16, f32, f64, f128 *)
 native_type          = "nint" [ overflow_suffix ] | "nfloat" | "ndouble" ;
+integer_suffix       = non_zero_suffix | overflow_suffix ;
+non_zero_suffix      = "n" ;   (* type cannot hold the value 0 (i32n: 1..MAX and MIN..-1,
+                                   u32n: 1..MAX); combinable with overflow suffix in
+                                   either order (i32nw / i32wn) *)
 overflow_suffix      = "w" | "t" | "c" | "s" ;
                      (* w = wrapped (default, C-style), t = trapped (panic on overflow),
                         c = checked (throws Overflow, requires 'throws' function),

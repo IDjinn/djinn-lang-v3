@@ -300,6 +300,8 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         {
             resultType = rightResolved;
         }
+        // Arithmetic/bitwise/shift results can be zero (e.g. a - a, a & 0)
+        resultType.nonZero = false;
         if (overflowMode != OverflowMode::None && resultType.overflowMode == OverflowMode::None)
         {
             resultType.overflowMode = overflowMode;
@@ -336,6 +338,12 @@ std::shared_ptr<Symbol> Binder::bindUnaryExpression(const UnaryExpression& expr)
 
     Type resultType = operand ? operand->type : Type::voided();
 
+    // Only negation preserves non-zero-ness (~x is zero when x == -1)
+    if (expr.op != TokenType::MINUS && resultType.kind == TypeKind::INTEGER)
+    {
+        resultType.nonZero = false;
+    }
+
     return std::make_shared<UnaryExpressionSymbol>(
         tokenTypeToString(expr.op), std::move(operand), resultType, expr.location
     );
@@ -363,6 +371,17 @@ std::shared_ptr<Symbol> Binder::bindPostfixExpression(const PostfixExpression& e
     // ++/--: propagate the operand's overflow mode
     if (operand && operand->type.kind == TypeKind::INTEGER)
     {
+        if (operand->type.nonZero)
+        {
+            BINDER_ERROR(
+                DiagnosticCode::TYPE_MISMATCH,
+                "cannot apply '" + tokenTypeToString(expr.op) + "' to non-zero type '" +
+                operand->type.toHumanString() + "': result may be zero",
+                operand,
+                expr.location
+            );
+        }
+
         const OverflowMode mode = operand->type.overflowMode;
         const_cast<PostfixExpression&>(expr).overflowMode = mode;
         const_cast<PostfixExpression&>(expr).overflowSigned = operand->type.sign;

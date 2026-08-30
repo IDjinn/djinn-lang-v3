@@ -46,6 +46,16 @@ struct TrapOperand
     std::string name;
 };
 
+// Level of runtime error instrumentation baked into the generated module.
+// Full (debug): rich trap descriptors (source snippet, operand values, variable
+// history) and shadow-stack frames for stack traces. Minimal (release): traps
+// and uncaught exceptions keep message + file:line + operand values only.
+enum class RuntimeDiagnostics
+{
+    Minimal,
+    Full
+};
+
 class Generator
 {
     friend class djinn::GeneratorExpressionVisitor;
@@ -74,6 +84,7 @@ public:
     bool stdDeclOnly = false;
     std::string moduleName;
     std::string reflectionMode = "none";
+    RuntimeDiagnostics runtimeDiagnostics = RuntimeDiagnostics::Full;
 
 private:
     DiagnosticEngine& _diagnostics;
@@ -326,15 +337,20 @@ private:
     llvm::GlobalVariable* errorFlagGlobal = nullptr;
     llvm::GlobalVariable* errorTagGlobal = nullptr;
     llvm::GlobalVariable* errorPayloadGlobal = nullptr;
+    llvm::GlobalVariable* errorNameGlobal = nullptr;
+    llvm::GlobalVariable* errorOriginFileGlobal = nullptr;
+    llvm::GlobalVariable* errorOriginLineGlobal = nullptr;
+    llvm::GlobalVariable* errorOriginColumnGlobal = nullptr;
     void ensure_error_globals_declared();
     llvm::Value* get_default_value(llvm::Type* type);
     std::shared_ptr<StructSymbol> resolve_error_struct(const std::string& name) const;
     llvm::Value* generate_error_construction(const FunctionCall& call);
     llvm::Value* generate_interpolated_error_message(const FunctionCall& call);
-    void emit_error_propagation_check();
+    void emit_error_propagation_check(const SourceLocation& loc);
     void emit_uncaught_error_check();
     void emit_div_by_zero_check(const TrapOperand& dividend, const TrapOperand& divisor, const SourceLocation& loc);
-    void emit_error_throw_with_tag(int32_t tag);
+    void emit_error_throw_with_tag(int32_t tag, const SourceLocation& loc);
+    void store_error_origin(const SourceLocation& loc);
 
     // Integer overflow modes (w/t/c/s suffixes)
     llvm::Function* get_or_declare_runtime_error_fn();
@@ -346,13 +362,19 @@ private:
 
     // Runtime diagnostics: rich traps (source location + operand values +
     // variable assignment history) and shadow call-stack frames for runtime
-    // stack traces
+    // stack traces. Shadow frames, variable tracking and source snippets are
+    // emitted in Full mode only; Minimal traps keep file:line + operands.
     void emit_runtime_error_trap(const SourceLocation& loc, const char* message, char op,
                                  const TrapOperand& left, const TrapOperand& right, bool isSigned);
+    void emit_runtime_error_trap_min(const SourceLocation& loc, const char* message, char op,
+                                     const TrapOperand& left, const TrapOperand& right, bool isSigned);
     void emit_frame_push(const std::string& displayName, const SourceLocation& loc);
     void emit_frame_set_line(const SourceLocation& loc);
     void emit_var_track(llvm::Value* slot, const std::string& name, const SourceLocation& loc);
+    void emit_error_stack_capture(const SourceLocation& loc);
     TrapOperand make_trap_operand(const Expression& expr, llvm::Value* value);
+    llvm::Constant* cached_global_string(const std::string& text, const char* prefix);
+    std::unordered_map<std::string, llvm::Constant*> stringGlobalCache;
 
     // Contracts (require/ensure)
     std::vector<const ContractClause*> currentContracts_;
@@ -360,6 +382,12 @@ private:
     void setup_contracts(const std::vector<const ContractClause*>& contracts, llvm::Function* llvmFunc);
     void emit_contract_requirements();
     void emit_contract_ensures();
+    void emit_non_zero_param_check(const std::string& paramName, const Type& paramType);
+
+    // Non-zero analysis: true when the expression is known to never be zero
+    // (non-zero literal, i32n-typed variable, cast to a non-zero type), used
+    // to elide division-by-zero checks
+    [[nodiscard]] bool is_provably_non_zero(const Expression& expr) const;
 
     // [intrinsic] struct method support
     llvm::Value* generate_intrinsic_method(const FunctionCall& call, const StructDef* def,

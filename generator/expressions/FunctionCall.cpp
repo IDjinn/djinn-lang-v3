@@ -570,7 +570,7 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     // re-throw when the callee failed (error propagation)
     if (currentFunctionThrows && !insideTryOperand_ && funcSym && funcSym->isThrowing())
     {
-        emit_error_propagation_check();
+        emit_error_propagation_check(expr.name.location);
     }
 
     return call;
@@ -1147,7 +1147,7 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         const auto methodSym = structSym ? structSym->getMethod(call.name.token_name) : nullptr;
         if (methodSym && methodSym->isThrowing())
         {
-            emit_error_propagation_check();
+            emit_error_propagation_check(call.name.location);
         }
     }
 

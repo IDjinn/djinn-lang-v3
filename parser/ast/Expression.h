@@ -544,6 +544,33 @@ struct UnaryExpression : Expression
     }
 };
 
+// True for `0`, `-0`, `0x0`, `0b0`, `0_0`... — integer literals whose value is zero
+inline bool is_zero_literal(const Expression& expr)
+{
+    const IntegerLiteral* lit = dynamic_cast<const IntegerLiteral*>(&expr);
+    if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
+    {
+        if (unary->op == TokenType::MINUS)
+        {
+            lit = dynamic_cast<const IntegerLiteral*>(unary->operand.get());
+        }
+    }
+    if (!lit) return false;
+
+    std::string digits;
+    for (const char c : lit->value)
+    {
+        if (c != '_' && c != '\'') digits += c;
+    }
+    if (digits.size() > 2 && digits[0] == '0' && (digits[1] == 'x' || digits[1] == 'X'
+        || digits[1] == 'b' || digits[1] == 'B'))
+    {
+        digits = digits.substr(2);
+    }
+    return !digits.empty()
+        && std::all_of(digits.begin(), digits.end(), [](const char c) { return c == '0'; });
+}
+
 struct PostfixExpression : Expression
 {
     TokenType op;
@@ -597,6 +624,33 @@ struct BinaryExpression : Expression
         right->print(os, indent + 2);
     }
 };
+
+// Matches `x != 0` / `0 != x`: when the condition holds, the identifier is
+// proven non-zero (used by require/ensure contract analysis)
+inline std::optional<std::string> non_zero_proven_identifier(const Expression& expr)
+{
+    const auto* binary = dynamic_cast<const BinaryExpression*>(&expr);
+    if (!binary || binary->op != TokenType::BANG_EQUAL) return std::nullopt;
+
+    if (const auto* leftIdent = dynamic_cast<const Identifier*>(binary->left.get());
+        leftIdent && is_zero_literal(*binary->right))
+    {
+        return leftIdent->identifier.token_name;
+    }
+    if (const auto* rightIdent = dynamic_cast<const Identifier*>(binary->right.get());
+        rightIdent && is_zero_literal(*binary->left))
+    {
+        return rightIdent->identifier.token_name;
+    }
+    return std::nullopt;
+}
+
+// Matches ensure(return != 0): the function's return value is proven non-zero
+inline bool ensures_non_zero_return(const Expression& expr)
+{
+    const auto proven = non_zero_proven_identifier(expr);
+    return proven && *proven == "return";
+}
 
 struct InitializerElement : Location
 {

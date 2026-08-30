@@ -4,7 +4,7 @@
 
 llvm::StructType* djinn_error_value_type(llvm::LLVMContext& context, llvm::IRBuilder<>& builder)
 {
-    return llvm::StructType::get(context, {builder.getInt32Ty(), builder.getPtrTy()});
+    return llvm::StructType::get(context, {builder.getInt32Ty(), builder.getPtrTy(), builder.getPtrTy()});
 }
 
 void Generator::ensure_error_globals_declared()
@@ -37,6 +37,42 @@ void Generator::ensure_error_globals_declared()
         llvm::ConstantPointerNull::get(builder->getPtrTy()),
         "__djinn_error_payload"
     );
+
+    errorNameGlobal = new llvm::GlobalVariable(
+        *module,
+        builder->getPtrTy(),
+        false,
+        llvm::GlobalVariable::InternalLinkage,
+        llvm::ConstantPointerNull::get(builder->getPtrTy()),
+        "__djinn_error_type"
+    );
+
+    errorOriginFileGlobal = new llvm::GlobalVariable(
+        *module,
+        builder->getPtrTy(),
+        false,
+        llvm::GlobalVariable::InternalLinkage,
+        llvm::ConstantPointerNull::get(builder->getPtrTy()),
+        "__djinn_error_origin_file"
+    );
+
+    errorOriginLineGlobal = new llvm::GlobalVariable(
+        *module,
+        builder->getInt32Ty(),
+        false,
+        llvm::GlobalVariable::InternalLinkage,
+        llvm::ConstantInt::get(builder->getInt32Ty(), 0),
+        "__djinn_error_origin_line"
+    );
+
+    errorOriginColumnGlobal = new llvm::GlobalVariable(
+        *module,
+        builder->getInt32Ty(),
+        false,
+        llvm::GlobalVariable::InternalLinkage,
+        llvm::ConstantInt::get(builder->getInt32Ty(), 0),
+        "__djinn_error_origin_column"
+    );
 }
 
 llvm::Value* Generator::get_default_value(llvm::Type* type)
@@ -61,7 +97,7 @@ std::shared_ptr<StructSymbol> Generator::resolve_error_struct(const std::string&
     return nullptr;
 }
 
-// Error values have the layout { i32 tag, i8* message }
+// Error values have the layout { i32 tag, i8* message, i8* type_name }
 llvm::Value* Generator::generate_error_construction(const FunctionCall& call)
 {
     ensure_error_globals_declared();
@@ -93,6 +129,14 @@ llvm::Value* Generator::generate_error_construction(const FunctionCall& call)
 
     auto* msgFieldPtr = builder->CreateStructGEP(errType, alloca, 1, "err_msg_ptr");
     builder->CreateStore(msgPtr, msgFieldPtr);
+
+    // Type name for uncaught-exception reports; one deduped global per error
+    // type, and displayed without the namespace qualification
+    auto name = errSym->name;
+    if (const auto pos = name.rfind("::"); pos != std::string::npos)
+        name = name.substr(pos + 2);
+    auto* nameFieldPtr = builder->CreateStructGEP(errType, alloca, 2, "err_type_ptr");
+    builder->CreateStore(cached_global_string(name, "err.type"), nameFieldPtr);
 
     return alloca;
 }
@@ -166,7 +210,17 @@ void Generator::generate_throw_statement(const ThrowStatement& stmt)
             auto* msgVal = builder->CreateLoad(builder->getPtrTy(), msgPtr, "throw_msg");
             builder->CreateStore(msgVal, errorPayloadGlobal, true);
         }
+
+        if (errType->getNumElements() >= 3)
+        {
+            auto* namePtr = builder->CreateStructGEP(errType, errPtr, 2, "throw_type_ptr");
+            auto* nameVal = builder->CreateLoad(builder->getPtrTy(), namePtr, "throw_type");
+            builder->CreateStore(nameVal, errorNameGlobal, true);
+        }
     }
+
+    store_error_origin(stmt.location);
+    emit_error_stack_capture(stmt.location);
 
     builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 1), errorFlagGlobal, true);
 
@@ -184,8 +238,10 @@ void Generator::generate_throw_statement(const ThrowStatement& stmt)
 }
 
 // After a call to a throwing function inside another throwing function
-// (unchecked call sites), re-throw when the callee failed.
-void Generator::emit_error_propagation_check()
+// (unchecked call sites), re-throw when the callee failed. The error origin
+// rises to this call site so uncaught reports point at the outermost
+// unhandled call instead of the innermost throw.
+void Generator::emit_error_propagation_check(const SourceLocation& loc)
 {
     ensure_error_globals_declared();
 
@@ -198,6 +254,7 @@ void Generator::emit_error_propagation_check()
     builder->CreateCondBr(errorFlag, errBB, contBB);
 
     builder->SetInsertPoint(errBB);
+    store_error_origin(loc);
     emit_all_scope_cleanup();
     llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
     if (returnType->isVoidTy())
@@ -222,7 +279,11 @@ void Generator::emit_uncaught_error_check()
     if (!uncaughtFn)
     {
         auto* uncaughtTy = llvm::FunctionType::get(builder->getVoidTy(),
-                                                   {builder->getInt32Ty(), builder->getPtrTy()}, false);
+                                                   {
+                                                       builder->getInt32Ty(), builder->getPtrTy(),
+                                                       builder->getPtrTy(), builder->getPtrTy(),
+                                                       builder->getInt32Ty(), builder->getInt32Ty(),
+                                                   }, false);
         uncaughtFn = llvm::Function::Create(uncaughtTy, llvm::Function::ExternalLinkage,
                                             "__djinn_uncaught_error", *module);
     }
@@ -237,8 +298,12 @@ void Generator::emit_uncaught_error_check()
 
     builder->SetInsertPoint(errBB);
     auto* tag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "uncaught_tag");
+    auto* name = builder->CreateLoad(builder->getPtrTy(), errorNameGlobal, true, "uncaught_type");
     auto* payload = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "uncaught_msg");
-    builder->CreateCall(uncaughtFn, {tag, payload});
+    auto* originFile = builder->CreateLoad(builder->getPtrTy(), errorOriginFileGlobal, true, "uncaught_file");
+    auto* originLine = builder->CreateLoad(builder->getInt32Ty(), errorOriginLineGlobal, true, "uncaught_line");
+    auto* originCol = builder->CreateLoad(builder->getInt32Ty(), errorOriginColumnGlobal, true, "uncaught_col");
+    builder->CreateCall(uncaughtFn, {tag, name, payload, originFile, originLine, originCol});
     builder->CreateUnreachable();
 
     builder->SetInsertPoint(okBB);
@@ -264,16 +329,7 @@ void Generator::emit_div_by_zero_check(const TrapOperand& dividend, const TrapOp
 
     if (currentFunctionThrows)
     {
-        builder->CreateStore(
-            llvm::ConstantInt::get(builder->getInt32Ty(), djinn::errors::builtin_error_tag("DivisionByZero")),
-            errorTagGlobal, true);
-        builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 1), errorFlagGlobal, true);
-        emit_all_scope_cleanup();
-        llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
-        if (returnType->isVoidTy())
-            builder->CreateRetVoid();
-        else
-            builder->CreateRet(get_default_value(returnType));
+        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("DivisionByZero"), loc);
     }
     else
     {
@@ -310,13 +366,47 @@ void Generator::setup_contracts(const std::vector<const ContractClause*>& contra
     emit_contract_requirements();
 }
 
+// Non-zero parameter entry check: the parameter type is an implicit
+// require(param != 0) clause. Throws ContractViolation when violated, which
+// is what lets division-by-zero checks inside the body be elided.
+void Generator::emit_non_zero_param_check(const std::string& paramName, const Type& paramType)
+{
+    if (paramType.kind != TypeKind::INTEGER || !paramType.nonZero) return;
+
+    auto* alloca = currentScope->lookup_variable(paramName);
+    if (!alloca) return;
+
+    auto* value = builder->CreateLoad(alloca->getAllocatedType(), alloca, paramName + ".nz_load");
+    auto* isZero = builder->CreateICmpEQ(
+        value, llvm::ConstantInt::get(value->getType(), 0), "nz_zero");
+
+    auto* llvmFunc = builder->GetInsertBlock()->getParent();
+    auto* okBB = llvm::BasicBlock::Create(*context, "nz.ok", llvmFunc);
+    auto* violBB = llvm::BasicBlock::Create(*context, "nz.violation", llvmFunc);
+
+    builder->CreateCondBr(isZero, violBB, okBB);
+
+    builder->SetInsertPoint(violBB);
+    emit_error_throw_with_tag(djinn::errors::builtin_error_tag("ContractViolation"), paramType.location);
+
+    builder->SetInsertPoint(okBB);
+}
+
 // Require checks: evaluate each precondition at function entry and throw
-// ContractViolation when one fails.
+// ContractViolation when one fails. A require that merely restates a non-zero
+// guarantee (declared i32n or upgraded from require(p != 0)) is skipped —
+// the non-zero entry check already covers it.
 void Generator::emit_contract_requirements()
 {
     for (const auto& contract : currentContracts_)
     {
         if (!contract || !contract->isRequire() || !contract->condition) continue;
+
+        if (const auto proven = non_zero_proven_identifier(*contract->condition);
+            proven && currentScope->lookup_variable_non_zero(*proven).value_or(false))
+        {
+            continue;
+        }
 
         auto* condVal = generate_expression(*contract->condition);
         if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(condVal))
@@ -333,7 +423,8 @@ void Generator::emit_contract_requirements()
         builder->CreateCondBr(condTrue, okBB, violBB);
 
         builder->SetInsertPoint(violBB);
-        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("ContractViolation"));
+        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("ContractViolation"),
+                                  contract->condition->location);
 
         builder->SetInsertPoint(okBB);
     }
@@ -362,20 +453,38 @@ void Generator::emit_contract_ensures()
         builder->CreateCondBr(condTrue, okBB, violBB);
 
         builder->SetInsertPoint(violBB);
-        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("ContractViolation"));
+        emit_error_throw_with_tag(djinn::errors::builtin_error_tag("ContractViolation"),
+                                  contract->condition->location);
 
         builder->SetInsertPoint(okBB);
     }
 }
 
+// Records where an error was raised so uncaught-exception reports can point
+// at the failing expression even without a stack trace (release builds).
+void Generator::store_error_origin(const SourceLocation& loc)
+{
+    llvm::Value* filePtr = llvm::ConstantPointerNull::get(builder->getPtrTy());
+    if (!loc.fileId.empty())
+        filePtr = cached_global_string(loc.fileId, "err.origin.file");
+    builder->CreateStore(filePtr, errorOriginFileGlobal, true);
+    builder->CreateStore(builder->getInt32(loc.line), errorOriginLineGlobal, true);
+    builder->CreateStore(builder->getInt32(loc.column), errorOriginColumnGlobal, true);
+}
+
 // Marks the error flag/tag and returns the function's default value,
 // terminating the current path (used by throw and contract violations).
-void Generator::emit_error_throw_with_tag(const int32_t tag)
+void Generator::emit_error_throw_with_tag(const int32_t tag, const SourceLocation& loc)
 {
     ensure_error_globals_declared();
 
     builder->CreateStore(builder->getInt32(tag), errorTagGlobal, true);
+    // Builtin-tag errors carry no type name of their own — clear any name left
+    // by a previous user exception so reports fall back to the builtin table
+    builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()), errorNameGlobal, true);
     builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 1), errorFlagGlobal, true);
+    store_error_origin(loc);
+    emit_error_stack_capture(loc);
 
     emit_all_scope_cleanup();
 
@@ -453,7 +562,8 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
     {
         if (currentFunctionThrows)
         {
-            // No fallback: propagate the error to this function's callers
+            // No fallback: propagate the error to this function's callers,
+            // with the origin rising to this unhandled try call site
             auto* llvmFunc = builder->GetInsertBlock()->getParent();
             auto* okBB = llvm::BasicBlock::Create(*context, "try.prop.ok", llvmFunc);
             auto* errBB = llvm::BasicBlock::Create(*context, "try.prop.err", llvmFunc);
@@ -461,6 +571,7 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
             builder->CreateCondBr(errorFlag, errBB, okBB);
 
             builder->SetInsertPoint(errBB);
+            store_error_origin(expr.location);
             emit_all_scope_cleanup();
             llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
             if (returnType->isVoidTy())

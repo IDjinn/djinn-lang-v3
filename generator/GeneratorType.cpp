@@ -388,7 +388,9 @@ void Generator::monomorphize_method(const MethodSymbol& method,
         if (substitutedParam.kind == TypeKind::INTEGER)
         {
             currentScope->set_variable_signed(paramName, substitutedParam.sign);
+            currentScope->set_variable_non_zero(paramName, substitutedParam.nonZero);
         }
+        emit_non_zero_param_check(paramName, substitutedParam);
 
         ++argIt;
         ++paramIdx;
