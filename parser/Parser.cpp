@@ -1467,6 +1467,17 @@ std::unique_ptr<Statement> Parser::parse_statement()
         // Fall through to expression statement handling
     }
 
+    if (check(TokenType::TRY))
+    {
+        // Block form `try { ... } catch (...) { ... }` starts with a brace;
+        // the expression forms (`try e`, `try e ?: f`) fall through below
+        if (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::LBRACE)
+        {
+            advance();
+            return parse_try_catch_statement();
+        }
+    }
+
     if (match(TokenType::BREAK))
     {
         expect("Esperado ';' após break", TokenType::SEMICOLON);
@@ -1565,6 +1576,50 @@ std::unique_ptr<Statement> Parser::parse_statement()
     auto expr = parse_expression();
     expect("Esperado ';'", TokenType::SEMICOLON);
     return std::make_unique<ExpressionStatement>(std::move(expr));
+}
+
+// try { ... } catch (ErrorType e | Error e | _) { ... } ... [finally { ... }]
+// The 'try' token is already consumed.
+std::unique_ptr<Statement> Parser::parse_try_catch_statement()
+{
+    const auto& tryToken = previous();
+
+    auto stmt = std::make_unique<TryCatchStatement>();
+    stmt->location = SourceLocation(tryToken.position, tryToken.value.length());
+    stmt->tryBlock = parse_block();
+
+    while (match(TokenType::CATCH))
+    {
+        CatchClause clause;
+        clause.location = SourceLocation(previous().position, previous().value.length());
+
+        expect("Expected '(' after 'catch'", TokenType::LPAREN);
+        const Token& typeToken = expect("Expected error type in catch pattern", TokenType::IDENTIFIER);
+        clause.errorType = makeSourceIdentifier(typeToken);
+
+        if (check(TokenType::IDENTIFIER))
+        {
+            clause.binding = makeSourceIdentifier(advance());
+        }
+        expect("Expected ')' after catch pattern", TokenType::RPAREN);
+
+        clause.body = parse_block();
+        stmt->catches.push_back(std::move(clause));
+    }
+
+    if (match(TokenType::FINALLY))
+    {
+        stmt->finallyBlock = parse_block();
+    }
+
+    if (stmt->catches.empty() && !stmt->finallyBlock)
+    {
+        PARSER_ERROR(DiagnosticCode::EXPECTED_CATCH_OR_FINALLY,
+                     "expected 'catch (...)' or 'finally' after try block",
+                     stmt->location);
+    }
+
+    return stmt;
 }
 
 std::unique_ptr<IfStatement> Parser::parse_if_statement()

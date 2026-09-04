@@ -14,6 +14,8 @@ Logger* logger;
 
 #ifdef _WIN32
 #include <io.h>
+#include <intrin.h>
+#include <dbghelp.h>
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "mswsock.lib")
 #else
@@ -24,6 +26,8 @@ Logger* logger;
 #include <netinet/tcp.h>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <dlfcn.h>
+#include <execinfo.h>
 #endif
 
 // #define DJINN_ENABLE_TRACE
@@ -660,65 +664,343 @@ static DWORD WINAPI worker_thread(LPVOID arg)
 
 char __djinn_last_error_report[DJINN_ERROR_REPORT_SIZE];
 
+// Thread-local error state written by generated throw sites and read by
+// propagation checks (single definition owned by the runtime — generated
+// modules declare it extern, so linked libraries share one state).
+DJINN_TLS djinn_errno_t __djinn_errno = {0, 0, NULL, NULL, NULL, 0, 0};
+
+static _Thread_local struct
+{
+    void* frames[DJINN_MAX_TRACE_FRAMES];
+    int count;
+} djinn_error_trace;
+
+#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
+
+// Validated frame-pointer walk: JIT-compiled frames carry no unwind info, so
+// CaptureStackBackTrace cannot walk through them. Every hop is bounds-checked
+// against the TEB stack limits; a broken chain just truncates the trace.
+static int djinn_walk_frame_pointers(void** frames, const int max)
+{
+    const uintptr_t stack_base = (uintptr_t)__readgsqword(0x08);
+    const uintptr_t stack_limit = (uintptr_t)__readgsqword(0x10);
+    if (stack_base <= stack_limit) return 0;
+
+    uintptr_t fp = (uintptr_t)__builtin_frame_address(0);
+    int count = 0;
+    while (count < max)
+    {
+        if (fp < stack_limit || fp % sizeof(void*) != 0
+            || fp + 2 * sizeof(void*) > stack_base)
+            break;
+        frames[count++] = (void*)((uintptr_t*)fp)[1];
+        const uintptr_t next = ((uintptr_t*)fp)[0];
+        if (next <= fp || next >= stack_base || next % sizeof(void*) != 0)
+            break;
+        fp = next;
+    }
+    return count;
+}
+#endif
+
+static int djinn_capture_frames(void** frames, const int max)
+{
+#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
+    const int walked = djinn_walk_frame_pointers(frames, max);
+    if (walked >= 2) return walked;
+    // Optimized builds drop frame pointers — the OS unwinder reads .pdata
+    return (int)CaptureStackBackTrace(1, (DWORD)max, frames, NULL);
+#else
+    void* scratch[DJINN_MAX_TRACE_FRAMES + 4];
+    int n = backtrace(scratch, max + 4);
+    if (n <= 2) return 0;
+    n -= 2; /* backtrace() + this helper */
+    if (n > max) n = max;
+    memcpy(frames, scratch + 2, (size_t)n * sizeof(void*));
+    return n;
+#endif
+}
+
+void __djinn_capture_backtrace(void)
+{
+    djinn_error_trace.count =
+        djinn_capture_frames(djinn_error_trace.frames, DJINN_MAX_TRACE_FRAMES);
+}
+
+// Shared with the native-exceptions shim: captures into caller storage so
+// the thrown error object carries its own raise-site trace.
+int __djinn_capture_backtrace_into(void** frames, const int max)
+{
+    return djinn_capture_frames(frames, max);
+}
+
+// ── JIT symbol registry ──
+
+#define DJINN_MAX_JIT_SYMBOLS 4096
+
+typedef struct
+{
+    const void* address;
+    char* name;
+} djinn_jit_symbol_t;
+
 static struct
 {
-    djinn_frame_t frames[DJINN_MAX_FRAMES];
-    int depth;
-    int overflowed; /* frames were dropped past the cap */
-} djinn_shadow_stack;
+    djinn_jit_symbol_t items[DJINN_MAX_JIT_SYMBOLS];
+    int count;
+} djinn_jit_symbols;
 
-void __djinn_frame_push(const char* function_name, const char* file, const uint32_t line)
+static int djinn_jit_symbol_cmp(const void* a, const void* b)
 {
-    if (djinn_shadow_stack.depth >= DJINN_MAX_FRAMES)
+    const djinn_jit_symbol_t* left = (const djinn_jit_symbol_t*)a;
+    const djinn_jit_symbol_t* right = (const djinn_jit_symbol_t*)b;
+    if (left->address < right->address) return -1;
+    if (left->address > right->address) return 1;
+    return 0;
+}
+
+void __djinn_jit_register_symbols(const char* const* names, const void* const* addresses,
+                                  const int count)
+{
+    for (int i = 0; i < count; i++)
     {
-        djinn_shadow_stack.overflowed = 1;
+        if (djinn_jit_symbols.count >= DJINN_MAX_JIT_SYMBOLS) break;
+        char* copy = strdup(names[i]);
+        if (!copy) break;
+        djinn_jit_symbols.items[djinn_jit_symbols.count].address = addresses[i];
+        djinn_jit_symbols.items[djinn_jit_symbols.count].name = copy;
+        djinn_jit_symbols.count++;
+    }
+    qsort(djinn_jit_symbols.items, (size_t)djinn_jit_symbols.count,
+          sizeof(djinn_jit_symbol_t), djinn_jit_symbol_cmp);
+}
+
+// Nearest registered symbol at or below addr; a function owns everything up
+// to the next registered address.
+static const char* djinn_jit_lookup(const void* addr)
+{
+    int lo = 0;
+    int hi = djinn_jit_symbols.count - 1;
+    int found = -1;
+    while (lo <= hi)
+    {
+        const int mid = lo + (hi - lo) / 2;
+        if (djinn_jit_symbols.items[mid].address <= addr)
+        {
+            found = mid;
+            lo = mid + 1;
+        }
+        else
+        {
+            hi = mid - 1;
+        }
+    }
+    if (found < 0) return NULL;
+    return djinn_jit_symbols.items[found].name;
+}
+
+// ── Symbolization ──
+
+#ifdef _WIN32
+
+typedef BOOL(WINAPI* djinn_SymInitialize_fn)(HANDLE, PCSTR, BOOL);
+typedef BOOL(WINAPI* djinn_SymFromAddr_fn)(HANDLE, DWORD64, PDWORD64, PSYMBOL_INFO);
+typedef BOOL(WINAPI* djinn_SymGetLineFromAddr64_fn)(HANDLE, DWORD64, PDWORD, PIMAGEHLP_LINE64);
+
+static struct
+{
+    HMODULE module;
+    djinn_SymInitialize_fn initialize;
+    djinn_SymFromAddr_fn from_addr;
+    djinn_SymGetLineFromAddr64_fn get_line;
+    int failed;
+} djinn_dbghelp;
+
+// Loaded lazily on first symbolization (error paths only): the happy path
+// never touches dbghelp, and JIT hosts need no link-time dependency on it.
+static void djinn_dbghelp_init(void)
+{
+    if (djinn_dbghelp.module || djinn_dbghelp.failed) return;
+
+    djinn_dbghelp.module = LoadLibraryA("dbghelp.dll");
+    if (!djinn_dbghelp.module)
+    {
+        djinn_dbghelp.failed = 1;
         return;
     }
-    djinn_frame_t* frame = &djinn_shadow_stack.frames[djinn_shadow_stack.depth++];
-    frame->function_name = function_name;
-    frame->file = file;
-    frame->line = line;
+
+    djinn_dbghelp.initialize = (djinn_SymInitialize_fn)(void(*)(void))
+    GetProcAddress(djinn_dbghelp.module, "SymInitialize");
+    djinn_dbghelp.from_addr = (djinn_SymFromAddr_fn)(void(*)(void))
+    GetProcAddress(djinn_dbghelp.module, "SymFromAddr");
+    djinn_dbghelp.get_line = (djinn_SymGetLineFromAddr64_fn)(void(*)(void))
+    GetProcAddress(djinn_dbghelp.module, "SymGetLineFromAddr64");
+
+    if (!djinn_dbghelp.initialize || !djinn_dbghelp.from_addr || !djinn_dbghelp.get_line
+        || !djinn_dbghelp.initialize(GetCurrentProcess(), NULL, TRUE))
+    {
+        djinn_dbghelp.failed = 1;
+    }
 }
 
-void __djinn_frame_pop(void)
+static int djinn_symbolize_frame(const void* addr, char* name, const size_t name_size,
+                                 char* file, const size_t file_size, uint32_t* line)
 {
-    if (djinn_shadow_stack.depth > 0)
-        djinn_shadow_stack.depth--;
+    djinn_dbghelp_init();
+    if (djinn_dbghelp.failed) return 0;
+
+    char buffer[sizeof(SYMBOL_INFO) + 256];
+    SYMBOL_INFO* symbol = (SYMBOL_INFO*)buffer;
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = 255;
+    DWORD64 displacement = 0;
+    if (!djinn_dbghelp.from_addr(GetCurrentProcess(), (DWORD64)(uintptr_t)addr,
+                                 &displacement, symbol))
+        return 0;
+    snprintf(name, name_size, "%s", symbol->Name);
+
+    IMAGEHLP_LINE64 line_info;
+    memset(&line_info, 0, sizeof line_info);
+    line_info.SizeOfStruct = sizeof line_info;
+    DWORD line_displacement = 0;
+    if (djinn_dbghelp.get_line(GetCurrentProcess(), (DWORD64)(uintptr_t)addr,
+                               &line_displacement, &line_info)
+        && line_info.LineNumber != 0 && line_info.FileName != NULL)
+    {
+        snprintf(file, file_size, "%s", line_info.FileName);
+        *line = (uint32_t)line_info.LineNumber;
+    }
+    return 1;
 }
 
-void __djinn_frame_set_line(const uint32_t line)
+void __djinn_symbolizer_set_path(const char* path)
 {
-    if (djinn_shadow_stack.depth > 0)
-        djinn_shadow_stack.frames[djinn_shadow_stack.depth - 1].line = line;
+    (void)path; /* line info comes from dbghelp/PDB on Windows */
 }
 
-// ── Uncaught-exception stack snapshot ──
-//
-// Thrown errors unwind normally (every propagation path returns and pops its
-// frame), so the shadow stack is empty by the time the uncaught report
-// renders. Throw sites snapshot the live stack here so the report keeps the
-// trace of where the error came from.
+#else
 
-static struct
-{
-    djinn_frame_t frames[DJINN_MAX_FRAMES];
-    int depth;
-} djinn_error_stack;
+#include <spawn.h>
 
-void __djinn_capture_error_stack(const uint32_t line)
+extern char** environ;
+
+#ifdef DJINN_SYMBOLIZER_PATH
+static char djinn_symbolizer_path[512] = DJINN_SYMBOLIZER_PATH;
+#else
+static char djinn_symbolizer_path[512] = "llvm-symbolizer";
+#endif
+static const char* djinn_self_path;
+
+void __djinn_symbolizer_set_path(const char* path)
 {
-    if (djinn_shadow_stack.depth > 0)
-        djinn_shadow_stack.frames[djinn_shadow_stack.depth - 1].line = line;
-    djinn_error_stack.depth = djinn_shadow_stack.depth;
-    memcpy(djinn_error_stack.frames, djinn_shadow_stack.frames,
-           (size_t)djinn_shadow_stack.depth * sizeof(djinn_frame_t));
+    if (path != NULL && path[0] != '\0')
+        snprintf(djinn_symbolizer_path, sizeof djinn_symbolizer_path, "%s", path);
 }
+
+static int djinn_symbolize_frame(const void* addr, char* name, const size_t name_size,
+                                 char* file, const size_t file_size, uint32_t* line)
+{
+    (void)file;
+    (void)file_size;
+    (void)line;
+    Dl_info info;
+    if (!dladdr(addr, &info) || info.dli_sname == NULL) return 0;
+    snprintf(name, name_size, "%s", info.dli_sname);
+    return 1;
+}
+
+// Asks llvm-symbolizer — one batched process per report, spawned with a plain
+// argv and no shell — for the file:line of every frame. Entries are left
+// untouched when the tool is unavailable, so traces degrade gracefully to
+// dladdr names.
+static void djinn_fill_frame_lines(void* const* frames, const int count,
+                                   char (*files)[192], uint32_t* lines)
+{
+    if (count <= 0 || djinn_symbolizer_path[0] == '\0') return;
+
+    if (djinn_self_path == NULL)
+    {
+        Dl_info info;
+        if (dladdr((const void*)&__djinn_runtime_init, &info) && info.dli_fname != NULL)
+            djinn_self_path = info.dli_fname;
+    }
+    if (djinn_self_path == NULL) return;
+
+    static const char* const flags[] = {"--functions=none", "--inlines=false"};
+    char addr_text[DJINN_MAX_TRACE_FRAMES][24];
+    char* argv[DJINN_MAX_TRACE_FRAMES + 5];
+    int argc = 0;
+    argv[argc++] = djinn_symbolizer_path;
+    static const char obj_prefix[] = "--obj=";
+    static char obj_arg[1024];
+    snprintf(obj_arg, sizeof obj_arg, "%s%s", obj_prefix, djinn_self_path);
+    argv[argc++] = obj_arg;
+    argv[argc++] = (char*)flags[0];
+    argv[argc++] = (char*)flags[1];
+    for (int i = 0; i < count; i++)
+    {
+        snprintf(addr_text[i], sizeof addr_text[i], "0x%llx",
+                 (unsigned long long)(uintptr_t)frames[i]);
+        argv[argc++] = addr_text[i];
+    }
+    argv[argc] = NULL;
+
+    int pipe_fds[2];
+    if (pipe(pipe_fds) != 0) return;
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, pipe_fds[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addclose(&actions, pipe_fds[0]);
+
+    pid_t child;
+    if (posix_spawnp(&child, djinn_symbolizer_path, &actions, NULL, argv, environ) != 0)
+    {
+        posix_spawn_file_actions_destroy(&actions);
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        return;
+    }
+    posix_spawn_file_actions_destroy(&actions);
+    close(pipe_fds[1]);
+
+    FILE* out = fdopen(pipe_fds[0], "r");
+    if (out == NULL)
+    {
+        close(pipe_fds[0]);
+        waitpid(child, NULL, 0);
+        return;
+    }
+
+    char output[512];
+    for (int i = 0; i < count; i++)
+    {
+        if (fgets(output, sizeof output, out) == NULL) break;
+        output[strcspn(output, "\n")] = '\0';
+
+        // "file:line:column" ("??:0:0" when unknown)
+        char* colon = strrchr(output, ':');
+        if (colon == NULL) continue;
+        *colon = '\0';
+        colon = strrchr(output, ':');
+        if (colon == NULL) continue;
+        *colon = '\0';
+        const unsigned long parsed = strtoul(colon + 1, NULL, 10);
+        if (parsed == 0 || output[0] == '\0' || strcmp(output, "??") == 0) continue;
+        snprintf(files[i], 192, "%s", output);
+        lines[i] = (uint32_t)parsed;
+    }
+
+    fclose(out);
+    waitpid(child, NULL, 0);
+}
+#endif
 
 // ── Variable assignment history ──
 
 typedef struct
 {
-    const char* line_text;
+    const char* file;
     uint32_t line;
 } djinn_var_event_t;
 
@@ -726,6 +1008,7 @@ typedef struct
 {
     const void* slot;
     const char* name;
+    const char* source_root;
     djinn_var_event_t events[DJINN_VAR_HISTORY]; /* newest last */
     int count; /* events stored (0..DJINN_VAR_HISTORY) */
     int total; /* total assignments seen (drives the "..." marker) */
@@ -737,7 +1020,8 @@ static struct
     int count;
 } djinn_var_registry;
 
-void __djinn_var_track(const void* slot, const char* name, const char* line_text, const uint32_t line)
+void __djinn_var_track(const void* slot, const char* name, const char* file,
+                       const char* source_root, const uint32_t line)
 {
     if (slot == NULL) return;
 
@@ -758,13 +1042,14 @@ void __djinn_var_track(const void* slot, const char* name, const char* line_text
         var->slot = slot;
         var->name = name;
     }
+    var->source_root = source_root;
 
     if (var->count == DJINN_VAR_HISTORY)
     {
         var->events[0] = var->events[1];
         var->count--;
     }
-    var->events[var->count].line_text = line_text;
+    var->events[var->count].file = file;
     var->events[var->count].line = line;
     var->count++;
     var->total++;
@@ -929,6 +1214,124 @@ static int djinn_append_note(char* buf, int used, const djinn_error_info_t* info
     return used;
 }
 
+// ── In-memory source registry (JIT hosts) ──
+//
+// Sources compiled from memory have no file on disk for snippet extraction;
+// the host registers their text before executing. Entries borrow the host's
+// string (process lifetime) — no allocation.
+
+#define DJINN_MAX_REGISTERED_SOURCES 8
+
+static struct
+{
+    const char* file_id;
+    const char* text;
+} djinn_registered_sources[DJINN_MAX_REGISTERED_SOURCES];
+
+static int djinn_registered_source_count = 0;
+
+void __djinn_register_source_text(const char* file_id, const char* text)
+{
+    if (file_id == NULL || text == NULL) return;
+    for (int i = 0; i < djinn_registered_source_count; i++)
+    {
+        if (strcmp(djinn_registered_sources[i].file_id, file_id) == 0)
+        {
+            djinn_registered_sources[i].text = text;
+            return;
+        }
+    }
+    if (djinn_registered_source_count < DJINN_MAX_REGISTERED_SOURCES)
+    {
+        djinn_registered_sources[djinn_registered_source_count].file_id = file_id;
+        djinn_registered_sources[djinn_registered_source_count].text = text;
+        djinn_registered_source_count++;
+    }
+}
+
+static int djinn_source_line_from_memory(const char* text, const uint32_t line,
+                                         char* dst, const size_t cap)
+{
+    if (text == NULL || line == 0) return 0;
+
+    uint32_t current = 1;
+    const char* p = text;
+    while (*p != '\0')
+    {
+        if (current == line)
+        {
+            const char* end = p;
+            while (*end != '\0' && *end != '\n') end++;
+            size_t len = (size_t)(end - p);
+            while (len > 0 && p[len - 1] == '\r') len--;
+            if (len >= cap) len = cap - 1;
+            memcpy(dst, p, len);
+            dst[len] = '\0';
+            return 1;
+        }
+        while (*p != '\0' && *p != '\n') p++;
+        if (*p == '\n')
+        {
+            p++;
+            current++;
+        }
+    }
+    return 0;
+}
+
+// Reads a single source line (1-based) into dst for report snippets.
+// fopen/fgets into caller storage only — error reporting must not allocate.
+// Tries the file path as-is first, then joined with source_root. Long lines
+// are truncated to cap. Returns 0 when the file or line is unavailable.
+static int djinn_read_source_line(const char* file, const char* source_root,
+                                  const uint32_t line, char* dst, const size_t cap)
+{
+    if (file == NULL || file[0] == '\0' || line == 0) return 0;
+
+    char path[1024];
+    FILE* f = fopen(file, "rb");
+    if (f == NULL && source_root != NULL && source_root[0] != '\0')
+    {
+        snprintf(path, sizeof path, "%s/%s", source_root, file);
+        f = fopen(path, "rb");
+    }
+    if (f == NULL)
+    {
+        /* not on disk: in-memory sources registered by the host */
+        for (int i = 0; i < djinn_registered_source_count; i++)
+        {
+            if (strcmp(djinn_registered_sources[i].file_id, file) == 0)
+                return djinn_source_line_from_memory(djinn_registered_sources[i].text,
+                                                     line, dst, cap);
+        }
+        return 0;
+    }
+
+    char scratch[512];
+    uint32_t current = 1;
+    int found = 0;
+    while (fgets(scratch, sizeof scratch, f) != NULL)
+    {
+        size_t len = strlen(scratch);
+        const int ends_line = len > 0 && scratch[len - 1] == '\n';
+        if (current == line)
+        {
+            while (len > 0 && (scratch[len - 1] == '\n' || scratch[len - 1] == '\r'))
+                len--;
+            if (len >= cap) len = cap - 1;
+            memcpy(dst, scratch, len);
+            dst[len] = '\0';
+            found = 1;
+            break;
+        }
+        /* a chunk without '\n' is a fragment of the same (overlong) line */
+        if (ends_line)
+            current++;
+    }
+    fclose(f);
+    return found;
+}
+
 static int djinn_append_snippet(char* buf, int used, const djinn_error_info_t* info)
 {
     if (info->line == 0 || info->file == NULL) return used;
@@ -941,15 +1344,18 @@ static int djinn_append_snippet(char* buf, int used, const djinn_error_info_t* i
                                (unsigned)info->line, (unsigned)info->column);
     used = djinn_report_append(buf, used, " %*s |\n", (int)gutter, "");
 
-    if (info->line_text != NULL && info->line_text[0] != '\0')
+    char line_text[DJINN_SOURCE_LINE_MAX];
+    if (djinn_read_source_line(info->file, info->source_root, info->line,
+                               line_text, sizeof line_text)
+        && line_text[0] != '\0')
     {
         // Trim trailing whitespace from the snippet so the caret stays aligned
-        size_t len = strlen(info->line_text);
-        while (len > 0 && (info->line_text[len - 1] == ' '
-                           || info->line_text[len - 1] == '\t'
-                           || info->line_text[len - 1] == '\r'))
+        size_t len = strlen(line_text);
+        while (len > 0 && (line_text[len - 1] == ' '
+            || line_text[len - 1] == '\t'
+            || line_text[len - 1] == '\r'))
             len--;
-        used = djinn_report_append(buf, used, " %s | %.*s\n", line_num, (int)len, info->line_text);
+        used = djinn_report_append(buf, used, " %s | %.*s\n", line_num, (int)len, line_text);
 
         const unsigned caret_len = info->length ? info->length : 1;
         const unsigned offset = info->column > 1 ? info->column - 1 : 0;
@@ -986,37 +1392,89 @@ static int djinn_append_var_history(char* buf, int used, const char* name, const
         used = djinn_report_append(buf, used, "     ...\n");
     for (int i = 0; i < var->count; i++)
     {
+        char line_text[DJINN_SOURCE_LINE_MAX];
+        const char* text = "";
+        if (djinn_read_source_line(var->events[i].file, var->source_root, var->events[i].line,
+                                   line_text, sizeof line_text))
+            text = line_text;
         used = djinn_report_append(buf, used, " %4u | %s\n",
-                                   (unsigned)var->events[i].line,
-                                   var->events[i].line_text ? var->events[i].line_text : "");
+                                   (unsigned)var->events[i].line, text);
     }
     return used;
 }
 
-static int djinn_render_frames(char* buf, int used, const djinn_frame_t* frames, const int depth)
+// Symbolizes (lazily — only when a report is printed) and renders the trace:
+// "  at name (file:line)", "  at name" or "  at 0xADDR" per frame. Leading
+// frames belonging to the runtime's capture machinery are skipped.
+static int djinn_render_backtrace(char* buf, int used, void* const* frames, const int count)
 {
-    if (depth == 0) return used;
+    if (count <= 0) return used;
+
+    char names[DJINN_MAX_TRACE_FRAMES][128];
+    char files[DJINN_MAX_TRACE_FRAMES][192];
+    uint32_t lines[DJINN_MAX_TRACE_FRAMES];
+    int have_name[DJINN_MAX_TRACE_FRAMES];
+
+    for (int i = 0; i < count; i++)
+    {
+        names[i][0] = '\0';
+        files[i][0] = '\0';
+        lines[i] = 0;
+        have_name[i] = 0;
+
+        if (const char* jit = djinn_jit_lookup(frames[i]))
+        {
+            snprintf(names[i], sizeof names[i], "%s", jit);
+            have_name[i] = 1;
+            continue;
+        }
+        if (djinn_symbolize_frame(frames[i], names[i], sizeof names[i],
+                                  files[i], sizeof files[i], &lines[i]))
+        {
+            have_name[i] = 1;
+        }
+    }
+#ifndef _WIN32
+    djinn_fill_frame_lines(frames, count, files, lines);
+#endif
+
+    // Skip the capture machinery itself at the top of the trace: runtime
+    // frames resolve to __djinn_/djinn_ names; JIT'd runtime helpers are the
+    // unresolved ones. Unresolvable leading frames can't be user code in a
+    // JIT (all user functions are registered) or an AOT debug build (statics
+    // resolve from the PDB/DWARF).
+    int start = 0;
+    while (start < count
+        && (!have_name[start]
+            || strncmp(names[start], "__djinn_", 8) == 0
+            || strncmp(names[start], "djinn_", 6) == 0))
+        start++;
+    if (start >= count) return used;
 
     used = djinn_report_append(buf, used, "stack trace:\n");
-    for (int i = depth - 1; i >= 0; i--)
+    for (int i = start; i < count; i++)
     {
-        const djinn_frame_t* frame = &frames[i];
-        used = djinn_report_append(buf, used, "  at %s (%s:%u)\n",
-                                   frame->function_name ? frame->function_name : "<unknown>",
-                                   frame->file ? frame->file : "?",
-                                   (unsigned)frame->line);
+        if (!have_name[i])
+            used = djinn_report_append(buf, used, "  at 0x%llx\n",
+                                       (unsigned long long)(uintptr_t)frames[i]);
+        else if (files[i][0] != '\0')
+            used = djinn_report_append(buf, used, "  at %s (%s:%u)\n",
+                                       names[i], files[i], (unsigned)lines[i]);
+        else
+            used = djinn_report_append(buf, used, "  at %s\n", names[i]);
+        // User execution ends at main; below it are host trampolines (JIT
+        // runner thread, process start) that add nothing to the report.
+        if (have_name[i] && strcmp(names[i], "main") == 0)
+            break;
     }
     return used;
 }
 
-static int djinn_append_stack_trace(char* buf, int used)
-{
-    used = djinn_render_frames(buf, used, djinn_shadow_stack.frames, djinn_shadow_stack.depth);
-    if (djinn_shadow_stack.overflowed)
-        used = djinn_report_append(buf, used, "  ... (more than %d frames, older frames omitted)\n",
-                                   DJINN_MAX_FRAMES);
-    return used;
-}
+// Minimal (release) reports keep location + operands but no trace: the
+// generator emits no throw-site captures in release builds, and traps arriving
+// through __djinn_runtime_error_min raise this flag so the inline capture is
+// skipped too.
+static int djinn_report_minimal = 0;
 
 void __djinn_runtime_error(const djinn_error_info_t* info)
 {
@@ -1028,10 +1486,6 @@ void __djinn_runtime_error(const djinn_error_info_t* info)
         info = &fallback;
     }
 
-    // The innermost frame should point at the failing operation, not at the
-    // function definition line.
-    __djinn_frame_set_line(info->line);
-
     char* report = __djinn_last_error_report;
     int used = 0;
     used = djinn_report_append(report, used, "djinn runtime error: %s\n",
@@ -1042,7 +1496,12 @@ void __djinn_runtime_error(const djinn_error_info_t* info)
         used = djinn_append_var_history(report, used, info->left_var_name, info->left_var_slot);
     if (info->right_var_slot != NULL && info->right_var_slot != info->left_var_slot)
         used = djinn_append_var_history(report, used, info->right_var_name, info->right_var_slot);
-    used = djinn_append_stack_trace(report, used);
+    if (!djinn_report_minimal)
+    {
+        void* frames[DJINN_MAX_TRACE_FRAMES];
+        const int count = djinn_capture_frames(frames, DJINN_MAX_TRACE_FRAMES);
+        used = djinn_render_backtrace(report, used, frames, count);
+    }
 
     fputs(report, stderr);
     fflush(stderr);
@@ -1065,6 +1524,7 @@ void __djinn_runtime_error_min(const char* message, const char* file, const uint
                                const uint8_t is_signed, const uint8_t has_operands,
                                const uint64_t left, const uint64_t right)
 {
+    djinn_report_minimal = 1;
     djinn_error_info_t info;
     memset(&info, 0, sizeof info);
     info.message = message ? message : "unknown";
@@ -1080,6 +1540,87 @@ void __djinn_runtime_error_min(const char* message, const char* file, const uint
     __djinn_runtime_error(&info);
 }
 
+// ── Interpolated error message formatting ──
+
+static DJINN_TLS char djinn_error_message[DJINN_ERROR_MESSAGE_MAX];
+
+// Mirrors std::types TypeInfo { i32 id, i32 size, i8* name, u8 kind }
+typedef struct
+{
+    int32_t id;
+    int32_t size;
+    const char* name;
+    uint8_t kind;
+} djinn_box_type_info_t;
+
+// Mirrors std::types object { TypeInfo* type, void* data }
+typedef struct
+{
+    const djinn_box_type_info_t* type;
+    const void* data;
+} djinn_boxed_object_t;
+
+const char* __djinn_error_format(const char* fmt_data, const uint32_t fmt_len,
+                                 const void* boxed_objects, const int32_t count)
+{
+    char* buf = djinn_error_message;
+    size_t bpos = 0;
+    uint32_t pos = 0;
+
+    while (pos < fmt_len)
+    {
+        const char current = fmt_data[pos];
+        if (current != '{')
+        {
+            if (bpos < DJINN_ERROR_MESSAGE_MAX - 1)
+                buf[bpos++] = current;
+            pos++;
+            continue;
+        }
+
+        pos++;
+        int32_t idx = 0;
+        while (pos < fmt_len && fmt_data[pos] != '}')
+        {
+            idx = idx * 10 + (fmt_data[pos] - '0');
+            pos++;
+        }
+        pos++; /* skip '}' */
+
+        if (idx < 0 || idx >= count || boxed_objects == NULL) continue;
+        const djinn_boxed_object_t* arg = &((const djinn_boxed_object_t*)boxed_objects)[idx];
+        if (arg->type == NULL || arg->data == NULL) continue;
+
+        const size_t room = DJINN_ERROR_MESSAGE_MAX - 1 - bpos;
+        int written = 0;
+        if (arg->type->kind == 0) /* int */
+        {
+            written = arg->type->size <= 4
+                          ? snprintf(buf + bpos, room + 1, "%d", *(const int32_t*)arg->data)
+                          : snprintf(buf + bpos, room + 1, "%lld",
+                                     (long long)*(const int64_t*)arg->data);
+        }
+        else if (arg->type->kind == 1) /* float */
+        {
+            written = arg->type->size <= 4
+                          ? snprintf(buf + bpos, room + 1, "%g", (double)*(const float*)arg->data)
+                          : snprintf(buf + bpos, room + 1, "%g", *(const double*)arg->data);
+        }
+        else if (arg->type->kind == 2) /* i8* string */
+        {
+            size_t slen = strlen((const char*)arg->data);
+            if (slen > room) slen = room;
+            memcpy(buf + bpos, arg->data, slen);
+            bpos += slen;
+        }
+        if (written > 0)
+            bpos += ((size_t)written > room) ? room : (size_t)written;
+    }
+
+    buf[bpos] = '\0';
+    return buf;
+}
+
 // Mirrors binder/ErrorTypes.h: tags 1..99 are reserved for builtin errors.
 static const char* djinn_builtin_error_name(const int tag)
 {
@@ -1093,6 +1634,7 @@ static const char* djinn_builtin_error_name(const int tag)
     case 6: return "OutOfBounds";
     case 7: return "InvalidArgument";
     case 8: return "ContractViolation";
+    case 9: return "ForeignError";
     default: return NULL;
     }
 }
@@ -1115,9 +1657,9 @@ void __djinn_uncaught_error(const int tag, const char* type_name, const char* me
     if (origin_file != NULL && origin_file[0] != '\0')
         used = djinn_report_append(report, used, "  --> %s:%u:%u\n", origin_file,
                                    (unsigned)origin_line, (unsigned)origin_column);
-    // The live shadow stack is empty by now (the error unwound normally), so
-    // render the snapshot taken at the throw site instead
-    used = djinn_render_frames(report, used, djinn_error_stack.frames, djinn_error_stack.depth);
+    // The error unwound normally, so render the trace captured at the throw
+    // site instead of the (already empty) live stack
+    used = djinn_render_backtrace(report, used, djinn_error_trace.frames, djinn_error_trace.count);
 
     fputs(report, stderr);
     fflush(stderr);
@@ -1301,6 +1843,24 @@ void __djinn_spawn(void* coro_handle)
     enqueue_task(&runtime.ready_queue, coro_handle);
 }
 
+// A completed coroutine with no continuation (fire-and-forget spawn) reports
+// its promise error slot into the thread-local error state — first error
+// wins. Awaited coroutines transfer through the awaiter instead; main's own
+// error stays in the error state its throw already wrote.
+static void djinn_collect_spawned_error(void* handle)
+{
+    const char* promise = (const char*)__djinn_coro_promise(handle, DJINN_PROMISE_ALIGN);
+    const int32_t tag = *(const volatile int32_t*)(promise + DJINN_PROMISE_ERR_TAG_OFFSET);
+    if (tag == 0 || __djinn_errno.flag) return;
+    __djinn_errno.flag = 1;
+    __djinn_errno.tag = tag;
+    __djinn_errno.message = *(const char* const*)(promise + DJINN_PROMISE_ERR_MESSAGE_OFFSET);
+    __djinn_errno.type_name = *(const char* const*)(promise + DJINN_PROMISE_ERR_TYPE_OFFSET);
+    __djinn_errno.origin_file = NULL;
+    __djinn_errno.origin_line = 0;
+    __djinn_errno.origin_column = 0;
+}
+
 static void process_completed_coro(void* handle, void* main_handle)
 {
     remove_from_waiting(handle);
@@ -1312,6 +1872,7 @@ static void process_completed_coro(void* handle, void* main_handle)
     }
     else if (handle != main_handle)
     {
+        djinn_collect_spawned_error(handle);
         __djinn_coro_destroy(handle);
     }
 }
@@ -1404,8 +1965,8 @@ int __djinn_event_loop(void* main_handle)
 {
     run_event_loop_core(main_handle);
 
-    void* promise = __djinn_coro_promise(main_handle, 4);
-    const int result = *(int*)promise;
+    const char* promise = (const char*)__djinn_coro_promise(main_handle, DJINN_PROMISE_ALIGN);
+    const int result = *(const int*)(promise + DJINN_PROMISE_VALUE_OFFSET);
     __djinn_coro_destroy(main_handle);
     return result;
 }

@@ -48,6 +48,11 @@ struct CompilerOptions
     bool noCache = false;
     bool debugMode = true;
     bool releaseMode = false;
+    // Debug builds: write a clean <name>.ll (no !dbg metadata) and compile the
+    // debug-info-bearing <name>.debug.ll instead, keeping the readable dump
+    // separate from the symbol payload (PDB/CodeView still land in the binary).
+    bool splitDebugInfo = true;
+    bool exceptions = false; // opt-in native exceptions (LLVM unwinding + try/catch/finally)
     bool outputDjLib = false;
     ErrorEnforcement errorEnforcement = ErrorEnforcement::CompileTime;
     std::string reflectionMode = "none"; // none | annotated | all

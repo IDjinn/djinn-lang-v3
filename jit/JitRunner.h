@@ -25,8 +25,12 @@ namespace djinn
     // code; negative on internal JIT failure (caller should treat as an error).
     // When the program traps, outRuntimeErrorReport (if given) receives the
     // rendered runtime error report (source snippet, caret, values, stack trace).
+    // inMemorySource, when given, is the djinn source text of the module (file
+    // id "main"); it is registered with the runtime so error reports can render
+    // source snippets — the caller keeps it alive until the call returns.
     int executeModule(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                      int optimizationLevel, std::string* outRuntimeErrorReport = nullptr);
+                      int optimizationLevel, std::string* outRuntimeErrorReport = nullptr,
+                      const std::string* inMemorySource = nullptr);
 }
 
 #endif //DJINN_JITRUNNER_H

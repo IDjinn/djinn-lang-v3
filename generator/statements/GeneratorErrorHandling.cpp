@@ -1,4 +1,5 @@
 #include "../Generator.h"
+#include "../ErrorTagMatching.h"
 #include "../../utils/Logger.h"
 #include "../../binder/ErrorTypes.h"
 
@@ -7,72 +8,118 @@ llvm::StructType* djinn_error_value_type(llvm::LLVMContext& context, llvm::IRBui
     return llvm::StructType::get(context, {builder.getInt32Ty(), builder.getPtrTy(), builder.getPtrTy()});
 }
 
+// Thread-local error state owned by the runtime (single definition shared by
+// every generated module — linked libraries included), accessed field-wise.
+llvm::StructType* djinn_errno_type(llvm::LLVMContext& context, llvm::IRBuilder<>& builder)
+{
+    return llvm::StructType::get(context, {
+                                     builder.getInt32Ty(), builder.getInt32Ty(), builder.getPtrTy(), builder.getPtrTy(),
+                                     builder.getPtrTy(), builder.getInt32Ty(), builder.getInt32Ty(),
+                                 });
+}
+
 void Generator::ensure_error_globals_declared()
 {
-    if (errorFlagGlobal) return;
+    if (errnoGlobal) return;
 
-    errorFlagGlobal = new llvm::GlobalVariable(
+    errnoGlobal = new llvm::GlobalVariable(
         *module,
-        builder->getInt1Ty(),
+        djinn_errno_type(*context, *builder),
         false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantInt::get(builder->getInt1Ty(), 0),
-        "__djinn_error_flag"
+        llvm::GlobalVariable::ExternalLinkage,
+        nullptr,
+        "__djinn_errno"
     );
+    errnoGlobal->setThreadLocal(true);
+}
 
-    errorTagGlobal = new llvm::GlobalVariable(
-        *module,
-        builder->getInt32Ty(),
-        false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantInt::get(builder->getInt32Ty(), 0),
-        "__djinn_error_tag"
-    );
+llvm::Value* Generator::errno_field(const unsigned index, const char* name)
+{
+    auto* ty = djinn_errno_type(*context, *builder);
+    return builder->CreateStructGEP(ty, errnoGlobal, index, name);
+}
 
-    errorPayloadGlobal = new llvm::GlobalVariable(
-        *module,
-        builder->getPtrTy(),
-        false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantPointerNull::get(builder->getPtrTy()),
-        "__djinn_error_payload"
-    );
+llvm::Value* Generator::errno_load_i32(const unsigned index, const char* name)
+{
+    return builder->CreateLoad(builder->getInt32Ty(), errno_field(index, ""), true, name);
+}
 
-    errorNameGlobal = new llvm::GlobalVariable(
-        *module,
-        builder->getPtrTy(),
-        false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantPointerNull::get(builder->getPtrTy()),
-        "__djinn_error_type"
-    );
+llvm::Value* Generator::errno_load_ptr(const unsigned index, const char* name)
+{
+    return builder->CreateLoad(builder->getPtrTy(), errno_field(index, ""), true, name);
+}
 
-    errorOriginFileGlobal = new llvm::GlobalVariable(
-        *module,
-        builder->getPtrTy(),
-        false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantPointerNull::get(builder->getPtrTy()),
-        "__djinn_error_origin_file"
-    );
+void Generator::errno_store_i32(const unsigned index, llvm::Value* value)
+{
+    builder->CreateStore(value, errno_field(index, ""), true);
+}
 
-    errorOriginLineGlobal = new llvm::GlobalVariable(
-        *module,
-        builder->getInt32Ty(),
-        false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantInt::get(builder->getInt32Ty(), 0),
-        "__djinn_error_origin_line"
-    );
+void Generator::errno_store_ptr(const unsigned index, llvm::Value* value)
+{
+    builder->CreateStore(value, errno_field(index, ""), true);
+}
 
-    errorOriginColumnGlobal = new llvm::GlobalVariable(
-        *module,
-        builder->getInt32Ty(),
-        false,
-        llvm::GlobalVariable::InternalLinkage,
-        llvm::ConstantInt::get(builder->getInt32Ty(), 0),
-        "__djinn_error_origin_column"
-    );
+void Generator::errno_clear_flag()
+{
+    errno_store_i32(0, builder->getInt32(0));
+}
+
+llvm::Value* Generator::errno_load_flag(const char* name)
+{
+    auto* raw = errno_load_i32(0, name);
+    return builder->CreateICmpNE(raw, builder->getInt32(0), std::string(name) + ".bool");
+}
+
+// Leaves the current function with an error in flight. Sync functions in the
+// default mode return the default value with the error state left set
+// (ordinary returns are the propagation mechanism); in native mode sync
+// functions re-throw, unwinding to the caller. Async functions copy the error
+// into their promise slot and go to the final suspend — unwinding cannot
+// cross suspend points, and the resuming thread's error state may differ.
+void Generator::emit_error_return_path()
+{
+    ensure_error_globals_declared();
+
+    if (inAsyncFunction)
+    {
+        if (asyncErrSlotPtr)
+        {
+            auto* promiseTy = llvm::cast<llvm::StructType>(asyncPromiseType);
+            builder->CreateStore(errno_load_i32(1, "err.slot.tag"),
+                                 builder->CreateStructGEP(promiseTy, asyncErrSlotPtr, 0, "slot.tag"));
+            builder->CreateStore(errno_load_ptr(2, "err.slot.msg"),
+                                 builder->CreateStructGEP(promiseTy, asyncErrSlotPtr, 1, "slot.msg"));
+            builder->CreateStore(errno_load_ptr(3, "err.slot.type"),
+                                 builder->CreateStructGEP(promiseTy, asyncErrSlotPtr, 2, "slot.type"));
+        }
+        emit_all_scope_cleanup();
+        if (asyncPromisePtr&& asyncReturnType &&!asyncReturnType->isVoidTy())
+        {
+            builder->CreateStore(get_default_value(asyncReturnType), asyncPromisePtr);
+        }
+        builder->CreateBr(asyncFinalSuspendBB);
+        return;
+    }
+
+    emit_all_scope_cleanup();
+
+    if (nativeExceptions)
+    {
+        emit_native_throw(errno_load_i32(1, "prop.tag"),
+                          errno_load_ptr(2, "prop.msg"),
+                          errno_load_ptr(3, "prop.type"));
+        return;
+    }
+
+    llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
+    if (returnType->isVoidTy())
+    {
+        builder->CreateRetVoid();
+    }
+    else
+    {
+        builder->CreateRet(get_default_value(returnType));
+    }
 }
 
 llvm::Value* Generator::get_default_value(llvm::Type* type)
@@ -141,38 +188,52 @@ llvm::Value* Generator::generate_error_construction(const FunctionCall& call)
     return alloca;
 }
 
-// Emits a Console.format(fmt, ...values) call for an interpolated error
-// message; arg 0 is the format string, the rest are the values to box.
+// Formats an interpolated error message ("msg {expr}") into the runtime's
+// fixed thread-local buffer (__djinn_error_format) — allocation-free, and the
+// buffer outlives unwinding so the message pointer stays valid in both error
+// modes. Args are boxed exactly like Console.format varargs.
 llvm::Value* Generator::generate_interpolated_error_message(const FunctionCall& call)
 {
-    auto* fmtFn = resolve_static_method_function("Console", "format");
+    auto* fmtTy = llvm::FunctionType::get(
+        builder->getPtrTy(),
+        {builder->getPtrTy(), builder->getInt32Ty(), builder->getPtrTy(), builder->getInt32Ty()},
+        false);
+    auto* fmtFn = module->getFunction("__djinn_error_format");
     if (!fmtFn)
     {
-        GENERATOR_ERROR(
-            DiagnosticCode::UNDEFINED_FUNCTION,
-            "Console.format is required for interpolated error messages",
-            call.name.location
-        );
+        fmtFn = llvm::Function::Create(fmtTy, llvm::Function::ExternalLinkage,
+                                       "__djinn_error_format", *module);
     }
 
-    llvm::Value* fmtVal = generate_expression(*call.arguments[0]);
-    llvm::Type* expectedType = fmtFn->getFunctionType()->getParamType(0);
-    if (fmtVal->getType()->isPointerTy() && expectedType->isStructTy())
+    auto* fmtVal = generate_expression(*call.arguments[0]);
+    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(fmtVal))
     {
-        fmtVal = builder->CreateLoad(expectedType, fmtVal, "fmt_load");
+        if (llvm::isa<llvm::StructType>(alloca->getAllocatedType()))
+            fmtVal = builder->CreateLoad(alloca->getAllocatedType(), fmtVal, "fmt_load");
     }
-    else
+    else if (fmtVal->getType()->isPointerTy())
     {
-        fmtVal = cast_value(fmtVal, expectedType);
+        fmtVal = builder->CreateLoad(
+            llvm::StructType::get(builder->getPtrTy(), builder->getInt32Ty()), fmtVal, "fmt_load");
     }
+
+    llvm::Value* fmtData = builder->CreateExtractValue(fmtVal, 0, "fmt.data");
+    llvm::Value* fmtLen = builder->CreateExtractValue(fmtVal, 1, "fmt.len");
 
     llvm::Value* varargs = emit_boxed_varargs_array(call.arguments, 1);
-    return builder->CreateCall(fmtFn, {fmtVal, varargs}, "err_fmt");
+    auto* objData = builder->CreateExtractValue(varargs, 0, "args.data");
+    auto* objCount = builder->CreateExtractValue(varargs, 1, "args.len");
+
+    return builder->CreateCall(fmtFn, {fmtData, fmtLen, objData, objCount}, "err_fmt");
 }
 
 void Generator::generate_throw_statement(const ThrowStatement& stmt)
 {
     ensure_error_globals_declared();
+
+    llvm::Value* tagVal = builder->getInt32(0);
+    llvm::Value* msgVal = llvm::ConstantPointerNull::get(builder->getPtrTy());
+    llvm::Value* nameVal = llvm::ConstantPointerNull::get(builder->getPtrTy());
 
     if (stmt.expression)
     {
@@ -200,52 +261,56 @@ void Generator::generate_throw_statement(const ThrowStatement& stmt)
         if (errType->getNumElements() >= 1)
         {
             auto* tagPtr = builder->CreateStructGEP(errType, errPtr, 0, "throw_tag_ptr");
-            auto* tagVal = builder->CreateLoad(builder->getInt32Ty(), tagPtr, "throw_tag");
-            builder->CreateStore(tagVal, errorTagGlobal, true);
+            tagVal = builder->CreateLoad(builder->getInt32Ty(), tagPtr, "throw_tag");
         }
 
         if (errType->getNumElements() >= 2)
         {
             auto* msgPtr = builder->CreateStructGEP(errType, errPtr, 1, "throw_msg_ptr");
-            auto* msgVal = builder->CreateLoad(builder->getPtrTy(), msgPtr, "throw_msg");
-            builder->CreateStore(msgVal, errorPayloadGlobal, true);
+            msgVal = builder->CreateLoad(builder->getPtrTy(), msgPtr, "throw_msg");
         }
 
         if (errType->getNumElements() >= 3)
         {
             auto* namePtr = builder->CreateStructGEP(errType, errPtr, 2, "throw_type_ptr");
-            auto* nameVal = builder->CreateLoad(builder->getPtrTy(), namePtr, "throw_type");
-            builder->CreateStore(nameVal, errorNameGlobal, true);
+            nameVal = builder->CreateLoad(builder->getPtrTy(), namePtr, "throw_type");
         }
     }
 
     store_error_origin(stmt.location);
-    emit_error_stack_capture(stmt.location);
 
-    builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 1), errorFlagGlobal, true);
-
-    emit_all_scope_cleanup();
-
-    llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
-    if (returnType->isVoidTy())
+    if (nativeExceptions)
     {
-        builder->CreateRetVoid();
+        // The shim mirrors the error into the thread-local state before the
+        // throw, keeping report rendering uniform across both modes
+        errno_store_i32(1, tagVal);
+        errno_store_ptr(2, msgVal);
+        errno_store_ptr(3, nameVal);
+        emit_native_throw(tagVal, msgVal, nameVal);
+        return;
     }
-    else
-    {
-        builder->CreateRet(get_default_value(returnType));
-    }
+
+    emit_error_trace_capture();
+
+    errno_store_i32(0, builder->getInt32(1));
+    errno_store_i32(1, tagVal);
+    errno_store_ptr(2, msgVal);
+    errno_store_ptr(3, nameVal);
+
+    emit_error_return_path();
 }
 
 // After a call to a throwing function inside another throwing function
-// (unchecked call sites), re-throw when the callee failed. The error origin
-// rises to this call site so uncaught reports point at the outermost
-// unhandled call instead of the innermost throw.
+// (unchecked call sites), re-throw when the callee failed. Native mode
+// propagates by unwinding instead: the call itself is an invoke and this
+// check is not emitted.
 void Generator::emit_error_propagation_check(const SourceLocation& loc)
 {
+    if (nativeExceptions) return;
+
     ensure_error_globals_declared();
 
-    auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "prop_err_flag");
+    auto* errorFlag = errno_load_flag("prop_err_flag");
 
     auto* llvmFunc = builder->GetInsertBlock()->getParent();
     auto* contBB = llvm::BasicBlock::Create(*context, "prop.ok", llvmFunc);
@@ -255,21 +320,12 @@ void Generator::emit_error_propagation_check(const SourceLocation& loc)
 
     builder->SetInsertPoint(errBB);
     store_error_origin(loc);
-    emit_all_scope_cleanup();
-    llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
-    if (returnType->isVoidTy())
-    {
-        builder->CreateRetVoid();
-    }
-    else
-    {
-        builder->CreateRet(get_default_value(returnType));
-    }
+    emit_error_return_path();
 
     builder->SetInsertPoint(contBB);
 }
 
-// Reports the error currently held in the error globals and aborts: loads
+// Reports the error currently held in the error state and aborts: loads
 // tag/type/message/origin and tail-calls __djinn_uncaught_error (noreturn).
 void Generator::emit_uncaught_error_trap()
 {
@@ -288,12 +344,12 @@ void Generator::emit_uncaught_error_trap()
                                             "__djinn_uncaught_error", *module);
     }
 
-    auto* tag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "uncaught_tag");
-    auto* name = builder->CreateLoad(builder->getPtrTy(), errorNameGlobal, true, "uncaught_type");
-    auto* payload = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "uncaught_msg");
-    auto* originFile = builder->CreateLoad(builder->getPtrTy(), errorOriginFileGlobal, true, "uncaught_file");
-    auto* originLine = builder->CreateLoad(builder->getInt32Ty(), errorOriginLineGlobal, true, "uncaught_line");
-    auto* originCol = builder->CreateLoad(builder->getInt32Ty(), errorOriginColumnGlobal, true, "uncaught_col");
+    auto* tag = errno_load_i32(1, "uncaught_tag");
+    auto* name = errno_load_ptr(3, "uncaught_type");
+    auto* payload = errno_load_ptr(2, "uncaught_msg");
+    auto* originFile = errno_load_ptr(4, "uncaught_file");
+    auto* originLine = errno_load_i32(5, "uncaught_line");
+    auto* originCol = errno_load_i32(6, "uncaught_col");
     builder->CreateCall(uncaughtFn, {tag, name, payload, originFile, originLine, originCol});
     builder->CreateUnreachable();
 }
@@ -304,7 +360,7 @@ void Generator::emit_uncaught_error_check()
 {
     ensure_error_globals_declared();
 
-    auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "uncaught_flag");
+    auto* errorFlag = errno_load_flag("uncaught_flag");
 
     auto* llvmFunc = builder->GetInsertBlock()->getParent();
     auto* okBB = llvm::BasicBlock::Create(*context, "main.err.ok", llvmFunc);
@@ -476,32 +532,218 @@ void Generator::store_error_origin(const SourceLocation& loc)
     llvm::Value* filePtr = llvm::ConstantPointerNull::get(builder->getPtrTy());
     if (!loc.fileId.empty())
         filePtr = cached_global_string(loc.fileId, "err.origin.file");
-    builder->CreateStore(filePtr, errorOriginFileGlobal, true);
-    builder->CreateStore(builder->getInt32(loc.line), errorOriginLineGlobal, true);
-    builder->CreateStore(builder->getInt32(loc.column), errorOriginColumnGlobal, true);
+    errno_store_ptr(4, filePtr);
+    errno_store_i32(5, builder->getInt32(loc.line));
+    errno_store_i32(6, builder->getInt32(loc.column));
 }
 
-// Marks the error flag/tag and returns the function's default value,
-// terminating the current path (used by throw and contract violations).
+// Marks the error flag/tag and leaves the function with the error in flight
+// (used by throw and contract violations).
 void Generator::emit_error_throw_with_tag(const int32_t tag, const SourceLocation& loc)
 {
     ensure_error_globals_declared();
 
-    builder->CreateStore(builder->getInt32(tag), errorTagGlobal, true);
+    store_error_origin(loc);
+
+    if (nativeExceptions)
+    {
+        errno_store_i32(0, builder->getInt32(1));
+        errno_store_i32(1, builder->getInt32(tag));
+        // Builtin-tag errors carry no type name of their own — clear any name left
+        // by a previous user exception so reports fall back to the builtin table
+        errno_store_ptr(3, llvm::ConstantPointerNull::get(builder->getPtrTy()));
+        emit_native_throw(builder->getInt32(tag),
+                          llvm::ConstantPointerNull::get(builder->getPtrTy()),
+                          llvm::ConstantPointerNull::get(builder->getPtrTy()));
+        return;
+    }
+
+    errno_store_i32(1, builder->getInt32(tag));
     // Builtin-tag errors carry no type name of their own — clear any name left
     // by a previous user exception so reports fall back to the builtin table
-    builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()), errorNameGlobal, true);
-    builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 1), errorFlagGlobal, true);
-    store_error_origin(loc);
-    emit_error_stack_capture(loc);
+    errno_store_ptr(3, llvm::ConstantPointerNull::get(builder->getPtrTy()));
+    errno_store_i32(0, builder->getInt32(1));
+    emit_error_trace_capture();
 
-    emit_all_scope_cleanup();
+    emit_error_return_path();
+}
 
-    llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
-    if (returnType->isVoidTy())
-        builder->CreateRetVoid();
+// Block-form try/catch/finally (native mode only). The try body runs with a
+// landing whose pads catchret to a normal dispatch block, so handler bodies,
+// return/break/continue and nested tries all behave like ordinary code; the
+// arms match by error tag exactly like outcome-switch arms, and unmatched
+// errors re-throw. `finally` runs inline on every non-unwinding path and once
+// more before a re-throw.
+void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
+{
+    if (!nativeExceptions)
+    {
+        GENERATOR_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
+                        "block-form try/catch requires the exceptions mode ('--exceptions')",
+                        stmt.location);
+    }
+    if (!eh_is_msvc_target())
+    {
+        GENERATOR_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
+                        "native exceptions are not supported on this target yet",
+                        stmt.location);
+    }
+
+    push_scope();
+
+    auto* func = builder->GetInsertBlock()->getParent();
+    auto* dispatchBB = llvm::BasicBlock::Create(*context, "trycatch.dispatch", func);
+    auto* contBB = llvm::BasicBlock::Create(*context, "trycatch.cont", func);
+    auto* rethrowBB = llvm::BasicBlock::Create(*context, "trycatch.rethrow", func);
+    auto* finallyBB = stmt.finallyBlock
+                          ? llvm::BasicBlock::Create(*context, "trycatch.finally", func)
+                          : contBB;
+
+    const auto landing = push_native_landing(false);
+
+    const bool prevInsideTry = insideTryOperand_;
+    insideTryOperand_ = true;
+    generate_block(*stmt.tryBlock);
+    insideTryOperand_ = prevInsideTry;
+    ehLandingStack_.pop_back();
+
+    if (!builder->GetInsertBlock()->getTerminator())
+    {
+        builder->CreateBr(dispatchBB);
+    }
+
+    // Arms match by tag in source order (specific types match derived errors
+    // too; Error/_ catch everything) — same semantics as outcome-switch arms
+    builder->SetInsertPoint(dispatchBB);
+    auto* thrownTag = errno_load_i32(1, "trycatch.tag");
+
+    for (size_t i = 0; i < stmt.catches.size(); ++i)
+    {
+        const auto& clause = stmt.catches[i];
+        auto* armBB = llvm::BasicBlock::Create(*context, "trycatch.arm." + clause.errorType.token_name, func);
+        llvm::BasicBlock* nextArmBB = i + 1 < stmt.catches.size()
+                                          ? llvm::BasicBlock::Create(*context, "trycatch.next", func)
+                                          : rethrowBB;
+
+        const auto errSym = resolve_error_struct(clause.errorType.token_name);
+        if (errSym)
+        {
+            llvm::Value* matched = nullptr;
+            for (const int32_t tag : djinn::error_arm_matched_tags(*symbols, *errSym))
+            {
+                auto* cmp = builder->CreateICmpEQ(thrownTag, builder->getInt32(tag), "trycatch.cmp");
+                matched = matched ? builder->CreateOr(matched, cmp) : cmp;
+            }
+            builder->CreateCondBr(matched, armBB, nextArmBB);
+        }
+        else
+        {
+            // "Error" or "_" — catch-all
+            builder->CreateBr(armBB);
+        }
+
+        builder->SetInsertPoint(armBB);
+        errno_clear_flag();
+
+        push_scope();
+        if (clause.binding)
+        {
+            auto* errType = djinn_error_value_type(*context, *builder);
+            auto* errAlloca = builder->CreateAlloca(errType, nullptr, clause.binding->token_name);
+            builder->CreateStore(thrownTag,
+                                 builder->CreateStructGEP(errType, errAlloca, 0, "bind.tag"));
+            builder->CreateStore(errno_load_ptr(2, "bind.msg"),
+                                 builder->CreateStructGEP(errType, errAlloca, 1, "bind.msg.ptr"));
+            builder->CreateStore(errno_load_ptr(3, "bind.type"),
+                                 builder->CreateStructGEP(errType, errAlloca, 2, "bind.type.ptr"));
+            currentScope->define_variable(clause.binding->token_name, errAlloca);
+        }
+        generate_block(*clause.body);
+        pop_scope();
+
+        if (!builder->GetInsertBlock()->getTerminator())
+        {
+            builder->CreateBr(finallyBB);
+        }
+
+        if (i + 1 < stmt.catches.size())
+        {
+            builder->SetInsertPoint(nextArmBB);
+        }
+    }
+
+    // No arm matched (or no catch arms at all — finally-only try): run
+    // finally once more, then re-throw
+    if (stmt.catches.empty())
+    {
+        builder->SetInsertPoint(dispatchBB);
+        builder->CreateBr(rethrowBB);
+    }
+    builder->SetInsertPoint(rethrowBB);
+    if (stmt.finallyBlock)
+    {
+        push_scope();
+        generate_block(*stmt.finallyBlock);
+        pop_scope();
+    }
+    ensure_error_globals_declared();
+    emit_native_throw(errno_load_i32(1, "rethrow.tag"),
+                      errno_load_ptr(2, "rethrow.msg"),
+                      errno_load_ptr(3, "rethrow.type"));
+
+    if (stmt.finallyBlock)
+    {
+        builder->SetInsertPoint(finallyBB);
+        push_scope();
+        generate_block(*stmt.finallyBlock);
+        pop_scope();
+        if (!builder->GetInsertBlock()->getTerminator())
+        {
+            builder->CreateBr(contBB);
+        }
+    }
+
+    // Fill the landing blocks now that the dispatch exists
+    finalize_native_landing(landing, dispatchBB);
+
+    builder->SetInsertPoint(contBB);
+    pop_scope();
+}
+
+// After a child coroutine completes: transfers its promise error slot (the
+// values were loaded before the frame was destroyed) into the thread-local
+// error state and propagates. Inside a try/switch operand the flag is left
+// set for the operand check instead — same rule as throwing calls.
+void Generator::emit_await_error_check(llvm::Value* errTag, llvm::Value* errMsg, llvm::Value* errType,
+                                       const SourceLocation& loc)
+{
+    ensure_error_globals_declared();
+
+    auto* hasError = builder->CreateICmpNE(errTag, builder->getInt32(0), "await.haserr");
+
+    auto* llvmFunc = builder->GetInsertBlock()->getParent();
+    auto* okBB = llvm::BasicBlock::Create(*context, "await.ok", llvmFunc);
+    auto* errBB = llvm::BasicBlock::Create(*context, "await.err", llvmFunc);
+
+    builder->CreateCondBr(hasError, errBB, okBB);
+
+    builder->SetInsertPoint(errBB);
+    errno_store_i32(0, builder->getInt32(1));
+    errno_store_i32(1, errTag);
+    errno_store_ptr(2, errMsg);
+    errno_store_ptr(3, errType);
+
+    if (insideTryOperand_)
+    {
+        builder->CreateBr(okBB);
+    }
     else
-        builder->CreateRet(get_default_value(returnType));
+    {
+        store_error_origin(loc);
+        emit_error_return_path();
+    }
+
+    builder->SetInsertPoint(okBB);
 }
 
 llvm::Value* Generator::generate_ternary_expression(const TernaryExpression& expr)
@@ -553,7 +795,17 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
 {
     ensure_error_globals_declared();
 
-    builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 0), errorFlagGlobal, true);
+    errno_clear_flag();
+
+    // Native mode: the operand's throwing calls unwind to the landing's
+    // pads, which resume here — at a dedicated, side-effect-free check block
+    // — with the error state set by the shim.
+    NativeLanding landing;
+    const bool nativeLanding = nativeExceptions;
+    if (nativeLanding)
+    {
+        landing = push_native_landing(false);
+    }
 
     const bool prevInsideTry = insideTryOperand_;
     insideTryOperand_ = true;
@@ -565,7 +817,21 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
         callResult = builder->CreateLoad(alloca->getAllocatedType(), alloca, "try_load");
     }
 
-    auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "try_err_flag");
+    llvm::Value* errorFlag = nullptr;
+    if (nativeLanding)
+    {
+        auto* llvmFunc = builder->GetInsertBlock()->getParent();
+        auto* checkBB = llvm::BasicBlock::Create(*context, "try.check", llvmFunc);
+        builder->CreateBr(checkBB);
+        builder->SetInsertPoint(checkBB);
+        errorFlag = errno_load_flag("try_err_flag");
+        finalize_native_landing(landing, checkBB);
+        ehLandingStack_.pop_back();
+    }
+    else
+    {
+        errorFlag = errno_load_flag("try_err_flag");
+    }
 
     if (!expr.fallback)
     {
@@ -581,12 +847,7 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
 
             builder->SetInsertPoint(errBB);
             store_error_origin(expr.location);
-            emit_all_scope_cleanup();
-            llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
-            if (returnType->isVoidTy())
-                builder->CreateRetVoid();
-            else
-                builder->CreateRet(get_default_value(returnType));
+            emit_error_return_path();
 
             builder->SetInsertPoint(okBB);
         }
@@ -604,7 +865,7 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
     builder->CreateBr(mergeBB);
 
     builder->SetInsertPoint(errBB);
-    builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 0), errorFlagGlobal, true);
+    errno_clear_flag();
     auto* fallbackVal = generate_expression(*expr.fallback);
     if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(fallbackVal))
     {

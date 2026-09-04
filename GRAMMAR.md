@@ -87,12 +87,15 @@ contract_clause      = ( "require" | "ensure" ) "(" expression ")"
 ```ebnf
 throw_statement      = "throw" expression ";" ;
 try_expression       = "try" expression [ "?:" expression ] ;
+try_catch_statement  = "try" block { catch_clause } [ "finally" block ] ;
+catch_clause         = "catch" "(" catch_pattern ")" block ;
+catch_pattern        = ( error_type | "Error" | "_" ) [ identifier ] ;
 ```
 
 (* Error values are structs deriving a builtin error type (`Exception`,
 `Generic`, `DivisionByZero`, `Argument`, `Overflow`, `OutOfBounds`,
-`InvalidArgument`, `ContractViolation`, or user-defined `struct MyError : Base;`)
-with layout `{ tag: i32, message: str, type_name: str }`.
+`InvalidArgument`, `ContractViolation`, `ForeignError`, or user-defined
+`struct MyError : Base;`) with layout `{ tag: i32, message: str, type_name: str }`.
 
 - `throws(T...)` declares what a function may throw; bare `throws` = anything.
 - `throw ErrorType("message")` sets the error state and returns the default value.
@@ -107,13 +110,40 @@ with layout `{ tag: i32, message: str, type_name: str }`.
   propagates; debug builds also print the stack trace captured at the throw
   site) and aborts.
 
+**Native exceptions (opt-in)**: with `--exceptions` (or `compiler.exceptions:
+true` in `djinn.proj`) the whole build switches the propagation mechanism from
+error-state returns to LLVM zero-cost unwinding (tables; no cost on the happy
+path) and enables the block-form `try/catch/finally`:
+
+- `catch (MyError e)` matches by error type (derived types match too),
+  `catch (Error e)`/`catch (_)` catch everything, binding the error value.
+- `finally` runs on every non-unwinding path and once more before a re-throw.
+- Foreign C++ exceptions crossing `extern` boundaries are wrapped as
+  `ForeignError`; C++ code can catch `djinn::error` (a `std::exception`)
+  directly — see `runtime/djinn_error.h`.
+- Throwing across `await` travels in the coroutine's promise error slot and
+  re-throws at the resume point.
+- The expression forms (`try expr`, outcome `switch`) keep their semantics and
+  lower to the same unwinding machinery.
+- Block-form `try/catch` without `--exceptions` is a compile error (9009);
+  native exceptions require an AOT build (the JIT falls back to it).
+
 Runtime error reporting detail is gated by build mode (`--debug`/`--release`,
 `build-mode:` in `djinn.proj`; default is debug):
 
 - Debug: full reports — source snippet with caret, operand values, variable
-  assignment history and a shadow-stack trace.
+  assignment history and a native stack trace (captured at the raise site,
+  symbolized from debug info). Source snippets are read from disk at report
+  time (JIT runs fall back to the in-memory source) — no line text is baked
+  into the binary.
 - Release: minimal reports — message, `file:line` and operand values only; no
-  per-site source strings, frames or tracking, keeping binaries small.
+  per-site source strings, traces or tracking, keeping binaries small.
+
+Debug builds also split the readable IR from the symbol payload: `<name>.ll`
+is written without debug metadata while `<name>.debug.ll` carries it and is
+what gets compiled with `-g` (CodeView/PDB). `--embed-debug-info` (or
+`compiler.split-debug-info: false` in `djinn.proj`) restores the single-file
+output.
 
 Error enforcement level (CompilerOptions::errorEnforcement):
 

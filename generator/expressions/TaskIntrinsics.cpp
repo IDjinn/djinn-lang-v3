@@ -73,11 +73,12 @@ llvm::Value* Generator::generate_task_intrinsic_method(
 
         auto* promiseFn = llvm::Intrinsic::getOrInsertDeclaration(
             module.get(), llvm::Intrinsic::coro_promise);
-        unsigned align = module->getDataLayout().getABITypeAlign(resultType).value();
+        // Promise layout: { err_tag, err_message, err_type_name, value }
         llvm::Value* promise = builder->CreateCall(promiseFn, {
-                                                       handle, builder->getInt32(align), builder->getFalse()
+                                                       handle, builder->getInt32(16), builder->getFalse()
                                                    }, "task.promise");
-        return builder->CreateLoad(resultType, promise, "task.result");
+        auto* valuePtr = builder->CreateStructGEP(promise_type(resultType), promise, 3, "task.value.ptr");
+        return builder->CreateLoad(resultType, valuePtr, "task.result");
     }
 
     throw CompileError(DiagnosticCode::UNDEFINED_FUNCTION,

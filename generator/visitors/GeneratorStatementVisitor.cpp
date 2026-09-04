@@ -77,4 +77,9 @@ namespace djinn
     {
         _generator.generate_throw_statement(stmt);
     }
+
+    void GeneratorStatementVisitor::visit(const TryCatchStatement& stmt)
+    {
+        _generator.generate_try_catch_statement(stmt);
+    }
 } // namespace djinn

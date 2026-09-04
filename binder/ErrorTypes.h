@@ -36,6 +36,10 @@ namespace djinn::errors
             {"OutOfBounds",       "Exception", 6},
             {"InvalidArgument",   "Exception", 7},
             {"ContractViolation", "Exception", 8},
+            // Raised when a foreign C++ exception is caught in native
+            // exceptions mode (see runtime/djinn_exceptions.cpp); must match
+            // DJINN_FOREIGN_ERROR_TAG
+            {"ForeignError", "Exception", 9},
         };
         return errors;
     }

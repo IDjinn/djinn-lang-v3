@@ -32,6 +32,10 @@ void printUsage(const char* programName)
         << "                snippets, stack traces, variable history) baked into the binary\n"
         << "  --release     Set build mode to release: minimal runtime error reports\n"
         << "                (file:line + operand values only)\n"
+        << "  --exceptions  Opt in to native exceptions: LLVM zero-cost unwinding, classic\n"
+        << "                try/catch/finally blocks and C++ exception interop (AOT only)\n"
+        << "  --embed-debug-info  Keep debug metadata in the single .ll instead of splitting\n"
+        << "                it into <name>.debug.ll (debug builds default to splitting)\n"
         << "  --reflect-all       Generate TypeInfoExt for all struct types\n"
         << "  --reflect-annotated Generate TypeInfoExt only for [Reflect] structs\n"
         << "  --error-enforcement <off|runtime|compiletime|strict>  Error-flow checks (default: compiletime)\n"
@@ -238,6 +242,14 @@ int main(int argc, char* argv[])
         {
             options.debugMode = false;
             options.releaseMode = true;
+        }
+        else if (arg == "--exceptions")
+        {
+            options.exceptions = true;
+        }
+        else if (arg == "--embed-debug-info")
+        {
+            options.splitDebugInfo = false;
         }
         else if (arg == "--no-std")
         {

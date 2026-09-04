@@ -40,6 +40,7 @@ namespace DiagnosticCode
     constexpr uint32_t EXPECTED_OPENING_BRACE = 2008;
     constexpr uint32_t EXPECTED_OPENING_PAREN = 2009;
     constexpr uint32_t EXPECTED_EQUAL = 2010;
+    constexpr uint32_t EXPECTED_CATCH_OR_FINALLY = 2011;
 
     // Semantic errors (3xxx)
     constexpr uint32_t UNDEFINED_VARIABLE = 3001;
@@ -94,6 +95,8 @@ namespace DiagnosticCode
     constexpr uint32_t CONSTEXPR_CALL_THROWS = 9006;
     constexpr uint32_t CONTRACT_VIOLATION_COMPILE_TIME = 9007;
     constexpr uint32_t SWITCH_ARM_UNREACHABLE = 9008;
+    constexpr uint32_t TRY_CATCH_REQUIRES_EXCEPTIONS = 9009;
+    constexpr uint32_t CATCH_ARM_NOT_ERROR_TYPE = 9010;
 }
 
 struct SourceLocation

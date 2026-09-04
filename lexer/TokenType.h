@@ -156,6 +156,8 @@ enum class TokenType
     THROW, // throw
     THROWS, // throws
     TRY, // try
+    CATCH, // catch (block-form try/catch; requires --exceptions)
+    FINALLY, // finally (block-form try/catch; requires --exceptions)
 
     // CONTRACTS
     REQUIRE, // require (contract precondition)

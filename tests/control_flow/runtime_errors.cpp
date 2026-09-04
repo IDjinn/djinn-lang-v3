@@ -1,12 +1,17 @@
 //
 // Polished runtime error reports: source location + caret, operand values
-// (digit-grouped), variable assignment history and the shadow-stack trace
-// for trapped overflow and division by zero.
+// (digit-grouped), variable assignment history and the native stack trace
+// (captured at throw/trap sites, symbolized lazily) for trapped overflow and
+// division by zero.
 //
 
 #include "DjinnCompiler.h"
 #include "jit/JitRunner.h"
 #include "gtest/gtest.h"
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <cstdlib>
 
 namespace
@@ -177,7 +182,7 @@ TEST(RuntimeErrors, StackTraceShowsIntermediateFrames)
     EXPECT_TRUE(atInner < atOuter && atOuter < atMain);
 }
 
-TEST(RuntimeErrors, ShadowStackCallsAppearInIr)
+TEST(RuntimeErrors, DebugInfoAndVarTrackingAppearInIr)
 {
     const auto source = R"(
         i32 helper(i32t v) {
@@ -190,9 +195,8 @@ TEST(RuntimeErrors, ShadowStackCallsAppearInIr)
 
     const auto result = compile(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_NE(result.ir.find("__djinn_frame_push"), std::string::npos);
-    EXPECT_NE(result.ir.find("__djinn_frame_pop"), std::string::npos);
-    EXPECT_NE(result.ir.find("__djinn_frame_set_line"), std::string::npos);
+    EXPECT_NE(result.ir.find("!DISubprogram"), std::string::npos);
+    EXPECT_NE(result.ir.find("!DILocation"), std::string::npos);
     EXPECT_NE(result.ir.find("__djinn_var_track"), std::string::npos);
 }
 
@@ -244,11 +248,13 @@ TEST(RuntimeErrors, UncaughtExceptionEscapingMainReportsAndAborts)
     EXPECT_NE(report.find("uncaught exception escaped 'main'"), std::string::npos);
     EXPECT_NE(report.find("DivisionByZeroException: Division 1/0 is not allowed"), std::string::npos);
     // The origin rises to the outermost unhandled call (line 12), not the
-    // throw site (line 6); the throw site lives in the trace instead
+    // throw site (line 6); the throw site lives in the trace instead. JIT
+    // traces symbolize names only (no debug objects in memory); AOT debug
+    // builds add file:line via dbghelp/llvm-symbolizer.
     EXPECT_NE(report.find("--> main:12"), std::string::npos);
     EXPECT_NE(report.find("stack trace"), std::string::npos);
-    EXPECT_NE(report.find("at division (main:6)"), std::string::npos);
-    EXPECT_NE(report.find("at main (main:12)"), std::string::npos);
+    EXPECT_NE(report.find("at division"), std::string::npos);
+    EXPECT_NE(report.find("at main"), std::string::npos);
     const auto atDivision = report.find("at division");
     const auto atMain = report.find("at main");
     ASSERT_NE(atDivision, std::string::npos);
@@ -291,11 +297,11 @@ TEST(RuntimeErrors, UncaughtExceptionReleaseReportHasNoStackTrace)
 
 //
 // Release (minimal) diagnostics: traps keep file:line + operand values but
-// drop the instrumentation that bloats binaries — shadow-stack frames,
-// variable tracking and source-line snippets.
+// drop the instrumentation that bloats binaries — debug metadata, variable
+// tracking, throw-site trace captures and source-line snippets.
 //
 
-TEST(RuntimeErrors, ReleaseModeOmitsShadowStackAndVarTracking)
+TEST(RuntimeErrors, ReleaseModeOmitsDebugInfoAndVarTracking)
 {
     const auto source = R"(
         i32 helper(i32t v) {
@@ -310,9 +316,9 @@ TEST(RuntimeErrors, ReleaseModeOmitsShadowStackAndVarTracking)
 
     const auto result = compileRelease(source);
     EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.ir.find("__djinn_frame_push"), std::string::npos);
-    EXPECT_EQ(result.ir.find("__djinn_frame_pop"), std::string::npos);
-    EXPECT_EQ(result.ir.find("__djinn_frame_set_line"), std::string::npos);
+    EXPECT_EQ(result.ir.find("!DISubprogram"), std::string::npos);
+    EXPECT_EQ(result.ir.find("!DILocation"), std::string::npos);
+    EXPECT_EQ(result.ir.find("__djinn_capture_backtrace"), std::string::npos);
     EXPECT_EQ(result.ir.find("__djinn_var_track"), std::string::npos);
 }
 
@@ -355,4 +361,81 @@ TEST(RuntimeErrors, ReleaseModeTrapReportKeepsLocationAndValues)
     EXPECT_EQ(report.find("^^^"), std::string::npos);             // no source snippet
     EXPECT_EQ(report.find("history of"), std::string::npos);      // no variable history
     EXPECT_EQ(report.find("stack trace"), std::string::npos);     // no shadow frames
+}
+
+namespace
+{
+    std::string read_file(const std::string& path)
+    {
+        std::ifstream file(path);
+        if (!file.is_open()) return "";
+        std::ostringstream buf;
+        buf << file.rdbuf();
+        return buf.str();
+    }
+}
+
+// Debug builds split the human-facing dump from the symbol payload: main.ll
+// is readable IR without !dbg metadata, main.debug.ll carries the metadata
+// and is what clang compiles (-g -> CodeView/PDB).
+TEST(RuntimeErrors, DebugBuildSplitsDebugInfoOutOfReadableIr)
+{
+    const auto source = R"(
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    std::filesystem::create_directories("build/test_ir");
+    std::remove("build/test_ir/split_debug.ll");
+    std::remove("build/test_ir/split_debug.debug.ll");
+
+    const auto result = DjinnCompiler::run(source, {
+                                               .optimizationLevel = 0, .generateBinary = false,
+                                               .useTempDirectory = false,
+                                               .outputDirectory = "build/test_ir",
+                                               .outputFileName = "split_debug"
+                                           });
+    EXPECT_EQ(result.diagnostics.size(), 0);
+
+    // result.ir keeps the full module for IR-level inspection
+    EXPECT_NE(result.ir.find("!DISubprogram"), std::string::npos);
+
+    const auto clean = read_file("build/test_ir/split_debug.ll");
+    ASSERT_FALSE(clean.empty());
+    EXPECT_NE(clean.find("define i32 @main"), std::string::npos);
+    EXPECT_EQ(clean.find("!DISubprogram"), std::string::npos);
+    EXPECT_EQ(clean.find("!DILocation"), std::string::npos);
+
+    const auto debug = read_file("build/test_ir/split_debug.debug.ll");
+    ASSERT_FALSE(debug.empty());
+    EXPECT_NE(debug.find("!DISubprogram"), std::string::npos);
+    EXPECT_NE(debug.find("define i32 @main"), std::string::npos);
+}
+
+// --embed-debug-info (splitDebugInfo = false): single .ll keeps the metadata,
+// as before the split existed.
+TEST(RuntimeErrors, EmbedDebugInfoKeepsSingleIrFile)
+{
+    const auto source = R"(
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    std::filesystem::create_directories("build/test_ir");
+
+    const auto result = DjinnCompiler::run(source, {
+                                               .optimizationLevel = 0, .generateBinary = false,
+                                               .useTempDirectory = false,
+                                               .outputDirectory = "build/test_ir",
+                                               .outputFileName = "embed_debug",
+                                               .splitDebugInfo = false
+                                           });
+    EXPECT_EQ(result.diagnostics.size(), 0);
+
+    const auto ir = read_file("build/test_ir/embed_debug.ll");
+    ASSERT_FALSE(ir.empty());
+    EXPECT_NE(ir.find("define i32 @main"), std::string::npos);
+    EXPECT_NE(ir.find("!DISubprogram"), std::string::npos);
 }

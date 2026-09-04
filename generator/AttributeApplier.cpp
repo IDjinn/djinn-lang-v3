@@ -61,7 +61,13 @@ void Generator::apply_attributes(llvm::Function* func, const std::vector<Attribu
 
 void Generator::apply_implicit_attributes(llvm::Function* func)
 {
-    // Djinn has no exceptions — all functions are nounwind
+    // Default mode has no unwinding — every function is nounwind. Native
+    // exceptions keep nounwind off generated functions (any of them may end
+    // up with an invoke/landing pad); declarations of externs keep it.
+    if (nativeExceptions && !func->isDeclaration())
+    {
+        return;
+    }
     if (!func->hasFnAttribute(llvm::Attribute::NoUnwind))
     {
         func->addFnAttr(llvm::Attribute::NoUnwind);

@@ -35,11 +35,30 @@
 #ifdef _WIN32
 #define CLANG_LINK_ARGS "-flto -fuse-ld=lld"
 #else
-#define CLANG_LINK_ARGS "-flto -fuse-ld=lld -lm -lpthread"
+#define CLANG_LINK_ARGS "-flto -fuse-ld=lld -lm -lpthread -ldl"
 #endif
 
 namespace
 {
+    // Debug builds keep debug info in the final binary so the native
+    // backtrace symbolizer can resolve file:line (CodeView/PDB on Windows,
+    // DWARF elsewhere); release builds drop it and traces degrade to function
+    // names/addresses. POSIX also bakes the llvm-symbolizer path (sibling of
+    // the clang in use) into the runtime for line info.
+    std::string debug_link_args(const CompilerOptions& options)
+    {
+        if (!options.debugMode) return {};
+#ifdef _WIN32
+        return " -g -gcodeview";
+#else
+        const std::filesystem::path clangPath(DJINN_CLANG_PATH);
+        const auto symbolizer = (clangPath.parent_path() / "llvm-symbolizer").string();
+        if (symbolizer.find(' ') != std::string::npos)
+            return " -g -DDJINN_SYMBOLIZER_PATH=\\\"" + symbolizer + "\\\"";
+        return " -g -DDJINN_SYMBOLIZER_PATH=" + symbolizer;
+#endif
+    }
+
     std::string compute_hash(const std::string& data)
     {
         auto h = std::hash<std::string>{}(data);
@@ -125,6 +144,12 @@ const std::string preludes[] = {
 const std::filesystem::path runtimePaths[] = {
     "runtime/djinn_runtime.c",
     "runtime/logger.c",
+};
+
+// Linked only with --exceptions: the C++ shim that throws/catches real
+// exceptions (djinn::error) for the LLVM unwinding machinery.
+const std::filesystem::path exceptionRuntimePaths[] = {
+    "runtime/djinn_exceptions.cpp",
 };
 
 
@@ -730,7 +755,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             }
         }
 
-        Binder binder(diagnostics, options.errorEnforcement);
+        Binder binder(diagnostics, options.errorEnforcement, options.exceptions);
 
         for (const auto& reader : djlibReaders)
         {
@@ -760,6 +785,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         generator.reflectionMode = options.reflectionMode;
         generator.runtimeDiagnostics =
             options.debugMode ? RuntimeDiagnostics::Full : RuntimeDiagnostics::Minimal;
+        generator.emitDebugInfo = options.debugMode;
+        generator.nativeExceptions = options.exceptions;
+        generator.sourceRoot = fs::absolute(path).string();
         {
             auto _phase = summary.phase("codegen");
             generator.generate();
@@ -793,9 +821,11 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             return {.returnCode = 1, .verifiedIr = false, .diagnostics = diagnostics.get_diagnostics()};
         }
 
+        const bool splitDebug = options.debugMode && options.splitDebugInfo;
+
         if (options.print_ir)
         {
-            LOG_INFO("RESULT\n\n%s", generator.print().c_str());
+            LOG_INFO("RESULT\n\n%s", generator.print(splitDebug).c_str());
         }
 
         {
@@ -840,10 +870,19 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             && cache.optimizationLevel == options.optimizationLevel
             && fs::exists(exePath));
 
-        // Always write .ll for debugging
+        // Always write .ll for debugging; debug builds keep the readable dump
+        // free of debug metadata and compile the .debug.ll carrying it instead
         {
             std::ofstream outFile(llPath);
-            outFile << generatedIr;
+            outFile << (splitDebug ? generator.print(true) : generatedIr);
+        }
+
+        std::string clangInput = llPath;
+        if (splitDebug)
+        {
+            clangInput = llPath.substr(0, llPath.size() - 3) + ".debug.ll";
+            std::ofstream debugOutFile(clangInput);
+            debugOutFile << generatedIr;
         }
 
         if (skipClang)
@@ -858,9 +897,20 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             {
                 runtimeArg += " " + runtime_path.string();
             }
+            if (options.exceptions)
+            {
+                for (auto& runtime_path : exceptionRuntimePaths)
+                {
+                    runtimeArg += " " + runtime_path.string();
+                }
+#ifndef _WIN32
+                runtimeArg += " -lstdc++";
+#endif
+            }
 
             auto optFlag = "-O" + std::to_string(options.optimizationLevel);
-            auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_LINK_ARGS " " + optFlag + " " + llPath + runtimeArg +
+            auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_LINK_ARGS " " + optFlag +
+                debug_link_args(options) + " " + clangInput + runtimeArg +
                 " -o " + exePath;
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
             const auto compile_result = system(cmdString.c_str());
@@ -1093,7 +1143,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         for (auto& prog : programs)
             resolve_compile_time_blocks(*prog, comptimeEval);
 
-        Binder binder(diagnostics, options.errorEnforcement);
+        Binder binder(diagnostics, options.errorEnforcement, options.exceptions);
         const auto bindResult = binder.bindAll(programs);
         if (!bindResult.success)
         {
@@ -1107,19 +1157,33 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         generator.reflectionMode = options.reflectionMode;
         generator.runtimeDiagnostics =
             options.debugMode ? RuntimeDiagnostics::Full : RuntimeDiagnostics::Minimal;
+        generator.emitDebugInfo = options.debugMode;
+        generator.nativeExceptions = options.exceptions;
+        generator.sourceRoot = fs::current_path().string();
         generator.generate();
         irVerified = generator.verify();
 
+        const bool splitDebug = options.debugMode && options.splitDebugInfo;
+
         if (options.print_ir)
         {
-            LOG_INFO("RESULT\n\n%s", generator.print().c_str());
+            LOG_INFO("RESULT\n\n%s", generator.print(splitDebug).c_str());
         }
 
         generatedIr = generator.print();
 
+        // Native exceptions need personality/landing-pad tables linked into a
+        // real binary — the JIT cannot run them yet, so fall back to AOT
+        bool jitEligible = djinn::jitRuntimeAvailable();
+        if (options.exceptions && jitEligible)
+        {
+            LOG_INFO("[jit] --exceptions requires a linked binary; falling back to AOT");
+            jitEligible = false;
+        }
+
         const bool useJit = options.jitExecution && options.generateBinary && options.runAfterCompile
             && std::getenv("DJINN_DISABLE_JIT") == nullptr
-            && djinn::jitRuntimeAvailable();
+            && jitEligible;
 
         std::string outputDir = options.outputDirectory;
         std::string outputFileName = options.outputFileName.empty() ? "main" : options.outputFileName;
@@ -1148,8 +1212,16 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
         generatedIr = generator.print();
         std::ofstream optOutput(llPath);
-        optOutput << generatedIr;
+        optOutput << (splitDebug ? generator.print(true) : generatedIr);
         optOutput.close();
+
+        std::string clangInput = llPath;
+        if (splitDebug)
+        {
+            clangInput = llPath.substr(0, llPath.size() - 3) + ".debug.ll";
+            std::ofstream debugOutFile(clangInput);
+            debugOutFile << generatedIr;
+        }
 
         if (!options.generateBinary)
         {
@@ -1160,7 +1232,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         {
             auto [jitModule, jitContext] = generator.takeModule();
             const auto jitExitCode = djinn::executeModule(std::move(jitModule), std::move(jitContext),
-                                                          options.optimizationLevel, &runtimeErrorReport);
+                                                          options.optimizationLevel, &runtimeErrorReport,
+                                                          &source);
             if (jitExitCode >= 0)
             {
                 LOG_DEBUG("jit exit code %d", jitExitCode);
@@ -1175,9 +1248,20 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         {
             runtimeArg += " " + runtime_path.string();
         }
+        if (options.exceptions)
+        {
+            for (const auto& runtime_path : exceptionRuntimePaths)
+            {
+                runtimeArg += " " + runtime_path.string();
+            }
+#ifndef _WIN32
+            runtimeArg += " -lstdc++";
+#endif
+        }
 
         auto optFlag = "-O" + std::to_string(options.optimizationLevel);
-        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_LINK_ARGS " " + optFlag + " " + llPath + runtimeArg +
+        const auto cmdString = "\"" DJINN_CLANG_PATH "\" " CLANG_LINK_ARGS " " + optFlag +
+            debug_link_args(options) + " " + clangInput + runtimeArg +
             " -o " + exePath;
         LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
         int clangResult = system(cmdString.c_str());

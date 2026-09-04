@@ -134,7 +134,8 @@ struct Console {
   }
 
   // Builds a formatted string in a heap buffer (same placeholder syntax as
-  // writeSync). Used by error construction for interpolated messages.
+  // writeSync). Interpolated error messages no longer route through here —
+  // they format into a fixed thread-local buffer via __djinn_error_format.
   public static str format(str format, ...args) {
       i8* buf = (i8*)__djinn_malloc(bufSize);
       mut i32 bpos = 0;

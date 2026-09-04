@@ -53,7 +53,7 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
-    emit_frame_push(func.name, func.location);
+    debugInfo->begin_function(llvmFunc, func.name, func.location);
 
     size_t idx = 0;
     for (auto& arg : llvmFunc->args())
@@ -91,6 +91,7 @@ void Generator::generate_function_body(const FunctionSymbol& func)
 
     if (builder->GetInsertBlock()->getTerminator())
     {
+        debugInfo->end_function();
         pop_scope();
         currentFunctionThrows = false;
         return;
@@ -102,14 +103,43 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     if (returnType->isVoidTy())
     {
         builder->CreateRetVoid();
+        debugInfo->end_function();
         pop_scope();
         currentFunctionThrows = false;
         return;
     }
 
     builder->CreateRet(llvm::Constant::getNullValue(returnType));
+    debugInfo->end_function();
     pop_scope();
     currentFunctionThrows = false;
+}
+
+// Promise layout: { err_tag, err_message, err_type_name, value } — the error
+// slot comes first so the runtime reads it at fixed offsets (awaiters and the
+// event loop transfer it across suspend points; see djinn_runtime.h).
+llvm::StructType* Generator::promise_type(llvm::Type* valueType)
+{
+    if (!valueType || valueType->isVoidTy())
+    {
+        return llvm::StructType::get(*context,
+                                     {builder->getInt32Ty(), builder->getPtrTy(), builder->getPtrTy()});
+    }
+    return llvm::StructType::get(*context, {
+                                     builder->getInt32Ty(), builder->getPtrTy(), builder->getPtrTy(), valueType
+                                 });
+}
+
+// Frames are not zero-initialized: the error slot must read "no error" until
+// the body decides otherwise.
+void Generator::emit_promise_error_slot_zero(llvm::StructType* promiseTy, llvm::Value* promisePtr)
+{
+    builder->CreateStore(builder->getInt32(0),
+                         builder->CreateStructGEP(promiseTy, promisePtr, 0, "err.zero.tag"));
+    builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()),
+                         builder->CreateStructGEP(promiseTy, promisePtr, 1, "err.zero.msg"));
+    builder->CreateStore(llvm::ConstantPointerNull::get(builder->getPtrTy()),
+                         builder->CreateStructGEP(promiseTy, promisePtr, 2, "err.zero.type"));
 }
 
 void Generator::ensure_malloc_free_declared()
@@ -162,6 +192,7 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
 
     // The original return type (what the user declared)
     llvm::Type* origReturnType = generate_type(func.returnType);
+    auto* promiseTy = promise_type(origReturnType);
 
     auto* ptrTy = llvm::PointerType::getUnqual(*context);
     auto* i64Ty = builder->getInt64Ty();
@@ -178,28 +209,21 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     // --- entry block ---
     builder->SetInsertPoint(entryBB);
 
+    debugInfo->begin_function(llvmFunc, func.name, func.location);
+
     // Create promise alloca BEFORE coro.id — LLVM requires this so it can
     // place the promise in the coroutine frame (accessible via @llvm.coro.promise)
     // NOTE: Do NOT store to promise here — after CoroSplit the address depends on
     // coro.begin which isn't available yet. Zero-init happens after coro.begin.
-    llvm::Value* promisePtr = nullptr;
-    if (!origReturnType->isVoidTy())
-    {
-        promisePtr = builder->CreateAlloca(origReturnType, nullptr, "coro.promise");
-    }
+    llvm::Value* promisePtr = builder->CreateAlloca(promiseTy, nullptr, "coro.promise");
 
     // %id = call token @llvm.coro.id(i32 <align>, ptr <promise>, ptr null, ptr null)
     // Pass promise alloca as 2nd arg so LLVM places it in the coroutine frame
     auto* coroIdFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_id);
-    llvm::Value* promiseArg = promisePtr
-                                  ? promisePtr
-                                  : static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy));
-    unsigned promiseAlign = promisePtr
-                                ? module->getDataLayout().getABITypeAlign(origReturnType).value()
-                                : 0;
+    constexpr unsigned promiseAlign = 16; // DJINN_PROMISE_ALIGN — runtime reads the slot
     llvm::Value* coroId = builder->CreateCall(coroIdFn, {
                                                   builder->getInt32(promiseAlign),
-                                                  promiseArg,
+                                                  promisePtr,
                                                   llvm::ConstantPointerNull::get(ptrTy),
                                                   llvm::ConstantPointerNull::get(ptrTy)
                                               }, "coro.id");
@@ -239,6 +263,8 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     llvm::Value* prevCoroId = asyncCoroId;
     llvm::Value* prevCoroHandle = asyncCoroHandle;
     llvm::Value* prevPromisePtr = asyncPromisePtr;
+    llvm::Value* prevErrSlotPtr = asyncErrSlotPtr;
+    llvm::Type* prevPromiseType = asyncPromiseType;
     llvm::BasicBlock* prevFinalSuspendBB = asyncFinalSuspendBB;
     llvm::BasicBlock* prevCleanupBB = asyncCleanupBB;
     llvm::BasicBlock* prevSuspendBB = asyncSuspendBB;
@@ -247,11 +273,25 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     inAsyncFunction = true;
     asyncCoroId = coroId;
     asyncCoroHandle = coroHandle;
-    asyncPromisePtr = promisePtr;
+    asyncPromisePtr = origReturnType->isVoidTy()
+                          ? nullptr
+                          : builder->CreateStructGEP(promiseTy, promisePtr, 3, "coro.promise.value");
+    asyncErrSlotPtr = promisePtr;
+    asyncPromiseType = promiseTy;
     asyncFinalSuspendBB = finalSuspendBB;
     asyncCleanupBB = cleanupBB;
     asyncSuspendBB = suspendBB;
     asyncReturnType = origReturnType;
+
+    // Native mode: throwing calls in the body unwind to the body pad, which
+    // mirrors the error into the promise slot and resumes at the final
+    // suspend — unwinding cannot cross suspend points
+    NativeLanding bodyLanding;
+    const bool bodyLandingActive = nativeExceptions && currentFunctionThrows;
+    if (bodyLandingActive)
+    {
+        bodyLanding = push_native_landing(false);
+    }
 
     // --- initial suspend: function returns handle immediately, body runs on first resume ---
     {
@@ -267,6 +307,9 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
         initSwitch->addCase(builder->getInt8(1), cleanupBB);
         builder->SetInsertPoint(initResumeBB);
     }
+
+    // The promise error slot starts clean (frames are not zero-initialized)
+    emit_promise_error_slot_zero(promiseTy, promisePtr);
 
     // Store function parameters
     size_t idx = 0;
@@ -302,10 +345,10 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
     // If the body didn't terminate (no return), branch to final suspend
     if (!builder->GetInsertBlock()->getTerminator())
     {
-        if (promisePtr && !origReturnType->isVoidTy())
+        if (asyncPromisePtr && !origReturnType->isVoidTy())
         {
             // Store default value
-            builder->CreateStore(llvm::Constant::getNullValue(origReturnType), promisePtr);
+            builder->CreateStore(llvm::Constant::getNullValue(origReturnType), asyncPromisePtr);
         }
         builder->CreateBr(finalSuspendBB);
     }
@@ -352,16 +395,66 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
                         });
     builder->CreateRet(coroHandle);
 
+    // Fill the async body landing: both pads mirror the error state (set by
+    // the shim) into the promise slot and resume at the final suspend
+    if (bodyLandingActive)
+    {
+        builder->SetInsertPoint(bodyLanding.dispatchBB);
+        auto* catchSwitch = builder->CreateCatchSwitch(
+            llvm::ConstantTokenNone::get(*context), nullptr, 2);
+        catchSwitch->addHandler(bodyLanding.djinnPad);
+        catchSwitch->addHandler(bodyLanding.allPad);
+
+        auto fillBodyPad = [&](llvm::BasicBlock* padBB, const bool foreign)
+        {
+            builder->SetInsertPoint(padBB);
+            llvm::Value* catchType = foreign
+                                         ? static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy))
+                                         : static_cast<llvm::Value*>(ehErrorTypeDesc);
+            auto* pad = builder->CreateCatchPad(catchSwitch, {catchType});
+            if (foreign)
+            {
+                auto* wrapTy = llvm::FunctionType::get(ptrTy, false);
+                auto* wrapFn = module->getFunction("__djinn_wrap_foreign");
+                if (!wrapFn)
+                {
+                    wrapFn = llvm::Function::Create(wrapTy, llvm::Function::ExternalLinkage,
+                                                    "__djinn_wrap_foreign", *module);
+                }
+                builder->CreateCall(wrapFn);
+            }
+
+            builder->CreateStore(errno_load_i32(1, "body.err.tag"),
+                                 builder->CreateStructGEP(promiseTy, promisePtr, 0, "body.slot.tag"));
+            builder->CreateStore(errno_load_ptr(2, "body.err.msg"),
+                                 builder->CreateStructGEP(promiseTy, promisePtr, 1, "body.slot.msg"));
+            builder->CreateStore(errno_load_ptr(3, "body.err.type"),
+                                 builder->CreateStructGEP(promiseTy, promisePtr, 2, "body.slot.type"));
+            emit_all_scope_cleanup();
+            if (asyncPromisePtr && !origReturnType->isVoidTy())
+            {
+                builder->CreateStore(get_default_value(origReturnType), asyncPromisePtr);
+            }
+            builder->CreateCatchRet(pad, finalSuspendBB);
+        };
+        fillBodyPad(bodyLanding.djinnPad, false);
+        fillBodyPad(bodyLanding.allPad, true);
+        ehLandingStack_.pop_back();
+    }
+
     // Restore async state
     inAsyncFunction = prevInAsync;
     asyncCoroId = prevCoroId;
     asyncCoroHandle = prevCoroHandle;
     asyncPromisePtr = prevPromisePtr;
+    asyncErrSlotPtr = prevErrSlotPtr;
+    asyncPromiseType = prevPromiseType;
     asyncFinalSuspendBB = prevFinalSuspendBB;
     asyncCleanupBB = prevCleanupBB;
     asyncSuspendBB = prevSuspendBB;
     asyncReturnType = prevAsyncReturnType;
 
+    debugInfo->end_function();
     pop_scope();
 }
 

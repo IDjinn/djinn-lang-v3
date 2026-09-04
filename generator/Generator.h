@@ -14,6 +14,7 @@
 #include <filesystem>
 #include "../parser/AST.h"
 #include "GeneratorScope.h"
+#include "DebugInfo.h"
 #include "../binder/Symbol.h"
 #include "../binder/SymbolTable.h"
 #include "../diagnostics/Diagnostic.h"
@@ -48,8 +49,9 @@ struct TrapOperand
 
 // Level of runtime error instrumentation baked into the generated module.
 // Full (debug): rich trap descriptors (source snippet, operand values, variable
-// history) and shadow-stack frames for stack traces. Minimal (release): traps
-// and uncaught exceptions keep message + file:line + operand values only.
+// history), throw-site backtrace capture and debug line info. Minimal
+// (release): traps and uncaught exceptions keep message + file:line + operand
+// values only, and no debug metadata is emitted.
 enum class RuntimeDiagnostics
 {
     Minimal,
@@ -58,6 +60,10 @@ enum class RuntimeDiagnostics
 
 // Layout of error values: { tag: i32, message: ptr, type_name: ptr }
 llvm::StructType* djinn_error_value_type(llvm::LLVMContext& context, llvm::IRBuilder<>& builder);
+
+// Layout of the runtime's thread-local error state (djinn_errno_t):
+// { flag, tag, message, type_name, origin_file, origin_line, origin_column }
+llvm::StructType* djinn_errno_type(llvm::LLVMContext & context, llvm::IRBuilder<> & builder);
 
 class Generator
 {
@@ -69,7 +75,9 @@ public:
 
     void run_passes(bool skipCoroPasses = false) const;
 
-    std::string print() const;
+    // Full IR; stripDebugInfo produces a human-readable dump without the
+    // !dbg metadata graph (compile/JIT module itself is never touched).
+    std::string print(bool stripDebugInfo = false) const;
 
     // Releases module + context ownership for in-process JIT execution.
     std::pair<std::unique_ptr<llvm::Module>, std::unique_ptr<llvm::LLVMContext>> takeModule();
@@ -88,12 +96,23 @@ public:
     std::string moduleName;
     std::string reflectionMode = "none";
     RuntimeDiagnostics runtimeDiagnostics = RuntimeDiagnostics::Full;
+    bool emitDebugInfo = true;
+    // Absolute base directory of the compiled sources; baked as a single
+    // module global so runtime error reports can read source snippets from
+    // disk instead of embedding every line's text in the IR. Empty = unknown.
+    std::string sourceRoot;
+    // Native exceptions mode (--exceptions): whole-build switch of the error
+    // propagation mechanism from errno-style returns to LLVM unwinding
+    // (invoke + personality), enabling block-form try/catch/finally and C++
+    // exception interop. Zero-cost on the happy path (tables only).
+    bool nativeExceptions = false;
 
 private:
     DiagnosticEngine& _diagnostics;
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
+    std::unique_ptr<djinn::SourceDebugInfo> debugInfo;
 
     std::unordered_map<std::string, llvm::Function*> functions;
     std::vector<llvm::Function*> externFunctions;
@@ -315,7 +334,9 @@ private:
     bool inAsyncFunction = false;
     llvm::Value* asyncCoroId = nullptr;
     llvm::Value* asyncCoroHandle = nullptr;
-    llvm::Value* asyncPromisePtr = nullptr;
+    llvm::Value* asyncPromisePtr = nullptr; // value slot (promise field 3) for the declared return type
+    llvm::Value* asyncErrSlotPtr = nullptr; // promise base — err slot lives at fields 0..2
+    llvm::Type* asyncPromiseType = nullptr; // wrapper struct { tag, message, type_name, value }
     llvm::BasicBlock* asyncFinalSuspendBB = nullptr;
     llvm::BasicBlock* asyncCleanupBB = nullptr;
     llvm::BasicBlock* asyncSuspendBB = nullptr;
@@ -324,8 +345,19 @@ private:
     void generate_async_function_body(const FunctionSymbol& func);
     void generate_async_method_body(const StructSymbol& struc, const MethodSymbol& method,
                                     llvm::Function* llvmFunc, StructDef* def);
-    llvm::Value* generate_await_loop(llvm::Value* handle, llvm::Type* resultType);
-    llvm::Value* generate_await_in_async(llvm::Value* childHandle, llvm::Type* resultType);
+    // Promise layout: { err_tag, err_message, err_type_name, value } — the
+    // error slot comes first so the runtime reads it at fixed offsets.
+    llvm::StructType* promise_type(llvm::Type* valueType);
+    void emit_promise_error_slot_zero(llvm::StructType* promiseTy, llvm::Value* promisePtr);
+    // After a child coroutine completes: transfers its promise error slot
+    // (loaded before the frame is destroyed) into the thread-local error
+    // state and propagates — or defers to the enclosing try/switch operand
+    // check when inside one.
+    void emit_await_error_check(llvm::Value* errTag, llvm::Value* errMsg, llvm::Value* errType,
+                                const SourceLocation& loc);
+    llvm::Value* generate_await_loop(llvm::Value* handle, llvm::Type* resultType, const SourceLocation& loc);
+    llvm::Value* generate_await_in_async(llvm::Value* childHandle, llvm::Type* resultType,
+                                         const SourceLocation& loc);
     void ensure_malloc_free_declared();
     bool hasAsyncFunctions = false;
 
@@ -338,21 +370,61 @@ private:
 
     void generate_throw_statement(const ThrowStatement& stmt);
 
+    void generate_try_catch_statement(const TryCatchStatement& stmt);
+
+    // ── Native exceptions (LLVM unwinding; --exceptions) ──
+    //
+    // Throwing calls become invokes; unwinding lands on the innermost active
+    // landing — the operand of a try expression/outcome switch, the arms of a
+    // try/catch statement, a function's cleanup pad (unchecked propagation),
+    // or the async body pad (errors cross await via the promise slot). One
+    // C++ type (djinn::error, runtime/djinn_error.h) crosses the boundary;
+    // fine-grained djinn error-type matching happens in the handlers by tag.
+    struct NativeLanding
+    {
+        llvm::BasicBlock* dispatchBB = nullptr; // catchswitch / cleanuppad
+        llvm::BasicBlock* djinnPad = nullptr; // catchpad [djinn::error]
+        llvm::BasicBlock* allPad = nullptr; // catchpad [null] (foreign)
+        bool cleanupOnly = false;
+    };
+
+    std::vector<NativeLanding> ehLandingStack_;
+    llvm::Function* ehPersonalityFn = nullptr;
+    llvm::GlobalVariable* ehErrorTypeDesc = nullptr; // MSVC ??_R0 descriptor (external)
+
+    void ensure_eh_declarations();
+    [[nodiscard]] bool eh_is_msvc_target() const;
+    NativeLanding push_native_landing(bool cleanupOnly);
+    // Fills the landing blocks: djinn/foreign pads catchret to handlerBB
+    // (handlers re-read the thread-local error state, which the shim set).
+    void finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB);
+    llvm::CallBase* emit_call_or_invoke(llvm::Function* callee, const std::vector<llvm::Value*>& args,
+                                        bool calleeCanThrow);
+    // __djinn_throw(tag, message, type_name) + unreachable
+    void emit_native_throw(llvm::Value* tag, llvm::Value* message, llvm::Value* typeName);
+    // Sets the module's host triple + data layout (native mode only)
+    void setup_target_triple();
+
     llvm::Value* generate_ternary_expression(const TernaryExpression& expr);
 
     llvm::Value* generate_try_expression(const TryExpression& expr);
 
-    // Error handling globals (errno-style for throws functions)
+    // Error handling state (errno-style for throws functions): the runtime's
+    // thread-local __djinn_errno struct, accessed field-wise. Async functions
+    // additionally mirror the error into their coroutine promise slot so it
+    // survives the await boundary across threads.
     bool currentFunctionThrows = false;
     bool insideTryOperand_ = false;
-    llvm::GlobalVariable* errorFlagGlobal = nullptr;
-    llvm::GlobalVariable* errorTagGlobal = nullptr;
-    llvm::GlobalVariable* errorPayloadGlobal = nullptr;
-    llvm::GlobalVariable* errorNameGlobal = nullptr;
-    llvm::GlobalVariable* errorOriginFileGlobal = nullptr;
-    llvm::GlobalVariable* errorOriginLineGlobal = nullptr;
-    llvm::GlobalVariable* errorOriginColumnGlobal = nullptr;
+    llvm::GlobalVariable* errnoGlobal = nullptr;
     void ensure_error_globals_declared();
+    llvm::Value* errno_field(unsigned index, const char* name);
+    llvm::Value* errno_load_i32(unsigned index, const char* name);
+    llvm::Value* errno_load_ptr(unsigned index, const char* name);
+    void errno_store_i32(unsigned index, llvm::Value* value);
+    void errno_store_ptr(unsigned index, llvm::Value* value);
+    void errno_clear_flag();
+    llvm::Value* errno_load_flag(const char* name);
+    void emit_error_return_path();
     llvm::Value* get_default_value(llvm::Type* type);
     std::shared_ptr<StructSymbol> resolve_error_struct(const std::string& name) const;
     llvm::Value* generate_error_construction(const FunctionCall& call);
@@ -373,19 +445,22 @@ private:
                                             const SourceLocation& loc);
 
     // Runtime diagnostics: rich traps (source location + operand values +
-    // variable assignment history) and shadow call-stack frames for runtime
-    // stack traces. Shadow frames, variable tracking and source snippets are
-    // emitted in Full mode only; Minimal traps keep file:line + operands.
+    // variable assignment history) and native backtrace capture at throw
+    // sites. Traces symbolize lazily from the binary's debug info (dbghelp /
+    // llvm-symbolizer) plus any JIT-registered symbols. Backtrace capture,
+    // variable tracking and source snippets are emitted in Full mode only;
+    // Minimal traps keep file:line + operands.
     void emit_runtime_error_trap(const SourceLocation& loc, const char* message, char op,
                                  const TrapOperand& left, const TrapOperand& right, bool isSigned);
     void emit_runtime_error_trap_min(const SourceLocation& loc, const char* message, char op,
                                      const TrapOperand& left, const TrapOperand& right, bool isSigned);
-    void emit_frame_push(const std::string& displayName, const SourceLocation& loc);
-    void emit_frame_set_line(const SourceLocation& loc);
     void emit_var_track(llvm::Value* slot, const std::string& name, const SourceLocation& loc);
-    void emit_error_stack_capture(const SourceLocation& loc);
+    void emit_error_trace_capture();
     TrapOperand make_trap_operand(const Expression& expr, llvm::Value* value);
     llvm::Constant* cached_global_string(const std::string& text, const char* prefix);
+    // Module global carrying Generator::sourceRoot (null when unknown); the
+    // runtime joins it with per-site file ids to read snippets at report time.
+    llvm::Value* source_root_global();
     std::unordered_map<std::string, llvm::Constant*> stringGlobalCache;
 
     // Contracts (require/ensure)

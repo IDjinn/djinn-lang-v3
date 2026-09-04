@@ -140,8 +140,10 @@ struct CompilerConfig
     std::vector<std::string> libs = {"std"}; // "std" = djinn stdlib, others = .ll link targets
     std::optional<bool> libraryMode;
     std::optional<bool> noCache;
+    std::optional<bool> splitDebugInfo;
     std::optional<std::string> buildMode;
     std::optional<std::string> reflectionMode;
+    std::optional<bool> exceptions;
 };
 
 struct RuntimeConfig
@@ -210,8 +212,10 @@ struct ProjectConfig
         // compiler (top-level)
         config.compiler.libraryMode = root.get<bool>("compiler.library-mode");
         config.compiler.noCache = root.get<bool>("compiler.no-cache");
+        config.compiler.splitDebugInfo = root.get<bool>("compiler.split-debug-info");
         config.compiler.buildMode = root.get<std::string>("compiler.build-mode");
         config.compiler.reflectionMode = root.get<std::string>("compiler.reflection-mode");
+        config.compiler.exceptions = root.get<bool>("compiler.exceptions");
 
         // runtime
         config.runtime.logger.level = root.get<std::string>("runtime.logger.level", "INFO");
@@ -237,6 +241,7 @@ struct ProjectConfig
         applyOpt(options.dump_macro_expansion, cc.internals.dump_macro_expansion);
         applyOpt(options.skipCoroPasses, cc.generator.skipCoroPasses);
         applyOpt(options.noCache, cc.noCache);
+        applyOpt(options.splitDebugInfo, cc.splitDebugInfo);
         if (cc.buildMode.has_value())
         {
             if (*cc.buildMode == "debug")
@@ -257,6 +262,7 @@ struct ProjectConfig
         }
         if (cc.reflectionMode.has_value())
             options.reflectionMode = *cc.reflectionMode;
+        applyOpt(options.exceptions, cc.exceptions);
         options.optimizationLevel = cc.generator.optimizationLevel;
 
         if (!cc.output.fileName.empty() && options.outputFileName.empty())

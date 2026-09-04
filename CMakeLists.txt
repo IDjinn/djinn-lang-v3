@@ -87,7 +87,7 @@ if (MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif ()
 
-file(GLOB_RECURSE DJINN_SOURCES
+file(GLOB_RECURSE DJINN_SOURCES CONFIGURE_DEPENDS
         lexer/*.cpp
         parser/*.cpp
         generator/*.cpp
@@ -107,7 +107,7 @@ file(GLOB_RECURSE DJINN_SOURCES
         jit/*.cpp
 )
 
-file(GLOB_RECURSE DJINN_HEADERS
+file(GLOB_RECURSE DJINN_HEADERS CONFIGURE_DEPENDS
         lexer/*.h
         parser/*.h
         generator/*.h

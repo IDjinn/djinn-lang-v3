@@ -3,6 +3,7 @@
 //
 
 #include "Generator.h"
+#include "ErrorTagMatching.h"
 #include "visitors/GeneratorExpressionVisitor.h"
 
 llvm::Value* Generator::generate_expression(const Expression& expr)
@@ -10,39 +11,6 @@ llvm::Value* Generator::generate_expression(const Expression& expr)
     djinn::GeneratorExpressionVisitor visitor(*this);
     expr.accept(visitor);
     return visitor.result();
-}
-
-namespace
-{
-    bool error_derived_from(const ScopedSymbolTable& symbols, const StructSymbol& derived, const StructSymbol& base)
-    {
-        std::string current = derived.errorBase;
-        while (!current.empty())
-        {
-            if (current == base.name) return true;
-            const auto sym = symbols.lookupStruct(current);
-            if (!sym) return false;
-            current = sym->errorBase;
-        }
-        return false;
-    }
-
-    // Tags an arm of error type `armType` matches: its own tag plus the tags of
-    // every error type deriving from it (catch-style hierarchy matching)
-    std::vector<int32_t> error_arm_matched_tags(const ScopedSymbolTable& symbols, const StructSymbol& armType)
-    {
-        std::vector<int32_t> tags{armType.errorTag};
-        for (const auto& entry : symbols.symbols())
-        {
-            const auto& symbol = entry.second;
-            if (!symbol || !symbol->isStruct()) continue;
-            const auto structSym = std::dynamic_pointer_cast<StructSymbol>(symbol);
-            if (!structSym || !structSym->isErrorType || structSym->errorTag == armType.errorTag) continue;
-            if (error_derived_from(symbols, *structSym, armType))
-                tags.push_back(structSym->errorTag);
-        }
-        return tags;
-    }
 }
 
 // ============================================================================
@@ -74,8 +42,17 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
     ensure_error_globals_declared();
 
     // The operand may be a throwing call whose outcome takes part in the match:
-    // clear the flag and suppress auto-propagation while it evaluates
-    builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 0), errorFlagGlobal, true);
+    // clear the flag and suppress auto-propagation while it evaluates. Native
+    // mode adds a landing so the operand's throwing calls unwind back to a
+    // dedicated check block with the error state set by the shim.
+    errno_clear_flag();
+
+    NativeLanding ehLanding;
+    const bool nativeLanding = nativeExceptions;
+    if (nativeLanding)
+    {
+        ehLanding = push_native_landing(false);
+    }
 
     const bool prevInsideTry = insideTryOperand_;
     insideTryOperand_ = true;
@@ -93,7 +70,20 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
         matchValue = builder->CreateLoad(alloca->getAllocatedType(), alloca, "switch_load");
     }
 
-    auto* errorFlag = builder->CreateLoad(builder->getInt1Ty(), errorFlagGlobal, true, "switch_err_flag");
+    llvm::Value* errorFlag = nullptr;
+    if (nativeLanding)
+    {
+        auto* checkBB = llvm::BasicBlock::Create(*context, "switch.check", builder->GetInsertBlock()->getParent());
+        builder->CreateBr(checkBB);
+        builder->SetInsertPoint(checkBB);
+        errorFlag = errno_load_flag("switch_err_flag");
+        finalize_native_landing(ehLanding, checkBB);
+        ehLandingStack_.pop_back();
+    }
+    else
+    {
+        errorFlag = errno_load_flag("switch_err_flag");
+    }
 
     const EnumDef* enumDef = nullptr;
     if (matchValue->getType()->isStructTy())
@@ -316,7 +306,7 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
 
     // ---- Error path ----
     builder->SetInsertPoint(errBB);
-    auto* thrownTag = builder->CreateLoad(builder->getInt32Ty(), errorTagGlobal, true, "switch_err_tag");
+    auto* thrownTag = errno_load_i32(1, "switch_err_tag");
 
     bool caughtAll = false;
     for (size_t i = 0; i < errorArms.size() && !caughtAll; ++i)
@@ -330,7 +320,7 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
         {
             continueBlock = llvm::BasicBlock::Create(*context, "switch.catch.next", func);
             llvm::Value* matched = nullptr;
-            for (const int32_t tag : error_arm_matched_tags(*symbols, *errSym))
+            for (const int32_t tag : djinn::error_arm_matched_tags(*symbols, *errSym))
             {
                 auto* cmp = builder->CreateICmpEQ(thrownTag, builder->getInt32(tag), "switch_tag_cmp");
                 matched = matched ? builder->CreateOr(matched, cmp) : cmp;
@@ -349,15 +339,15 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
         }
 
         builder->SetInsertPoint(armBlock);
-        builder->CreateStore(llvm::ConstantInt::get(builder->getInt1Ty(), 0), errorFlagGlobal, true);
+        errno_clear_flag();
 
         push_scope();
         if (arm->binding)
         {
             auto* errType = djinn_error_value_type(*context, *builder);
             auto* errAlloca = builder->CreateAlloca(errType, nullptr, arm->binding->token_name);
-            auto* nameVal = builder->CreateLoad(builder->getPtrTy(), errorNameGlobal, true, "switch_err_type");
-            auto* msgVal = builder->CreateLoad(builder->getPtrTy(), errorPayloadGlobal, true, "switch_err_msg");
+            auto* nameVal = errno_load_ptr(3, "switch_err_type");
+            auto* msgVal = errno_load_ptr(2, "switch_err_msg");
             builder->CreateStore(thrownTag, builder->CreateStructGEP(errType, errAlloca, 0, "bind_tag_ptr"));
             builder->CreateStore(msgVal, builder->CreateStructGEP(errType, errAlloca, 1, "bind_msg_ptr"));
             builder->CreateStore(nameVal, builder->CreateStructGEP(errType, errAlloca, 2, "bind_type_ptr"));
@@ -383,16 +373,7 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
         if (currentFunctionThrows)
         {
             store_error_origin(expr.location);
-            emit_all_scope_cleanup();
-            llvm::Type* returnType = currentFunction ? currentFunction->getReturnType() : builder->getInt32Ty();
-            if (returnType->isVoidTy())
-            {
-                builder->CreateRetVoid();
-            }
-            else
-            {
-                builder->CreateRet(get_default_value(returnType));
-            }
+            emit_error_return_path();
         }
         else
         {

@@ -18,10 +18,11 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/IR/DebugInfo.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include "../binder/SymbolTable.h"
 #include "../utils/Logger.h"
-#include "RuntimeDiagnostics.h"
 
 Generator::Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<ScopedSymbolTable>& symbols)
     : _diagnostics(diagnostics),
@@ -29,6 +30,7 @@ Generator::Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<Scoped
       context(std::make_unique<llvm::LLVMContext>()),
       module(std::make_unique<llvm::Module>("djinn_module", *context)),
       builder(std::make_unique<llvm::IRBuilder<>>(*context)),
+      debugInfo(std::make_unique<djinn::SourceDebugInfo>(*module, *builder)),
       currentScope(std::make_shared<GeneratorScope>())
 {
 }
@@ -108,6 +110,22 @@ void Generator::generate()
         module->setModuleIdentifier(moduleName);
         module->setSourceFileName(moduleName);
     }
+
+    if (nativeExceptions)
+    {
+        // Native unwinding needs the target triple to pick the EH flavor;
+        // only the MSVC (funclet) flavor is implemented so far
+        setup_target_triple();
+        if (!eh_is_msvc_target())
+        {
+            GENERATOR_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
+                            "--exceptions is not supported on this target yet (Windows/MSVC only)",
+                            SourceLocation{});
+        }
+    }
+
+    debugInfo->set_enabled(emitDebugInfo);
+    debugInfo->begin_module(moduleName);
 
     // PASS 0: Register short-name aliases for namespaced symbols
     LOG_DEBUG("[generator] PASS 0: registering aliases from %zu symbols", symbols->symbols().size());
@@ -237,6 +255,7 @@ void Generator::generate()
             auto fSym = std::dynamic_pointer_cast<FunctionSymbol>(sym);
             forward_declare_function(*fSym);
         }
+        debugInfo->finalize();
         verify_all_symbols_generated();
         return;
     }
@@ -331,18 +350,49 @@ void Generator::generate()
             // (can't do this in C because @llvm.coro.promise doesn't lower
             // properly in non-coroutine functions)
             llvm::Type* mainRetType = generate_type(mainSym->returnType);
+            auto* promiseTy = promise_type(mainRetType);
+            auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(
+                module.get(), llvm::Intrinsic::coro_promise);
+            llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
+                                                              handle,
+                                                              builder->getInt32(16),
+                                                              builder->getFalse()
+                                                          }, "main.promise");
+
+            // Async main that ended via error left it in the promise slot, not
+            // necessarily in this thread's error state — transfer it so the
+            // uncaught check below reports it
+            {
+                ensure_error_globals_declared();
+                auto* errTag = builder->CreateLoad(
+                    builder->getInt32Ty(),
+                    builder->CreateStructGEP(promiseTy, promisePtr, 0, "main.err.tag"), "main.errtag");
+                auto* hasError = builder->CreateICmpNE(errTag, builder->getInt32(0), "main.haserr");
+
+                auto* slotOkBB = llvm::BasicBlock::Create(*context, "main.err.slot.ok", realMainFn);
+                auto* slotErrBB = llvm::BasicBlock::Create(*context, "main.err.slot", realMainFn);
+                builder->CreateCondBr(hasError, slotErrBB, slotOkBB);
+
+                builder->SetInsertPoint(slotErrBB);
+                errno_store_i32(0, builder->getInt32(1));
+                errno_store_i32(1, errTag);
+                errno_store_ptr(2, builder->CreateLoad(
+                                    builder->getPtrTy(),
+                                    builder->CreateStructGEP(promiseTy, promisePtr, 1, "main.err.msg"), "main.errmsg"));
+                errno_store_ptr(3, builder->CreateLoad(
+                                    builder->getPtrTy(),
+                                    builder->CreateStructGEP(promiseTy, promisePtr, 2, "main.err.type"),
+                                    "main.errtype"));
+                builder->CreateBr(slotOkBB);
+
+                builder->SetInsertPoint(slotOkBB);
+            }
+
             llvm::Value* result = nullptr;
             if (mainRetType && !mainRetType->isVoidTy())
             {
-                auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(
-                    module.get(), llvm::Intrinsic::coro_promise);
-                unsigned align = module->getDataLayout().getABITypeAlign(mainRetType).value();
-                llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
-                                                                  handle,
-                                                                  builder->getInt32(align),
-                                                                  builder->getFalse()
-                                                              }, "main.promise");
-                result = builder->CreateLoad(mainRetType, promisePtr, "main.result");
+                auto* valuePtr = builder->CreateStructGEP(promiseTy, promisePtr, 3, "main.value.ptr");
+                result = builder->CreateLoad(mainRetType, valuePtr, "main.result");
             }
             else
             {
@@ -387,7 +437,31 @@ void Generator::generate()
             builder->CreateCall(initFn, {builder->getInt32(4)});
 
             llvm::Value* result;
-            if (syncMainFn->getReturnType()->isVoidTy())
+            if (nativeExceptions&& mainSym->isThrowing())
+            {
+                // Native mode: an error escaping the sync main unwinds here —
+                // report from the error state and abort instead of exiting
+                const auto landing = push_native_landing(false);
+                auto* okBB = llvm::BasicBlock::Create(*context, "main.inv.ok", realMainFn);
+                if (syncMainFn->getReturnType()->isVoidTy())
+                {
+                    builder->CreateInvoke(syncMainFn, okBB, landing.dispatchBB);
+                    builder->SetInsertPoint(okBB);
+                    result = builder->getInt32(0);
+                }
+                else
+                {
+                    auto* invoke = builder->CreateInvoke(syncMainFn, okBB, landing.dispatchBB);
+                    builder->SetInsertPoint(okBB);
+                    result = invoke;
+                }
+                auto* uncaughtBB = llvm::BasicBlock::Create(*context, "main.uncaught", realMainFn);
+                finalize_native_landing(landing, uncaughtBB);
+                builder->SetInsertPoint(uncaughtBB);
+                emit_uncaught_error_trap();
+                builder->SetInsertPoint(okBB);
+            }
+            else if (syncMainFn->getReturnType()->isVoidTy())
             {
                 builder->CreateCall(syncMainFn, {});
                 result = builder->getInt32(0);
@@ -415,6 +489,9 @@ void Generator::generate()
     verify_all_symbols_generated();
 
     // NOTE: Coroutine and optimization passes are run externally via run_passes()
+
+    // PASS 9: Complete the debug metadata graph (must precede verify/print)
+    debugInfo->finalize();
 
     // PASS 10: Force emission of used declarations
     // emit_used_declarations();
@@ -564,25 +641,24 @@ void Generator::run_passes(bool skipCoroPasses) const
 
     MPM.addPass(llvm::CoroCleanupPass());
 
-    // Shadow-stack unwinding: insert __djinn_frame_pop() before every return
-    // of functions that push a frame (runs after coro lowering so it sees the
-    // final control flow; async functions never push and stay untouched).
-    // Minimal (release) builds emit no frames, so the pass has nothing to do.
-    if (runtimeDiagnostics == RuntimeDiagnostics::Full)
-    {
-        llvm::FunctionPassManager FPM;
-        FPM.addPass(djinn::ShadowStackPopPass());
-        MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
-    }
-
     MPM.run(*module, MAM);
 }
 
-std::string Generator::print() const
+std::string Generator::print(const bool stripDebugInfo) const
 {
+    if (!stripDebugInfo)
+    {
+        std::string str;
+        llvm::raw_string_ostream stream(str);
+        module->print(stream, nullptr);
+        return str;
+    }
+
+    auto cloned = llvm::CloneModule(*module);
+    llvm::StripDebugInfo(*cloned);
     std::string str;
     llvm::raw_string_ostream stream(str);
-    module->print(stream, nullptr);
+    cloned->print(stream, nullptr);
     return str;
 }
 

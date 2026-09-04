@@ -1,10 +1,17 @@
 //
-// Await expression code generation — resumes coroutine and extracts result from promise
+// Await expression code generation — resumes coroutine and extracts result
+// and error slot from the child promise
 //
 
 #include "../Generator.h"
 
-llvm::Value* Generator::generate_await_in_async(llvm::Value* childHandle, llvm::Type* resultType)
+namespace
+{
+    constexpr unsigned kPromiseAlign = 16; // DJINN_PROMISE_ALIGN
+}
+
+llvm::Value* Generator::generate_await_in_async(llvm::Value* childHandle, llvm::Type* resultType,
+                                                const SourceLocation& loc)
 {
     auto* ptrTy = llvm::PointerType::getUnqual(*context);
 
@@ -31,32 +38,51 @@ llvm::Value* Generator::generate_await_in_async(llvm::Value* childHandle, llvm::
     switchInst->addCase(builder->getInt8(0), awaitReadyBB);
     switchInst->addCase(builder->getInt8(1), asyncCleanupBB);
 
-    // 3. await.ready: extract result from child promise
+    // 3. await.ready: extract result and error slot from the child promise.
+    //    Values are read before the destroy — they point at heap/constant
+    //    storage, the promise itself dies with the frame.
     builder->SetInsertPoint(awaitReadyBB);
+
+    auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(
+        module.get(), llvm::Intrinsic::coro_promise);
+    auto* promiseTy = promise_type(resultType);
+    llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
+                                                      childHandle,
+                                                      builder->getInt32(kPromiseAlign),
+                                                      builder->getFalse()
+                                                  }, "await.promise");
 
     llvm::Value* result = nullptr;
     if (resultType && !resultType->isVoidTy())
     {
-        auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(
-            module.get(), llvm::Intrinsic::coro_promise);
-        unsigned align = module->getDataLayout().getABITypeAlign(resultType).value();
-        llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
-                                                          childHandle,
-                                                          builder->getInt32(align),
-                                                          builder->getFalse()
-                                                      }, "await.promise");
-        result = builder->CreateLoad(resultType, promisePtr, "await.result");
+        auto* valuePtr = builder->CreateStructGEP(promiseTy, promisePtr, 3, "await.value.ptr");
+        result = builder->CreateLoad(resultType, valuePtr, "await.result");
     }
+
+    auto* errTag = builder->CreateLoad(builder->getInt32Ty(),
+                                       builder->CreateStructGEP(promiseTy, promisePtr, 0, "await.err.tag.ptr"),
+                                       "await.err.tag");
+    auto* errMsg = builder->CreateLoad(builder->getPtrTy(),
+                                       builder->CreateStructGEP(promiseTy, promisePtr, 1, "await.err.msg.ptr"),
+                                       "await.err.msg");
+    auto* errType = builder->CreateLoad(builder->getPtrTy(),
+                                        builder->CreateStructGEP(promiseTy, promisePtr, 2, "await.err.type.ptr"),
+                                        "await.err.type");
 
     // 4. Destroy child coroutine frame
     auto* coroDestroyFn = llvm::Intrinsic::getOrInsertDeclaration(
         module.get(), llvm::Intrinsic::coro_destroy);
     builder->CreateCall(coroDestroyFn, {childHandle});
 
+    // 5. Child error slot -> thread-local error state; propagate or defer to
+    //    the enclosing try/switch operand check
+    emit_await_error_check(errTag, errMsg, errType, loc);
+
     return result;
 }
 
-llvm::Value* Generator::generate_await_loop(llvm::Value* handle, llvm::Type* resultType)
+llvm::Value* Generator::generate_await_loop(llvm::Value* handle, llvm::Type* resultType,
+                                            const SourceLocation& loc)
 {
     auto* ptrTy = llvm::PointerType::getUnqual(*context);
 
@@ -97,23 +123,37 @@ llvm::Value* Generator::generate_await_loop(llvm::Value* handle, llvm::Type* res
         builder->SetInsertPoint(awaitReadyBB);
     }
 
-    // Extract result from coroutine promise
+    // Extract result and error slot from coroutine promise (values are read
+    // before the destroy — they outlive the frame)
+    auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_promise);
+    auto* promiseTy = promise_type(resultType);
+    llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
+                                                      handle,
+                                                      builder->getInt32(kPromiseAlign),
+                                                      builder->getFalse()
+                                                  }, "await.promise");
+
     llvm::Value* result = nullptr;
     if (resultType && !resultType->isVoidTy())
     {
-        auto* coroPromiseFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_promise);
-        unsigned align = module->getDataLayout().getABITypeAlign(resultType).value();
-        llvm::Value* promisePtr = builder->CreateCall(coroPromiseFn, {
-                                                          handle,
-                                                          builder->getInt32(align),
-                                                          builder->getFalse()
-                                                      }, "await.promise");
-
-        result = builder->CreateLoad(resultType, promisePtr, "await.result");
+        auto* valuePtr = builder->CreateStructGEP(promiseTy, promisePtr, 3, "await.value.ptr");
+        result = builder->CreateLoad(resultType, valuePtr, "await.result");
     }
+
+    auto* errTag = builder->CreateLoad(builder->getInt32Ty(),
+                                       builder->CreateStructGEP(promiseTy, promisePtr, 0, "await.err.tag.ptr"),
+                                       "await.err.tag");
+    auto* errMsg = builder->CreateLoad(builder->getPtrTy(),
+                                       builder->CreateStructGEP(promiseTy, promisePtr, 1, "await.err.msg.ptr"),
+                                       "await.err.msg");
+    auto* errType = builder->CreateLoad(builder->getPtrTy(),
+                                        builder->CreateStructGEP(promiseTy, promisePtr, 2, "await.err.type.ptr"),
+                                        "await.err.type");
 
     auto* coroDestroyFn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::coro_destroy);
     builder->CreateCall(coroDestroyFn, {handle});
+
+    emit_await_error_check(errTag, errMsg, errType, loc);
 
     return result;
 }
@@ -189,7 +229,7 @@ llvm::Value* Generator::generate_await_expression(const AwaitExpression& expr)
     // In sync context: fallback to busy-loop
     if (inAsyncFunction)
     {
-        return generate_await_in_async(handle, resultType);
+        return generate_await_in_async(handle, resultType, expr.location);
     }
-    return generate_await_loop(handle, resultType);
+    return generate_await_loop(handle, resultType, expr.location);
 }

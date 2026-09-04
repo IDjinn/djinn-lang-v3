@@ -263,7 +263,7 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
                 }
             }
 
-            return generate_await_loop(handle, resultType);
+            return generate_await_loop(handle, resultType, call.location);
         }
 
     case Intrinsic::Typeof:
@@ -552,23 +552,22 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
         }
     }
 
-    // Record the call site on the shadow stack so runtime stack traces point
-    // at the calling line, not the function definition
-    emit_frame_set_line(expr.name.location);
-
-    auto call = builder->CreateCall(func, args);
+    const bool calleeThrows = funcSym && funcSym->isThrowing();
+    auto call = emit_call_or_invoke(func, args, nativeExceptions && calleeThrows);
     auto isExternFunctionDeclaration = func->isDeclaration() && !func->isIntrinsic();
     if (isExternFunctionDeclaration)
     // if we are calling a extern function, we flag this call as no-optimize, otherwise llvm could wipe out this entire call.
     {
         func->setMemoryEffects(llvm::MemoryEffects::unknown());
         call->setCannotDuplicate();
-        call->setTailCall(false);
+        if (auto* callInst = llvm::dyn_cast<llvm::CallInst>(call))
+            callInst->setTailCallKind(llvm::CallInst::TCK_None);
     }
 
     // Unchecked call to a throwing function inside another throwing function:
-    // re-throw when the callee failed (error propagation)
-    if (currentFunctionThrows && !insideTryOperand_ && funcSym && funcSym->isThrowing())
+    // re-throw when the callee failed (error propagation; native mode
+    // propagates by unwinding instead — the call above is already an invoke)
+    if (currentFunctionThrows && !insideTryOperand_ && calleeThrows)
     {
         emit_error_propagation_check(expr.name.location);
     }
@@ -1135,17 +1134,16 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
         }
     }
 
-    emit_frame_set_line(call.name.location);
-
-    auto* methodCall = builder->CreateCall(func, args);
+    const auto structSym2 = symbols->lookupStruct(structName);
+    const auto methodSym2 = structSym2 ? structSym2->getMethod(call.name.token_name) : nullptr;
+    auto* methodCall = emit_call_or_invoke(func, args, nativeExceptions && methodSym2 && methodSym2->isThrowing());
 
     // Unchecked call to a throwing method inside another throwing function:
-    // re-throw when the callee failed (error propagation)
+    // re-throw when the callee failed (error propagation; native mode
+    // propagates by unwinding instead)
     if (currentFunctionThrows && !insideTryOperand_)
     {
-        const auto structSym = symbols->lookupStruct(structName);
-        const auto methodSym = structSym ? structSym->getMethod(call.name.token_name) : nullptr;
-        if (methodSym && methodSym->isThrowing())
+        if (methodSym2 && methodSym2->isThrowing())
         {
             emit_error_propagation_check(call.name.location);
         }

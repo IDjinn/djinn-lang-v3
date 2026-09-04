@@ -98,6 +98,8 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     llvm::Value* savedAsyncCoroId = asyncCoroId;
     llvm::Value* savedAsyncCoroHandle = asyncCoroHandle;
     llvm::Value* savedAsyncPromisePtr = asyncPromisePtr;
+    llvm::Value* savedAsyncErrSlotPtr = asyncErrSlotPtr;
+    llvm::Type* savedAsyncPromiseType = asyncPromiseType;
     llvm::BasicBlock* savedAsyncFinalSuspendBB = asyncFinalSuspendBB;
     llvm::BasicBlock* savedAsyncCleanupBB = asyncCleanupBB;
     llvm::BasicBlock* savedAsyncSuspendBB = asyncSuspendBB;
@@ -107,6 +109,8 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     asyncCoroId = nullptr;
     asyncCoroHandle = nullptr;
     asyncPromisePtr = nullptr;
+    asyncErrSlotPtr = nullptr;
+    asyncPromiseType = nullptr;
     asyncFinalSuspendBB = nullptr;
     asyncCleanupBB = nullptr;
     asyncSuspendBB = nullptr;
@@ -147,6 +151,8 @@ llvm::StructType* Generator::monomorphize_struct(const std::string& baseName, co
     asyncCoroId = savedAsyncCoroId;
     asyncCoroHandle = savedAsyncCoroHandle;
     asyncPromisePtr = savedAsyncPromisePtr;
+    asyncErrSlotPtr = savedAsyncErrSlotPtr;
+    asyncPromiseType = savedAsyncPromiseType;
     asyncFinalSuspendBB = savedAsyncFinalSuspendBB;
     asyncCleanupBB = savedAsyncCleanupBB;
     asyncSuspendBB = savedAsyncSuspendBB;
@@ -358,7 +364,7 @@ void Generator::monomorphize_method(const MethodSymbol& method,
     const auto entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
     builder->SetInsertPoint(entry);
 
-    emit_frame_push(mangledStructName + "." + method.name, method.location);
+    debugInfo->begin_function(llvmFunc, mangledStructName + "." + method.name, method.location);
 
     auto argIt = llvmFunc->arg_begin();
     if (!isStatic)
@@ -443,6 +449,7 @@ void Generator::monomorphize_method(const MethodSymbol& method,
         }
     }
 
+    debugInfo->end_function();
     pop_scope();
 }
 
@@ -504,6 +511,8 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
         auto* entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
         builder->SetInsertPoint(entry);
 
+        debugInfo->begin_function(llvmFunc, mangledStructName + "." + prop.name + ".get", prop.location);
+
         auto argIt = llvmFunc->arg_begin();
         argIt->setName("this");
         auto* thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
@@ -528,6 +537,7 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
             builder->CreateRet(llvm::Constant::getNullValue(returnType));
         }
 
+        debugInfo->end_function();
         pop_scope();
     }
 
@@ -562,6 +572,8 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
         auto* entry = llvm::BasicBlock::Create(*context, "entry", llvmFunc);
         builder->SetInsertPoint(entry);
 
+        debugInfo->begin_function(llvmFunc, mangledStructName + "." + prop.name + ".set", prop.location);
+
         auto argIt = llvmFunc->arg_begin();
         argIt->setName("this");
         auto* thisAlloca = builder->CreateAlloca(argIt->getType(), nullptr, "this");
@@ -591,6 +603,7 @@ void Generator::monomorphize_property(const PropertySymbol& prop,
             builder->CreateRetVoid();
         }
 
+        debugInfo->end_function();
         pop_scope();
     }
 

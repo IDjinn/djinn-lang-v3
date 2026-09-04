@@ -154,4 +154,64 @@ namespace djinn
             }
         }
     }
+
+    void BinderStatementVisitor::visit(const TryCatchStatement& stmt)
+    {
+        if (!_binder.nativeExceptions_)
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
+                "block-form try/catch requires the exceptions mode ('--exceptions' or compiler.exceptions in djinn.proj); "
+                "the expression forms ('try e', 'try e ?: f', outcome switch) are available in every mode",
+                stmt.location
+            ));
+            return;
+        }
+
+        for (const auto& clause : stmt.catches)
+        {
+            const auto& name = clause.errorType.token_name;
+            if (name != "_" && name != "Error")
+            {
+                const auto errStruct = _binder._global_scope->lookupStruct(name);
+                if (!errStruct || !errStruct->isErrorType)
+                {
+                    _binder._diagnostics.emitAndPrint(Diagnostic(
+                        Severity::Error, DiagnosticCode::CATCH_ARM_NOT_ERROR_TYPE,
+                        "catch pattern must be an error type (deriving from 'Exception'), 'Error' or '_', got '"
+                        + name + "'",
+                        clause.location
+                    ));
+                }
+            }
+        }
+
+        // The try block is a checked scope: throwing calls inside are handled
+        // by the catch arms, not by the function's own propagation
+        const bool prevInsideTry = _binder.insideTryExpression_;
+        _binder.insideTryExpression_ = true;
+        _binder.pushScope();
+        _binder.bindBlock(*stmt.tryBlock);
+        _binder.popScope();
+        _binder.insideTryExpression_ = prevInsideTry;
+
+        for (const auto& clause : stmt.catches)
+        {
+            _binder.pushScope();
+            if (clause.binding)
+            {
+                _binder._current_scope->defineVariable(clause.binding->token_name,
+                                                       Type::struct_type(clause.errorType.token_name), false);
+            }
+            _binder.bindBlock(*clause.body);
+            _binder.popScope();
+        }
+
+        if (stmt.finallyBlock)
+        {
+            _binder.pushScope();
+            _binder.bindBlock(*stmt.finallyBlock);
+            _binder.popScope();
+        }
+    }
 } // namespace djinn

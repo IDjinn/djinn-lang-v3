@@ -113,6 +113,8 @@ private:
 
     std::unique_ptr<Statement> parse_statement();
 
+    std::unique_ptr<Statement> parse_try_catch_statement();
+
     std::unique_ptr<IfStatement> parse_if_statement();
 
     std::unique_ptr<Statement> parse_for_statement();

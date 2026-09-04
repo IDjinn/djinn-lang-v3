@@ -8,8 +8,8 @@
 #include "../lib/DjLibReader.h"
 #include "ErrorTypes.h"
 
-Binder::Binder(DiagnosticEngine& diagnostics, ErrorEnforcement enforcement)
-    : _diagnostics(diagnostics), enforcement_(enforcement)
+Binder::Binder(DiagnosticEngine& diagnostics, ErrorEnforcement enforcement, bool nativeExceptions)
+    : _diagnostics(diagnostics), enforcement_(enforcement), nativeExceptions_(nativeExceptions)
 {
     _global_scope = std::make_shared<ScopedSymbolTable>();
     _current_scope = _global_scope;

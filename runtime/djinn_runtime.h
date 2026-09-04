@@ -75,6 +75,48 @@ do {                                                              \
 #define DJINN_ATTR_MALLOC    __attribute__((malloc, alloc_size(1), returns_nonnull))
 #endif
 
+#if defined(_MSC_VER)
+#define DJINN_TLS __declspec(thread)
+#else
+#define DJINN_TLS _Thread_local
+#endif
+
+// ── Error state (errno-style propagation) ──
+//
+// The generator lowers `throw`/`throws`/`try` to writes/reads of this
+// thread-local struct: throw sites store tag/message/type/origin and return
+// a default value; call sites of throwing functions reload the flag and
+// propagate. Thread-local so concurrent runtime worker threads never
+// interleave errors. Tags mirror binder/ErrorTypes.h (1..99 builtin, 100+
+// user error structs).
+
+typedef struct djinn_errno
+{
+    int32_t flag; /* 1 = error in flight */
+    int32_t tag; /* 0 = none; builtin/user tag */
+    const char* message; /* heap string from the error value */
+    const char* type_name; /* static per-type name; NULL for builtin tags */
+    const char* origin_file;
+    uint32_t origin_line;
+    uint32_t origin_column;
+} djinn_errno_t;
+
+extern DJINN_TLS djinn_errno_t __djinn_errno;
+
+// ── Coroutine promise ABI ──
+//
+// Every async function's promise is { i32 err_tag, ptr err_message,
+// ptr err_type_name, T value } — the error slot comes first so the runtime
+// can read it at fixed offsets (0/8/16) without knowing T, letting errors
+// cross `await` boundaries (the resuming thread's error state may differ
+// from the throwing one's). All promises are 16-byte aligned.
+
+#define DJINN_PROMISE_ALIGN 16
+#define DJINN_PROMISE_ERR_TAG_OFFSET 0
+#define DJINN_PROMISE_ERR_MESSAGE_OFFSET 8
+#define DJINN_PROMISE_ERR_TYPE_OFFSET 16
+#define DJINN_PROMISE_VALUE_OFFSET 24
+
 uint64_t __djinn_hash_string(const char* data, uint32_t length);
 
 int64_t __djinn_unix_timestamp_ms(void);
@@ -213,14 +255,16 @@ void __djinn_runtime_shutdown(void);
 // The generator bakes a djinn_error_info_t at each trap site and calls
 // __djinn_runtime_error, which renders a compile-time-style report
 // ( --> file:line:col, source snippet, caret underline, note with the
-// operand values) followed by the shadow-stack trace, stores it in
+// operand values) followed by the native stack trace, stores it in
 // __djinn_last_error_report (so JIT hosts can capture it) and aborts.
 
 typedef struct djinn_error_info
 {
     const char* message;   /* "integer overflow" / "division by zero" */
     const char* file;      /* source file display name */
-    const char* line_text; /* source snippet; "" when unavailable */
+    const char* source_root; /* absolute dir joined with `file` to read the
+                                snippet from disk at report time; NULL when
+                                unknown (reports degrade to file:line) */
     uint32_t line;         /* 1-based */
     uint32_t column;       /* 1-based */
     uint32_t length;       /* caret span length (>= 1) */
@@ -263,37 +307,64 @@ void __djinn_uncaught_error(int tag, const char* type_name, const char* message,
 // ── Variable assignment history ──
 //
 // The generator records each integer variable declaration/assignment with its
-// source line; when an operand of a failing operation is a variable, the
-// report shows its last DJINN_VAR_HISTORY assignment sites.
+// source file + line; when an operand of a failing operation is a variable,
+// the report shows its last DJINN_VAR_HISTORY assignment sites, reading the
+// line text from disk at report time.
 
 #define DJINN_MAX_TRACKED_VARS 128
 #define DJINN_VAR_HISTORY 2
+#define DJINN_SOURCE_LINE_MAX 256
 
-void __djinn_var_track(const void* slot, const char* name, const char* line_text, uint32_t line);
+void __djinn_var_track(const void* slot, const char* name, const char* file,
+                       const char* source_root, uint32_t line);
 
-// ── Shadow call stack for runtime stack traces ──
+// ── Interpolated error message formatting ──
 //
-// The generator pushes a frame at each (sync) function entry, updates the
-// top frame's line at call sites, and a post-codegen pass inserts a pop
-// before every return. Plain global (not thread-local): reliable for
-// single-threaded sync code; async/coroutine functions do not participate.
+// Interpolated throw messages are formatted into a fixed thread-local buffer
+// instead of a heap allocation: the message pointer must outlive unwinding
+// and synchronous propagation, and per-throw mallocs would defeat the
+// allocation-free error path. Same "{idx}" placeholder syntax and object
+// boxing as Console.format. Returns the buffer pointer, valid until the next
+// throw on this thread.
 
-#define DJINN_MAX_FRAMES 256
+#define DJINN_ERROR_MESSAGE_MAX 256
 
-typedef struct djinn_frame
-{
-    const char* function_name;
-    const char* file;
-    uint32_t line;
-} djinn_frame_t;
+const char* __djinn_error_format(const char* fmt_data, uint32_t fmt_len,
+                                 const void* boxed_objects, int32_t count);
 
-void __djinn_frame_push(const char* function_name, const char* file, uint32_t line);
-void __djinn_frame_pop(void);
-void __djinn_frame_set_line(uint32_t line);
+// Registers an in-memory source text under its file id so snippet extraction
+// works for sources that were never written to disk (run()/tests). Borrows
+// the host's string (must stay valid while the compiled program runs);
+// re-registering an id replaces its text. No allocation.
+void __djinn_register_source_text(const char* file_id, const char* text);
 
-// Snapshots the live shadow stack (top frame's line set to the throw site) so
-// the uncaught-exception report keeps the trace after the error unwinds.
-void __djinn_capture_error_stack(uint32_t line);
+// ── Native stack traces ──
+//
+// Traces are captured with the platform unwinder at throw/trap sites — a
+// validated frame-pointer walk on Windows x64 (JIT frames have no unwind
+// info), backtrace() elsewhere — and symbolized lazily, only when a report is
+// printed: dbghelp (PDB) on Windows, dladdr + llvm-symbolizer (DWARF) on
+// POSIX, plus any symbols a JIT host registers. Nothing runs on the happy
+// path.
+
+#define DJINN_MAX_TRACE_FRAMES 64
+
+// Captures the native stack into the thread-local error trace. Called at
+// throw sites so the uncaught-exception report keeps the trace after the
+// error unwinds; traps capture inline instead.
+void __djinn_capture_backtrace(void);
+
+// Capture into caller storage (used by the exceptions shim so thrown error
+// objects carry their own raise-site trace).
+int __djinn_capture_backtrace_into(void** frames, int max);
+
+// Points the lazy symbolizer at an llvm-symbolizer binary (POSIX file:line
+// info); optional — without it traces fall back to dladdr names only.
+void __djinn_symbolizer_set_path(const char* path);
+
+// Registers address->name pairs for JIT-compiled functions; the symbolizer
+// consults them before the platform symbol sources. Names are copied.
+void __djinn_jit_register_symbols(const char* const* names, const void* const* addresses, int count);
 
 extern void __djinn_coro_resume(void* handle);
 extern int __djinn_coro_done(void* handle);

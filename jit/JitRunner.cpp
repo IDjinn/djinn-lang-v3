@@ -317,7 +317,8 @@ namespace djinn
     }
 
     int executeModule(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                      const int optimizationLevel, std::string* outRuntimeErrorReport)
+                      const int optimizationLevel, std::string* outRuntimeErrorReport,
+                      const std::string* inMemorySource)
     {
         using namespace llvm;
         using namespace llvm::orc;
@@ -416,6 +417,15 @@ namespace djinn
         if (auto err = dylib.define(absoluteSymbols(std::move(hostWrappers))))
             JIT_FAIL(std::move(err));
 
+        // Collected before the module is moved into the JIT (see the symbol
+        // registration after main materialization below).
+        std::vector<std::string> jitSymbolNames;
+        for (const auto& fn : *module)
+        {
+            if (!fn.isDeclaration() && !fn.getName().empty())
+                jitSymbolNames.push_back(fn.getName().str());
+        }
+
         for (const auto& bcPath : runtimeBitcodePaths())
         {
             auto buffer = MemoryBuffer::getFile(bcPath.string());
@@ -439,9 +449,51 @@ namespace djinn
         if (!mainAddr)
             JIT_FAIL(mainAddr.takeError());
 
+        // Register address->name pairs for every generated function so runtime
+        // backtraces can symbolize JIT frames — they live only in memory, so
+        // dbghelp/dladdr cannot see them.
+        if (auto registerAddr = jit->lookup("__djinn_jit_register_symbols"))
+        {
+            using RegisterSymbolsFn = void (*)(const char* const*, const void* const*, int);
+            std::vector<const char*> names;
+            std::vector<const void*> addresses;
+            names.reserve(jitSymbolNames.size());
+            addresses.reserve(jitSymbolNames.size());
+            for (const auto& name : jitSymbolNames)
+            {
+                if (auto addr = jit->lookup(name))
+                {
+                    names.push_back(name.c_str());
+                    addresses.push_back(addr->toPtr<const void*>());
+                }
+                else
+                {
+                    consumeError(addr.takeError());
+                }
+            }
+            if (!names.empty())
+                registerAddr->toPtr<RegisterSymbolsFn>()(names.data(), addresses.data(),
+                                                         static_cast<int>(names.size()));
+        }
+        else
+        {
+            consumeError(registerAddr.takeError());
+        }
+
         // main is generated as `i32 @main()` with no parameters. It runs on a
         // dedicated thread: on exit/abort the thread parks itself (see
         // terminateJitMain) and is detached below.
+        // In-memory sources have no file on disk for snippet extraction — hand
+        // the text to the runtime (borrowed; the caller outlives the run).
+        if (inMemorySource != nullptr && !inMemorySource->empty())
+        {
+            if (auto registerSource = jit->lookup("__djinn_register_source_text"))
+            {
+                using RegisterSourceFn = void (*)(const char*, const char*);
+                registerSource->toPtr<RegisterSourceFn>()("main", inMemorySource->c_str());
+            }
+        }
+
         const auto mainFn = mainAddr->toPtr<int (*)()>();
         std::atomic<int> normalExit{-2};
         terminatedExitCode.store(-2, std::memory_order_release);

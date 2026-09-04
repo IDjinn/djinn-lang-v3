@@ -249,6 +249,54 @@ struct ThrowStatement : Statement
     }
 };
 
+// One catch arm of a block-form try: an error type (deriving from Exception),
+// the catch-all "Error", or the wildcard "_" — with an optional binding —
+// followed by the handler body.
+struct CatchClause : Location
+{
+    SourceIdentifier errorType;
+    std::optional<SourceIdentifier> binding;
+    std::unique_ptr<Block> body;
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "Catch(" << errorType.token_name;
+        if (binding) os << " " << binding->token_name;
+        os << ")\n";
+        if (body) body->print(os, indent + 2);
+    }
+};
+
+// Block-form try/catch/finally (opt-in via --exceptions). Complements the
+// expression forms (`try e`, `try e ?: f`, outcome switch) which stay
+// available in every mode.
+struct TryCatchStatement : Statement
+{
+    std::unique_ptr<Block> tryBlock;
+    std::vector<CatchClause> catches;
+    std::unique_ptr<Block> finallyBlock;
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "TryCatchStatement\n";
+        if (tryBlock) tryBlock->print(os, indent + 2);
+        for (const auto& clause : catches)
+        {
+            clause.print(os, indent + 2);
+        }
+        if (finallyBlock)
+        {
+            writeIndent(os, indent + 2);
+            os << "Finally\n";
+            finallyBlock->print(os, indent + 4);
+        }
+    }
+};
+
 struct SwitchCaseStatement : Statement
 {
     std::unique_ptr<Expression> expression;

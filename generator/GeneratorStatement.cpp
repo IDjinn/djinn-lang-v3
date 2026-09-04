@@ -8,6 +8,7 @@
 
 void Generator::generate_statement(const Statement& stmt)
 {
+    debugInfo->set_current_location(stmt.location);
     djinn::GeneratorStatementVisitor visitor(*this);
     stmt.accept(visitor);
 }

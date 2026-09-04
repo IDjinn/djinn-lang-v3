@@ -93,7 +93,8 @@ class Binder
 
 public:
     explicit Binder(DiagnosticEngine& diagnostics,
-                    ErrorEnforcement enforcement = ErrorEnforcement::CompileTime);
+                    ErrorEnforcement enforcement = ErrorEnforcement::CompileTime,
+                    bool nativeExceptions = false);
 
     BindingResult bind(const Program& program);
 
@@ -117,6 +118,7 @@ private:
     bool currentFunctionThrowsAny_ = false;
     std::vector<Type> currentFunctionThrowsTypes_;
     bool insideTryExpression_ = false;
+    bool nativeExceptions_ = false;
     mutable int32_t nextErrorTag_ = djinn::errors::FirstUserErrorTag;
     bool _bindingStdLib = false;
     std::unordered_map<std::string, int32_t> _attributeTargets;
