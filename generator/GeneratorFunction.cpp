@@ -411,7 +411,13 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
             llvm::Value* catchType = foreign
                                          ? static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy))
                                          : static_cast<llvm::Value*>(ehErrorTypeDesc);
-            auto* pad = builder->CreateCatchPad(catchSwitch, {catchType});
+            // MSVC pads are [descriptor, flags, catch-object slot]; 64 =
+            // catch-all (slot unused), 8 = typed catch (handler writes slot)
+            llvm::Value* catchFlags = builder->getInt32(foreign ? 64 : 8);
+            llvm::Value* catchObj = foreign
+                                        ? static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy))
+                                        : create_eh_catch_slot();
+            auto* pad = builder->CreateCatchPad(catchSwitch, {catchType, catchFlags, catchObj});
             if (foreign)
             {
                 auto* wrapTy = llvm::FunctionType::get(ptrTy, false);
@@ -484,7 +490,12 @@ void Generator::generate_extern_function(const ExternFunctionSymbol& func)
     llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     llvmFunc->removeFnAttr(llvm::Attribute::ReadNone);
     llvmFunc->removeFnAttr(llvm::Attribute::ReadOnly);
-    llvmFunc->addFnAttr(llvm::Attribute::NoUnwind);
+    // This declaration is filled in by a later pass — under native exceptions
+    // its body may contain invokes/funclets, so it must not claim nounwind
+    if (!nativeExceptions)
+    {
+        llvmFunc->addFnAttr(llvm::Attribute::NoUnwind);
+    }
 
     functions[func.name] = llvmFunc;
     externFunctions.push_back(llvmFunc);

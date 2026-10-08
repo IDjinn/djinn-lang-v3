@@ -47,7 +47,8 @@ bool Generator::eh_is_msvc_target() const
 // Personality + the djinn::error RTTI type descriptor the catchpads match
 // against. The descriptor symbol lives in the exceptions shim
 // (runtime/djinn_exceptions.cpp) and its mangled name is fixed by the MSVC
-// ABI: ??_R0?AVerror@djinn@@@8.
+// ABI: ??_R0?AUerror@djinn@@@8 — 'U' because djinn::error is declared as a
+// struct in runtime/djinn_error.h ('V' would be a class).
 void Generator::ensure_eh_declarations()
 {
     if (ehPersonalityFn) return;
@@ -62,12 +63,12 @@ void Generator::ensure_eh_declarations()
                                                  "__CxxFrameHandler3", *module);
     }
 
-    llvm::GlobalVariable* desc = module->getNamedGlobal("??_R0?AVerror@djinn@@@8");
+    llvm::GlobalVariable* desc = module->getNamedGlobal("??_R0?AUerror@djinn@@@8");
     if (!desc)
     {
         desc = new llvm::GlobalVariable(*module, ptrTy, false,
                                         llvm::GlobalVariable::ExternalLinkage, nullptr,
-                                        "??_R0?AVerror@djinn@@@8");
+                                        "??_R0?AUerror@djinn@@@8");
     }
     ehErrorTypeDesc = desc;
 }
@@ -93,6 +94,18 @@ Generator::NativeLanding Generator::push_native_landing(const bool cleanupOnly)
     return landing;
 }
 
+// MSVC catchpads are triples [type descriptor, flags, catch-object slot]:
+// flags 8 = typed catch (the handler stores the object pointer into the
+// slot), flags 64 = catch-all (slot unused, null). A bare [descriptor] pad
+// crashes the X86 backend.
+llvm::Value* Generator::create_eh_catch_slot()
+{
+    auto* func = builder->GetInsertBlock()->getParent();
+    llvm::IRBuilder<> entry_builder(&func->getEntryBlock(),
+                                    func->getEntryBlock().getFirstInsertionPt());
+    return entry_builder.CreateAlloca(builder->getPtrTy(), nullptr, "eh.catch.obj");
+}
+
 void Generator::finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB)
 {
     if (landing.cleanupOnly)
@@ -114,14 +127,18 @@ void Generator::finalize_native_landing(const NativeLanding& landing, llvm::Basi
     // mirrored by __djinn_throw), so the pad only resumes the parent at the
     // handler block.
     builder->SetInsertPoint(landing.djinnPad);
-    auto* djinnPad = builder->CreateCatchPad(catchSwitch, {ehErrorTypeDesc});
+    auto* djinnPad = builder->CreateCatchPad(catchSwitch, {ehErrorTypeDesc,
+                                                           builder->getInt32(8),
+                                                           create_eh_catch_slot()});
     builder->CreateCatchRet(djinnPad, handlerBB);
 
     // Foreign exception: wrap as ForeignError (also mirrored into the error
     // state by the shim) and resume at the same handler.
     builder->SetInsertPoint(landing.allPad);
     auto* foreignPad = builder->CreateCatchPad(catchSwitch,
-                                               {llvm::ConstantPointerNull::get(builder->getPtrTy())});
+                                               {llvm::ConstantPointerNull::get(builder->getPtrTy()),
+                                                builder->getInt32(64),
+                                                llvm::ConstantPointerNull::get(builder->getPtrTy())});
     auto* wrapTy = llvm::FunctionType::get(builder->getPtrTy(), false);
     auto* wrapFn = module->getFunction("__djinn_wrap_foreign");
     if (!wrapFn)

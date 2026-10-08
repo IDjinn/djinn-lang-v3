@@ -105,6 +105,7 @@ file(GLOB_RECURSE DJINN_SOURCES CONFIGURE_DEPENDS
         utils/*.cpp
         lib/*.cpp
         jit/*.cpp
+        verification/*.cpp
 )
 
 file(GLOB_RECURSE DJINN_HEADERS CONFIGURE_DEPENDS
@@ -123,6 +124,7 @@ file(GLOB_RECURSE DJINN_HEADERS CONFIGURE_DEPENDS
         visitor/*.h
         evaluator/*.h
         lib/*.h
+        verification/*.h
 )
 
 

@@ -187,6 +187,102 @@ i32 ok = try clamp(5, 1, 10) ?: 0;
 
 *)
 
+### Contract verification modes, semantic sections, invariants and uow
+
+```ebnf
+contract_clause      = ( "require" | "ensure" ) "(" expression ")" [ mode_clause ]
+                     | ( "require" | "ensure" ) block [ mode_clause ]
+                     | semantic_section ;
+
+mode_clause          = "in" "mode" ( "prove" | "check" | "assume" | "ignore" ) ;
+
+semantic_section     = section_kind ":" section_body ;
+section_kind         = "reads" | "writes" | "access" | "atomic" | "isolation"
+                     | "ordering" | "retry" | "effects" | "strategy" | "propagation" ;
+
+invariant_decl       = "invariant" expression [ mode_clause ] ;   (* on structs and uows *)
+
+uow_decl             = "uow" IDENTIFIER "{" { uow_member } "}" ;
+uow_member           = contract_clause | invariant_decl
+                     | "body" block | "before_commit" block | "after_commit" block
+                     | uow_decl ;
+```
+
+(* Modes (default `check` keeps today's runtime semantics; see VERIFICATION-SPEC.md §5.2):
+
+- `check` — runtime check injected (as today) plus best-effort compile-time checking.
+- `prove` — the verifier must prove the clause statically; unprovable is a hard error (9507).
+- `assume` — trusted, recorded as an audit obligation, never checked.
+- `ignore` — documentation only, excluded from the report.
+
+Semantic sections are compile-time claims, always diffed against body inference
+(E-CONTRACT-011 on mismatch): `inferred ⊆ declared` for `effects`/`reads`,
+`inferred == declared` for `writes`. Section kinds other than reads/writes/effects
+are uow-scope claims. Resource paths are dotted (`from.balance`); method fields
+are written `self.field` (or `this.field`, normalized).
+
+Entity invariants default to `prove`: assumed on method entry, proven at every
+return path (E-CONTRACT-044 on violation, 9507 when unprovable). `in mode check`
+on an invariant is rejected — runtime injection is a later phase.
+
+`uow` declares a verification-only scope: nothing is generated for it. Its body
+is checked statically: `atomic:` must match the body's writes exactly,
+`retry: allowed` forbids `external_io` outside `after_commit` (E-CONTRACT-042),
+`strategy: database` enforces effect placement (E-CONTRACT-045), and `ordering:`
+declarations form a program-wide graph that must not conflict (E-CONTRACT-043).
+
+Extern declarations accept contract clauses, turning them into spec-first
+stubs: the clauses are checked at every call site before a body exists.
+
+Examples:
+
+```djinn
+struct Account {
+    i32 balance;
+    invariant this.balance >= 0 in mode prove
+}
+
+impl Account {
+    i32 withdraw(i32 amount)
+        require(amount > 0)
+        require(this.balance >= amount)
+        ensure(return == this.balance - amount)
+        writes: self.balance
+        reads: self.balance
+    {
+        this.balance = this.balance - amount;
+        return this.balance;
+    }
+}
+
+uow Transfer {
+    require(amount > 0)
+    reads: from.balance, to.balance
+    writes: from.balance, to.balance
+    access: exclusive from, exclusive to
+    atomic: from.balance, to.balance
+    ordering: Account.id ascending
+    isolation: snapshot
+    retry: allowed
+    strategy: database
+    effects: external_io
+
+    body {
+        from.balance = from.balance - amount;
+        to.balance = to.balance + amount;
+    }
+
+    after_commit {
+        notify_transfer(amount);
+    }
+}
+
+extern fn charge(i32 amount) -> i32
+    require(amount > 0);
+```
+
+*)
+
 ### Constexpr / Consteval
 
 ```ebnf

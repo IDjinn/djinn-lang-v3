@@ -1,0 +1,57 @@
+// Bank transfer exercising the FULL contract surface from VERIFICATION-SPEC.md —
+// INVALID scenario: the uow carries the two bugs from the spec's #13 worked
+// example, and the verifier rejects the program at compile time.
+//
+// Expected: compilation FAILS with two hard errors and exit code 1:
+//
+//   E-CONTRACT-011 (9502) — the body also writes `ledger.balance` (the audit
+//     account) but the writes claim does not list it; the error points at the
+//     offending write (line 50).
+//
+//   E-CONTRACT-042 (9503) — `retry: allowed` makes the uow retryable, but the
+//     body calls `notify_transfer`, whose effect closure contains
+//     `external_io` — a non-idempotent effect that would run twice on retry.
+//     Resolutions offered: move it to `after_commit`, declare it idempotent,
+//     or set `retry: disabled`.
+//
+// Everything else holds on purpose: the reads claim covers every field the
+// body touches, the atomic section matches the body writes exactly, the
+// access modes do not conflict, and the ordering declaration is consistent.
+
+import std::types;
+import std::sys;
+
+namespace bank;
+
+i32 notify_transfer(i32 amount)
+    effects: external_io
+{
+    printf("[email]   transfer of %d confirmed\n", amount);
+    return 0;
+}
+
+uow Transfer {
+    require(amount > 0)
+
+    reads: from.balance, to.balance, ledger.balance
+    writes: from.balance, to.balance // BUG (spec #13): audit_events/ledger missing
+
+    access: exclusive from, exclusive to
+    atomic: from.balance, to.balance, ledger.balance
+    ordering: Account.id ascending
+    isolation: snapshot
+    retry: allowed
+    strategy: database
+    effects: external_io
+
+    body {
+        from.balance = from.balance - amount;
+        to.balance = to.balance + amount;
+        ledger.balance = ledger.balance + 1;
+        notify_transfer(amount); // BUG (spec #13): external_io inside a retryable body
+    }
+}
+
+i32 main() {
+    return 0;
+}

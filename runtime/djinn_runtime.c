@@ -1422,7 +1422,8 @@ static int djinn_render_backtrace(char* buf, int used, void* const* frames, cons
         lines[i] = 0;
         have_name[i] = 0;
 
-        if (const char* jit = djinn_jit_lookup(frames[i]))
+        const char* jit = djinn_jit_lookup(frames[i]);
+        if (jit)
         {
             snprintf(names[i], sizeof names[i], "%s", jit);
             have_name[i] = 1;

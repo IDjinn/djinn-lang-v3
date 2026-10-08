@@ -27,6 +27,10 @@ namespace djinn::binder {
             return nullptr;
         }
 
+        // Record the qualified callee so the verification pass can resolve
+        // this call site against the callee's contracts.
+        call.resolvedCalleeName = funcSym->name;
+
         // Compile-time enforcement runs first: a provable violation is more
         // specific than the MISSING_TRY diagnostic it replaces
         if (!binder.check_compile_time_call(*funcSym, call))

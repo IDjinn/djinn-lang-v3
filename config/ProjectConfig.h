@@ -144,6 +144,7 @@ struct CompilerConfig
     std::optional<std::string> buildMode;
     std::optional<std::string> reflectionMode;
     std::optional<bool> exceptions;
+    std::optional<std::string> verificationMode;
 };
 
 struct RuntimeConfig
@@ -216,6 +217,7 @@ struct ProjectConfig
         config.compiler.buildMode = root.get<std::string>("compiler.build-mode");
         config.compiler.reflectionMode = root.get<std::string>("compiler.reflection-mode");
         config.compiler.exceptions = root.get<bool>("compiler.exceptions");
+        config.compiler.verificationMode = root.get<std::string>("compiler.verify");
 
         // runtime
         config.runtime.logger.level = root.get<std::string>("runtime.logger.level", "INFO");
@@ -263,6 +265,15 @@ struct ProjectConfig
         if (cc.reflectionMode.has_value())
             options.reflectionMode = *cc.reflectionMode;
         applyOpt(options.exceptions, cc.exceptions);
+        if (cc.verificationMode.has_value())
+        {
+            if (*cc.verificationMode == "off") options.verificationMode = VerificationMode::Off;
+            else if (*cc.verificationMode == "report") options.verificationMode = VerificationMode::Report;
+            else if (*cc.verificationMode == "trace") options.verificationMode = VerificationMode::Trace;
+            else
+                LOG_WARN("Unknown verify mode '%s' (expected off|report|trace), keeping current mode",
+                         cc.verificationMode->c_str());
+        }
         options.optimizationLevel = cc.generator.optimizationLevel;
 
         if (!cc.output.fileName.empty() && options.outputFileName.empty())

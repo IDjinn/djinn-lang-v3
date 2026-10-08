@@ -179,6 +179,7 @@ struct FunctionSymbol : Symbol
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
     std::vector<const ContractClause*> contracts;
+    std::vector<const SemanticSection*> sections;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation& loc = {})
         : Symbol(SymbolKind::Function, std::move(name), retType, loc),
@@ -273,6 +274,7 @@ struct MethodSymbol : Symbol
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
     std::vector<const ContractClause*> contracts;
+    std::vector<const SemanticSection*> sections;
 
     Block* body = nullptr;
     Expression* expressionBody = nullptr;
@@ -393,6 +395,9 @@ struct StructSymbol : Symbol
     bool isErrorType = false;
     int32_t errorTag = -1;
     std::string errorBase; // qualified name of the error base; empty for the root
+
+    // Entity invariants (VERIFICATION-SPEC.md §5.1), proven on every write.
+    std::vector<const ContractClause*> invariants;
 
     [[nodiscard]] bool isGeneric() const
     {

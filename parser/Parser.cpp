@@ -5,7 +5,9 @@
 #include "parser.h"
 
 #include <cctype>
+#include <optional>
 #include <ranges>
+#include <set>
 #include <sstream>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/CommandLine.h>
@@ -437,7 +439,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
         return method;
     }
 
-    method->contracts = parse_contract_clauses();
+    ContractSurface surface = parse_contract_surface();
+    method->contracts = std::move(surface.clauses);
+    method->sections = std::move(surface.sections);
 
     // Add parameters to scope before parsing body
     pushScope();
@@ -624,6 +628,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     std::vector<StructField> fields;
     std::vector<StructProperty> structDecl_properties;
     std::vector<std::unique_ptr<StructMethodDeclaration>> methods;
+    std::vector<ContractClause> invariants;
     if (!match(TokenType::LBRACE))
     {
         expect("expected semi colon for no-body struct", TokenType::SEMICOLON);
@@ -641,6 +646,20 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
                 auto op = parse_operator(true);
                 op->attributes = std::move(methodAttributes);
                 methods.push_back(std::move(op));
+                continue;
+            }
+
+            // Entity invariant (VERIFICATION-SPEC.md §5.1): `invariant expr in mode ...;`
+            if (checkContextual("invariant"))
+            {
+                advance(); // invariant
+                ContractClause invariant;
+                invariant.kind = ContractClause::Kind::Invariant;
+                invariant.mode = ContractClause::Mode::Prove;
+                invariant.condition = parse_expression();
+                parse_mode_clause(invariant);
+                match(TokenType::SEMICOLON);
+                invariants.push_back(std::move(invariant));
                 continue;
             }
 
@@ -796,6 +815,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
     auto structDecl = std::make_unique<StructDeclaration>(std::move(name), std::move(genericParams), std::move(fields));
     structDecl->properties = std::move(structDecl_properties);
     structDecl->methods = std::move(methods);
+    structDecl->invariants = std::move(invariants);
     structDecl->implements = std::move(implements);
     structDecl->baseType = std::move(baseType);
     structDecl->attributes = std::move(attributes);
@@ -1050,6 +1070,10 @@ void Parser::parse_top_level_declarations(Program* program)
         {
             program->attributeDecls.push_back(parse_attribute_declaration());
         }
+        else if (checkContextual("uow"))
+        {
+            program->uows.push_back(parse_uow());
+        }
         else if (check(TokenType::ASYNC))
         {
             advance();
@@ -1097,7 +1121,7 @@ void Parser::parse_constexpr_declaration(Program* program, std::vector<Attribute
         bool throwsAny = false;
         std::vector<Type> throwsTypes;
         parse_throws_clause(throwsAny, throwsTypes);
-        auto contracts = parse_contract_clauses();
+        ContractSurface surface = parse_contract_surface();
         auto body = parse_block();
         popScope();
         auto func = std::make_unique<FunctionDeclaration>(std::move(type), makeSourceIdentifier(nameToken),
@@ -1106,7 +1130,8 @@ void Parser::parse_constexpr_declaration(Program* program, std::vector<Attribute
         func->constExpr = isConstExpr;
         func->throwsAny = throwsAny;
         func->throwsTypes = std::move(throwsTypes);
-        func->contracts = std::move(contracts);
+        func->contracts = std::move(surface.clauses);
+        func->sections = std::move(surface.sections);
         program->functions.push_back(std::move(func));
     }
     else if (isIntrinsic && check(TokenType::SEMICOLON))
@@ -1236,6 +1261,10 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             {
                 program->attributeDecls.push_back(parse_attribute_declaration());
             }
+            else if (checkContextual("uow"))
+            {
+                program->uows.push_back(parse_uow());
+            }
             else if (check(TokenType::ASYNC))
             {
                 advance(); // consume 'async'
@@ -1283,7 +1312,7 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
     std::vector<Type> throwsTypes;
     parse_throws_clause(throwsAny, throwsTypes);
 
-    auto contracts = parse_contract_clauses();
+    ContractSurface surface = parse_contract_surface();
 
     auto body = parse_block();
 
@@ -1294,7 +1323,8 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
                                                           params, std::move(body));
     funcDecl->throwsAny = throwsAny;
     funcDecl->throwsTypes = std::move(throwsTypes);
-    funcDecl->contracts = std::move(contracts);
+    funcDecl->contracts = std::move(surface.clauses);
+    funcDecl->sections = std::move(surface.sections);
     return funcDecl;
 }
 
@@ -1341,61 +1371,424 @@ void Parser::parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes
     }
 }
 
-// Parses require(...)/ensure(...) clauses between a signature and its body.
+// Parses the contract area between a signature and its body: require/ensure
+// clauses (each with an optional `in mode` clause) and semantic sections.
 // Block form (`require { return ...; }`) is normalized to the returned
 // expression, so downstream phases only deal with a single condition.
-std::vector<ContractClause> Parser::parse_contract_clauses()
+ContractSurface Parser::parse_contract_surface()
 {
-    std::vector<ContractClause> clauses;
+    ContractSurface surface;
+    std::set<SemanticKind> seen_sections;
 
-    while (check(TokenType::REQUIRE) || check(TokenType::ENSURE))
+    while (true)
     {
-        ContractClause clause;
-        clause.kind = check(TokenType::REQUIRE)
-                          ? ContractClause::Kind::Require
-                          : ContractClause::Kind::Ensure;
-        const Token& kw = advance(); // require / ensure
-
-        if (match(TokenType::LPAREN))
+        if (check(TokenType::REQUIRE) || check(TokenType::ENSURE))
         {
-            clause.condition = parse_expression();
-            expect("Esperado ')' após condição do contrato", TokenType::RPAREN);
-        }
-        else if (check(TokenType::LBRACE))
-        {
-            clause.block = parse_block();
+            ContractClause clause;
+            clause.kind = check(TokenType::REQUIRE)
+                              ? ContractClause::Kind::Require
+                              : ContractClause::Kind::Ensure;
+            const Token& kw = advance(); // require / ensure
 
-            // Normalize: take the first `return expr;` as the condition
-            if (clause.block)
+            if (match(TokenType::LPAREN))
             {
-                for (auto& stmt : clause.block->statements)
+                clause.condition = parse_expression();
+                expect("Esperado ')' após condição do contrato", TokenType::RPAREN);
+            }
+            else if (check(TokenType::LBRACE))
+            {
+                clause.block = parse_block();
+
+                // Normalize: take the first `return expr;` as the condition
+                if (clause.block)
                 {
-                    if (auto* ret = dynamic_cast<ReturnStatement*>(stmt.get());
-                        ret && ret->value)
+                    for (auto& stmt : clause.block->statements)
                     {
-                        clause.condition = std::move(ret->value);
-                        break;
+                        if (auto* ret = dynamic_cast<ReturnStatement*>(stmt.get());
+                            ret && ret->value)
+                        {
+                            clause.condition = std::move(ret->value);
+                            break;
+                        }
                     }
                 }
+                if (!clause.condition)
+                {
+                    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                                 "contract block must contain a 'return <condition>;' statement",
+                                 SourceLocation(kw.position.fileId, kw.position.line, kw.position.column, 1));
+                }
             }
-            if (!clause.condition)
+            else
             {
                 PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
-                             "contract block must contain a 'return <condition>;' statement",
+                             "expected '(' or '{' after '" + kw.value + "' contract clause",
                              SourceLocation(kw.position.fileId, kw.position.line, kw.position.column, 1));
             }
-        }
-        else
-        {
-            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
-                         "expected '(' or '{' after '" + kw.value + "' contract clause",
-                         SourceLocation(kw.position.fileId, kw.position.line, kw.position.column, 1));
+
+            parse_mode_clause(clause);
+            surface.clauses.push_back(std::move(clause));
+            continue;
         }
 
-        clauses.push_back(std::move(clause));
+        if (check_semantic_section())
+        {
+            SemanticSection section = parse_semantic_section();
+            if (!seen_sections.insert(section.kind).second)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "duplicate '" + std::string(semantic_kind_name(section.kind)) + "' section",
+                             section.location);
+            }
+            surface.sections.push_back(std::move(section));
+            continue;
+        }
+
+        break;
     }
 
-    return clauses;
+    return surface;
+}
+
+// `in mode prove|check|assume|ignore` (VERIFICATION-SPEC.md §5.2).
+void Parser::parse_mode_clause(ContractClause& clause)
+{
+    if (!match(TokenType::IN))
+        return;
+
+    if (!checkContextual("mode"))
+    {
+        PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                     "expected 'mode' after 'in' in contract clause",
+                     SourceLocation(peek().position.fileId, peek().position.line, peek().position.column, 1));
+    }
+    advance(); // mode
+
+    struct ModeName
+    {
+        const char* name;
+        ContractClause::Mode mode;
+    };
+    static const ModeName modes[] = {
+        {"prove", ContractClause::Mode::Prove},
+        {"check", ContractClause::Mode::Check},
+        {"assume", ContractClause::Mode::Assume},
+        {"ignore", ContractClause::Mode::Ignore},
+    };
+
+    for (const auto& candidate : modes)
+    {
+        if (checkContextual(candidate.name))
+        {
+            clause.mode = candidate.mode;
+            advance();
+            return;
+        }
+    }
+
+    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                 "expected 'prove', 'check', 'assume' or 'ignore' after 'in mode'",
+                 SourceLocation(peek().position.fileId, peek().position.line, peek().position.column, 1));
+}
+
+// A section starts at `kind :` for one of the spec §5.1 section kinds — all
+// plain identifiers in today's lexer.
+std::optional<SemanticKind> semantic_kind_from_name(const std::string& name)
+{
+    static const std::pair<const char*, SemanticKind> kinds[] = {
+        {"reads", SemanticKind::Reads},       {"writes", SemanticKind::Writes},
+        {"access", SemanticKind::Access},     {"atomic", SemanticKind::Atomic},
+        {"isolation", SemanticKind::Isolation}, {"ordering", SemanticKind::Ordering},
+        {"retry", SemanticKind::Retry},       {"effects", SemanticKind::Effects},
+        {"strategy", SemanticKind::Strategy}, {"propagation", SemanticKind::Propagation},
+    };
+
+    for (const auto& [word, kind] : kinds)
+    {
+        if (name == word) return kind;
+    }
+    return std::nullopt;
+}
+
+bool Parser::check_semantic_section()
+{
+    if (!check(TokenType::IDENTIFIER) || current + 1 >= tokens.size())
+        return false;
+    if (tokens[current + 1].type != TokenType::COLON)
+        return false;
+
+    return semantic_kind_from_name(peek().value).has_value();
+}
+
+std::optional<SemanticEffect> semantic_effect_from_name(const std::string& name)
+{
+    static const std::pair<const char*, SemanticEffect> effects[] = {
+        {"memory", SemanticEffect::Memory},     {"filesystem", SemanticEffect::Filesystem},
+        {"time", SemanticEffect::Time},         {"random", SemanticEffect::Random},
+        {"process", SemanticEffect::Process},   {"external_io", SemanticEffect::ExternalIO},
+    };
+
+    for (const auto& [word, effect] : effects)
+    {
+        if (name == word) return effect;
+    }
+    return std::nullopt;
+}
+
+SemanticSection Parser::parse_semantic_section()
+{
+    const Token& kindToken = advance(); // section kind
+    SemanticSection section;
+    section.kind = *semantic_kind_from_name(kindToken.value);
+    section.location = SourceLocation(kindToken.position, kindToken.value.length());
+
+    expect("Esperado ':' após seção semântica", TokenType::COLON);
+
+    const auto parse_path = [this](SemanticItem& item)
+    {
+        item.location = SourceLocation(peek().position, peek().value.length());
+        item.path.push_back(expect("Esperado identificador", TokenType::IDENTIFIER).value);
+        while (match(TokenType::DOT))
+        {
+            item.path.push_back(expect("Esperado identificador após '.'", TokenType::IDENTIFIER).value);
+        }
+    };
+
+    const auto parse_qualified = [this](SemanticItem& item,
+                                        const std::vector<std::pair<const char*, SemanticQualifier>>& vocabulary,
+                                        const std::string& what)
+    {
+        item.location = SourceLocation(peek().position, peek().value.length());
+        const Token& qualifier = expect(("Esperado " + what).c_str(), TokenType::IDENTIFIER);
+        const std::string value = qualifier.value;
+        for (const auto& [word, parsed] : vocabulary)
+        {
+            if (value == word)
+            {
+                item.qualifier = parsed;
+                return;
+            }
+        }
+        std::string joined;
+        for (size_t i = 0; i < vocabulary.size(); i++)
+        {
+            if (i > 0) joined += ", ";
+            joined += vocabulary[i].first;
+        }
+        PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                     what + " must be one of: " + joined,
+                     SourceLocation(qualifier.position.fileId, qualifier.position.line,
+                                    qualifier.position.column, 1));
+    };
+
+    switch (section.kind)
+    {
+    case SemanticKind::Access:
+    {
+        // access: exclusive from, shared to
+        do
+        {
+            SemanticItem item;
+            parse_qualified(item, {{"shared", SemanticQualifier::Shared},
+                                   {"exclusive", SemanticQualifier::Exclusive}},
+                            "access mode");
+            parse_path(item);
+            section.items.push_back(std::move(item));
+        }
+        while (match(TokenType::COMMA));
+        break;
+    }
+    case SemanticKind::Ordering:
+    {
+        // ordering: Account.id ascending
+        do
+        {
+            SemanticItem item;
+            parse_path(item);
+            parse_qualified(item, {{"ascending", SemanticQualifier::Ascending},
+                                   {"descending", SemanticQualifier::Descending}},
+                            "ordering direction");
+            section.items.push_back(std::move(item));
+        }
+        while (match(TokenType::COMMA));
+        break;
+    }
+    case SemanticKind::Retry:
+    {
+        SemanticItem item;
+        parse_qualified(item, {{"allowed", SemanticQualifier::Allowed},
+                               {"disabled", SemanticQualifier::Disabled}},
+                        "retry policy");
+        section.items.push_back(std::move(item));
+        break;
+    }
+    case SemanticKind::Isolation:
+    {
+        SemanticItem item;
+        parse_qualified(item, {{"snapshot", SemanticQualifier::Snapshot},
+                               {"serializable", SemanticQualifier::Serializable}},
+                        "isolation level");
+        section.items.push_back(std::move(item));
+        break;
+    }
+    case SemanticKind::Propagation:
+    {
+        SemanticItem item;
+        // `independent` and `savepoint` are reserved (spec §5.4).
+        parse_qualified(item, {{"join", SemanticQualifier::Join}}, "propagation mode");
+        section.items.push_back(std::move(item));
+        break;
+    }
+    case SemanticKind::Strategy:
+    {
+        // strategy is a single identifier; v1 ships 'database'.
+        SemanticItem item;
+        parse_path(item);
+        if (item.path.size() == 1 && item.path.front() == "database")
+            section.strategy = SemanticStrategy::Database;
+        else
+            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "strategy must be 'database' (other names are reserved)",
+                         item.location);
+        section.items.push_back(std::move(item));
+        break;
+    }
+    case SemanticKind::Effects:
+    {
+        // effects: external_io, memory — closed vocabulary (spec §11).
+        do
+        {
+            SemanticItem item;
+            parse_path(item);
+            const auto effect =
+                item.path.size() == 1 ? semantic_effect_from_name(item.path.front()) : std::nullopt;
+            if (!effect)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "effect must be one of: external_io, memory, filesystem, time, "
+                             "random, process",
+                             item.location);
+            }
+            item.effect = *effect;
+            section.items.push_back(std::move(item));
+        }
+        while (match(TokenType::COMMA));
+        break;
+    }
+    default:
+    {
+        // reads / writes / atomic: identifier lists
+        do
+        {
+            SemanticItem item;
+            parse_path(item);
+            section.items.push_back(std::move(item));
+        }
+        while (match(TokenType::COMMA));
+        break;
+    }
+    }
+
+    return section;
+}
+
+std::unique_ptr<UowDeclaration> Parser::parse_uow()
+{
+    const auto startLocation = SourceLocation(peek().position, peek().value.length());
+    advance(); // uow
+
+    const Token& nameToken = expect("Esperado nome do uow", TokenType::IDENTIFIER);
+    expect("Esperado '{'", TokenType::LBRACE);
+
+    auto decl = std::make_unique<UowDeclaration>();
+    decl->name = makeSourceIdentifier(nameToken);
+
+    std::set<SemanticKind> seen_sections;
+
+    while (!check(TokenType::RBRACE) && !isAtEnd())
+    {
+        if (check(TokenType::REQUIRE) || check(TokenType::ENSURE) || check_semantic_section())
+        {
+            ContractSurface piece = parse_contract_surface();
+            for (auto& clause : piece.clauses)
+                decl->contracts.push_back(std::move(clause));
+            for (auto& section : piece.sections)
+            {
+                if (!seen_sections.insert(section.kind).second)
+                {
+                    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                                 "duplicate '" + std::string(semantic_kind_name(section.kind)) + "' section",
+                                 section.location);
+                }
+                decl->sections.push_back(std::move(section));
+            }
+            continue;
+        }
+
+        if (checkContextual("invariant"))
+        {
+            advance(); // invariant
+            ContractClause invariant;
+            invariant.kind = ContractClause::Kind::Invariant;
+            invariant.mode = ContractClause::Mode::Prove;
+            invariant.condition = parse_expression();
+            parse_mode_clause(invariant);
+            match(TokenType::SEMICOLON);
+            decl->invariants.push_back(std::move(invariant));
+            continue;
+        }
+
+        if (checkContextual("body"))
+        {
+            advance();
+            if (decl->body)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'body' block in uow",
+                             decl->name.location);
+            }
+            decl->body = parse_block();
+            continue;
+        }
+
+        if (checkContextual("before_commit"))
+        {
+            advance();
+            if (decl->beforeCommit)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'before_commit' block in uow",
+                             decl->name.location);
+            }
+            decl->beforeCommit = parse_block();
+            continue;
+        }
+
+        if (checkContextual("after_commit"))
+        {
+            advance();
+            if (decl->afterCommit)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'after_commit' block in uow",
+                             decl->name.location);
+            }
+            decl->afterCommit = parse_block();
+            continue;
+        }
+
+        if (checkContextual("uow"))
+        {
+            decl->nested.push_back(parse_uow());
+            continue;
+        }
+
+        PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                     "expected uow member (contract, section, invariant, body, "
+                     "before_commit, after_commit or nested uow)",
+                     SourceLocation(peek().position.fileId, peek().position.line, peek().position.column, 1));
+    }
+
+    expect("Esperado '}'", TokenType::RBRACE);
+    decl->location = startLocation;
+    return decl;
 }
 
 std::unique_ptr<Block> Parser::parse_block()
@@ -2883,6 +3276,9 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
 
     expect("Esperado ')'", TokenType::RPAREN);
     const auto finalLocation = SourceLocation(peek().position, peek().value.length());
+    // Optional contract clauses turn the extern into a spec-first stub: the
+    // verifier checks them at every call site.
+    auto contracts = parse_contract_surface().clauses;
     expect("Esperado ';'", TokenType::SEMICOLON);
 
     auto decl = std::make_unique<ExternFunctionDeclaration>();
@@ -2890,6 +3286,7 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     decl->returnType = std::move(returnType);
     decl->parameters = std::move(parameters);
     decl->isVariadic = isVariadic;
+    decl->contracts = std::move(contracts);
     decl->location = finalLocation - initialLocation;
     decl->abi = abi;
 

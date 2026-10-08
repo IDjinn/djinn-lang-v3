@@ -14,6 +14,8 @@
 #include "lexer/Token.h"
 #include "parser/AST.h"
 #include "ErrorEnforcement.h"
+#include "verification/VerificationMode.h"
+#include "verification/IR.h"
 
 struct RuntimeProperties
 {
@@ -55,6 +57,7 @@ struct CompilerOptions
     bool exceptions = false; // opt-in native exceptions (LLVM unwinding + try/catch/finally)
     bool outputDjLib = false;
     ErrorEnforcement errorEnforcement = ErrorEnforcement::CompileTime;
+    VerificationMode verificationMode = VerificationMode::Off;
     std::string reflectionMode = "none"; // none | annotated | all
     std::string outputFileName{};
     std::string outputDirectory{"build"};
@@ -76,6 +79,8 @@ struct CompilerResult
     // Full rendered runtime error report (source snippet, caret, operand
     // values, stack trace) when the program trapped; JIT path only.
     std::string runtimeErrorReport;
+    // Verification IR when CompilerOptions::verificationMode != Off.
+    djinn::verification::VerificationIR verification{};
 };
 
 

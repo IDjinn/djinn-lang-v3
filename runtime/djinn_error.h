@@ -31,6 +31,12 @@ namespace djinn
         const char* message = nullptr;
         const char* type_name = nullptr;
 
+        error(const int32_t error_tag = 0, const char* error_message = nullptr,
+              const char* error_type = nullptr)
+            : tag(error_tag), message(error_message), type_name(error_type)
+        {
+        }
+
         const char* what() const noexcept override;
     };
 }

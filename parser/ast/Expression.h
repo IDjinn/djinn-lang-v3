@@ -224,7 +224,7 @@ struct VariableDeclaration : Expression
         : type(std::move(type)),
           name(std::move(name)), isMutable(isMutable)
     {
-        location = name.location;
+        location = this->name.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -244,7 +244,7 @@ struct Assignment : Expression
     Assignment(SourceIdentifier name, std::unique_ptr<Expression> value)
         : name(std::move(name)), value(std::move(value))
     {
-        location = name.location;
+        location = this->name.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -268,7 +268,7 @@ struct VariableInit : Expression
     VariableInit(Type type, SourceIdentifier name, std::unique_ptr<Expression> value, bool isMutable)
         : type(std::move(type)), name(std::move(name)), value(std::move(value)), isMutable(isMutable)
     {
-        location = name.location;
+        location = this->name.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -410,13 +410,13 @@ struct FieldAccess : Expression
     FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field)
         : object(std::move(obj)), fieldName(std::move(field))
     {
-        location = field.location;
+        location = fieldName.location;
     }
 
     FieldAccess(std::unique_ptr<Expression> obj, SourceIdentifier field, FieldAccessKind kind)
         : object(std::move(obj)), fieldName(std::move(field)), accessKind(kind)
     {
-        location = field.location;
+        location = fieldName.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -443,7 +443,7 @@ struct FieldAssignment : Expression
     FieldAssignment(std::unique_ptr<Expression> obj, SourceIdentifier field, std::unique_ptr<Expression> val)
         : object(std::move(obj)), fieldName(std::move(field)), value(std::move(val))
     {
-        location = field.location;
+        location = fieldName.location;
     }
 
     void accept(djinn::IExpressionVisitor& visitor) const override { visitor.visit(*this); }
@@ -467,23 +467,25 @@ struct FunctionCall : Expression
     std::vector<Type> typeArguments; // generic type arguments: Result<i32, string*>::Ok(...)
     bool hasVariadicForward = false; // true if call includes ... to forward variadic args
     mutable std::string typeofResolvedName; // set by binder for typeof() intrinsic
+    mutable std::string resolvedCalleeName; // set by binder: qualified callee name, consumed by the verification pass
+    mutable std::string resolvedCalleeStruct; // set by binder: owning struct for method calls, else empty
 
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression>> args)
         : name(std::move(n)), arguments(std::move(args))
     {
-        location = n.location;
+        location = name.location;
     }
 
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression>> args, std::unique_ptr<Expression> recv)
         : name(std::move(n)), arguments(std::move(args)), receiver(std::move(recv))
     {
-        location = n.location;
+        location = name.location;
     }
 
     FunctionCall(SourceIdentifier n, std::vector<Type> typeArgs, std::vector<std::unique_ptr<Expression>> args)
         : name(std::move(n)), arguments(std::move(args)), typeArguments(std::move(typeArgs))
     {
-        location = n.location;
+        location = name.location;
     }
 
     [[nodiscard]] bool isMethodCall() const { return receiver != nullptr; }
@@ -662,7 +664,7 @@ struct InitializerElement : Location
     InitializerElement(SourceIdentifier fieldName, std::unique_ptr<Expression> value)
         : fieldName(std::move(fieldName)), value(std::move(value))
     {
-        location = fieldName.location;
+        location = this->fieldName.location;
     }
 
     explicit InitializerElement(std::unique_ptr<Expression> value)
@@ -790,7 +792,7 @@ struct SwitchArm : Location
     SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Expression> res)
         : variantName(std::move(variant)), binding(std::move(bind)), result(std::move(res))
     {
-        location = variant.location;
+        location = variantName.location;
     }
 
     SwitchArm(SourceIdentifier variant, std::optional<SourceIdentifier> bind, std::unique_ptr<Block> blk);

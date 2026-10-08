@@ -1,0 +1,25 @@
+project: "bank-uow"
+version: "1.0.0"
+
+compiler:
+  build-mode: debug
+  no-cache: true
+  exceptions: true # block-form try/catch requires native exceptions
+  verify: trace # off | report | trace — verification pass logs obligations (contract clauses, invariants, claims, uow)
+
+  output:
+    file: "bank-uow"
+    directory: "build"
+    run-after-compile: true
+
+  logger:
+    level: 'INFO'
+    format: '[{HH:mm:ss:mmmm}] [{level}] [{file}:{line}] {...}'
+
+  libs:
+    - std
+
+runtime:
+  logger:
+    level: 'WARN'
+    format: '[{HH:mm:ss:mmmm}] [{level}] [{file}:{line}] {...}'

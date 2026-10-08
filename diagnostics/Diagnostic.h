@@ -97,6 +97,21 @@ namespace DiagnosticCode
     constexpr uint32_t SWITCH_ARM_UNREACHABLE = 9008;
     constexpr uint32_t TRY_CATCH_REQUIRES_EXCEPTIONS = 9009;
     constexpr uint32_t CATCH_ARM_NOT_ERROR_TYPE = 9010;
+
+    // Contract verification (95xx) — emitted by the verification/ pass.
+    // Stable string aliases (E-CONTRACT-*) live in the JSON diagnostic
+    // envelope (VERIFICATION-IDEAS.md §5.2).
+    constexpr uint32_t E_CONTRACT_PRECONDITION_NOT_ESTABLISHED = 9501; // E-CONTRACT-007
+    constexpr uint32_t E_CONTRACT_CLAIM_INFERENCE_MISMATCH = 9502;     // E-CONTRACT-011
+    constexpr uint32_t E_CONTRACT_RETRY_UNSAFE_EFFECT = 9503;          // E-CONTRACT-042
+    constexpr uint32_t E_CONTRACT_ORDERING_CYCLE = 9504;               // E-CONTRACT-043
+    constexpr uint32_t E_CONTRACT_INVARIANT_NOT_PRESERVED = 9505;      // E-CONTRACT-044
+    constexpr uint32_t E_CONTRACT_EFFECT_PLACEMENT = 9506;             // E-CONTRACT-045
+    constexpr uint32_t E_CONTRACT_UNPROVABLE = 9507;                   // E-CONTRACT-046
+    constexpr uint32_t E_CONTRACT_DENIED_EFFECT = 9508;                // E-CONTRACT-047
+    constexpr uint32_t E_CONTRACT_ILLEGAL_TRANSITION = 9509;           // E-CONTRACT-048
+    constexpr uint32_t E_CONTRACT_REFINEMENT_VIOLATED = 9510;          // E-CONTRACT-049
+    constexpr uint32_t E_CONTRACT_BASELINE_BREAK = 9511;               // E-CONTRACT-050
 }
 
 struct SourceLocation

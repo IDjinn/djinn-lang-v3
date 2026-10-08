@@ -127,21 +127,181 @@ struct MethodParameter
     }
 };
 
-// Contracts: require/ensure clauses between a function signature and its body
+// Contracts: require/ensure/invariant clauses between a signature and its
+// body (invariants live on structs and uows).
 struct ContractClause
 {
     enum class Kind
     {
         Require,
-        Ensure
+        Ensure,
+        Invariant
+    };
+
+    // Verification mode (VERIFICATION-SPEC.md §5.2). Check preserves
+    // today's runtime semantics and is the default for require/ensure;
+    // invariants default to Prove (applied by the parser).
+    enum class Mode
+    {
+        Check,
+        Prove,
+        Assume,
+        Ignore
     };
 
     Kind kind;
+    Mode mode = Mode::Check;
     std::unique_ptr<Expression> condition; // require(expr) / ensure(expr)
     std::unique_ptr<Block> block; // require { ... } block form
 
     [[nodiscard]] bool isRequire() const { return kind == Kind::Require; }
     [[nodiscard]] bool isEnsure() const { return kind == Kind::Ensure; }
+    [[nodiscard]] bool isInvariant() const { return kind == Kind::Invariant; }
+};
+
+// Section kinds (VERIFICATION-SPEC.md §5.1). The lexer only sees plain
+// identifiers; the parser maps the word to the enum and rejects anything
+// outside the vocabulary.
+enum class SemanticKind
+{
+    Reads,
+    Writes,
+    Access,
+    Atomic,
+    Isolation,
+    Ordering,
+    Retry,
+    Effects,
+    Strategy,
+    Propagation,
+};
+
+// Per-kind qualifier vocabulary. One enum because the qualifier slot is
+// kind-disjoint: access modes, ordering directions, retry policy, isolation
+// level and propagation mode never mix.
+enum class SemanticQualifier
+{
+    None,
+    Shared,
+    Exclusive,
+    Ascending,
+    Descending,
+    Allowed,
+    Disabled,
+    Snapshot,
+    Serializable,
+    Join,
+};
+
+// v1 ships 'database'; other strategy names are reserved (spec §8).
+enum class SemanticStrategy
+{
+    None,
+    Database,
+};
+
+// Side-effect vocabulary (spec §11). The parser maps `effects:` items to
+// this closed set; the verifier infers the same values for callees it can
+// see into and for the builtin table over extern/libc callees.
+enum class SemanticEffect
+{
+    None,
+    Memory,
+    Filesystem,
+    Time,
+    Random,
+    Process,
+    ExternalIO,
+};
+
+inline const char* semantic_kind_name(const SemanticKind kind)
+{
+    switch (kind)
+    {
+        case SemanticKind::Reads: return "reads";
+        case SemanticKind::Writes: return "writes";
+        case SemanticKind::Access: return "access";
+        case SemanticKind::Atomic: return "atomic";
+        case SemanticKind::Isolation: return "isolation";
+        case SemanticKind::Ordering: return "ordering";
+        case SemanticKind::Retry: return "retry";
+        case SemanticKind::Effects: return "effects";
+        case SemanticKind::Strategy: return "strategy";
+        case SemanticKind::Propagation: return "propagation";
+    }
+    return "?";
+}
+
+inline const char* semantic_qualifier_name(const SemanticQualifier qualifier)
+{
+    switch (qualifier)
+    {
+        case SemanticQualifier::None: return "none";
+        case SemanticQualifier::Shared: return "shared";
+        case SemanticQualifier::Exclusive: return "exclusive";
+        case SemanticQualifier::Ascending: return "ascending";
+        case SemanticQualifier::Descending: return "descending";
+        case SemanticQualifier::Allowed: return "allowed";
+        case SemanticQualifier::Disabled: return "disabled";
+        case SemanticQualifier::Snapshot: return "snapshot";
+        case SemanticQualifier::Serializable: return "serializable";
+        case SemanticQualifier::Join: return "join";
+    }
+    return "?";
+}
+
+inline const char* semantic_strategy_name(const SemanticStrategy strategy)
+{
+    switch (strategy)
+    {
+        case SemanticStrategy::None: return "none";
+        case SemanticStrategy::Database: return "database";
+    }
+    return "?";
+}
+
+inline const char* semantic_effect_name(const SemanticEffect effect)
+{
+    switch (effect)
+    {
+        case SemanticEffect::None: return "none";
+        case SemanticEffect::Memory: return "memory";
+        case SemanticEffect::Filesystem: return "filesystem";
+        case SemanticEffect::Time: return "time";
+        case SemanticEffect::Random: return "random";
+        case SemanticEffect::Process: return "process";
+        case SemanticEffect::ExternalIO: return "external_io";
+    }
+    return "?";
+}
+
+// One entry of a semantic section: a dotted resource path ("from.balance")
+// plus an optional qualifier (shared/exclusive, ascending/descending,
+// allowed/disabled, snapshot/serializable, join) or effect (effects lists).
+struct SemanticItem
+{
+    std::vector<std::string> path;
+    SemanticQualifier qualifier = SemanticQualifier::None;
+    SemanticEffect effect = SemanticEffect::None;
+    SourceLocation location;
+};
+
+// Semantic section (VERIFICATION-SPEC.md §5.1): reads / writes / access /
+// atomic / isolation / ordering / retry / effects / strategy / propagation.
+// Compile-time claims only — the generator never sees them.
+struct SemanticSection
+{
+    SemanticKind kind = SemanticKind::Reads;
+    SemanticStrategy strategy = SemanticStrategy::None;
+    SourceLocation location;
+    std::vector<SemanticItem> items;
+};
+
+// Parse result of the contract area between a signature and its body.
+struct ContractSurface
+{
+    std::vector<ContractClause> clauses;
+    std::vector<SemanticSection> sections;
 };
 
 struct StructMethodDeclaration : Location
@@ -163,6 +323,7 @@ struct StructMethodDeclaration : Location
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
     std::vector<ContractClause> contracts;
+    std::vector<SemanticSection> sections;
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
@@ -367,6 +528,8 @@ struct StructDeclaration : Location
     std::vector<AttributeUsageDeclaration> attributes;
     bool isConstExpr = false;
     bool isIntrinsic = false;
+    // Entity invariants (VERIFICATION-SPEC.md §5.1): proven on every write.
+    std::vector<ContractClause> invariants;
 
     StructDeclaration(SourceIdentifier name, std::vector<StructField> fields)
         : name(std::move(name)), fields(std::move(fields))
@@ -514,6 +677,7 @@ struct FunctionDeclaration : Location
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
     std::vector<ContractClause> contracts;
+    std::vector<SemanticSection> sections;
 
     FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)
@@ -659,6 +823,9 @@ struct ExternFunctionDeclaration : Location
     std::vector<Parameter> parameters;
     bool isVariadic = false;
     std::string abi = "C";
+    // Spec-first stubs (VERIFICATION-SPEC.md §12.3): contracts on a
+    // body-less extern are checked at every call site.
+    std::vector<ContractClause> contracts;
 
     void accept(djinn::IDeclarationVisitor& visitor, const std::string& prefix = "") const
     {
@@ -958,6 +1125,27 @@ struct StaticVarDeclaration : Location
     }
 };
 
+// Unit of work (VERIFICATION-SPEC.md §5.1/§10): a named verification scope
+// with contracts, semantic sections, invariants and lifecycle blocks.
+// Static checks only in v1 — nothing is ever generated for it.
+struct UowDeclaration : Location
+{
+    SourceIdentifier name;
+    std::vector<ContractClause> contracts;
+    std::vector<ContractClause> invariants;
+    std::vector<SemanticSection> sections;
+    std::unique_ptr<Block> body;
+    std::unique_ptr<Block> beforeCommit;
+    std::unique_ptr<Block> afterCommit;
+    std::vector<std::unique_ptr<UowDeclaration>> nested;
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "UowDeclaration(" << name.token_name << ")\n";
+    }
+};
+
 struct Program : Location
 {
     // File-scoped namespace: "namespace foo;" at top of file
@@ -978,6 +1166,9 @@ struct Program : Location
     std::vector<std::unique_ptr<CompileTimeBlock>> compileTimeBlocks;
     std::vector<std::unique_ptr<StaticVarDeclaration>> staticVars;
     std::vector<std::unique_ptr<AttributeDeclaration>> attributeDecls;
+    // Units of work are verification-only: outside acceptAll/print so no
+    // downstream phase (notably the generator) ever traverses them.
+    std::vector<std::unique_ptr<UowDeclaration>> uows;
 
     explicit Program(const std::string& name)
     {

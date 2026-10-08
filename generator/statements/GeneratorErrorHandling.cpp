@@ -607,9 +607,12 @@ void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
     insideTryOperand_ = prevInsideTry;
     ehLandingStack_.pop_back();
 
+    // Normal completion of the try body skips the dispatch entirely — the
+    // dispatcher is only for unwinding pads, and dispatching an unset error
+    // flag would rethrow garbage
     if (!builder->GetInsertBlock()->getTerminator())
     {
-        builder->CreateBr(dispatchBB);
+        builder->CreateBr(finallyBB);
     }
 
     // Arms match by tag in source order (specific types match derived errors

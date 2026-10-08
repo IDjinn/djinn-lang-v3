@@ -10,6 +10,11 @@ void Binder::collectExternFunction(const ExternFunctionDeclaration& decl, const 
     funcSym->isVariadic = decl.isVariadic;
     funcSym->abi = decl.abi;
 
+    for (const auto& contract : decl.contracts)
+    {
+        funcSym->contracts.push_back(&contract);
+    }
+
     for (const auto& param : decl.parameters)
     {
         funcSym->addParameter(param.name.token_name, *param.type);
@@ -49,6 +54,10 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
     for (const auto& contract : decl.contracts)
     {
         funcSym->contracts.push_back(&contract);
+    }
+    for (const auto& section : decl.sections)
+    {
+        funcSym->sections.push_back(&section);
     }
     // Contracts implicitly throw ContractViolation on violation
     if (!decl.contracts.empty() && !funcSym->throwsAny)

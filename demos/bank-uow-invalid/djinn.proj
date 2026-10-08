@@ -1,0 +1,25 @@
+project: "bank-uow-invalid"
+version: "1.0.0"
+
+compiler:
+  build-mode: debug
+  no-cache: true
+  exceptions: true
+  verify: trace
+
+  output:
+    file: "bank-uow-invalid"
+    directory: "build"
+    run-after-compile: true
+
+  logger:
+    level: 'INFO'
+    format: '[{HH:mm:ss:mmmm}] [{level}] [{file}:{line}] {...}'
+
+  libs:
+    - std
+
+runtime:
+  logger:
+    level: 'WARN'
+    format: '[{HH:mm:ss:mmmm}] [{level}] [{file}:{line}] {...}'

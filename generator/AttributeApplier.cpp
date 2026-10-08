@@ -64,8 +64,14 @@ void Generator::apply_implicit_attributes(llvm::Function* func)
     // Default mode has no unwinding — every function is nounwind. Native
     // exceptions keep nounwind off generated functions (any of them may end
     // up with an invoke/landing pad); declarations of externs keep it.
-    if (nativeExceptions && !func->isDeclaration())
+    if (nativeExceptions)
     {
+        if (!func->isDeclaration())
+        {
+            // A forward declaration may have tagged this function nounwind
+            // before its body existed — funclet tables must not claim that
+            func->removeFnAttr(llvm::Attribute::NoUnwind);
+        }
         return;
     }
     if (!func->hasFnAttribute(llvm::Attribute::NoUnwind))

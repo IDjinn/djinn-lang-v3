@@ -1,0 +1,79 @@
+// Bank transaction simulation exercising the contract/verification system
+// from VERIFICATION-SPEC.md — VALID scenario: every contract holds and both
+// transactions commit.
+//
+// What this exercises:
+// - Business rules as require/ensure contracts on the pure transfer
+//   functions (the spec's `database` strategy example: `requires
+//   from.balance >= amount` lowers to a guarded update — here the same rule
+//   is enforced as a runtime contract; under mode `check` it would BE the
+//   guarded update).
+// - The compile-time verification pass: djinn.proj sets `verify: trace`, so
+//   during compilation the compiler logs one [verification] line per
+//   collected obligation (debit: 2 require + 1 ensure, credit: 1 require +
+//   1 ensure) and prints the `verification` row in the phases table.
+// - Runtime enforcement: contracts are implicit ContractViolation throws;
+//   the transaction body commits only if every contract inside holds,
+//   otherwise the catch arm rolls both balances back to their snapshot (the
+//   ABORTED path of the UOW lifecycle, spec §10). Block-form try/catch
+//   requires native exceptions, enabled via `compiler.exceptions: true`.
+//
+// Run: .\cmake-build-debug-visual-studio\djinn.exe -r .\demos\bank-valid\
+// Expected: two [commit] lines, final balances 850 / 190, exit code 0.
+
+import std::types;
+import std::sys;
+
+namespace bank;
+
+i32 debit(i32 balance, i32 amount)
+    require(amount > 0)
+    require(balance >= amount)
+    ensure(return == balance - amount)
+{
+    return balance - amount;
+}
+
+i32 credit(i32 balance, i32 amount)
+    require(amount > 0)
+    ensure(return == balance + amount)
+{
+    return balance + amount;
+}
+
+i32 main() {
+    i32 mut alice = 1000;
+    i32 mut bob = 40;
+
+    printf("== bank transaction: valid scenario ==\n");
+    printf("start: alice = %d, bob = %d\n", alice, bob);
+
+    // Transaction 1: transfer 250 from Alice to Bob
+    i32 alice_before = alice;
+    i32 bob_before = bob;
+    try {
+        alice = debit(alice, 250);
+        bob = credit(bob, 250);
+        printf("[commit]   transferred 250: alice = %d, bob = %d\n", alice, bob);
+    } catch (Exception e) {
+        alice = alice_before;
+        bob = bob_before;
+        printf("[rollback] transfer of 250 aborted, balances restored\n");
+    }
+
+    // Transaction 2: transfer 100 back from Bob to Alice
+    i32 alice_before_2 = alice;
+    i32 bob_before_2 = bob;
+    try {
+        bob = debit(bob, 100);
+        alice = credit(alice, 100);
+        printf("[commit]   transferred 100: alice = %d, bob = %d\n", alice, bob);
+    } catch (Exception e) {
+        alice = alice_before_2;
+        bob = bob_before_2;
+        printf("[rollback] transfer of 100 aborted, balances restored\n");
+    }
+
+    printf("end:   alice = %d, bob = %d\n", alice, bob);
+    return 0;
+}

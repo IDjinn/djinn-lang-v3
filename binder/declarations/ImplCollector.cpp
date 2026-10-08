@@ -79,6 +79,10 @@ void Binder::collectImpl(const ImplDeclaration& decl, const std::string& prefix)
             {
                 methodSym->contracts.push_back(&contract);
             }
+            for (const auto& section : method->sections)
+            {
+                methodSym->sections.push_back(&section);
+            }
             // Contracts implicitly throw ContractViolation on violation
             if (!method->contracts.empty() && !methodSym->throwsAny)
             {

@@ -25,6 +25,12 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         structSym->addGenericParam(genParam.name.token_name, genParam.constraints);
     }
 
+    // Entity invariants
+    for (const auto& invariant : decl.invariants)
+    {
+        structSym->invariants.push_back(&invariant);
+    }
+
     // Validate constraint interface names
     for (const auto& genParam : decl.genericParams.params)
     {
@@ -93,6 +99,10 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         for (const auto& contract : method->contracts)
         {
             methodSym->contracts.push_back(&contract);
+        }
+        for (const auto& section : method->sections)
+        {
+            methodSym->sections.push_back(&section);
         }
         // Contracts implicitly throw ContractViolation on violation
         if (!method->contracts.empty() && !methodSym->throwsAny)

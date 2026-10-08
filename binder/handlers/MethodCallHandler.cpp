@@ -73,6 +73,13 @@ namespace djinn::binder
         if (const auto method = std::dynamic_pointer_cast<MethodSymbol>(methodSym))
         {
             binder.check_throwing_call(call.name.token_name, method->isThrowing(), call.name.location);
+            // Record the resolved method so the verification pass can check
+            // this call site against the method's contracts.
+            if (!method->structName.empty())
+            {
+                call.resolvedCalleeName = method->name;
+                call.resolvedCalleeStruct = method->structName;
+            }
         }
 
         auto result = std::make_shared<FunctionCallSymbol>(

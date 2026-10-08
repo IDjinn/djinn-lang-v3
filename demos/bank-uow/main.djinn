@@ -1,0 +1,107 @@
+// Bank transfer exercising the FULL contract surface from VERIFICATION-SPEC.md —
+// VALID scenario: every claim matches what the bodies do, the entity invariant
+// is proven at every method exit, and the uow passes its static checks.
+//
+// What this exercises (all static, compile time — the binary is identical to
+// the same program with every section/uow stripped):
+// - Entity invariant `in mode prove`: the compiler assumes the invariant on
+//   method entry and proves it at every return path (`withdraw` discharges it
+//   through the `require(this.balance >= amount)` relation; `deposit` through
+//   the interval arithmetic of the increment). E-CONTRACT-044 on violation.
+// - `ensure` proven from the bodies: both methods' ensures are affine over
+//   tracked field values (`this.balance`), so they discharge statically.
+// - Semantic sections as claims (spec §6.2): `reads`/`writes` on the methods
+//   and on the uow are diffed against body inference; `effects` claims are
+//   checked against the transitive effect closure (`notify_transfer` is
+//   external_io via its own claim + printf).
+// - uow static checks (spec §9/§10): the body realizes exactly the declared
+//   `atomic` set, `retry: allowed` finds no external_io outside
+//   `after_commit`, `strategy: database` placement rules hold, and the
+//   program-wide ordering graph stays consistent.
+//
+// Run: .\cmake-build-debug-visual-studio\djinn.exe -r .\demos\bank-uow\
+// Expected: compiles clean (trace logs the obligations), prints the commit
+// line, final balances 750 / 290, exit code 0. The uow itself emits nothing.
+
+import std::types;
+import std::sys;
+
+namespace bank;
+
+struct Account {
+    i32 balance;
+    invariant this.balance >= 0 in mode prove
+}
+
+impl Account {
+    i32 withdraw(i32 amount)
+        require(amount > 0)
+        require(this.balance >= amount)
+        ensure(return == this.balance - amount)
+        writes: self.balance
+        reads: self.balance
+    {
+        this.balance = this.balance - amount;
+        return this.balance;
+    }
+
+    i32 deposit(i32 amount)
+        require(amount > 0)
+        ensure(return == this.balance + amount)
+        writes: self.balance
+        reads: self.balance
+    {
+        this.balance = this.balance + amount;
+        return this.balance;
+    }
+}
+
+i32 notify_transfer(i32 amount)
+    effects: external_io
+{
+    printf("[email]   transfer of %d confirmed\n", amount);
+    return 0;
+}
+
+uow Transfer {
+    require(amount > 0)
+
+    reads: from.balance, to.balance
+    writes: from.balance, to.balance
+
+    access: exclusive from, exclusive to
+    atomic: from.balance, to.balance
+    ordering: Account.id ascending
+    isolation: snapshot
+    retry: allowed
+    strategy: database
+    effects: external_io
+
+    body {
+        from.balance = from.balance - amount;
+        to.balance = to.balance + amount;
+    }
+
+    after_commit {
+        notify_transfer(amount);
+    }
+}
+
+i32 main() throws {
+    Account mut alice = { 1000 };
+    Account mut bob = { 40 };
+
+    printf("== bank uow: valid scenario ==\n");
+    printf("start: alice = %d, bob = %d\n", alice.balance, bob.balance);
+
+    try {
+        alice.withdraw(250);
+        bob.deposit(250);
+        printf("[commit]   transferred 250: alice = %d, bob = %d\n", alice.balance, bob.balance);
+    } catch (Exception e) {
+        printf("[rollback] transfer aborted, balances untouched\n");
+    }
+
+    printf("end:   alice = %d, bob = %d\n", alice.balance, bob.balance);
+    return 0;
+}

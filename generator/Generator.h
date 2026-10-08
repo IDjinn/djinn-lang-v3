@@ -395,6 +395,9 @@ private:
     void ensure_eh_declarations();
     [[nodiscard]] bool eh_is_msvc_target() const;
     NativeLanding push_native_landing(bool cleanupOnly);
+    // Entry-block scratch slot the MSVC handler fills with the matched
+    // exception object (generated handlers read the error state instead)
+    llvm::Value* create_eh_catch_slot();
     // Fills the landing blocks: djinn/foreign pads catchret to handlerBB
     // (handlers re-read the thread-local error state, which the shim set).
     void finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB);

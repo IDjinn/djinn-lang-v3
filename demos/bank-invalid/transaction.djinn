@@ -1,0 +1,98 @@
+// Bank transaction simulation exercising the contract/verification system
+// from VERIFICATION-SPEC.md — INVALID scenario: the transfer calls violate
+// business rules, and the compile-time verifier rejects the program.
+//
+// What this exercises:
+// - Business rules as require/ensure contracts on the pure transfer
+//   functions (debit: 2 require + 1 ensure, credit: 1 require + 1 ensure).
+//   Attempt 1 violates `require(amount > 0)` on both calls; attempt 2
+//   violates the spec's `requires from.balance >= amount` rule only at
+//   runtime (the argument is not statically decidable there); attempt 3
+//   violates `require(amount > 0)` on the credit.
+// - The compile-time verification pass: djinn.proj sets `verify: trace`, so
+//   the compiler collects every obligation and PROVES the ensure clauses
+//   from the function bodies (linear fragment, see VERIFICATION-SPEC.md
+//   §6.2/§6.3). Provable require violations at call sites are hard errors:
+//   the compiler emits one E-CONTRACT-007 diagnostic (code 9501) per
+//   violating call with the evaluated argument values as evidence.
+// - Runtime enforcement (for contrast): under `verify: off` the same
+//   contracts become runtime ContractViolation throws — the catch arms
+//   restore both balances from their snapshots (the ABORTED path of the UOW
+//   lifecycle, spec §10). Block-form try/catch requires native exceptions,
+//   enabled via `compiler.exceptions: true`.
+//
+// Run: .\cmake-build-debug-visual-studio\djinn.exe -r .\demos\bank-invalid\
+// Expected: compilation FAILS with three E-CONTRACT-007 (9501) diagnostics —
+// debit(alice, -50), credit(bob, -50) and credit(bob, -60) each violate
+// require(amount > 0), with evidence like `amount = -50` — and exit code 1.
+
+import std::types;
+import std::sys;
+
+namespace bank;
+
+i32 debit(i32 balance, i32 amount)
+    require(amount > 0)
+    require(balance >= amount)
+    ensure(return == balance - amount)
+{
+    return balance - amount;
+}
+
+i32 credit(i32 balance, i32 amount)
+    require(amount > 0)
+    ensure(return == balance + amount)
+{
+    return balance + amount;
+}
+
+i32 main() {
+    i32 mut alice = 100;
+    i32 mut bob = 40;
+
+    printf("== bank transaction: invalid scenario ==\n");
+    printf("start: alice = %d, bob = %d\n", alice, bob);
+
+    // Attempt 1: non-positive amount — require(amount > 0) fails before any write
+    i32 alice_before = alice;
+    i32 bob_before = bob;
+    try {
+        alice = debit(alice, -50);
+        bob = credit(bob, -50);
+        printf("[commit]   transferred -50: alice = %d, bob = %d\n", alice, bob);
+    } catch (Exception e) {
+        alice = alice_before;
+        bob = bob_before;
+        printf("[rollback] transfer of -50 aborted, balances restored\n");
+    }
+
+    // Attempt 2: insufficient funds — require(balance >= amount) fails
+    i32 alice_before_2 = alice;
+    i32 bob_before_2 = bob;
+    try {
+        alice = debit(alice, 500);
+        bob = credit(bob, 500);
+        printf("[commit]   transferred 500: alice = %d, bob = %d\n", alice, bob);
+    } catch (Exception e) {
+        alice = alice_before_2;
+        bob = bob_before_2;
+        printf("[rollback] transfer of 500 aborted, balances restored\n");
+    }
+
+    // Attempt 3: partial write — the debit lands, then the credit violates
+    // require(amount > 0); the catch undoes the debit (transaction atomicity)
+    i32 alice_before_3 = alice;
+    i32 bob_before_3 = bob;
+    try {
+        alice = debit(alice, 60);
+        bob = credit(bob, -60);
+        printf("[commit]   transferred 60: alice = %d, bob = %d\n", alice, bob);
+    } catch (Exception e) {
+        alice = alice_before_3;
+        bob = bob_before_3;
+        printf("[rollback] transfer of 60 aborted, balances restored\n");
+    }
+
+    printf("end:   alice = %d, bob = %d (unchanged)\n", alice, bob);
+    return 0;
+}

@@ -22,6 +22,7 @@
 #include "evaluator/ConstEvaluator.h"
 #include "lexer/Lexer.h"
 #include "parser/parser.h"
+#include "verification/Verifier.h"
 #include "utils/Logger.h"
 #include "utils/StopWatch.h"
 #include "lib/DjLibReader.h"
@@ -72,6 +73,7 @@ namespace
         std::map<std::string, std::string> fileHashes;
         std::string irHash;
         int optimizationLevel = -1;
+        std::string verificationMode;
 
         static BuildCache load(const std::string& cachePath)
         {
@@ -86,6 +88,8 @@ namespace
                     cache.irHash = line.substr(3);
                 else if (line.starts_with("opt:"))
                     cache.optimizationLevel = std::stoi(line.substr(4));
+                else if (line.starts_with("verify:"))
+                    cache.verificationMode = line.substr(7);
                 else
                 {
                     auto sep = line.find(':');
@@ -103,11 +107,14 @@ namespace
                 file << path << ":" << hash << "\n";
             file << "ir:" << irHash << "\n";
             file << "opt:" << optimizationLevel << "\n";
+            file << "verify:" << verificationMode << "\n";
         }
 
-        bool matches(const std::map<std::string, std::string>& current, int optLevel) const
+        bool matches(const std::map<std::string, std::string>& current, int optLevel,
+                     const std::string& verifyMode) const
         {
             if (optimizationLevel != optLevel) return false;
+            if (verificationMode != verifyMode) return false;
             if (fileHashes.size() != current.size()) return false;
             for (const auto& [path, hash] : current)
             {
@@ -532,7 +539,9 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             LOG_DEBUG("[cache] hashed %zu source files, loaded cache from %s", currentHashes.size(), cachePath.c_str());
         }
 
-        if (!options.noCache && cache.matches(currentHashes, options.optimizationLevel) && fs::exists(exePath))
+        if (!options.noCache && cache.matches(currentHashes, options.optimizationLevel,
+                                               verification_mode_name(options.verificationMode)) &&
+            fs::exists(exePath))
         {
             LOG_INFO("[cache] sources unchanged, skipping build");
 
@@ -778,6 +787,21 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
         }
 
+        djinn::verification::VerificationIR verificationIR;
+        if (options.verificationMode != VerificationMode::Off)
+        {
+            auto _phase = summary.phase("verification");
+            Verifier verifier(diagnostics, options.verificationMode);
+            const auto verificationResult = verifier.run(programs, bindResult.globalScope);
+            if (!verificationResult.success)
+            {
+                std::cerr << diagnostics.render();
+                LOG_ERROR("Verification failed.");
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
+            verificationIR = verificationResult.ir;
+        }
+
         auto generator = Generator(diagnostics, bindResult.globalScope);
         generator.libraryMode = options.libraryMode;
         generator.stdDeclOnly = options.stdDeclOnly;
@@ -915,6 +939,13 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             LOG_DEBUG("Executing compilation command: %s", cmdString.c_str());
             const auto compile_result = system(cmdString.c_str());
             LOG_DEBUG("Compile return: %d", compile_result);
+            if (compile_result != 0)
+            {
+                // A stale exe from a previous build must never be executed or
+                // cached as fresh — surface the failure instead.
+                LOG_ERROR("clang exited with code %d; executable not produced", compile_result);
+                return {.returnCode = 1, .diagnostics = diagnostics.get_diagnostics()};
+            }
         }
 
         // Save cache
@@ -922,6 +953,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         newCache.fileHashes = currentHashes;
         newCache.irHash = irHash;
         newCache.optimizationLevel = options.optimizationLevel;
+        newCache.verificationMode = verification_mode_name(options.verificationMode);
         newCache.save(cachePath);
         LOG_DEBUG("[cache] saved %zu file hashes to %s", currentHashes.size(), cachePath.c_str());
 
@@ -946,7 +978,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         summary.print();
 
         LOG_DEBUG("exit code %d", programReturnCode);
-        return {.returnCode = programReturnCode, .diagnostics = diagnostics.get_diagnostics()};
+        return {.returnCode = programReturnCode, .diagnostics = diagnostics.get_diagnostics(),
+                .verification = verificationIR};
     }
     catch (const CompileError& e)
     {
@@ -970,6 +1003,7 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
 
     bool irVerified = true;
     std::string runtimeErrorReport;
+    djinn::verification::VerificationIR verificationIR;
     auto makeResult = [&](int returnCode, const std::stacktrace& trace)
     {
         if (!options.silentMode && !diagnostics.get_diagnostics().empty())
@@ -983,7 +1017,8 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
             .ir = generatedIr,
             .diagnostics = diagnostics.get_diagnostics(),
             .expandedSource = expandedSourceResult,
-            .runtimeErrorReport = runtimeErrorReport
+            .runtimeErrorReport = runtimeErrorReport,
+            .verification = verificationIR
         };
     };
 
@@ -1148,6 +1183,17 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         if (!bindResult.success)
         {
             return makeResult(1, std::stacktrace::current());
+        }
+
+        if (options.verificationMode != VerificationMode::Off)
+        {
+            Verifier verifier(diagnostics, options.verificationMode);
+            const auto verificationResult = verifier.run(programs, bindResult.globalScope);
+            if (!verificationResult.success)
+            {
+                return makeResult(1, std::stacktrace::current());
+            }
+            verificationIR = verificationResult.ir;
         }
 
         auto generator = Generator(diagnostics, bindResult.globalScope);

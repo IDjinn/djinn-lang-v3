@@ -107,7 +107,18 @@ private:
 
     void parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes);
 
-    std::vector<ContractClause> parse_contract_clauses();
+    // Contract area between a signature and a body: require/ensure clauses
+    // with optional `in mode` clauses, plus semantic sections.
+    ContractSurface parse_contract_surface();
+
+    // Optional `in mode prove|check|assume|ignore` after a clause.
+    void parse_mode_clause(ContractClause& clause);
+
+    bool check_semantic_section();
+
+    SemanticSection parse_semantic_section();
+
+    std::unique_ptr<UowDeclaration> parse_uow();
 
     std::unique_ptr<Block> parse_block();
 

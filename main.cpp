@@ -39,6 +39,9 @@ void printUsage(const char* programName)
         << "  --reflect-all       Generate TypeInfoExt for all struct types\n"
         << "  --reflect-annotated Generate TypeInfoExt only for [Reflect] structs\n"
         << "  --error-enforcement <off|runtime|compiletime|strict>  Error-flow checks (default: compiletime)\n"
+        << "  --verify <off|report|trace>  Semantic verification pass building the Verification\n"
+        << "                IR (default: off; report adds an obligations pass before codegen,\n"
+        << "                trace also logs every collected obligation; djinn.proj: compiler.verify)\n"
         << "  --no-std      Don't include standard library\n"
         << "  --std-decl    Include std declarations only (use with -l std.ll)\n"
         << "  --inspect <file.djlib>  Inspect djlib metadata\n"
@@ -230,6 +233,18 @@ int main(int argc, char* argv[])
             {
                 LOG_ERROR("Unknown error enforcement level: %s (expected off|runtime|compiletime|strict)",
                           level.c_str());
+                return 1;
+            }
+        }
+        else if (arg == "--verify" && i + 1 < argc)
+        {
+            const std::string mode = argv[++i];
+            if (mode == "off") options.verificationMode = VerificationMode::Off;
+            else if (mode == "report") options.verificationMode = VerificationMode::Report;
+            else if (mode == "trace") options.verificationMode = VerificationMode::Trace;
+            else
+            {
+                LOG_ERROR("Unknown verification mode: %s (expected off|report|trace)", mode.c_str());
                 return 1;
             }
         }

@@ -825,7 +825,13 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
             llvm::Value* catchType = foreign
                                          ? static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy))
                                          : static_cast<llvm::Value*>(ehErrorTypeDesc);
-            auto* pad = builder->CreateCatchPad(catchSwitch, {catchType});
+            // MSVC pads are [descriptor, flags, catch-object slot]; 64 =
+            // catch-all (slot unused), 8 = typed catch (handler writes slot)
+            llvm::Value* catchFlags = builder->getInt32(foreign ? 64 : 8);
+            llvm::Value* catchObj = foreign
+                                        ? static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptrTy))
+                                        : create_eh_catch_slot();
+            auto* pad = builder->CreateCatchPad(catchSwitch, {catchType, catchFlags, catchObj});
             if (foreign)
             {
                 auto* wrapTy = llvm::FunctionType::get(ptrTy, false);
