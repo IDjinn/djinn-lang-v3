@@ -297,6 +297,94 @@ struct TryCatchStatement : Statement
     }
 };
 
+// Forward declaration: defined in Declaration.h (which includes this header).
+enum class UowPhase : int;
+
+// Inline uow lifecycle block inside a uow member body (`before_commit { }` /
+// `after_commit { }`, VERIFICATION-SPEC.md §10). Real, compiled code: the
+// statements are deferred to the member's success path (after_commit) or run
+// just before commit (before_commit); any unwind skips them entirely.
+struct UowPhaseBlockStatement : Statement
+{
+    UowPhase phase;
+    std::unique_ptr<Block> body;
+
+    explicit UowPhaseBlockStatement(UowPhase phase, std::unique_ptr<Block> body)
+        : phase(phase), body(std::move(body))
+    {
+    }
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "UowPhaseBlock\n";
+        if (body) body->print(os, indent + 2);
+    }
+};
+
+// `lock (a, b) { ... }`: acquires each operand's object in listed order,
+// releases in reverse on every exit path (normal or unwind). The verifier
+// uses lock scopes as the discharge evidence for `atomic`/`exclusive` claims.
+struct LockStatement : Statement
+{
+    std::vector<std::unique_ptr<Expression>> operands;
+    std::unique_ptr<Block> body;
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "LockStatement\n";
+        for (const auto& operand : operands) operand->print(os, indent + 2);
+        if (body) body->print(os, indent + 2);
+    }
+};
+
+// `commit;` inside a uow member body: ends the transaction portion. Every
+// statement after it (block or not, explicit `after_commit` block or not)
+// runs in the member's after-commit window — success-only, skipped by any
+// unwind before the commit point.
+struct CommitStatement : Statement
+{
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "CommitStatement\n";
+    }
+};
+
+// `rollback;` / `rollback (a.b, c.d);` — restores entry snapshots of the
+// listed dotted paths (all captured paths when bare). Only valid inside the
+// catch arm of a uow member; snapshots are taken at member entry.
+struct RollbackStatement : Statement
+{
+    std::vector<std::vector<std::string>> paths;
+    SourceLocation keywordLocation;
+
+    void accept(djinn::IStatementVisitor& visitor) const override { visitor.visit(*this); }
+
+    void print(std::ostream& os, const int indent = 0) const override
+    {
+        writeIndent(os, indent);
+        os << "RollbackStatement";
+        for (const auto& path : paths)
+        {
+            os << " ";
+            for (size_t i = 0; i < path.size(); ++i)
+            {
+                if (i > 0) os << ".";
+                os << path[i];
+            }
+        }
+        os << "\n";
+    }
+};
+
 struct SwitchCaseStatement : Statement
 {
     std::unique_ptr<Expression> expression;

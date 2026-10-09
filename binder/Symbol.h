@@ -174,12 +174,26 @@ struct FunctionSymbol : Symbol
     bool isVariadic = false;
     bool isAsync = false;
     std::unique_ptr<Block> body;
-    bool constEval;
-    bool constExpr;
+    bool constEval = false;
+    bool constExpr = false;
     bool throwsAny = false;
     std::vector<Type> throwsTypes;
     std::vector<const ContractClause*> contracts;
     std::vector<const SemanticSection*> sections;
+
+    // `uow (Name[.phase])` attachment (VERIFICATION-SPEC.md §5.1); empty name
+    // means the function does not participate in any uow.
+    std::string uowName;
+    SourceLocation uowLocation;
+    UowPhase uowPhase = UowPhase::Body;
+
+    // Function-level handler suffix (non-owning: the AST declaration outlives
+    // the symbol). "Error"/"_" arms set catchesAllErrors; throwsAfterArms is
+    // the effective verdict — declared/contract throws no arm handles.
+    std::vector<const CatchClause*> catchArms;
+    const Block* finallyBlock = nullptr;
+    bool catchesAllErrors = false;
+    bool throwsAfterArms = false;
 
     FunctionSymbol(std::string name, Type retType, const SourceLocation& loc = {})
         : Symbol(SymbolKind::Function, std::move(name), retType, loc),
@@ -204,6 +218,9 @@ struct FunctionSymbol : Symbol
     [[nodiscard]] bool hasBody() const { return body != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
     [[nodiscard]] bool isThrowing() const { return throwsAny || !throwsTypes.empty(); }
+
+    // Callers only need `try` for errors the function does not handle itself.
+    [[nodiscard]] bool effectivelyThrowing() const { return throwsAny || throwsAfterArms; }
 
     [[nodiscard]] size_t callerArity() const
     {
@@ -276,6 +293,20 @@ struct MethodSymbol : Symbol
     std::vector<const ContractClause*> contracts;
     std::vector<const SemanticSection*> sections;
 
+    // `uow (Name[.phase])` attachment (VERIFICATION-SPEC.md §5.1); empty name
+    // means the method does not participate in any uow.
+    std::string uowName;
+    SourceLocation uowLocation;
+    UowPhase uowPhase = UowPhase::Body;
+
+    // Function-level handler suffix (non-owning: the AST declaration outlives
+    // the symbol). "Error"/"_" arms set catchesAllErrors; throwsAfterArms is
+    // the effective verdict — declared/contract throws no arm handles.
+    std::vector<const CatchClause*> catchArms;
+    const Block* finallyBlock = nullptr;
+    bool catchesAllErrors = false;
+    bool throwsAfterArms = false;
+
     Block* body = nullptr;
     Expression* expressionBody = nullptr;
 
@@ -308,6 +339,9 @@ struct MethodSymbol : Symbol
     [[nodiscard]] bool isExpressionBody() const { return expressionBody != nullptr; }
     [[nodiscard]] size_t arity() const { return paramTypes.size(); }
     [[nodiscard]] bool isThrowing() const { return throwsAny || !throwsTypes.empty(); }
+
+    // Callers only need `try` for errors the method does not handle itself.
+    [[nodiscard]] bool effectivelyThrowing() const { return throwsAny || throwsAfterArms; }
 
     [[nodiscard]] size_t callerArity() const
     {

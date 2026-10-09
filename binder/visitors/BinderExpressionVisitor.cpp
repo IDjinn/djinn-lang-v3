@@ -180,6 +180,15 @@ namespace djinn
 
     void BinderExpressionVisitor::visit(const AwaitExpression& expr)
     {
+        if (_binder.lockScopeDepth_ > 0)
+        {
+            _binder._diagnostics.emitAndPrint(Diagnostic(
+                Severity::Error, DiagnosticCode::AWAIT_INSIDE_LOCK,
+                "cannot await inside a lock scope: the lock would stay held while the coroutine "
+                    "is suspended",
+                expr.location
+            ));
+        }
         _binder.bindExpression(*expr.operand);
         _result = nullptr;
     }

@@ -44,6 +44,12 @@ std::shared_ptr<Symbol> Binder::bindIdentifier(const Identifier& id)
 
 std::shared_ptr<Symbol> Binder::bindFunctionCall(const FunctionCall& call)
 {
+    // `old(expr)` is contract-only verification syntax (entry snapshot of
+    // field paths): bind the operand transparently — the verification
+    // fragment consumes the call itself, no function is resolved.
+    if (call.name.token_name == "old" && call.arguments.size() == 1 && !call.receiver)
+        return bindExpression(*call.arguments.front());
+
     // Use chain of responsibility pattern with call handlers
     static auto handlers = djinn::binder::createCallHandlers();
 

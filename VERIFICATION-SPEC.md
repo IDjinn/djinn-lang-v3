@@ -106,11 +106,17 @@ sections.
 ```ebnf
 contract_clause   = ( "require" | "ensure" ) "(" expression ")" [ mode_clause ]
                   | ( "require" | "ensure" ) block [ mode_clause ]
+                  | uow_attachment
                   | semantic_section ;
 
 mode_clause       = "in" "mode" ( "prove" | "check" | "assume" | "ignore" ) ;
 
-semantic_section  = section_kind ":" section_body ;
+uow_attachment    = "uow" "(" IDENTIFIER [ "." uow_phase ] ")" ;
+uow_phase         = "before_commit" | "after_commit" ;
+
+semantic_section  = section_kind ( ":" section_body | "(" section_body ")" ) ;
+(* Parenthesized sections are only valid on function/method signatures;
+   inside a uow declaration, sections always use `key: value`. *)
 section_kind      = "reads" | "writes" | "access" | "atomic" | "isolation"
                   | "ordering" | "retry" | "effects" | "strategy" | "propagation" ;
 
@@ -122,15 +128,43 @@ isolation_level   = "snapshot" | "serializable" ;
 
 invariant_decl    = "invariant" expression [ mode_clause ] ;   (* on entities/structs *)
 
+catch_suffix      = { "catch" "(" error_type [ IDENTIFIER ] ")" block } [ "finally" block ] ;
+commit_stmt       = "commit" ";" ;   (* ends the transaction window *)
+uow_phase_block   = ( "before_commit" | "after_commit" ) block ;   (* statement in a member body *)
+rollback_stmt     = "rollback" [ "(" path { "," path } ")" ] ";" ; (* catch arms of uow members *)
+lock_stmt         = "lock" "(" expression { "," expression } ")" block ;
+
 uow_decl          = "uow" IDENTIFIER "{" { uow_member } "}" ;
-uow_member        = contract_clause | semantic_section | invariant_decl
-                  | "body" block | "before_commit" block | "after_commit" block
-                  | uow_decl ;
+uow_member        = contract_clause | semantic_section | invariant_decl | uow_decl ;
 ```
 
-Functions and UOWs both accept semantic sections. `ensures` is the existing
-`ensure` clause family; `old(expr)` is valid inside `ensure` on UOWs and refers
-to the pre-UOW state.
+Functions, methods and UOWs all accept semantic sections — on signatures in
+either surface form, inside uows always `key: value`. A UOW is a **pure
+specification**: contracts, sections, invariants — nothing else. Functions and
+methods implement it by attaching `uow (Name[.phase])` in the contract area
+between the signature and the body: the bare name is the transaction body,
+the suffix runs the whole body in that lifecycle phase (the compact form of
+the matching inline block), and lifecycle code can also be written inline as
+`before_commit { ... }` / `after_commit { ... }` blocks. The **catch suffix**
+after a body handles the member's own errors: handled types leave the
+effective throws set, so callers need no `try`. `ensures` is the existing
+`ensure` clause family. Inside `ensure` (and uow claims), bare field paths
+(`this.balance`) denote the **exit** value and `old(expr)` denotes the value
+its field paths had **at entry** (§6.3): `ensure(return == old(this.balance)
+- amount)` claims the result equals the entry balance minus the amount.
+`old()` accepts field paths (`this.x` / `self.x` / `name.x`) and plain
+parameters (identity). It is also valid **in member code** — transaction
+bodies, including after `commit;`, and catch/finally arms — where it reads
+the same entry snapshot the checked claims use, so pre-state stays
+observable for the whole member lifetime.
+
+**Reference parameters.** A uow member's struct-typed parameters are passed
+**by reference**: the member mutates the caller's objects, which is what
+makes `commit`/`rollback` meaningful (a rollback restores the caller's
+objects to their entry state; a commit leaves the mutations in place).
+Arguments must be mutable (`mut`) variables or field chains; reference
+parameters auto-deref at every use site like `this` does. Parameters of
+non-uow functions and scalar parameters everywhere keep value semantics.
 
 ### 5.2 Verification modes
 
@@ -169,7 +203,11 @@ unverified none permitted in CI; state exists only mid-compile
 | Access modes | `shared`, `exclusive` | `owned`/`isolated`/`transactional` reserved for v2 |
 | Isolation | `snapshot`, `serializable` | theory names, not SQL-only names |
 | Nesting | `propagation: join` (default) | `independent`, `savepoint` reserved |
-| Atomicity | section `atomic:` **declares**; `atomic { }` block **realizes** | compiler checks the block covers exactly the declared set |
+| Atomicity | section `atomic:` **declares**; members realize it | discharged by `strategy: database`, otherwise by `lock` scopes |
+| Rollback | bare `rollback;` (whole objects); `rollback (paths)` lists fields | entry snapshots, catch arms only |
+| Commit | `commit;` ends the transaction window | the rest of the body is after-commit content |
+| Locking | `lock (a, b) { ... }` statement | ordered acquisition, unwind-safe release; await/spawn rejected inside |
+| Member handlers | function-level `catch` suffix (+ `finally`) | handled types leave the effective throws set |
 
 ---
 
@@ -286,7 +324,7 @@ environment and (b) which rules to **enforce** on user code. v1 ships `database`
 
 | Strategy | Assumed guarantees | Enforced rules | Materialization (later phases) |
 | --- | --- | --- | --- |
-| `database` | declared `isolation` provided by the DB transaction; retry on serialization failure | `external_io` only in `after_commit`; retry-safety of body | `BEGIN/COMMIT`, row locks, guarded updates |
+| `database` | declared `isolation` provided by the DB transaction; retry on serialization failure | non-idempotent effects (`external_io`, `process`, `filesystem`) only in `after_commit`; retry-safety of body | `BEGIN/COMMIT`, row locks, guarded updates |
 | `lock` | exclusive/shared honored by lock protocol | ordering compliance | lock acquisition/release from access + ordering |
 | `stm` | atomicity via read/write-set validation | retry-safety, idempotency | speculative execution + retry |
 
@@ -322,8 +360,11 @@ mapping as consistent.
 ## 10. UOW Semantics
 
 A UOW is *a unit of work and consistency that completes or aborts according to
-its contract*. It is a **hybrid construct**: syntactic block lowering into a
-static lifecycle model in v1; a runtime protocol in a later phase.
+its contract*. It is a **pure specification**: contracts, semantic sections and
+invariants — no body, no generated code. Real functions implement it by
+attaching `uow (Name)` next to their body; the analyzer verifies each member
+against the spec, and the transaction's lifecycle is the model the member's
+inline `before_commit` / `after_commit` blocks project onto.
 
 ```text
 OPEN -> ACTIVE -> VALIDATING -> COMMITTING -> COMMITTED -> AFTER_COMMIT
@@ -331,29 +372,61 @@ OPEN -> ACTIVE -> VALIDATING -> COMMITTING -> COMMITTED -> AFTER_COMMIT
                     +--> ABORTED <---+
 ```
 
-v1 checks (static only):
+v1 checks (static only, per attached member and across members):
 
-- `body` realizes exactly the declared `atomic` set (no more, no less).
-- Effects placement: `external_io` only in `after_commit` (under retryable
-  strategies); `before_commit` may read state, must preserve invariants.
-- UOWs writing a resource with entity `invariant`s must discharge them
-  (`preserves Account.invariants` is implicit for `writes` targets).
+- Every member's inferred writes/reads/effects (through its calls) stay inside
+  the UOW's claims, anchored at the offending line (E-CONTRACT-011). All three
+  claim sections are always explicit — `atomic:` never implies `writes:`.
+  Inline `before_commit` blocks and statements before `commit;` join the
+  transaction window; `after_commit` blocks and statements after `commit;`
+  join the post-commit phase (claims apply, the retry window does not).
+- The transaction members jointly realize exactly the declared `atomic` set
+  (no more, no less).
+- Atomicity discharge (E-CONTRACT-053): `strategy: database` delegates to the
+  DB transaction (coverage + ordering). Any other strategy — or none —
+  requires every atomic path (and every `exclusive` operand's writes) to be
+  written only inside `lock` scopes naming the path's root object.
+- All-or-nothing (E-CONTRACT-054): a member that can fail mid-transaction (a
+  call to a throwing callee) and writes an atomic path must roll it back —
+  bare `rollback;` restores whole-object entry snapshots of every struct
+  parameter and `self`; the listed form names exact paths.
+- ContractViolation coverage (E-CONTRACT-055): a member whose body can violate
+  a check-mode contract (its own or a callee's) must catch it in its handler
+  suffix, or the clause must be `in mode prove`.
+- Retry safety: with `retry: allowed`, non-idempotent effects
+  (`external_io`, `process`, `filesystem`) cannot appear in the transaction
+  window (E-CONTRACT-042) — they belong in `after_commit` blocks.
+- Effect placement: `strategy: database` confines non-idempotent effects to
+  `after_commit` blocks (E-CONTRACT-045).
+- The UOW's `require`/`ensure` clauses are inherited by every member whose
+  parameters can name the clause's operands — proven at compile time, never
+  injected at runtime; unresolvable clauses are recorded as assumed
+  obligations for the audit trail.
+- Ordering claims across UOWs must not conflict (E-CONTRACT-043); access
+  modes must not contradict themselves per operand (E-CONTRACT-011).
+- Attaching to an unknown UOW is a hard error (E-CONTRACT-051); a UOW with
+  no participating functions warns (E-CONTRACT-052).
 - Nesting: default `propagation: join` (inner joins the outer's lifecycle,
   one commit). `independent` / `savepoint` reserved for later phases.
-- Functions may require an active UOW context (`requires uow`).
+- `requires uow` (a function demanding an active UOW context) is reserved.
 
 ---
 
 ## 11. Effects
 
-Declared vocabulary (v1): `memory`, `database`, `filesystem`, `network`,
-`external_io`, `random`, `time`, `process`, `thread`.
+Implemented vocabulary (v1): `memory`, `filesystem`, `time`, `random`,
+`process`, `external_io`. `database`, `network` and `thread` are reserved
+names the parser rejects until their strategies land.
 
 - Effects are **inferred** from bodies (transitively); explicit `effects:`
   sections are claims verified by claim-vs-inference, used at API boundaries to
   restrict or document.
 - `external_io` subsumes non-idempotent outside interaction (email, HTTP POST,
-  payments); it is the effect that triggers retry-safety diagnostics.
+  payments). The **non-retry-safe set** is `external_io`, `process` and
+  `filesystem`: none of them can be safely re-run by a retry, and under
+  strategy `database` they belong in `after_commit`. `memory`, `time` and
+  `random` are retry-safe — a retry allocates fresh resources and re-observes
+  the clock/RNG, duplicating nothing observable.
 - Effects gate composability: what may run inside atomic regions, UOW bodies,
   retryable regions, and parallel code.
 
@@ -372,6 +445,13 @@ Declared vocabulary (v1): `memory`, `database`, `filesystem`, `network`,
 | `E-CONTRACT-044` | entity invariant not preserved by writes target |
 | `E-CONTRACT-045` | effect placement violates strategy rules (e.g. `external_io` outside `after_commit`) |
 | `E-CONTRACT-046` | obligation unprovable in `mode prove` (author must choose `check`/`assume`) |
+| `E-CONTRACT-047` | function attaches to an unknown uow |
+| `E-CONTRACT-048` | uow has no participating functions (warning) |
+| `E-CONTRACT-053` | atomic claim not discharged by a lock scope (strategy provides no atomicity) |
+| `E-CONTRACT-054` | member can fail mid-transaction without rolling back an atomic path |
+| `E-CONTRACT-055` | uow member does not handle `ContractViolation` |
+| `E-CONTRACT-051` | function attaches to an unknown uow |
+| `E-CONTRACT-052` | uow has no participating functions (warning) |
 
 ### 12.2 Diagnostic shape
 
@@ -451,7 +531,10 @@ uow Transfer {
 ```
 
 ```cpp
-body {
+// transfer_money.djinn — transaction body member
+void transferMoney(Account from, Account to, Money amount)
+    uow (Transfer)
+{
     from.balance -= amount;
     to.balance += amount;
     audit.record(TransferCompleted, receipt);    // ok: stdlib idempotent (assume)
@@ -500,16 +583,25 @@ uow Transfer {
 ```
 
 ```cpp
-body {
-    // pure transition + idempotent audit: provable, retry-safe
+// Transaction body member: pure transition + idempotent audit,
+// provable and retry-safe. The handler suffix frees callers from `try`;
+// a bare `rollback;` restores every parameter if anything fails.
+void transferMoney(Account from, Account to, Money amount)
+    uow (Transfer)
+{
     from.balance -= amount;
     to.balance += amount;
     audit.record(TransferCompleted, receipt);
-}
 
-after_commit {
-    // runs exactly once, after durability; abort/retry never reach it.
-    send_transfer_email(from.owner.email, receipt);
+    // After-success block: runs exactly once, after durability;
+    // abort/retry never reach it.
+    after_commit {
+        send_transfer_email(from.owner.email, receipt);
+    }
+} catch (ContractViolation violation) {
+    rollback;
+} catch (BalanceModifyException balanceException) {
+    rollback;
 }
 ```
 
@@ -591,20 +683,41 @@ Undecidable checks stay `checked` (runtime).
   through call chains (`transfer → debit → credit`), method call sites are
   checked against their contracts, and contract-bearing extern stubs are
   verified spec-first.
-- Grammar + AST for §5.1: `in mode` clauses, all ten semantic sections,
-  struct/uow `invariant` declarations, `uow` scopes with
-  `body`/`before_commit`/`after_commit` (parser-side, zero lexer changes).
+- Grammar + AST for §5.1: `in mode` clauses, all ten semantic sections (both
+  `kind:` and `kind(...)` surface forms), struct/uow `invariant` declarations,
+  and `uow (Name)` attachment on functions/methods (parser-side, zero lexer
+  changes). The uow pseudo-body (`body`/`before_commit`/`after_commit` blocks)
+  was removed: a uow is a pure specification, and the lifecycle lives inline in
+  the member bodies as `before_commit { ... }` / `after_commit { ... }`
+  blocks (deferred to the member's success path).
 - Claim-vs-inference over semantic sections (§6.2): reads/effects
   `inferred ⊆ declared`, writes `inferred == declared`, hard error 9502.
-- uow static checks (§9/§10): atomic coverage, retry-safety (9503),
-  `strategy database` effect placement (9506), access-mode conflicts,
-  program-wide ordering contradictions (9504).
+- uow checks over attached members (§9/§10): member inference (callee paths
+  expanded into the member's operand terms, receiver included) diffed against
+  the claims anchored at the offending line, atomic coverage realized jointly
+  by the transaction members, retry-safety (9503), `strategy database` effect
+  placement (9506), access-mode conflicts, program-wide ordering
+  contradictions (9504). Unknown uow attachment is a hard error (9512,
+  E-CONTRACT-051); a memberless uow warns (9513, E-CONTRACT-052). The uow's
+  require/ensure clauses are inherited by members whose parameters can name
+  the operands — compile-time only, never injected; unresolvable clauses stay
+  assumed obligations.
 - Entity invariants (§10) default `prove`: seeded on method entry, decided at
   every return path over tracked field values; 9505 on violation, 9507 when
   unprovable. `in mode check` on invariants is rejected (no runtime injection
   in this phase).
 - Modes (§5.2): `prove` demands proof (9507 otherwise), `assume` records
   trusted obligations, `ignore` drops them; `check` stays the default.
+- Mode gating in the generator: only `in mode check` clauses reach the binary
+  — `assume`/`prove`/`ignore` contracts emit no runtime code, so a
+  compile-time-proven contract costs nothing at runtime.
+- Transactional member surface (§10): the function-level catch suffix
+  (handled types leave the effective throws set), bare `rollback;` with
+  whole-object entry snapshots and the all-or-nothing rule (9515,
+  E-CONTRACT-054), the `lock` statement lowered to
+  `__djinn_object_lock`/`__djinn_object_unlock` with the atomic-discharge
+  check (9514, E-CONTRACT-053), and the ContractViolation coverage rule
+  (9516, E-CONTRACT-055).
 - Generator/runtime neutrality: uows live outside `Program::acceptAll`, and
   sections/invariants are symbol-level metadata only — verified binaries are
   byte-identical to contract-stripped ones (except today's `check` guards).
@@ -612,6 +725,10 @@ Undecidable checks stay `checked` (runtime).
 Remaining from §15: SMT-backed `prove` (Phase 4), full `mode check`
 injection framework (Phase 6), `strategy lock` and beyond, uow runtime
 protocol, `--report obligations`/`--json` tooling (Phase 5 leftovers).
+Delivered early from Phase 6: the `lock` statement with runtime lowering
+(`__djinn_object_lock`/`__djinn_object_unlock`) and the atomic-discharge
+verification it enables; the uow runtime protocol (inter-member commit
+engine) remains future work — all-or-nothing is currently per member.
 
 ## 16. Decision Log
 
@@ -633,6 +750,11 @@ protocol, `--report obligations`/`--json` tooling (Phase 5 leftovers).
 | 14 | v1 excludes STM, distributed, runtime UOW engine | prove the IR on the database strategy before multiplying backends |
 | 15 | `atomic` dual form kept: section declares, block realizes | checked coverage ties them together; not two syntaxes for one thing |
 | 16 | Agent feature order: fix hints → spec-first → modular → obligations | diagnostics are the compiler's UX; everything else builds on them |
+| 17 | Function-level `catch` suffix; handled types leave the effective throws set | members own their failures ("runs or does not run"); callers keep plain calls |
+| 18 | Attachment suffix + inline lifecycle blocks are both first-class | `uow (Name.after_commit)` is the compact form of the inline block; after-commit logic is part of the transaction, not a separate transaction |
+| 19 | Rollback = explicit statement + whole-object entry snapshots (bare form) | explicit syntax lowers to real code; the spec never injects; no per-path bookkeeping for the common case |
+| 20 | `lock` statement discharges `atomic` only where no strategy does | `strategy: database` stays zero-verbosity; in-memory atomicity demands visible synchronization |
+| 21 | ContractViolation must be caught in uow members (or clauses move to `prove`) | an escaping violation un-verifies the all-or-nothing property |
 
 ## 17. Open Questions
 

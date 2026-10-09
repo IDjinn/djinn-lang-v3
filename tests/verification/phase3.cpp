@@ -6,11 +6,13 @@
 
 //
 // Semantic contract surface (VERIFICATION-SPEC.md §5.1/§5.2, static only):
-// semantic sections are claims diffed against body inference, uow scopes get
-// their static checks (atomic coverage, retry safety, effect placement,
-// ordering graph, access conflicts), entity invariants are proven at method
-// exits, and clause modes prove/assume/ignore select the verification
-// contract. Nothing here changes the generated binary.
+// semantic sections are claims diffed against body inference, uows are pure
+// specifications that real functions attach to with `uow (Name)` and
+// get their static checks per member (atomic coverage, retry safety, effect
+// placement, ordering graph, access conflicts), entity invariants are proven
+// at method exits, and clause modes prove/assume/ignore select the
+// verification contract. Nothing here changes the generated binary except
+// mode gating: only `in mode check` reaches runtime.
 //
 
 namespace
@@ -44,7 +46,7 @@ TEST(VerificationSemantics, WritesClaimMatchingBodyPasses)
         }
 
         impl Box {
-            i32 bump() writes: self.value {
+            i32 bump() writes(self.value) {
                 this.value = this.value + 1;
                 return this.value;
             }
@@ -69,7 +71,7 @@ TEST(VerificationSemantics, WritesClaimMismatchIsHardError)
         }
 
         impl Box {
-            i32 bump() writes: self.other {
+            i32 bump() writes(self.other) {
                 this.value = this.value + 1;
                 return this.value;
             }
@@ -94,7 +96,7 @@ TEST(VerificationSemantics, ReadsClaimHiddenPathIsHardError)
         }
 
         impl Box {
-            i32 peek_both() reads: self.value {
+            i32 peek_both() reads(self.value) {
                 return this.value + this.spare;
             }
         }
@@ -115,7 +117,7 @@ TEST(VerificationSemantics, EffectsClaimHiddenEffectIsHardError)
         import std::sys;
 
         i32 noisy()
-            effects: memory
+            effects(memory)
         {
             printf("hi\n");
             return 0;
@@ -137,7 +139,7 @@ TEST(VerificationSemantics, EffectsClaimCoveringBodyPasses)
         import std::sys;
 
         i32 noisy()
-            effects: external_io
+            effects(external_io)
         {
             printf("hi\n");
             return 0;
@@ -154,13 +156,29 @@ TEST(VerificationSemantics, EffectsClaimCoveringBodyPasses)
 
 TEST(VerificationUow, AtomicCoverageMismatchIsHardError)
 {
+    // The member writes b.value through Cell::set, but the uow's atomic set
+    // only covers a.value (spec §10: the transaction members realize exactly
+    // the declared atomic set).
     const char* source = R"(
+        struct Cell {
+            i32 value;
+        }
+
+        impl Cell {
+            i32 set(i32 v) writes(self.value) {
+                this.value = v;
+                return this.value;
+            }
+        }
+
         uow Move {
             atomic: a.value
+        }
 
-            body {
-                b.value = b.value + 1;
-            }
+        void moveValue(Cell a, Cell b)
+            uow (Move)
+        {
+            b.set(1);
         }
 
         i32 main() {
@@ -180,10 +198,12 @@ TEST(VerificationUow, RetryAllowedWithExternalIoIsUnsafe)
 
         uow Replicate {
             retry: allowed
+        }
 
-            body {
-                printf("tick\n");
-            }
+        void tick()
+            uow (Replicate)
+        {
+            printf("tick\n");
         }
 
         i32 main() {
@@ -196,18 +216,22 @@ TEST(VerificationUow, RetryAllowedWithExternalIoIsUnsafe)
     EXPECT_EQ(result.returnCode, 1);
 }
 
-TEST(VerificationUow, ExternalIoInAfterCommitIsSafe)
+TEST(VerificationUow, ExternalIoInInlineAfterCommitIsSafe)
 {
+    // external_io inside the member's inline after_commit block sits outside
+    // the retry window — the same placement rules as a phase member, written
+    // inline (phase suffixes on the attachment are gone).
     const char* source = R"(
         import std::sys;
 
         uow Notify {
             strategy: database
             effects: external_io
+        }
 
-            body {
-            }
-
+        void done()
+            uow (Notify)
+        {
             after_commit {
                 printf("done\n");
             }
@@ -222,14 +246,48 @@ TEST(VerificationUow, ExternalIoInAfterCommitIsSafe)
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
+TEST(VerificationUow, WholeBodyPhaseAttachment)
+{
+    // `uow (Name.after_commit)` runs the entire body in that phase — the
+    // compact form of writing everything inside an inline after_commit block
+    // (external_io is fine there).
+    const char* source = R"(
+        import std::sys;
+
+        uow Notify {
+            strategy: database
+            effects: external_io
+        }
+
+        void done()
+            uow (Notify.after_commit)
+        {
+            printf("done\n");
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
 TEST(VerificationUow, AccessModeConflictIsHardError)
 {
     const char* source = R"(
+        struct Ledger {
+            i32 total;
+        }
+
         uow Dual {
             access: shared ledger, exclusive ledger
+        }
 
-            body {
-            }
+        void touch(Ledger ledger)
+            uow (Dual)
+        {
         }
 
         i32 main() {
@@ -245,18 +303,26 @@ TEST(VerificationUow, AccessModeConflictIsHardError)
 TEST(VerificationUow, OrderingConflictAcrossUowsIsHardError)
 {
     const char* source = R"(
+        struct Account {
+            i32 id;
+        }
+
         uow A {
             ordering: Account.id ascending
-
-            body {
-            }
         }
 
         uow B {
             ordering: Account.id descending
+        }
 
-            body {
-            }
+        void first(Account account)
+            uow (A)
+        {
+        }
+
+        void second(Account account)
+            uow (B)
+        {
         }
 
         i32 main() {
@@ -274,10 +340,27 @@ TEST(VerificationUow, UowEmitsNoCode)
     // The uow is a compile-time verification scope: the generated program is
     // identical to one without it.
     const char* source = R"(
-        uow Ghost {
-            body {
-                printf("never executed\n");
+        struct Box {
+            i32 value;
+        }
+
+        impl Box {
+            i32 set(i32 v) writes(self.value) {
+                this.value = v;
+                return this.value;
             }
+        }
+
+        uow Ghost {
+            writes: box.value
+            atomic: box.value
+            strategy: database
+        }
+
+        void doWork(Box box)
+            uow (Ghost)
+        {
+            box.set(3);
         }
 
         i32 main() {
@@ -288,7 +371,118 @@ TEST(VerificationUow, UowEmitsNoCode)
     const auto result = DjinnCompiler::run(source, report_options(true));
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, DJINN_EXIT(7));
-    EXPECT_EQ(result.verification.unitsOfWork.size(), 1);
+    ASSERT_EQ(result.verification.unitsOfWork.size(), 1);
+    EXPECT_EQ(result.verification.unitsOfWork[0].members.size(), 1);
+}
+
+TEST(VerificationUow, RemovedBodyBlockIsRejectedWithMigrationHint)
+{
+    // Lifecycle blocks moved onto functions: `uow (Name)` next to the
+    // member's body is the only way to implement a phase now.
+    const char* source = R"(
+        uow Old {
+            body {
+            }
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationUow, UnknownUowAttachmentIsHardError)
+{
+    const char* source = R"(
+        void stray()
+            uow (Nowhere)
+        {
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_UNKNOWN_UOW));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationUow, UowWithoutMembersWarnsButCompiles)
+{
+    const char* source = R"(
+        uow Lonely {
+            reads: box.value
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_UOW_NO_MEMBERS));
+    EXPECT_GE(warningCount(result), 1);
+    EXPECT_EQ(result.returnCode, 0);
+}
+
+TEST(VerificationUow, InheritedRequireInProveModeIsProvedOrRejected)
+{
+    // The uow's require is inherited by every member; in mode prove it must
+    // be decidable at compile time — a parameter comparison is not.
+    const char* source = R"(
+        uow Positive {
+            require(amount > 0) in mode prove
+        }
+
+        void work(i32 amount)
+            uow (Positive)
+        {
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_UNPROVABLE));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationUow, InheritedClauseOutsideMemberScopeIsAssumed)
+{
+    // `from` is not a parameter of `work`, so the clause cannot be inherited:
+    // it stays on the audit trail as an assumed obligation.
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        uow Mixed {
+            require(from.value > 0)
+        }
+
+        void work(i32 amount)
+            uow (Mixed)
+        {
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(errorCount(result), 0);
+    EXPECT_EQ(result.returnCode, 0);
+    const auto* require = find_obligation(result, "work", "require");
+    ASSERT_NE(require, nullptr);
+    EXPECT_EQ(require->status, djinn::verification::ObligationStatus::Assumed);
 }
 
 TEST(VerificationInvariants, InvariantProvenOnNaturalWriters)
@@ -447,4 +641,404 @@ TEST(VerificationModes, IgnoreDropsObligation)
     const auto result = DjinnCompiler::run(source, report_options());
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(find_obligation(result, "doc_only", "ensure"), nullptr);
+}
+
+TEST(VerificationModes, IgnoreEmitsNoRuntimeCheck)
+{
+    // Only `in mode check` reaches the binary (spec §5.2): the runtime
+    // violation below does not throw, and the program returns normally.
+    const char* source = R"(
+        i32 flaky(i32 x)
+            ensure(return < 100) in mode ignore
+        {
+            return x + 200;
+        }
+
+        i32 main() throws {
+            return flaky(0);
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options(true));
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(200));
+}
+
+//
+// Transactional uow surface (VERIFICATION-SPEC.md §10): the function-level
+// catch suffix, bare `rollback;` with whole-object entry snapshots, inline
+// before_commit/after_commit blocks, the lock statement as atomic-discharge
+// evidence, and the ContractViolation coverage rule.
+//
+
+TEST(VerificationTransactional, AtomicWithoutLockIsHardError)
+{
+    // Under no discharging strategy, every atomic path must be written inside
+    // a lock scope naming its root object (E-CONTRACT-053).
+    const char* source = R"(
+        struct Cell {
+            i32 value;
+        }
+
+        impl Cell {
+            i32 set(i32 v) writes(self.value) {
+                this.value = v;
+                return this.value;
+            }
+        }
+
+        uow Swap {
+            atomic: a.value
+        }
+
+        void moveValue(Cell a, Cell b)
+            uow (Swap)
+        {
+            a.set(1);
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_ATOMIC_NOT_DISCHARGED));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationTransactional, AtomicWithLockPasses)
+{
+    const char* source = R"(
+        struct Cell {
+            i32 value;
+        }
+
+        impl Cell {
+            i32 set(i32 v) writes(self.value) {
+                this.value = v;
+                return this.value;
+            }
+        }
+
+        uow Swap {
+            atomic: a.value
+        }
+
+        void moveValue(Cell a, Cell b)
+            uow (Swap)
+        {
+            lock (a) {
+                a.set(1);
+            }
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+TEST(VerificationTransactional, AwaitInsideLockIsRejected)
+{
+    const char* source = R"(
+        struct Cell {
+            i32 value;
+        }
+
+        async i32 fetch() {
+            return 1;
+        }
+
+        void work(Cell cell) {
+            lock (cell) {
+                await fetch();
+            }
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::AWAIT_INSIDE_LOCK));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationTransactional, RollbackCoverageIsRequired)
+{
+    // The member can fail mid-transaction (bump's check-mode require) and
+    // writes an atomic path; without any rollback statement the all-or-nothing
+    // property is unverified (E-CONTRACT-054).
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        impl Box {
+            i32 bump(i32 v)
+                require(v > 0)
+                writes(self.value)
+            {
+                this.value = v;
+                return this.value;
+            }
+        }
+
+        uow Move {
+            atomic: b.value
+        }
+
+        void move(Box b, i32 v)
+            uow (Move)
+        {
+            b.bump(v);
+        } catch (ContractViolation violation) {
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_ROLLBACK_INCOMPLETE));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationTransactional, BareRollbackCoversEverything)
+{
+    // A bare `rollback;` restores every struct parameter wholesale, so the
+    // atomic paths are covered without listing them.
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        impl Box {
+            i32 bump(i32 v)
+                require(v > 0)
+                writes(self.value)
+            {
+                this.value = v;
+                return this.value;
+            }
+        }
+
+        uow Move {
+            atomic: b.value
+        }
+
+        void move(Box b, i32 v)
+            uow (Move)
+        {
+            b.bump(v);
+        } catch (ContractViolation violation) {
+            rollback;
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+TEST(VerificationTransactional, ContractViolationMustBeCaught)
+{
+    // A uow member whose callee carries check-mode contracts must handle
+    // ContractViolation (or the clauses must be in mode prove).
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        struct DomainError : Exception;
+
+        impl Box {
+            i32 bump(i32 v)
+                require(v > 0)
+                writes(self.value)
+            {
+                this.value = v;
+                return this.value;
+            }
+        }
+
+        uow Move {
+            atomic: b.value
+        }
+
+        void move(Box b, i32 v)
+            uow (Move)
+        {
+            b.bump(v);
+        } catch (DomainError error) {
+            rollback;
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_VIOLATION_UNHANDLED));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationTransactional, CatchSuffixFreesCallerFromTry)
+{
+    // A member that handles its own errors is non-throwing for callers:
+    // main needs neither `throws` nor a try around the call.
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        impl Box {
+            i32 bump(i32 v)
+                require(v > 0)
+                writes(self.value)
+            {
+                this.value = v;
+                return this.value;
+            }
+        }
+
+        void work(Box b, i32 v) {
+            b.bump(v);
+        } catch (ContractViolation violation) {
+        }
+
+        i32 main() {
+            Box b = { 0 };
+            work(b, 0 - 5);
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, 0);
+}
+
+TEST(VerificationTransactional, InlineAfterCommitRunsOnlyOnSuccess)
+{
+    // The after_commit block runs after a successful body; a contract
+    // violation in the body aborts the uow and skips it (the catch handler
+    // runs instead, and main still returns normally).
+    const char* source = R"(
+        import std::sys;
+
+        i32 boom(i32 v)
+            require(v > 0)
+        {
+            return v;
+        }
+
+        uow Probe {
+        }
+
+        void go(i32 v)
+            uow (Probe)
+        {
+            boom(v);
+            after_commit {
+                boom(0);
+            }
+        } catch (ContractViolation violation) {
+        }
+
+        i32 main() {
+            go(0 - 1);
+            return 42;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options(true));
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(42));
+}
+
+TEST(VerificationTransactional, CommitSplitsTheTransactionWindow)
+{
+    // `commit;` ends the transaction: a non-idempotent effect before it sits
+    // in the retry window (9503) — the fix is moving it after the commit.
+    const char* source = R"(
+        import std::sys;
+
+        uow Probe {
+            retry: allowed
+        }
+
+        void work()
+            uow (Probe)
+        {
+            printf("before\n");
+            commit;
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_RETRY_UNSAFE_EFFECT));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationTransactional, CommitAllowsExternalIoAfterIt)
+{
+    const char* source = R"(
+        import std::sys;
+
+        uow Probe {
+            retry: allowed
+        }
+
+        void work()
+            uow (Probe)
+        {
+            commit;
+            printf("after\n");
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+TEST(VerificationTransactional, UowSectionsRequireColonSyntax)
+{
+    // The parenthesized section form is only valid on function signatures;
+    // inside a uow, sections are always `key: value`.
+    const char* source = R"(
+        struct Cell {
+            i32 value;
+        }
+
+        uow Swap {
+            atomic(a.value)
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_EQ(result.returnCode, 1);
+    EXPECT_EQ(errorCount(result), 1);
 }

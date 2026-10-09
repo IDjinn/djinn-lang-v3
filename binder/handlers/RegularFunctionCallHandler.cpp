@@ -36,7 +36,7 @@ namespace djinn::binder {
         if (!binder.check_compile_time_call(*funcSym, call))
         {
             // Calls to throwing functions require `try` (or a throwing caller to propagate)
-            binder.check_throwing_call(call.name.token_name, funcSym->isThrowing(), call.name.location);
+            binder.check_throwing_call(call.name.token_name, funcSym->effectivelyThrowing(), call.name.location);
         }
 
         const size_t expectedArgs = funcSym->callerArity();
@@ -60,8 +60,18 @@ namespace djinn::binder {
         }
 
         std::vector<std::shared_ptr<Symbol> > parameters;
+        size_t paramIdx = 0;
         for (const auto &arg: call.arguments) {
             parameters.emplace_back(binder.bindExpression(*arg));
+
+            // [Location]-attributed parameters are transparent to callers.
+            while (paramIdx < funcSym->paramTypes.size() &&
+                   funcSym->paramHasAttribute(paramIdx, "Location"))
+                paramIdx++;
+            if (paramIdx < funcSym->paramTypes.size())
+                check_uow_reference_param(*funcSym, paramIdx, *arg, parameters.back(),
+                                          scope, diagnostics);
+            paramIdx++;
         }
 
         return std::make_shared<FunctionCallSymbol>(

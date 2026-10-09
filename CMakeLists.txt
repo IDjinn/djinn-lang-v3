@@ -131,6 +131,8 @@ file(GLOB_RECURSE DJINN_HEADERS CONFIGURE_DEPENDS
 message(STATUS "LIBXML2_INCLUDE_DIR = ${LIBXML2_INCLUDE_DIR}")
 message(STATUS "LIBXML2_LIBRARY = ${LIBXML2_LIBRARY}")
 
+find_package(OpenMP REQUIRED)
+
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -190,6 +192,7 @@ if (LIBXML2_LIBRARY)
 endif ()
 target_link_libraries(djinn_lib PUBLIC ryml::ryml)
 target_link_libraries(djinn_lib PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(djinn_lib PRIVATE OpenMP::OpenMP_CXX)
 target_compile_features(djinn_lib PUBLIC cxx_std_23)
 
 # std::stacktrace requires the backtrace support library, shipped as a separate

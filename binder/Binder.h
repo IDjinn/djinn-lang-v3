@@ -118,6 +118,9 @@ private:
     bool currentFunctionThrowsAny_ = false;
     std::vector<Type> currentFunctionThrowsTypes_;
     bool insideTryExpression_ = false;
+
+    // >0 while binding inside a lock scope: await/spawn are rejected there.
+    int lockScopeDepth_ = 0;
     bool nativeExceptions_ = false;
     mutable int32_t nextErrorTag_ = djinn::errors::FirstUserErrorTag;
     bool _bindingStdLib = false;
@@ -248,6 +251,21 @@ private:
     // Error handling checks: enforce `try` on calls to throwing functions
     bool tryOperandSawThrowingCall_ = false;
     void check_throwing_call(const std::string& calleeName, bool calleeThrows, const SourceLocation& loc);
+
+    // Function-level catch suffix: does one arm of the suffix handle thrownType
+    // (directly or via the error hierarchy)? "Error"/"_" arms handle everything.
+    bool arm_covers_throw(const std::vector<const CatchClause*>& arms, bool catchesAllErrors,
+                          const std::string& thrownType) const;
+
+    // Effective verdict for a symbol with a catch suffix: true when a declared
+    // or contract throw survives the suffix (bare `throws` always survives).
+    bool throws_after_arms(const std::vector<const CatchClause*>& arms, bool catchesAllErrors,
+                           bool throwsAny, const std::vector<Type>& throwsTypes) const;
+
+    // Caught-type context while binding a function/method with a suffix: a
+    // `throw` of a caught type needs no throws-clause coverage.
+    std::vector<std::string> currentFunctionCaughtNames_;
+    bool currentFunctionCatchesAll_ = false;
 
     // Compile-time enforcement: a call whose outcome is provable (constexpr
     // callee that always throws, or a require clause violated by constant

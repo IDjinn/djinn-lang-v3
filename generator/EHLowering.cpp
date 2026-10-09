@@ -12,6 +12,8 @@
 #include "Generator.h"
 #include "../utils/Logger.h"
 
+#include "llvm/Support/TargetSelect.h"
+
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Target/TargetMachine.h"
@@ -23,6 +25,11 @@ void Generator::setup_target_triple()
 
     const llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
     module->setTargetTriple(triple);
+
+    // Only the JIT path bootstraps the native target otherwise; register it
+    // here so the AOT compile gets a real DataLayout instead of a warning.
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
 
     std::string error;
     const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple.str(), error);
@@ -106,13 +113,15 @@ llvm::Value* Generator::create_eh_catch_slot()
     return entry_builder.CreateAlloca(builder->getPtrTy(), nullptr, "eh.catch.obj");
 }
 
-void Generator::finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB)
+void Generator::finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB,
+                                        const std::function<void()>& extraCleanup)
 {
     if (landing.cleanupOnly)
     {
         builder->SetInsertPoint(landing.dispatchBB);
         auto* pad = builder->CreateCleanupPad(llvm::ConstantTokenNone::get(*context));
         emit_all_scope_cleanup();
+        if (extraCleanup) extraCleanup();
         builder->CreateCleanupRet(pad, nullptr);
         return;
     }

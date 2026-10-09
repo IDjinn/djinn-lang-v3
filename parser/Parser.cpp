@@ -442,6 +442,10 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     ContractSurface surface = parse_contract_surface();
     method->contracts = std::move(surface.clauses);
     method->sections = std::move(surface.sections);
+    method->hasUow = surface.hasUow;
+    method->uowName = std::move(surface.uowName);
+    method->uowLocation = surface.uowLocation;
+    method->uowPhase = surface.uowPhase;
 
     // Add parameters to scope before parsing body
     pushScope();
@@ -449,6 +453,9 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     {
         currentScope->define_variable(param.name.token_name, *param.type);
     }
+
+    const bool outerUowMember = in_uow_member_body_;
+    in_uow_member_body_ = surface.hasUow;
 
     // Parse body: { ... } or => expr;
     if (match(TokenType::ARROW))
@@ -461,12 +468,34 @@ std::unique_ptr<StructMethodDeclaration> Parser::parse_method(const bool allowBo
     {
         // Block body: { ... }
         method->body = parse_block();
+
+        // Function-level handler suffix: catch arms + optional finally.
+        if (check(TokenType::CATCH) || check(TokenType::FINALLY))
+        {
+            if (method->throwsAny || !method->throwsTypes.empty())
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "'" + method->name.token_name + "' declares 'throws' and a catch suffix; a "
+                                 "method that handles its own errors needs neither",
+                             SourceLocation(peek().position, peek().value.length()));
+            }
+            parse_function_suffix(method->catchArms, method->finallyBlock);
+        }
     }
     else
     {
         // Abstract method in struct (just declaration)
+        if (method->hasUow)
+        {
+            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "uow attachment requires a method body; '" + method->name.token_name +
+                             "' is abstract",
+                         method->uowLocation);
+        }
         expect("Esperado ';' após declaração do método", TokenType::SEMICOLON);
     }
+
+    in_uow_member_body_ = outerUowMember;
 
     popScope();
     LOG_DEBUG("[parser] method declared: '%s' with %zu params%s",
@@ -650,7 +679,7 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct()
             }
 
             // Entity invariant (VERIFICATION-SPEC.md §5.1): `invariant expr in mode ...;`
-            if (checkContextual("invariant"))
+            if (peek_uow_keyword() == UowKeyword::Invariant)
             {
                 advance(); // invariant
                 ContractClause invariant;
@@ -1070,7 +1099,7 @@ void Parser::parse_top_level_declarations(Program* program)
         {
             program->attributeDecls.push_back(parse_attribute_declaration());
         }
-        else if (checkContextual("uow"))
+        else if (peek_uow_keyword() == UowKeyword::Uow)
         {
             program->uows.push_back(parse_uow());
         }
@@ -1132,6 +1161,10 @@ void Parser::parse_constexpr_declaration(Program* program, std::vector<Attribute
         func->throwsTypes = std::move(throwsTypes);
         func->contracts = std::move(surface.clauses);
         func->sections = std::move(surface.sections);
+        func->hasUow = surface.hasUow;
+        func->uowName = std::move(surface.uowName);
+        func->uowLocation = surface.uowLocation;
+        func->uowPhase = surface.uowPhase;
         program->functions.push_back(std::move(func));
     }
     else if (isIntrinsic && check(TokenType::SEMICOLON))
@@ -1261,7 +1294,7 @@ std::unique_ptr<Program> Parser::parse(const std::string& program_name)
             {
                 program->attributeDecls.push_back(parse_attribute_declaration());
             }
-            else if (checkContextual("uow"))
+            else if (peek_uow_keyword() == UowKeyword::Uow)
             {
                 program->uows.push_back(parse_uow());
             }
@@ -1314,7 +1347,27 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
 
     ContractSurface surface = parse_contract_surface();
 
+    const bool outerUowMember = in_uow_member_body_;
+    in_uow_member_body_ = surface.hasUow;
+
     auto body = parse_block();
+
+    // Function-level handler suffix: catch arms + optional finally.
+    std::vector<CatchClause> catchArms;
+    std::unique_ptr<Block> finallyBlock;
+    if (check(TokenType::CATCH) || check(TokenType::FINALLY))
+    {
+        if (throwsAny || !throwsTypes.empty())
+        {
+            PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                         "'" + nameToken.value + "' declares 'throws' and a catch suffix; a function "
+                             "that handles its own errors needs neither",
+                         SourceLocation(peek().position, peek().value.length()));
+        }
+        parse_function_suffix(catchArms, finallyBlock);
+    }
+
+    in_uow_member_body_ = outerUowMember;
 
     popScope();
 
@@ -1323,8 +1376,14 @@ std::unique_ptr<FunctionDeclaration> Parser::parse_function_with_type(std::uniqu
                                                           params, std::move(body));
     funcDecl->throwsAny = throwsAny;
     funcDecl->throwsTypes = std::move(throwsTypes);
+    funcDecl->catchArms = std::move(catchArms);
+    funcDecl->finallyBlock = std::move(finallyBlock);
     funcDecl->contracts = std::move(surface.clauses);
     funcDecl->sections = std::move(surface.sections);
+    funcDecl->hasUow = surface.hasUow;
+    funcDecl->uowName = std::move(surface.uowName);
+    funcDecl->uowLocation = surface.uowLocation;
+    funcDecl->uowPhase = surface.uowPhase;
     return funcDecl;
 }
 
@@ -1369,6 +1428,17 @@ void Parser::parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes
             throwsAny = true;
         }
     }
+}
+
+// uow-surface keyword vocabulary; defined with the other keyword tables.
+std::optional<UowKeyword> uow_keyword_from_name(const std::string& name);
+std::optional<UowPhase> uow_phase_from_name(const std::string& name);
+
+std::optional<UowPhase> uow_phase_from_name(const std::string& name)
+{
+    if (name == uow_phase_name(UowPhase::BeforeCommit)) return UowPhase::BeforeCommit;
+    if (name == uow_phase_name(UowPhase::AfterCommit)) return UowPhase::AfterCommit;
+    return std::nullopt;
 }
 
 // Parses the contract area between a signature and its body: require/ensure
@@ -1428,6 +1498,47 @@ ContractSurface Parser::parse_contract_surface()
 
             parse_mode_clause(clause);
             surface.clauses.push_back(std::move(clause));
+            continue;
+        }
+
+        if (peek_uow_keyword() == UowKeyword::Uow)
+        {
+            const Token& kw = advance(); // uow
+            const SourceLocation kwLoc(kw.position.fileId, kw.position.line, kw.position.column,
+                                       static_cast<int>(kw.value.length()));
+            if (surface.hasUow)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'uow' attachment", kwLoc);
+            }
+            expect("Esperado '(' após 'uow'", TokenType::LPAREN);
+            const Token& nameToken = expect("Esperado nome do uow", TokenType::IDENTIFIER);
+            surface.hasUow = true;
+            surface.uowName = nameToken.value;
+            surface.uowLocation = SourceLocation(nameToken.position.fileId, nameToken.position.line,
+                                                 nameToken.position.column,
+                                                 static_cast<int>(nameToken.value.length()));
+            surface.uowPhase = UowPhase::Body;
+            if (match(TokenType::DOT))
+            {
+                // Whole-body phase: `uow (Name.after_commit)` runs the entire
+                // body in that lifecycle phase — the compact form of writing
+                // everything inside a matching inline block.
+                const Token& phaseToken =
+                    expect("Esperado fase do uow (before_commit ou after_commit)", TokenType::IDENTIFIER);
+                const auto phase = uow_phase_from_name(phaseToken.value);
+                if (!phase)
+                {
+                    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                                 "unknown uow phase '" + phaseToken.value + "' (expected " +
+                                     uow_phase_name(UowPhase::BeforeCommit) + " or " +
+                                     uow_phase_name(UowPhase::AfterCommit) + ")",
+                                 SourceLocation(phaseToken.position.fileId, phaseToken.position.line,
+                                                phaseToken.position.column,
+                                                static_cast<int>(phaseToken.value.length())));
+                }
+                surface.uowPhase = *phase;
+            }
+            expect("Esperado ')' após o nome do uow", TokenType::RPAREN);
             continue;
         }
 
@@ -1514,7 +1625,8 @@ bool Parser::check_semantic_section()
 {
     if (!check(TokenType::IDENTIFIER) || current + 1 >= tokens.size())
         return false;
-    if (tokens[current + 1].type != TokenType::COLON)
+    if (tokens[current + 1].type != TokenType::COLON &&
+        tokens[current + 1].type != TokenType::LPAREN)
         return false;
 
     return semantic_kind_from_name(peek().value).has_value();
@@ -1535,6 +1647,29 @@ std::optional<SemanticEffect> semantic_effect_from_name(const std::string& name)
     return std::nullopt;
 }
 
+std::optional<UowKeyword> uow_keyword_from_name(const std::string& name)
+{
+    static const std::pair<const char*, UowKeyword> keywords[] = {
+        {"uow", UowKeyword::Uow},
+        {"body", UowKeyword::Body},
+        {"before_commit", UowKeyword::BeforeCommit},
+        {"after_commit", UowKeyword::AfterCommit},
+        {"invariant", UowKeyword::Invariant},
+    };
+
+    for (const auto& [word, keyword] : keywords)
+    {
+        if (name == word) return keyword;
+    }
+    return std::nullopt;
+}
+
+std::optional<UowKeyword> Parser::peek_uow_keyword()
+{
+    if (!check(TokenType::IDENTIFIER)) return std::nullopt;
+    return uow_keyword_from_name(peek().value);
+}
+
 SemanticSection Parser::parse_semantic_section()
 {
     const Token& kindToken = advance(); // section kind
@@ -1542,7 +1677,13 @@ SemanticSection Parser::parse_semantic_section()
     section.kind = *semantic_kind_from_name(kindToken.value);
     section.location = SourceLocation(kindToken.position, kindToken.value.length());
 
-    expect("Esperado ':' após seção semântica", TokenType::COLON);
+    // Two surface forms: `kind: item, item` and `kind(item, item)`. The body
+    // grammar is identical; only the delimiter differs.
+    const bool parenthesized = match(TokenType::LPAREN);
+    if (!parenthesized)
+    {
+        expect("Esperado ':' após seção semântica", TokenType::COLON);
+    }
 
     const auto parse_path = [this](SemanticItem& item)
     {
@@ -1689,6 +1830,11 @@ SemanticSection Parser::parse_semantic_section()
     }
     }
 
+    if (parenthesized)
+    {
+        expect("Esperado ')' após seção semântica", TokenType::RPAREN);
+    }
+
     return section;
 }
 
@@ -1709,7 +1855,23 @@ std::unique_ptr<UowDeclaration> Parser::parse_uow()
     {
         if (check(TokenType::REQUIRE) || check(TokenType::ENSURE) || check_semantic_section())
         {
+            // Inside a uow, sections always use `key: value` — the
+            // parenthesized form is only valid on function signatures.
+            if (check_semantic_section() && tokens[current + 1].type == TokenType::LPAREN)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "uow sections use 'key: value' syntax; '" + peek().value +
+                                 "(...)' is only valid on function signatures",
+                             SourceLocation(peek().position, peek().value.length()));
+            }
             ContractSurface piece = parse_contract_surface();
+            if (piece.hasUow)
+            {
+                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                             "uow attachment is not allowed inside a uow declaration; "
+                             "attach functions to it with 'uow (Name)' next to their body",
+                             piece.uowLocation);
+            }
             for (auto& clause : piece.clauses)
                 decl->contracts.push_back(std::move(clause));
             for (auto& section : piece.sections)
@@ -1725,64 +1887,47 @@ std::unique_ptr<UowDeclaration> Parser::parse_uow()
             continue;
         }
 
-        if (checkContextual("invariant"))
+        if (const auto keyword = peek_uow_keyword())
         {
-            advance(); // invariant
-            ContractClause invariant;
-            invariant.kind = ContractClause::Kind::Invariant;
-            invariant.mode = ContractClause::Mode::Prove;
-            invariant.condition = parse_expression();
-            parse_mode_clause(invariant);
-            match(TokenType::SEMICOLON);
-            decl->invariants.push_back(std::move(invariant));
-            continue;
-        }
-
-        if (checkContextual("body"))
-        {
-            advance();
-            if (decl->body)
+            const Token& kw = peek();
+            const SourceLocation kwLoc(kw.position.fileId, kw.position.line, kw.position.column,
+                                       static_cast<int>(kw.value.length()));
+            switch (*keyword)
             {
-                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'body' block in uow",
-                             decl->name.location);
+                case UowKeyword::Invariant:
+                {
+                    advance(); // invariant
+                    ContractClause invariant;
+                    invariant.kind = ContractClause::Kind::Invariant;
+                    invariant.mode = ContractClause::Mode::Prove;
+                    invariant.condition = parse_expression();
+                    parse_mode_clause(invariant);
+                    match(TokenType::SEMICOLON);
+                    decl->invariants.push_back(std::move(invariant));
+                    continue;
+                }
+                case UowKeyword::Uow:
+                {
+                    decl->nested.push_back(parse_uow());
+                    continue;
+                }
+                case UowKeyword::Body:
+                case UowKeyword::BeforeCommit:
+                case UowKeyword::AfterCommit:
+                {
+                    PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                                 "'" + std::string(uow_keyword_name(*keyword)) +
+                                     "' blocks were removed from uow declarations; attach a member "
+                                     "with 'uow (" + decl->name.token_name + ")' and write the phase "
+                                     "inline in its body as '" +
+                                     std::string(uow_keyword_name(*keyword)) + " { ... }'",
+                                 kwLoc);
+                }
             }
-            decl->body = parse_block();
-            continue;
-        }
-
-        if (checkContextual("before_commit"))
-        {
-            advance();
-            if (decl->beforeCommit)
-            {
-                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'before_commit' block in uow",
-                             decl->name.location);
-            }
-            decl->beforeCommit = parse_block();
-            continue;
-        }
-
-        if (checkContextual("after_commit"))
-        {
-            advance();
-            if (decl->afterCommit)
-            {
-                PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN, "duplicate 'after_commit' block in uow",
-                             decl->name.location);
-            }
-            decl->afterCommit = parse_block();
-            continue;
-        }
-
-        if (checkContextual("uow"))
-        {
-            decl->nested.push_back(parse_uow());
-            continue;
         }
 
         PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
-                     "expected uow member (contract, section, invariant, body, "
-                     "before_commit, after_commit or nested uow)",
+                     "expected uow member (contract, section, invariant or nested uow)",
                      SourceLocation(peek().position.fileId, peek().position.line, peek().position.column, 1));
     }
 
@@ -1918,6 +2063,105 @@ std::unique_ptr<Statement> Parser::parse_statement()
         return stmt;
     }
 
+    // Inline uow lifecycle blocks — only inside a uow member body.
+    if (in_uow_member_body_)
+    {
+        if (checkContextual("commit") && current + 1 < tokens.size() &&
+            tokens[current + 1].type == TokenType::SEMICOLON)
+        {
+            const Token& kw = advance();
+            auto stmt = std::make_unique<CommitStatement>();
+            stmt->location = SourceLocation(kw.position, kw.value.length());
+            expect("Esperado ';' após commit", TokenType::SEMICOLON);
+            return stmt;
+        }
+
+        const auto keyword = peek_uow_keyword();
+        if ((keyword == UowKeyword::BeforeCommit || keyword == UowKeyword::AfterCommit) &&
+            current + 1 < tokens.size() && tokens[current + 1].type == TokenType::LBRACE)
+        {
+            const Token& kw = advance();
+            const auto phase = *keyword == UowKeyword::BeforeCommit ? UowPhase::BeforeCommit
+                                                                    : UowPhase::AfterCommit;
+            auto stmt = std::make_unique<UowPhaseBlockStatement>(phase, parse_block());
+            stmt->location = SourceLocation(kw.position, kw.value.length());
+            return stmt;
+        }
+
+        if (checkContextual("rollback") && in_catch_arm_ && current + 1 < tokens.size() &&
+            (tokens[current + 1].type == TokenType::SEMICOLON ||
+             tokens[current + 1].type == TokenType::LPAREN))
+        {
+            const Token& kw = advance();
+            auto stmt = std::make_unique<RollbackStatement>();
+            stmt->location = SourceLocation(kw.position, kw.value.length());
+            stmt->keywordLocation = stmt->location;
+            if (match(TokenType::LPAREN))
+            {
+                if (!check(TokenType::RPAREN))
+                {
+                    do
+                    {
+                        std::vector<std::string> path;
+                        path.push_back(expect("Esperado identificador", TokenType::IDENTIFIER).value);
+                        while (match(TokenType::DOT))
+                        {
+                            path.push_back(
+                                expect("Esperado identificador após '.'", TokenType::IDENTIFIER).value);
+                        }
+                        stmt->paths.push_back(std::move(path));
+                    }
+                    while (match(TokenType::COMMA));
+                }
+                expect("Esperado ')' após rollback", TokenType::RPAREN);
+            }
+            expect("Esperado ';' após rollback", TokenType::SEMICOLON);
+            return stmt;
+        }
+    }
+
+    // lock (a, b) { ... } — disambiguated from a call to something named
+    // 'lock' by the '{' after the balanced argument list.
+    if (checkContextual("lock") && current + 1 < tokens.size() &&
+        tokens[current + 1].type == TokenType::LPAREN)
+    {
+        int depth = 0;
+        bool found = false;
+        size_t close = 0;
+        for (size_t i = current + 1; i < tokens.size(); i++)
+        {
+            if (tokens[i].type == TokenType::LPAREN) depth++;
+            else if (tokens[i].type == TokenType::RPAREN)
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    close = i;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found && close + 1 < tokens.size() && tokens[close + 1].type == TokenType::LBRACE)
+        {
+            const Token& kw = advance(); // lock
+            auto stmt = std::make_unique<LockStatement>();
+            stmt->location = SourceLocation(kw.position, kw.value.length());
+            expect("Esperado '('", TokenType::LPAREN);
+            if (!check(TokenType::RPAREN))
+            {
+                do
+                {
+                    stmt->operands.push_back(parse_expression());
+                }
+                while (match(TokenType::COMMA));
+            }
+            expect("Esperado ')' após operandos do lock", TokenType::RPAREN);
+            stmt->body = parse_block();
+            return stmt;
+        }
+    }
+
     // Bare block: { ... }
     if (check(TokenType::LBRACE))
     {
@@ -1971,6 +2215,43 @@ std::unique_ptr<Statement> Parser::parse_statement()
     return std::make_unique<ExpressionStatement>(std::move(expr));
 }
 
+// One catch arm; the 'catch' token is already consumed.
+CatchClause Parser::parse_catch_clause()
+{
+    CatchClause clause;
+    clause.location = SourceLocation(previous().position, previous().value.length());
+
+    expect("Expected '(' after 'catch'", TokenType::LPAREN);
+    const Token& typeToken = expect("Expected error type in catch pattern", TokenType::IDENTIFIER);
+    clause.errorType = makeSourceIdentifier(typeToken);
+
+    if (check(TokenType::IDENTIFIER))
+    {
+        clause.binding = makeSourceIdentifier(advance());
+    }
+    expect("Expected ')' after catch pattern", TokenType::RPAREN);
+
+    const bool outerCatchArm = in_catch_arm_;
+    in_catch_arm_ = true;
+    clause.body = parse_block();
+    in_catch_arm_ = outerCatchArm;
+    return clause;
+}
+
+// Function-level handler suffix: `{ body } catch (T e) { ... } finally { ... }`.
+void Parser::parse_function_suffix(std::vector<CatchClause>& arms, std::unique_ptr<Block>& finallyBlock)
+{
+    while (check(TokenType::CATCH))
+    {
+        advance();
+        arms.push_back(parse_catch_clause());
+    }
+    if (match(TokenType::FINALLY))
+    {
+        finallyBlock = parse_block();
+    }
+}
+
 // try { ... } catch (ErrorType e | Error e | _) { ... } ... [finally { ... }]
 // The 'try' token is already consumed.
 std::unique_ptr<Statement> Parser::parse_try_catch_statement()
@@ -1983,21 +2264,7 @@ std::unique_ptr<Statement> Parser::parse_try_catch_statement()
 
     while (match(TokenType::CATCH))
     {
-        CatchClause clause;
-        clause.location = SourceLocation(previous().position, previous().value.length());
-
-        expect("Expected '(' after 'catch'", TokenType::LPAREN);
-        const Token& typeToken = expect("Expected error type in catch pattern", TokenType::IDENTIFIER);
-        clause.errorType = makeSourceIdentifier(typeToken);
-
-        if (check(TokenType::IDENTIFIER))
-        {
-            clause.binding = makeSourceIdentifier(advance());
-        }
-        expect("Expected ')' after catch pattern", TokenType::RPAREN);
-
-        clause.body = parse_block();
-        stmt->catches.push_back(std::move(clause));
+        stmt->catches.push_back(parse_catch_clause());
     }
 
     if (match(TokenType::FINALLY))
@@ -3278,7 +3545,14 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     const auto finalLocation = SourceLocation(peek().position, peek().value.length());
     // Optional contract clauses turn the extern into a spec-first stub: the
     // verifier checks them at every call site.
-    auto contracts = parse_contract_surface().clauses;
+    ContractSurface surface = parse_contract_surface();
+    if (surface.hasUow)
+    {
+        PARSER_ERROR(DiagnosticCode::UNEXPECTED_TOKEN,
+                     "uow attachment requires a function body; extern '" + nameToken.value +
+                         "' has none",
+                     surface.uowLocation);
+    }
     expect("Esperado ';'", TokenType::SEMICOLON);
 
     auto decl = std::make_unique<ExternFunctionDeclaration>();
@@ -3286,7 +3560,7 @@ std::unique_ptr<ExternFunctionDeclaration> Parser::parse_extern_function(const s
     decl->returnType = std::move(returnType);
     decl->parameters = std::move(parameters);
     decl->isVariadic = isVariadic;
-    decl->contracts = std::move(contracts);
+    decl->contracts = std::move(surface.clauses);
     decl->location = finalLocation - initialLocation;
     decl->abi = abi;
 

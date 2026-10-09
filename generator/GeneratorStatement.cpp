@@ -71,6 +71,7 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
                 const auto structName = structType->getName().str();
                 if (const auto structVal = generate_brace_init_for_struct(*braceInit, structType, structName))
                 {
+                    emit_deferred_uow_blocks();
                     emit_all_scope_cleanup();
                     builder->CreateRet(structVal);
                     return;
@@ -111,7 +112,9 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
             bool hasEnsure = false;
             for (const auto& contract : currentContracts_)
             {
-                if (contract && contract->isEnsure() && contract->condition) hasEnsure = true;
+                if (contract && contract->isEnsure() && contract->condition &&
+                    contract->mode == ContractClause::Mode::Check)
+                    hasEnsure = true;
             }
             if (hasEnsure)
             {
@@ -123,6 +126,9 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
             }
         }
 
+        // Deferred uow lifecycle blocks run after the ensure checks: a
+        // violated postcondition throws and skips them (the uow aborted).
+        emit_deferred_uow_blocks();
         emit_all_scope_cleanup();
         builder->CreateRet(val);
     }
@@ -133,6 +139,7 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
         {
             emit_contract_ensures();
         }
+        emit_deferred_uow_blocks();
         emit_all_scope_cleanup();
         builder->CreateRetVoid();
     }

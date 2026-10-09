@@ -5,6 +5,7 @@
 #ifndef DJINN_PARSER_H
 #define DJINN_PARSER_H
 
+#include <optional>
 #include <string>
 #include <vector>
 #include <memory>
@@ -99,6 +100,9 @@ private:
 
     bool checkContextual(const std::string& keyword);
 
+    // Current identifier token as a uow-surface keyword, if it is one.
+    std::optional<UowKeyword> peek_uow_keyword();
+
     std::unique_ptr<FunctionDeclaration> parse_function();
 
     std::unique_ptr<FunctionDeclaration> parse_function_with_type(std::unique_ptr<Type> returnType);
@@ -106,6 +110,13 @@ private:
     std::vector<Parameter> parse_parameters();
 
     void parse_throws_clause(bool& throwsAny, std::vector<Type>& throwsTypes);
+
+    // One `catch (Type [binding]) { ... }` arm; 'catch' is already consumed.
+    CatchClause parse_catch_clause();
+
+    // Function-level handler suffix after the body: catch arms + optional
+    // finally block. Handled types leave the function's effective throws set.
+    void parse_function_suffix(std::vector<CatchClause>& arms, std::unique_ptr<Block>& finallyBlock);
 
     // Contract area between a signature and a body: require/ensure clauses
     // with optional `in mode` clauses, plus semantic sections.
@@ -201,6 +212,14 @@ private:
     std::vector<Token> collect_macro_arg_tokens();
 
     void expand_interpolation_args(std::vector<std::unique_ptr<Expression>>& args);
+
+    // True while parsing the body (and handler suffix) of a function/method
+    // attached to a uow: gates the inline before_commit/after_commit and
+    // rollback statement surface.
+    bool in_uow_member_body_ = false;
+
+    // True while parsing a catch arm body: rollback is valid there.
+    bool in_catch_arm_ = false;
 };
 
 #endif //DJINN_PARSER_H

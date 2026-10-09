@@ -97,6 +97,7 @@ namespace DiagnosticCode
     constexpr uint32_t SWITCH_ARM_UNREACHABLE = 9008;
     constexpr uint32_t TRY_CATCH_REQUIRES_EXCEPTIONS = 9009;
     constexpr uint32_t CATCH_ARM_NOT_ERROR_TYPE = 9010;
+    constexpr uint32_t AWAIT_INSIDE_LOCK = 9011;
 
     // Contract verification (95xx) — emitted by the verification/ pass.
     // Stable string aliases (E-CONTRACT-*) live in the JSON diagnostic
@@ -112,6 +113,11 @@ namespace DiagnosticCode
     constexpr uint32_t E_CONTRACT_ILLEGAL_TRANSITION = 9509;           // E-CONTRACT-048
     constexpr uint32_t E_CONTRACT_REFINEMENT_VIOLATED = 9510;          // E-CONTRACT-049
     constexpr uint32_t E_CONTRACT_BASELINE_BREAK = 9511;               // E-CONTRACT-050
+    constexpr uint32_t E_CONTRACT_UNKNOWN_UOW = 9512;                  // E-CONTRACT-051
+    constexpr uint32_t E_CONTRACT_UOW_NO_MEMBERS = 9513;               // E-CONTRACT-052
+    constexpr uint32_t E_CONTRACT_ATOMIC_NOT_DISCHARGED = 9514;        // E-CONTRACT-053
+    constexpr uint32_t E_CONTRACT_ROLLBACK_INCOMPLETE = 9515;          // E-CONTRACT-054
+    constexpr uint32_t E_CONTRACT_VIOLATION_UNHANDLED = 9516;          // E-CONTRACT-055
 }
 
 struct SourceLocation

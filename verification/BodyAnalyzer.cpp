@@ -4,6 +4,7 @@
 
 #include "../binder/Symbol.h"
 #include "../parser/ast/Statement.h"
+#include "../parser/ast/Declaration.h"
 
 namespace djinn::verification
 {
@@ -50,27 +51,96 @@ namespace djinn::verification
             const std::vector<const ContractClause*>& _seeds;
             FactSet _facts;
             std::vector<ReturnPath> _returns;
+            // Enclosing `lock` scope roots (root object names, outermost first).
+            std::vector<std::string> _lock_roots;
+            // When non-null, lifecycle statements are folded into this phase
+            // semantics instead of the member's transaction-phase sets.
+            BodySemantics* _phase_target = nullptr;
+
+            // Behavior notes land in the phase target when one is open (inline
+            // before_commit/after_commit blocks are checked separately).
+            BodySemantics* semantics_target() const { return _phase_target ? _phase_target : _semantics; }
 
             void note_read(const Expression& object, const SourceIdentifier& field)
             {
-                if (!_semantics) return;
+                BodySemantics* semantics = semantics_target();
+                if (!semantics) return;
                 if (const auto* identifier = dynamic_cast<const Identifier*>(&object))
-                    _semantics->reads.insert(identifier->name() + "." + field.token_name);
+                {
+                    std::string path = identifier->name() + "." + field.token_name;
+                    semantics->reads.insert(path);
+                    semantics->read_sites.emplace(path, object.location);
+                }
             }
 
             void note_write(const Expression& object, const SourceIdentifier& field)
             {
-                if (!_semantics) return;
+                BodySemantics* semantics = semantics_target();
+                if (!semantics) return;
                 if (const auto* identifier = dynamic_cast<const Identifier*>(&object))
-                    _semantics->writes.insert(identifier->name() + "." + field.token_name);
+                {
+                    std::string path = identifier->name() + "." + field.token_name;
+                    semantics->writes.insert(path);
+                    semantics->write_sites.emplace(path, object.location);
+                    if (_lock_roots.empty())
+                    {
+                        semantics->unlocked_writes.insert(path);
+                    }
+                    else
+                    {
+                        auto& roots = semantics->write_lock_roots[path];
+                        roots.insert(_lock_roots.begin(), _lock_roots.end());
+                    }
+                }
+            }
+
+            // Leftmost identifier of an operand expression, used as the lock
+            // root name (the same operand convention the verifier matches on).
+            static std::string operand_root_name(const Expression& expression)
+            {
+                if (const auto* ident = dynamic_cast<const Identifier*>(&expression))
+                    return ident->name();
+                if (const auto* field = dynamic_cast<const FieldAccess*>(&expression))
+                    return operand_root_name(*field->object);
+                if (const auto* call = dynamic_cast<const FunctionCall*>(&expression))
+                {
+                    if (!call->receiver) return call->name.token_name;
+                    return operand_root_name(*call->receiver);
+                }
+                return "";
+            }
+
+            void note_call(const std::string& callee, const FunctionCall& call)
+            {
+                BodySemantics* semantics = semantics_target();
+                if (!semantics || callee.empty()) return;
+                if (std::ranges::find(semantics->calls, callee) == semantics->calls.end())
+                    semantics->calls.push_back(callee);
+                semantics->call_sites.emplace(callee, call.location);
+                semantics->call_nodes.push_back(&call);
+                if (_lock_roots.empty())
+                {
+                    semantics->unlocked_calls.insert(callee);
+                }
+                else
+                {
+                    auto& roots = semantics->call_lock_roots[callee];
+                    roots.insert(_lock_roots.begin(), _lock_roots.end());
+                }
             }
 
             bool walk_block(const Block& block)
             {
+                BodySemantics* savedPhase = _phase_target;
                 for (const auto& statement : block.statements)
                 {
-                    if (statement && walk_statement(*statement)) return true;
+                    if (statement && walk_statement(*statement))
+                    {
+                        _phase_target = savedPhase;
+                        return true;
+                    }
                 }
+                _phase_target = savedPhase;
                 return false;
             }
 
@@ -166,6 +236,61 @@ namespace djinn::verification
                 if (const auto* spawn = dynamic_cast<const SpawnStatement*>(&statement))
                 {
                     if (spawn->expression) walk_expression_calls(*spawn->expression);
+                    return false;
+                }
+
+                // Inline uow lifecycle block: its behavior is checked per
+                // phase, never against the member's transaction-phase claims.
+                if (const auto* phase_block = dynamic_cast<const UowPhaseBlockStatement*>(&statement))
+                {
+                    if (!_semantics || !phase_block->body) return walk_block(*phase_block->body);
+                    const int key = static_cast<int>(phase_block->phase);
+                    auto& slot = _semantics->phase_blocks[key];
+                    if (!slot) slot = std::make_shared<BodySemantics>();
+                    BodySemantics* outerTarget = _phase_target;
+                    _phase_target = slot.get();
+                    const bool terminated = walk_block(*phase_block->body);
+                    _phase_target = outerTarget;
+                    return terminated;
+                }
+
+                // `lock (a, b) { ... }`: the operands' roots name the objects
+                // held for everything the body reads/writes/calls.
+                if (const auto* lock = dynamic_cast<const LockStatement*>(&statement))
+                {
+                    std::vector<std::string> roots;
+                    for (const auto& operand : lock->operands)
+                    {
+                        if (!operand) continue;
+                        std::string root = operand_root_name(*operand);
+                        if (!root.empty()) roots.push_back(std::move(root));
+                    }
+                    for (const auto& root : roots) _lock_roots.push_back(root);
+                    const bool terminated = lock->body ? walk_block(*lock->body) : false;
+                    for (size_t i = 0; i < roots.size(); i++) _lock_roots.pop_back();
+                    return terminated;
+                }
+
+                // `commit;`: the transaction ends here — the rest of the block
+                // belongs to the member's after-commit window.
+                if (dynamic_cast<const CommitStatement*>(&statement))
+                {
+                    if (_semantics)
+                    {
+                        auto& slot = _semantics->phase_blocks[static_cast<int>(UowPhase::AfterCommit)];
+                        if (!slot) slot = std::make_shared<BodySemantics>();
+                        _phase_target = slot.get();
+                    }
+                    return false;
+                }
+
+                if (const auto* rollback = dynamic_cast<const RollbackStatement*>(&statement))
+                {
+                    if (_semantics)
+                    {
+                        for (const auto& path : rollback->paths)
+                            _semantics->rollback_paths.push_back(path);
+                    }
                     return false;
                 }
 
@@ -558,7 +683,9 @@ namespace djinn::verification
                 {
                     if (_on_call) _on_call(*call, _facts);
                     if (_semantics && !call->resolvedCalleeName.empty())
-                        _semantics->calls.push_back(call->resolvedCalleeName);
+                    {
+                        note_call(call->resolvedCalleeName, *call);
+                    }
                     for (const auto& argument : call->arguments)
                         walk_expression_calls(*argument);
                     if (call->receiver) walk_expression_calls(*call->receiver);

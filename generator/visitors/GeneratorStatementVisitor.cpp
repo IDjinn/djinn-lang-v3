@@ -82,4 +82,31 @@ namespace djinn
     {
         _generator.generate_try_catch_statement(stmt);
     }
+
+    void GeneratorStatementVisitor::visit(const UowPhaseBlockStatement& stmt)
+    {
+        if (stmt.phase == UowPhase::BeforeCommit)
+        {
+            _generator.deferredBeforeCommitBlocks_.push_back(stmt.body.get());
+        }
+        else
+        {
+            _generator.deferredAfterCommitBlocks_.push_back(stmt.body.get());
+        }
+    }
+
+    void GeneratorStatementVisitor::visit(const LockStatement& stmt)
+    {
+        _generator.generate_lock_statement(stmt);
+    }
+
+    void GeneratorStatementVisitor::visit(const RollbackStatement& stmt)
+    {
+        _generator.generate_rollback_statement(stmt);
+    }
+
+    void GeneratorStatementVisitor::visit(const CommitStatement&/*stmt*/)
+    {
+        // Handled by generate_member_body's split; a nested commit is a no-op.
+    }
 } // namespace djinn

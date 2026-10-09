@@ -173,12 +173,14 @@ namespace djinn::verification
             }
             const int64_t magnitude = coefficient < 0 ? -coefficient : coefficient;
             if (magnitude != 1) text += std::to_string(magnitude) + "*";
-            text += name;
+            // Ghost names ("#this.balance") are pre-state snapshots: render
+            // them in the source vocabulary.
+            text += name.starts_with('#') ? "old(" + name.substr(1) + ")" : name;
         }
         return text.empty() ? "0" : text;
     }
 
-    std::optional<Affine> translate_linear(const Expression& expr)
+    std::optional<Affine> translate_linear(const Expression& expr, const bool pre_state)
     {
         if (const auto* literal = dynamic_cast<const IntegerLiteral*>(&expr))
         {
@@ -195,26 +197,42 @@ namespace djinn::verification
         // `object.field` on a named object becomes a tracked variable
         // ("this.balance" / "from.balance") so entity invariants and field
         // writes stay decidable. Anything deeper stays outside the fragment.
+        // Under pre_state the name denotes the entry snapshot the walker
+        // preserves as a ghost ("#this.balance") across the field's first
+        // write.
         if (const auto* field_access = dynamic_cast<const FieldAccess*>(&expr))
         {
             if (const auto* object = dynamic_cast<const Identifier*>(field_access->object.get()))
-                return Affine::of_variable(object->name() + "." + field_access->fieldName.token_name);
+            {
+                const std::string path = object->name() + "." + field_access->fieldName.token_name;
+                return Affine::of_variable(pre_state ? "#" + path : path);
+            }
+            return std::nullopt;
+        }
+
+        // `old(expr)` in a claim selects the entry snapshot of its field
+        // paths; in pre-state contexts it is its own meaning already, so a
+        // nested old() stays outside the fragment.
+        if (const auto* call = dynamic_cast<const FunctionCall*>(&expr))
+        {
+            if (!pre_state && call->name.token_name == "old" && call->arguments.size() == 1)
+                return translate_linear(*call->arguments.front(), true);
             return std::nullopt;
         }
 
         if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
         {
             if (unary->op != TokenType::MINUS) return std::nullopt;
-            const auto operand = translate_linear(*unary->operand);
+            const auto operand = translate_linear(*unary->operand, pre_state);
             if (!operand) return std::nullopt;
             return operand->negated();
         }
 
         if (const auto* binary = dynamic_cast<const BinaryExpression*>(&expr))
         {
-            const auto left = translate_linear(*binary->left);
+            const auto left = translate_linear(*binary->left, pre_state);
             if (!left) return std::nullopt;
-            const auto right = translate_linear(*binary->right);
+            const auto right = translate_linear(*binary->right, pre_state);
             if (!right) return std::nullopt;
 
             switch (binary->op)
@@ -241,11 +259,12 @@ namespace djinn::verification
     {
         std::unique_ptr<Condition> comparison_condition(const TokenType op,
                                                         const Expression& left_expr,
-                                                        const Expression& right_expr)
+                                                        const Expression& right_expr,
+                                                        const bool pre_state)
         {
-            const auto left = translate_linear(left_expr);
+            const auto left = translate_linear(left_expr, pre_state);
             if (!left) return nullptr;
-            const auto right = translate_linear(right_expr);
+            const auto right = translate_linear(right_expr, pre_state);
             if (!right) return nullptr;
 
             auto condition = std::make_unique<Condition>();
@@ -257,7 +276,7 @@ namespace djinn::verification
         }
     }
 
-    std::unique_ptr<Condition> translate_condition(const Expression& expr)
+    std::unique_ptr<Condition> translate_condition(const Expression& expr, const bool pre_state)
     {
         if (const auto* literal = dynamic_cast<const BooleanLiteral*>(&expr))
         {
@@ -270,7 +289,7 @@ namespace djinn::verification
         if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
         {
             if (unary->op != TokenType::BANG) return nullptr;
-            auto child = translate_condition(*unary->operand);
+            auto child = translate_condition(*unary->operand, pre_state);
             if (!child) return nullptr;
             auto condition = std::make_unique<Condition>();
             condition->kind = Condition::Kind::Negation;
@@ -288,13 +307,13 @@ namespace djinn::verification
                 case TokenType::LESS_EQUAL:
                 case TokenType::GREATER:
                 case TokenType::GREATER_EQUAL:
-                    return comparison_condition(binary->op, *binary->left, *binary->right);
+                    return comparison_condition(binary->op, *binary->left, *binary->right, pre_state);
                 case TokenType::AND_AND:
                 case TokenType::OR_OR:
                     {
-                        auto lhs = translate_condition(*binary->left);
+                        auto lhs = translate_condition(*binary->left, pre_state);
                         if (!lhs) return nullptr;
-                        auto rhs = translate_condition(*binary->right);
+                        auto rhs = translate_condition(*binary->right, pre_state);
                         if (!rhs) return nullptr;
                         auto condition = std::make_unique<Condition>();
                         condition->kind = binary->op == TokenType::AND_AND

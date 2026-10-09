@@ -56,12 +56,20 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     currentFunction_ = qualifiedName;
 
     const auto funcSym = _global_scope->lookupFunction(qualifiedName);
-    currentFunctionThrows_ = funcSym ? funcSym->isThrowing() : false;
+    currentFunctionThrows_ = funcSym ? funcSym->effectivelyThrowing() : false;
     currentFunctionThrowsAny_ = funcSym ? funcSym->throwsAny : false;
     currentFunctionThrowsTypes_ = funcSym ? funcSym->throwsTypes : std::vector<Type>();
+    currentFunctionCatchesAll_ = funcSym ? funcSym->catchesAllErrors : false;
+    currentFunctionCaughtNames_.clear();
+    if (funcSym)
+    {
+        for (const auto* arm : funcSym->catchArms)
+            currentFunctionCaughtNames_.push_back(arm->errorType.token_name);
+    }
 
     pushScope();
 
+    size_t paramIdx = 0;
     for (const auto& param : func.parameters)
     {
         if (!isTypeDefined(*param.type) && param.type->kind == TypeKind::STRUCT)
@@ -70,11 +78,18 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
                          param.name.location);
         }
 
-        if (!_current_scope->defineParameter(param.name.token_name, *param.type, param.isMutable))
+        // Uow members bind reference parameters as pointers (matching the
+        // collected symbol) so field access auto-derefs like `this` does.
+        const Type paramType = funcSym && paramIdx < funcSym->paramTypes.size()
+                                   ? funcSym->paramTypes[paramIdx]
+                                   : *param.type;
+
+        if (!_current_scope->defineParameter(param.name.token_name, paramType, param.isMutable))
         {
             BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
                          "parameter '" + param.name.token_name + "' is already defined", param, param.name.location);
         }
+        paramIdx++;
     }
 
     if (!isTypeDefined(*func.returnType))
@@ -105,7 +120,48 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     // Get the body from the FunctionSymbol (ownership was transferred during collection)
     if (funcSym && funcSym->body)
     {
+        // A catch suffix turns the whole body into a checked scope: throwing
+        // calls are handled by the arms, not by the function's propagation.
+        const bool prevInsideTry = insideTryExpression_;
+        if (!funcSym->catchArms.empty()) insideTryExpression_ = true;
         bindBlock(*funcSym->body);
+        insideTryExpression_ = prevInsideTry;
+    }
+
+    // Handler suffix: catch arms (each its own scope with the binding) + finally.
+    if (funcSym)
+    {
+        for (const auto* arm : funcSym->catchArms)
+        {
+            const auto& armName = arm->errorType.token_name;
+            if (armName != "_" && armName != "Error")
+            {
+                const auto errStruct = _global_scope->lookupStruct(armName);
+                if (!errStruct || !errStruct->isErrorType)
+                {
+                    _diagnostics.emitAndPrint(Diagnostic(
+                        Severity::Error, DiagnosticCode::CATCH_ARM_NOT_ERROR_TYPE,
+                        "catch pattern must be an error type (deriving from 'Exception'), "
+                            "'Error' or '_', got '" + armName + "'",
+                        arm->location
+                    ));
+                }
+            }
+            pushScope();
+            if (arm->binding)
+            {
+                _current_scope->defineVariable(arm->binding->token_name,
+                                               Type::struct_type(arm->errorType.token_name), false);
+            }
+            bindBlock(*arm->body);
+            popScope();
+        }
+        if (funcSym->finallyBlock)
+        {
+            pushScope();
+            bindBlock(*funcSym->finallyBlock);
+            popScope();
+        }
     }
 
     popScope();
@@ -113,15 +169,30 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     currentFunctionThrows_ = false;
     currentFunctionThrowsAny_ = false;
     currentFunctionThrowsTypes_.clear();
+    currentFunctionCaughtNames_.clear();
+    currentFunctionCatchesAll_ = false;
 }
 
 void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration& struc)
 {
     currentFunction_ = struc.name.token_name + "::" + method.name.token_name;
     currentStructName_ = struc.name.token_name;
-    currentFunctionThrows_ = method.isThrowing();
+    std::vector<const CatchClause*> suffixArms;
+    bool catchesAll = false;
+    for (const auto& arm : method.catchArms)
+    {
+        suffixArms.push_back(&arm);
+        const auto& armName = arm.errorType.token_name;
+        if (armName == "Error" || armName == "_") catchesAll = true;
+    }
+    currentFunctionThrows_ = method.throwsAny ||
+        throws_after_arms(suffixArms, catchesAll, method.throwsAny, method.throwsTypes);
     currentFunctionThrowsAny_ = method.throwsAny;
     currentFunctionThrowsTypes_ = method.throwsTypes;
+    currentFunctionCatchesAll_ = catchesAll;
+    currentFunctionCaughtNames_.clear();
+    for (const auto& arm : method.catchArms)
+        currentFunctionCaughtNames_.push_back(arm.errorType.token_name);
 
     pushScope();
 
@@ -143,7 +214,12 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
                              param, param.name.location);
             }
         }
-        if (!_current_scope->defineParameter(param.name.token_name, *param.type, param.isMutable))
+        // Uow members bind reference parameters as pointers so field access
+        // auto-derefs like `this` does.
+        const Type paramType = !method.uowName.empty() && param.type->kind == TypeKind::STRUCT
+                                   ? Type::pointer(*param.type)
+                                   : *param.type;
+        if (!_current_scope->defineParameter(param.name.token_name, paramType, param.isMutable))
         {
             BINDER_ERROR(DiagnosticCode::DUPLICATE_DEFINITION,
                          "parameter '" + param.name.token_name + "' is already defined", param, param.name.location);
@@ -224,11 +300,48 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
 
     if (method.body)
     {
+        // A catch suffix turns the whole body into a checked scope.
+        const bool prevInsideTry = insideTryExpression_;
+        if (!method.catchArms.empty()) insideTryExpression_ = true;
         bindBlock(*method.body);
+        insideTryExpression_ = prevInsideTry;
     }
     else if (method.expression)
     {
         bindExpression(*method.expression);
+    }
+
+    // Handler suffix: catch arms (each its own scope with the binding) + finally.
+    for (const auto& arm : method.catchArms)
+    {
+        const auto& armName = arm.errorType.token_name;
+        if (armName != "_" && armName != "Error")
+        {
+            const auto errStruct = _global_scope->lookupStruct(armName);
+            if (!errStruct || !errStruct->isErrorType)
+            {
+                _diagnostics.emitAndPrint(Diagnostic(
+                    Severity::Error, DiagnosticCode::CATCH_ARM_NOT_ERROR_TYPE,
+                    "catch pattern must be an error type (deriving from 'Exception'), "
+                        "'Error' or '_', got '" + armName + "'",
+                    arm.location
+                ));
+            }
+        }
+        pushScope();
+        if (arm.binding)
+        {
+            _current_scope->defineVariable(arm.binding->token_name,
+                                           Type::struct_type(arm.errorType.token_name), false);
+        }
+        bindBlock(*arm.body);
+        popScope();
+    }
+    if (method.finallyBlock)
+    {
+        pushScope();
+        bindBlock(*method.finallyBlock);
+        popScope();
     }
 
     // Look up the method in the SPECIFIC struct, not across all structs in scope.
@@ -253,6 +366,8 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     currentFunctionThrows_ = false;
     currentFunctionThrowsAny_ = false;
     currentFunctionThrowsTypes_.clear();
+    currentFunctionCaughtNames_.clear();
+    currentFunctionCatchesAll_ = false;
 }
 
 void Binder::bind_contract_conditions(const std::vector<const ContractClause*>& contracts,

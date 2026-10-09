@@ -54,8 +54,10 @@ struct VerificationResult
 //   - `require` clauses at every call site, free or method (E-CONTRACT-007),
 //   - interprocedural postcondition propagation over call chains,
 //   - semantic sections (reads/writes/effects) against body inference
-//     (E-CONTRACT-011), uow static checks (atomic coverage, retry safety,
-//     effect placement, ordering conflicts — E-CONTRACT-042/043/045),
+//     (E-CONTRACT-011),
+//   - uows: functions attach with `uow (Name)` and are checked
+//     against the uow's claims — atomic coverage, retry safety, effect
+//     placement, ordering conflicts (E-CONTRACT-042/043/045),
 //   - entity invariants at method exits (E-CONTRACT-044),
 //   - obligation modes prove/assume/ignore (E-CONTRACT-046 on unprovable).
 //
@@ -109,16 +111,32 @@ private:
     void check_invariants(VerificationResult& result, const MethodSymbol& method,
                           const StructSymbol& strct, const djinn::verification::BodySummary& body);
 
-    // Static uow checks (§9/§10) plus the program-wide ordering graph (§7.3).
+    // One function/method attached to a uow via `uow (Name)`.
+    struct UowMember
+    {
+        const Symbol* key = nullptr;
+        const FunctionSymbol* function = nullptr; // null for methods
+        const MethodSymbol* method = nullptr; // null for free functions
+        UowPhase phase = UowPhase::Body;
+    };
+
+    // Static uow checks (§9/§10) over the member functions attached with
+    // `uow (Name)`, plus the program-wide ordering graph (§7.3).
     void verify_uow(VerificationResult& result, const UowDeclaration& uow,
+                    const std::map<const UowDeclaration*, std::vector<UowMember>>& members,
                     const std::shared_ptr<ScopedSymbolTable>& globalScope,
                     std::map<std::string, std::pair<std::string, bool>>& ordering_keys);
 
-    void apply_callee_to_uow(const FunctionCall& call,
-                             djinn::verification::BodySemantics& paths,
-                             std::set<SemanticEffect>& effects,
+    // Pulls a callee's inferred resource paths into a member's aggregate view,
+    // substituting plain-identifier arguments for the callee's parameters:
+    // `from.withdraw(amount)` contributing "self.balance" stays "self.balance",
+    // while `debit(from, amount)` contributing "acct.balance" becomes
+    // "from.balance".
+    void expand_callee_paths(const FunctionCall& call,
+                             djinn::verification::BodySemantics& aggregate,
                              const std::shared_ptr<ScopedSymbolTable>& globalScope,
-                             std::map<std::string, SourceLocation>* write_sites = nullptr) const;
+                             std::map<std::string, SourceLocation>* write_sites = nullptr,
+                             const std::set<std::string>* callLockRoots = nullptr) const;
 
     DiagnosticEngine& _diagnostics;
     VerificationMode _mode;

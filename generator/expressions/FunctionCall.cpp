@@ -460,6 +460,27 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     //     return generate_variadic_forward_call(expr);
     // }
 
+    // `old(path)` reads an entry snapshot captured at function entry
+    // (setup_contracts for checked claims, setup_body_old_snapshots for uses
+    // in member code — transaction bodies, catch/finally arms).
+    if (expr.name.token_name == "old" && expr.arguments.size() == 1 && !expr.receiver)
+    {
+        const std::string key = old_path_key(*expr.arguments.front());
+        if (key.empty())
+        {
+            GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
+                            "old() espera um caminho de campo (objeto.campo)",
+                            expr.name.location);
+        }
+        const auto snapshot = oldSnapshots_.find(key);
+        if (snapshot != oldSnapshots_.end())
+            return builder->CreateLoad(snapshot->second->getAllocatedType(),
+                                       snapshot->second, "old.load");
+        GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
+                        "old() não tem snapshot de entrada para '" + key + "'",
+                        expr.name.location);
+    }
+
     // Resolve short-name aliases (namespace / file namespace) to the qualified
     // name used as the functions-map key (e.g. "division" -> "test::division")
     std::string calleeName = expr.name.token_name;
@@ -500,7 +521,16 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
                                              ? funcType->getParamType(paramIdx)->isPointerTy()
                                              : false;
                 if (targetIsPtr)
-                    argVal = coerce_str_to_ptr(argVal);
+                {
+                    // Uow reference parameters take the address of a struct
+                    // lvalue; slice values (str/arr<T>) keep the data-pointer
+                    // coercion.
+                    auto* argStruct = llvm::dyn_cast<llvm::StructType>(argVal->getType());
+                    if (argStruct && !is_slice_struct(argStruct))
+                        argVal = generate_lvalue_address(*expr.arguments[userArgIdx]);
+                    else
+                        argVal = coerce_str_to_ptr(argVal);
+                }
                 if (paramIdx < funcType->getNumParams())
                 {
                     llvm::Type* expectedType = funcType->getParamType(paramIdx);
@@ -525,7 +555,14 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
                                          : funcType->isVarArg();
             if (targetIsPtr)
             {
-                argVal = coerce_str_to_ptr(argVal);
+                // Uow reference parameters take the address of a struct
+                // lvalue; slice values (str/arr<T>) keep the data-pointer
+                // coercion, and C varargs pass through untouched.
+                auto* argStruct = llvm::dyn_cast<llvm::StructType>(argVal->getType());
+                if (argIdx < funcType->getNumParams() && argStruct && !is_slice_struct(argStruct))
+                    argVal = generate_lvalue_address(*arg);
+                else
+                    argVal = coerce_str_to_ptr(argVal);
             }
 
             if (argIdx < funcType->getNumParams())
@@ -1092,7 +1129,14 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
                                          : funcType->isVarArg();
             if (targetIsPtr)
             {
-                argVal = coerce_str_to_ptr(argVal);
+                // Uow reference parameters take the address of a struct
+                // lvalue; slice values (str/arr<T>) keep the data-pointer
+                // coercion, and C varargs pass through untouched.
+                auto* argStruct = llvm::dyn_cast<llvm::StructType>(argVal->getType());
+                if (argIdx < funcType->getNumParams() && argStruct && !is_slice_struct(argStruct))
+                    argVal = generate_lvalue_address(*arg);
+                else
+                    argVal = coerce_str_to_ptr(argVal);
             }
 
             if (argIdx < funcType->getNumParams())

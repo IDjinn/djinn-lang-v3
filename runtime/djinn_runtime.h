@@ -429,6 +429,12 @@ void __djinn_mutex_unlock(djinn_mutex_t* mutex);
 int __djinn_mutex_trylock(djinn_mutex_t* mutex);
 void __djinn_mutex_destroy(djinn_mutex_t* mutex);
 
+// Object-level locking for `lock (expr) { ... }` scopes: a global address →
+// recursive-mutex table (lazy entries, guarded by a table mutex). Locks and
+// releases nest per object, matching the language's ordered acquisition.
+void __djinn_object_lock(void* object);
+void __djinn_object_unlock(void* object);
+
 
 int64_t __djinn_console_write(const char* str, void* coro);
 int64_t __djinn_console_error(const char* str, void* coro);

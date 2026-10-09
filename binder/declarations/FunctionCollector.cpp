@@ -9,6 +9,7 @@ void Binder::collectExternFunction(const ExternFunctionDeclaration& decl, const 
     const auto funcSym = std::make_shared<ExternFunctionSymbol>(decl.name.token_name, *decl.returnType);
     funcSym->isVariadic = decl.isVariadic;
     funcSym->abi = decl.abi;
+    funcSym->isFromLibrary = _bindingStdLib;
 
     for (const auto& contract : decl.contracts)
     {
@@ -46,6 +47,7 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
                                           ? decl.name.token_name
                                           : prefix + "::" + decl.name.token_name;
     const auto funcSym = std::make_shared<FunctionSymbol>(qualifiedName, *decl.returnType);
+    funcSym->isFromLibrary = _bindingStdLib;
     funcSym->isAsync = decl.isAsync;
     funcSym->constEval = decl.constEval;
     funcSym->constExpr = decl.constExpr;
@@ -59,6 +61,9 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
     {
         funcSym->sections.push_back(&section);
     }
+    funcSym->uowName = decl.uowName;
+    funcSym->uowLocation = decl.uowLocation;
+    funcSym->uowPhase = decl.uowPhase;
     // Contracts implicitly throw ContractViolation on violation
     if (!decl.contracts.empty() && !funcSym->throwsAny)
     {
@@ -71,6 +76,34 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
             funcSym->throwsTypes.push_back(contractViolation);
         }
     }
+
+    // Function-level handler suffix
+    for (const auto& arm : decl.catchArms)
+    {
+        funcSym->catchArms.push_back(&arm);
+        const auto& armName = arm.errorType.token_name;
+        if (armName == "Error" || armName == "_") funcSym->catchesAllErrors = true;
+    }
+    funcSym->finallyBlock = decl.finallyBlock.get();
+    if (!funcSym->catchArms.empty() || funcSym->finallyBlock)
+    {
+        if (funcSym->isAsync)
+        {
+            BINDER_ERROR(DiagnosticCode::INVALID_MODIFIERS,
+                         "function '" + decl.name.token_name + "' cannot combine 'async' with a "
+                             "catch suffix (deferred error travel across await is a later phase)",
+                         decl, decl.name.location);
+        }
+        if (!nativeExceptions_)
+        {
+            BINDER_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
+                         "a catch suffix requires the exceptions mode ('--exceptions' or "
+                             "compiler.exceptions in djinn.proj)",
+                         decl, decl.name.location);
+        }
+    }
+    funcSym->throwsAfterArms = throws_after_arms(funcSym->catchArms, funcSym->catchesAllErrors,
+                                                 funcSym->throwsAny, funcSym->throwsTypes);
 
     // function cannot be async and compile time constraint
     if (funcSym->isAsync && (funcSym->constEval || funcSym->constExpr))
@@ -86,7 +119,14 @@ void Binder::collectFunctionWithPrefix(FunctionDeclaration& decl, const std::str
         std::vector<AttributeSymbol> paramAttrs;
         for (const auto& attr : param.attributes)
             paramAttrs.emplace_back(attr.name.token_name, attr.args);
-        funcSym->addParameter(param.name.token_name, *param.type, false, std::move(paramAttrs));
+        // Uow members take struct parameters by reference (spec §5.1): the
+        // transaction's commit/rollback surface is only meaningful when the
+        // member mutates caller state, so struct params lower to pointers and
+        // auto-deref at every use site like `this` does.
+        Type paramType = !decl.uowName.empty() && param.type->kind == TypeKind::STRUCT
+                             ? Type::pointer(*param.type)
+                             : *param.type;
+        funcSym->addParameter(param.name.token_name, paramType, false, std::move(paramAttrs));
     }
 
     if (!_global_scope->defineFunction(funcSym))

@@ -501,9 +501,12 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
     }
 
     currentFunction = llvmFunc;
-    currentFunctionThrows = method.isThrowing();
+    currentFunctionThrows = method.effectivelyThrowing();
     currentContracts_.clear();
     contractReturnAlloca = nullptr;
+    rollbackSnapshots_.clear();
+    deferredBeforeCommitBlocks_.clear();
+    deferredAfterCommitBlocks_.clear();
 
     const bool isStatic = method.isStatic;
     llvm::Type* returnType = generate_type(method.returnType);
@@ -542,6 +545,11 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
         auto* alloca = builder->CreateAlloca(argIt->getType(), nullptr, paramName);
         builder->CreateStore(&*argIt, alloca);
         std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        if (paramStructType.empty() && paramType.kind == TypeKind::POINTER && paramType.elementType &&
+            paramType.elementType->kind == TypeKind::STRUCT)
+        {
+            paramStructType = paramType.elementType->structName;
+        }
         currentScope->define_variable(paramName, alloca, paramStructType);
         if (paramType.kind == TypeKind::INTEGER)
         {
@@ -557,11 +565,23 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
     // Contracts: require checks at entry + `return` binding for ensure clauses
     setup_contracts(method.contracts, llvmFunc);
 
+    // Entry snapshots for old() uses in member code (bodies, catch/finally)
+    setup_body_old_snapshots(method.body, method.catchArms, method.finallyBlock);
+
+    // Rollback snapshot slots (uow members whose catch arms declare rollback)
+    setup_rollback_snapshots(method.catchArms, method.paramNames, method.paramTypes, struc.name);
+
     if (method.body)
     {
-        for (const auto& stmt : method.body->statements)
+        if (!method.catchArms.empty() || method.finallyBlock)
         {
-            generate_statement(*stmt);
+            generate_guarded_region(method.location,
+                                    [&] { generate_member_body(*method.body); },
+                                    method.catchArms, method.finallyBlock);
+        }
+        else
+        {
+            generate_member_body(*method.body);
         }
     }
     else if (method.expressionBody)
@@ -582,6 +602,7 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 
     if (!builder->GetInsertBlock()->getTerminator())
     {
+        emit_deferred_uow_blocks();
         emit_scope_cleanup();
         if (method.isConstructor || returnType->isVoidTy())
         {

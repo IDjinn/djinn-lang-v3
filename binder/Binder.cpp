@@ -156,7 +156,9 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         {
             LOG_DEBUG("[binder] PRELUDE: collecting declarations for '%s' (structs=%zu, enums=%zu)",
                       program->name.c_str(), program->structs.size(), program->enums.size());
+            _bindingStdLib = true;
             collectDeclarations(*program);
+            _bindingStdLib = false;
 
             // Create short-name aliases for prelude types immediately
             const std::vector<std::pair<std::string, std::shared_ptr<Symbol>>> snapshot(
@@ -211,7 +213,9 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         LOG_DEBUG("[binder] collecting declarations: '%s' (ns='%s', structs=%zu, enums=%zu, functions=%zu)",
                   program->name.c_str(), program->fileNamespace.c_str(),
                   program->structs.size(), program->enums.size(), program->functions.size());
+        _bindingStdLib = program->fileNamespace.starts_with("std::");
         collectDeclarations(*program);
+        _bindingStdLib = false;
     }
 
     LOG_DEBUG("[binder] total symbols after collection: %zu", _global_scope->symbols().size());
@@ -348,6 +352,34 @@ bool Binder::is_error_derived_from(const std::string& structName, const std::str
         if (current == base) return true;
         if (!current->isErrorType || current->errorBase.empty()) return false;
         current = _global_scope->lookupStruct(current->errorBase);
+    }
+    return false;
+}
+
+bool Binder::arm_covers_throw(const std::vector<const CatchClause*>& arms, const bool catchesAllErrors,
+                              const std::string& thrownType) const
+{
+    if (catchesAllErrors) return true;
+    for (const auto* arm : arms)
+    {
+        if (!arm) continue;
+        const auto& name = arm->errorType.token_name;
+        if (name == "Error" || name == "_") return true;
+        if (name == thrownType) return true;
+        if (is_error_derived_from(thrownType, name)) return true;
+    }
+    return false;
+}
+
+bool Binder::throws_after_arms(const std::vector<const CatchClause*>& arms, const bool catchesAllErrors,
+                               const bool throwsAny, const std::vector<Type>& throwsTypes) const
+{
+    if (throwsAny) return true;
+    if (arms.empty()) return !throwsTypes.empty();
+    for (const auto& t : throwsTypes)
+    {
+        if (t.kind != TypeKind::STRUCT) return true;
+        if (!arm_covers_throw(arms, catchesAllErrors, t.structName)) return true;
     }
     return false;
 }

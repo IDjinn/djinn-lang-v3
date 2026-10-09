@@ -114,6 +114,9 @@ namespace djinn::verification
         std::string subject;
         RetryPolicy retry = RetryPolicy::Disabled;
         std::string strategy;
+        // Functions attached with `uow (Name)`, in subject spelling
+        // ("transferMoney", "Account::withdraw").
+        std::vector<std::string> members;
         ClaimSet claims;
         std::vector<Obligation> obligations;
         OrderingGraph ordering;

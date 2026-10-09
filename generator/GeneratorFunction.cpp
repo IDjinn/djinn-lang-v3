@@ -34,9 +34,13 @@ void Generator::forward_declare_function(const FunctionSymbol& func)
 
 void Generator::generate_function_body(const FunctionSymbol& func)
 {
-    currentFunctionThrows = func.isThrowing();
+    currentFunctionThrows = func.effectivelyThrowing();
     currentContracts_.clear();
     contractReturnAlloca = nullptr;
+    oldSnapshots_.clear();
+    rollbackSnapshots_.clear();
+    deferredBeforeCommitBlocks_.clear();
+    deferredAfterCommitBlocks_.clear();
 
     if (func.isAsync)
     {
@@ -65,6 +69,11 @@ void Generator::generate_function_body(const FunctionSymbol& func)
         auto* alloca = builder->CreateAlloca(arg.getType(), nullptr, paramName);
         builder->CreateStore(&arg, alloca);
         std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        if (structTypeName.empty() && paramType.kind == TypeKind::POINTER && paramType.elementType &&
+            paramType.elementType->kind == TypeKind::STRUCT)
+        {
+            structTypeName = paramType.elementType->structName;
+        }
         currentScope->define_variable(paramName, alloca, structTypeName);
         if (paramType.kind == TypeKind::INTEGER)
         {
@@ -78,16 +87,29 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     // Contracts: require checks at entry + `return` binding for ensure clauses
     setup_contracts(func.contracts, llvmFunc);
 
+    // Entry snapshots for old() uses in member code (bodies, catch/finally)
+    setup_body_old_snapshots(func.body.get(), func.catchArms, func.finallyBlock);
+
+    // Rollback snapshot slots (uow members whose catch arms declare rollback)
+    setup_rollback_snapshots(func.catchArms, func.paramNames, func.paramTypes, "");
+
     if (func.body)
     {
-        for (const auto& stmt : func.body->statements)
+        if (!func.catchArms.empty() || func.finallyBlock)
         {
-            generate_statement(*stmt);
+            generate_guarded_region(func.location,
+                                    [&] { generate_member_body(*func.body); },
+                                    func.catchArms, func.finallyBlock);
+        }
+        else
+        {
+            generate_member_body(*func.body);
         }
     }
 
     currentContracts_.clear();
     contractReturnAlloca = nullptr;
+    oldSnapshots_.clear();
 
     if (builder->GetInsertBlock()->getTerminator())
     {
@@ -97,6 +119,7 @@ void Generator::generate_function_body(const FunctionSymbol& func)
         return;
     }
 
+    emit_deferred_uow_blocks();
     emit_scope_cleanup();
 
     llvm::Type* returnType = llvmFunc->getReturnType();

@@ -21,6 +21,10 @@ struct YieldStatement;
 struct SpawnStatement;
 struct ThrowStatement;
 struct TryCatchStatement;
+struct UowPhaseBlockStatement;
+struct LockStatement;
+struct RollbackStatement;
+struct CommitStatement;
 
 namespace djinn
 {
@@ -58,6 +62,14 @@ namespace djinn
         virtual void visit(const ThrowStatement& stmt) = 0;
 
         virtual void visit(const TryCatchStatement& stmt) = 0;
+
+        virtual void visit(const UowPhaseBlockStatement& stmt) = 0;
+
+        virtual void visit(const LockStatement& stmt) = 0;
+
+        virtual void visit(const RollbackStatement& stmt) = 0;
+
+        virtual void visit(const CommitStatement& stmt) = 0;
     };
 } // namespace djinn
 

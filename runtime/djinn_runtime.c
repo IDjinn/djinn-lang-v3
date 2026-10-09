@@ -1667,6 +1667,16 @@ void __djinn_uncaught_error(const int tag, const char* type_name, const char* me
     abort();
 }
 
+// Object lock table mutex (`lock (expr) { ... }` scopes); the table itself
+// lives with the object-lock implementation further down. Declared before
+// __djinn_runtime_init, which primes it at startup.
+#ifdef _WIN32
+static CRITICAL_SECTION g_object_locks_mutex;
+static int g_object_locks_mutex_ready = 0;
+#else
+static pthread_mutex_t g_object_locks_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 void __djinn_runtime_init(int num_threads)
 {
     memset(&runtime, 0, sizeof(runtime));
@@ -1695,6 +1705,14 @@ void __djinn_runtime_init(int num_threads)
     InitializeCriticalSection(&runtime.socket_mutex);
 #else
     pthread_mutex_init(&runtime.socket_mutex, NULL);
+#endif
+
+    // Object lock table mutex (`lock (expr) { ... }` scopes)
+#ifdef _WIN32
+    InitializeCriticalSection(&g_object_locks_mutex);
+    g_object_locks_mutex_ready = 1;
+#else
+    pthread_mutex_init(&g_object_locks_mutex, NULL);
 #endif
 
     runtime.running = 1;
@@ -2522,6 +2540,94 @@ void __djinn_mutex_destroy(djinn_mutex_t* mutex)
     pthread_mutex_destroy(&mutex->mtx);
 #endif
     free(mutex);
+}
+
+// Object-level lock table: address → recursive mutex, created lazily on first
+// lock. The table itself is guarded; entries are never freed (bounded by the
+// set of objects a program locks).
+typedef struct djinn_object_lock_entry
+{
+    void* object;
+    djinn_mutex_t* mutex;
+    struct djinn_object_lock_entry* next;
+} djinn_object_lock_entry_t;
+
+static djinn_object_lock_entry_t* g_object_locks = NULL;
+
+#ifdef _WIN32
+static void object_locks_table_lock(void)
+{
+    // Programs that never call __djinn_runtime_init (contract-test harnesses)
+    // still get a usable table mutex.
+    while (!g_object_locks_mutex_ready)
+    {
+        InitializeCriticalSection(&g_object_locks_mutex);
+        g_object_locks_mutex_ready = 1;
+    }
+    EnterCriticalSection(&g_object_locks_mutex);
+}
+static void object_locks_table_unlock(void) { LeaveCriticalSection(&g_object_locks_mutex); }
+#else
+static void object_locks_table_lock(void) { pthread_mutex_lock(&g_object_locks_mutex); }
+static void object_locks_table_unlock(void) { pthread_mutex_unlock(&g_object_locks_mutex); }
+#endif
+
+static djinn_mutex_t* object_lock_for(void* object)
+{
+    djinn_mutex_t* found = NULL;
+    object_locks_table_lock();
+    for (djinn_object_lock_entry_t* e = g_object_locks; e; e = e->next)
+    {
+        if (e->object == object)
+        {
+            found = e->mutex;
+            break;
+        }
+    }
+    if (!found)
+    {
+        djinn_object_lock_entry_t* entry = (djinn_object_lock_entry_t*)malloc(sizeof(*entry));
+        if (entry)
+        {
+            entry->mutex = __djinn_mutex_create();
+            if (entry->mutex)
+            {
+#ifndef _WIN32
+                pthread_mutexattr_t attr;
+                pthread_mutexattr_init(&attr);
+                pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+                pthread_mutex_init(&entry->mutex->mtx, &attr);
+                pthread_mutexattr_destroy(&attr);
+#endif
+                entry->object = object;
+                entry->next = g_object_locks;
+                g_object_locks = entry;
+                found = entry->mutex;
+            }
+            else
+            {
+                free(entry);
+            }
+        }
+    }
+    object_locks_table_unlock();
+    return found;
+}
+
+void __djinn_object_lock(void* object)
+{
+    DJINN_ASSERT(object, "cannot lock a null object");
+    djinn_mutex_t* mutex = object_lock_for(object);
+    DJINN_ASSERT(mutex, "object lock table allocation failed");
+    __djinn_mutex_lock(mutex);
+}
+
+void __djinn_object_unlock(void* object)
+{
+    DJINN_ASSERT(object, "cannot unlock a null object");
+    djinn_mutex_t* mutex = object_lock_for(object);
+    DJINN_ASSERT(mutex, "unlock before lock");
+    __djinn_mutex_unlock(mutex);
 }
 
 int64_t __djinn_console_write(const char* str, void* coro)

@@ -67,10 +67,16 @@ namespace djinn::verification
     };
 
     // Translate an expression into the linear fragment; null = outside fragment.
-    [[nodiscard]] std::unique_ptr<Condition> translate_condition(const Expression& expr);
+    // Under pre_state (ensure/claim clauses), field paths name their entry
+    // snapshot ("this.balance" -> "#this.balance") and `old(e)` selects it;
+    // outside it, `old(e)` is transparent (requires evaluate in pre-state
+    // anyway) and field paths name the current value.
+    [[nodiscard]] std::unique_ptr<Condition> translate_condition(const Expression& expr,
+                                                                 bool pre_state = false);
 
     // Translate an integer-valued expression; nullopt = outside fragment.
-    [[nodiscard]] std::optional<Affine> translate_linear(const Expression& expr);
+    [[nodiscard]] std::optional<Affine> translate_linear(const Expression& expr,
+                                                         bool pre_state = false);
 
     [[nodiscard]] std::string condition_to_string(const Condition& condition);
 }

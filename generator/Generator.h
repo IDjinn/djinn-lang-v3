@@ -5,6 +5,8 @@
 #ifndef DJINN_GENERATOR_H
 #define DJINN_GENERATOR_H
 
+#include <functional>
+#include <map>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -372,6 +374,63 @@ private:
 
     void generate_try_catch_statement(const TryCatchStatement& stmt);
 
+    // Shared lowering for a body guarded by catch arms (+ optional finally):
+    // used by the try/catch statement and the function-level handler suffix.
+    void generate_guarded_region(const SourceLocation& loc,
+                                 const std::function<void()>& generateBody,
+                                 const std::vector<const CatchClause*>& arms,
+                                 const Block* finallyBlock);
+
+    // `lock (a, b) { ... }`: acquires each operand's object in listed order,
+    // releases in reverse on the normal path and during unwind (cleanup pad).
+    void generate_lock_statement(const LockStatement& stmt);
+
+    // `rollback;` / `rollback (a.b, c.d);`: restores entry snapshots. Slots
+    // exist only for functions whose catch arms list explicit rollback paths.
+    void generate_rollback_statement(const RollbackStatement& stmt);
+
+    // Dotted-path object address (root variable + field chain), shared by the
+    // rollback snapshot/restore paths. outType receives the value type.
+    llvm::Value* resolve_path_address(const std::vector<std::string>& path,
+                                      llvm::Type** outType = nullptr,
+                                      const SourceLocation& loc = {});
+
+    // Address of a lock operand: struct locals by alloca, pointer holders by
+    // load; anything else is spilled to a temporary.
+    llvm::Value* resolve_object_address(const Expression& expr);
+
+    // Snapshot allocas for a member whose catch arms contain rollback
+    // statements; called once at member entry, before the body. A bare
+    // `rollback;` snapshots every struct parameter plus self (whole objects);
+    // listed paths snapshot exactly those fields.
+    void setup_rollback_snapshots(const std::vector<const CatchClause*>& arms,
+                                  const std::vector<std::string>& paramNames,
+                                  const std::vector<Type>& paramTypes,
+                                  const std::string& selfStructName);
+
+    // Inline uow lifecycle blocks and the post-`commit;` tail, deferred to the
+    // member's normal exit: before_commit blocks run first, then after_commit
+    // blocks and commit-tail statements in source order; any unwind (throwing
+    // call without a suffix) skips them entirely.
+    void emit_deferred_uow_blocks();
+
+    // Member-body statement loop: splits at `commit;` — statements before it
+    // generate inline, statements after it join the after-commit deferral.
+    void generate_member_body(const Block& body);
+
+    void collect_rollback_paths(const Block& block, std::vector<std::vector<std::string>>& out) const;
+    std::vector<const Statement*> deferredBeforeCommitBlocks_;
+    std::vector<const Statement*> deferredAfterCommitBlocks_;
+
+    struct RollbackSnapshot
+    {
+        std::vector<std::string> path; // empty for whole-object snapshots
+        llvm::Value* address = nullptr; // stable entry value
+        llvm::Type* valueType = nullptr;
+        llvm::AllocaInst* slot = nullptr;
+    };
+    std::vector<RollbackSnapshot> rollbackSnapshots_;
+
     // ── Native exceptions (LLVM unwinding; --exceptions) ──
     //
     // Throwing calls become invokes; unwinding lands on the innermost active
@@ -400,7 +459,9 @@ private:
     llvm::Value* create_eh_catch_slot();
     // Fills the landing blocks: djinn/foreign pads catchret to handlerBB
     // (handlers re-read the thread-local error state, which the shim set).
-    void finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB);
+    // extraCleanup runs inside a cleanup-only pad before the cleanupret.
+    void finalize_native_landing(const NativeLanding& landing, llvm::BasicBlock* handlerBB,
+                                 const std::function<void()>& extraCleanup = {});
     llvm::CallBase* emit_call_or_invoke(llvm::Function* callee, const std::vector<llvm::Value*>& args,
                                         bool calleeCanThrow);
     // __djinn_throw(tag, message, type_name) + unreachable
@@ -469,10 +530,28 @@ private:
     // Contracts (require/ensure)
     std::vector<const ContractClause*> currentContracts_;
     llvm::AllocaInst* contractReturnAlloca = nullptr;
+    // Runtime `old(path)` support for checked ensures: each distinct field
+    // path is captured at function entry and read by the ensure's check.
+    std::map<std::string, llvm::AllocaInst*> oldSnapshots_;
     void setup_contracts(const std::vector<const ContractClause*>& contracts, llvm::Function* llvmFunc);
     void emit_contract_requirements();
     void emit_contract_ensures();
     void emit_non_zero_param_check(const std::string& paramName, const Type& paramType);
+    // "name.field" for the single-level field accesses old() accepts, empty
+    // otherwise; collect_old_paths gathers every old() operand in a claim.
+    [[nodiscard]] std::string old_path_key(const Expression& expr) const;
+    void collect_old_paths(const Expression& expr, std::vector<const Expression*>& out) const;
+    // Entry snapshots for `old()` uses in member code (transaction bodies,
+    // catch/finally arms): collected from the AST so post-commit reads still
+    // see entry values.
+    void setup_body_old_snapshots(const Block* body,
+                                  const std::vector<const CatchClause*>& catchArms,
+                                  const Block* finallyBlock);
+    void collect_old_paths_in_block(const Block& block, std::vector<const Expression*>& out) const;
+
+    // Address of a caller-side lvalue passed to a uow member's by-reference
+    // parameter (variables, field chains, pointer variables).
+    llvm::Value* generate_lvalue_address(const Expression& expr);
 
     // Non-zero analysis: true when the expression is known to never be zero
     // (non-zero literal, i32n-typed variable, cast to a non-zero type), used

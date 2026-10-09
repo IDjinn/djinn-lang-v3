@@ -406,16 +406,20 @@ void Generator::emit_div_by_zero_check(const TrapOperand& dividend, const TrapOp
 }
 
 // Set up contract state for the function being generated: binds the `return`
-// pseudo-variable for ensure clauses and emits require checks at entry.
+// pseudo-variable for ensure clauses and emits require checks at entry. Only
+// `in mode check` clauses reach the binary (spec §5.2) — assume/prove/ignore
+// are compile-time dispositions and emit nothing.
 void Generator::setup_contracts(const std::vector<const ContractClause*>& contracts, llvm::Function* llvmFunc)
 {
     currentContracts_ = contracts;
     contractReturnAlloca = nullptr;
+    oldSnapshots_.clear();
 
     bool hasEnsure = false;
     for (const auto& contract : contracts)
     {
-        if (contract && contract->isEnsure() && contract->condition)
+        if (contract && contract->isEnsure() && contract->condition &&
+            contract->mode == ContractClause::Mode::Check)
         {
             hasEnsure = true;
             break;
@@ -428,7 +432,243 @@ void Generator::setup_contracts(const std::vector<const ContractClause*>& contra
         currentScope->define_variable("return", contractReturnAlloca, "");
     }
 
+    // Runtime `old()`: every field path under old() in a checked claim is
+    // captured at entry; ensure checks read the snapshot at return time and
+    // requires read it at entry (where snapshot and current value coincide).
+    std::vector<const Expression*> oldPaths;
+    for (const auto& contract : contracts)
+    {
+        if (!contract || !contract->condition) continue;
+        if (contract->mode != ContractClause::Mode::Check) continue;
+        collect_old_paths(*contract->condition, oldPaths);
+    }
+    for (const auto* path : oldPaths)
+    {
+        auto* value = generate_expression(*path);
+        auto* snapshot = builder->CreateAlloca(value->getType(), nullptr, "__old");
+        builder->CreateStore(value, snapshot);
+        oldSnapshots_[old_path_key(*path)] = snapshot;
+    }
+
     emit_contract_requirements();
+}
+
+// "name.field" for the field paths old() accepts (plus the bare "name" form
+// for scalars), empty otherwise.
+std::string Generator::old_path_key(const Expression& expr) const
+{
+    if (const auto* ident = dynamic_cast<const Identifier*>(&expr))
+        return ident->identifier.token_name;
+    const auto* field = dynamic_cast<const FieldAccess*>(&expr);
+    if (!field) return "";
+    const auto* object = dynamic_cast<const Identifier*>(field->object.get());
+    if (!object) return "";
+    return object->name() + "." + field->fieldName.token_name;
+}
+
+void Generator::collect_old_paths(const Expression& expr, std::vector<const Expression*>& out) const
+{
+    if (const auto* call = dynamic_cast<const FunctionCall*>(&expr))
+    {
+        if (call->name.token_name == "old" && call->arguments.size() == 1 && !call->receiver)
+        {
+            if (!old_path_key(*call->arguments.front()).empty())
+                out.push_back(call->arguments.front().get());
+            return;
+        }
+        for (const auto& argument : call->arguments)
+            collect_old_paths(*argument, out);
+        if (call->receiver) collect_old_paths(*call->receiver, out);
+        return;
+    }
+    if (const auto* binary = dynamic_cast<const BinaryExpression*>(&expr))
+    {
+        collect_old_paths(*binary->left, out);
+        collect_old_paths(*binary->right, out);
+        return;
+    }
+    if (const auto* unary = dynamic_cast<const UnaryExpression*>(&expr))
+    {
+        collect_old_paths(*unary->operand, out);
+        return;
+    }
+    if (const auto* postfix = dynamic_cast<const PostfixExpression*>(&expr))
+    {
+        collect_old_paths(*postfix->operand, out);
+        return;
+    }
+    if (const auto* field = dynamic_cast<const FieldAccess*>(&expr))
+    {
+        collect_old_paths(*field->object, out);
+        return;
+    }
+    if (const auto* fieldAssign = dynamic_cast<const FieldAssignment*>(&expr))
+    {
+        collect_old_paths(*fieldAssign->object, out);
+        collect_old_paths(*fieldAssign->value, out);
+        return;
+    }
+    if (const auto* index = dynamic_cast<const IndexAccess*>(&expr))
+    {
+        collect_old_paths(*index->object, out);
+        collect_old_paths(*index->index, out);
+        return;
+    }
+    if (const auto* indexAssign = dynamic_cast<const IndexAssignment*>(&expr))
+    {
+        collect_old_paths(*indexAssign->object, out);
+        collect_old_paths(*indexAssign->index, out);
+        collect_old_paths(*indexAssign->value, out);
+        return;
+    }
+    if (const auto* init = dynamic_cast<const VariableInit*>(&expr))
+    {
+        collect_old_paths(*init->value, out);
+        return;
+    }
+    if (const auto* assign = dynamic_cast<const Assignment*>(&expr))
+    {
+        collect_old_paths(*assign->value, out);
+        return;
+    }
+    if (const auto* switchExpr = dynamic_cast<const SwitchExpression*>(&expr))
+    {
+        collect_old_paths(*switchExpr->value, out);
+        for (const auto& arm : switchExpr->arms)
+        {
+            if (arm.result) collect_old_paths(*arm.result, out);
+            if (arm.block) collect_old_paths_in_block(*arm.block, out);
+        }
+        return;
+    }
+    if (const auto* arrayLiteral = dynamic_cast<const ArrayLiteral*>(&expr))
+    {
+        for (const auto& element : arrayLiteral->elements)
+            collect_old_paths(*element, out);
+        return;
+    }
+}
+
+// Statement walk gathering old() uses from a whole member body so their
+// entry snapshots exist before any statement runs.
+void Generator::collect_old_paths_in_block(const Block& block, std::vector<const Expression*>& out) const
+{
+    for (const auto& stmt : block.statements)
+    {
+        if (!stmt) continue;
+        if (const auto* exprStmt = dynamic_cast<const ExpressionStatement*>(stmt.get()))
+        {
+            collect_old_paths(*exprStmt->expression, out);
+        }
+        else if (const auto* ret = dynamic_cast<const ReturnStatement*>(stmt.get()))
+        {
+            if (ret->value) collect_old_paths(*ret->value, out);
+        }
+        else if (dynamic_cast<const CommitStatement*>(stmt.get()) ||
+                 dynamic_cast<const RollbackStatement*>(stmt.get()) ||
+                 dynamic_cast<const BreakStatement*>(stmt.get()) ||
+                 dynamic_cast<const ContinueStatement*>(stmt.get()))
+        {
+            continue;
+        }
+        else if (const auto* nested = dynamic_cast<const Block*>(stmt.get()))
+        {
+            collect_old_paths_in_block(*nested, out);
+        }
+        else if (const auto* ifStmt = dynamic_cast<const IfStatement*>(stmt.get()))
+        {
+            if (ifStmt->condition) collect_old_paths(*ifStmt->condition, out);
+            if (ifStmt->thenBranch) collect_old_paths_in_block(*ifStmt->thenBranch, out);
+            if (ifStmt->elseBranch) collect_old_paths_in_block(*ifStmt->elseBranch, out);
+        }
+        else if (const auto* forStmt = dynamic_cast<const ForStatement*>(stmt.get()))
+        {
+            if (forStmt->initializer) collect_old_paths(*forStmt->initializer, out);
+            if (forStmt->condition) collect_old_paths(*forStmt->condition, out);
+            if (forStmt->postfix) collect_old_paths(*forStmt->postfix, out);
+            if (forStmt->body) collect_old_paths_in_block(*forStmt->body, out);
+        }
+        else if (const auto* rangeFor = dynamic_cast<const RangeForStatement*>(stmt.get()))
+        {
+            if (rangeFor->start) collect_old_paths(*rangeFor->start, out);
+            if (rangeFor->end) collect_old_paths(*rangeFor->end, out);
+            if (rangeFor->body) collect_old_paths_in_block(*rangeFor->body, out);
+        }
+        else if (const auto* whileStmt = dynamic_cast<const WhileStatement*>(stmt.get()))
+        {
+            if (whileStmt->condition) collect_old_paths(*whileStmt->condition, out);
+            if (whileStmt->body) collect_old_paths_in_block(*whileStmt->body, out);
+        }
+        else if (const auto* doWhile = dynamic_cast<const DoWhileStatement*>(stmt.get()))
+        {
+            if (doWhile->body) collect_old_paths_in_block(*doWhile->body, out);
+            if (doWhile->condition) collect_old_paths(*doWhile->condition, out);
+        }
+        else if (const auto* yield = dynamic_cast<const YieldStatement*>(stmt.get()))
+        {
+            if (yield->value) collect_old_paths(*yield->value, out);
+        }
+        else if (const auto* spawn = dynamic_cast<const SpawnStatement*>(stmt.get()))
+        {
+            if (spawn->expression) collect_old_paths(*spawn->expression, out);
+        }
+        else if (const auto* throwStmt = dynamic_cast<const ThrowStatement*>(stmt.get()))
+        {
+            if (throwStmt->expression) collect_old_paths(*throwStmt->expression, out);
+        }
+        else if (const auto* switchStmt = dynamic_cast<const SwitchStatement*>(stmt.get()))
+        {
+            if (switchStmt->value) collect_old_paths(*switchStmt->value, out);
+            for (const auto& caseStmt : switchStmt->cases)
+            {
+                if (caseStmt->expression) collect_old_paths(*caseStmt->expression, out);
+                if (caseStmt->body) collect_old_paths_in_block(*caseStmt->body, out);
+            }
+        }
+        else if (const auto* lock = dynamic_cast<const LockStatement*>(stmt.get()))
+        {
+            if (lock->body) collect_old_paths_in_block(*lock->body, out);
+        }
+        else if (const auto* tryCatch = dynamic_cast<const TryCatchStatement*>(stmt.get()))
+        {
+            if (tryCatch->tryBlock) collect_old_paths_in_block(*tryCatch->tryBlock, out);
+            for (const auto& clause : tryCatch->catches)
+            {
+                if (clause.body) collect_old_paths_in_block(*clause.body, out);
+            }
+            if (tryCatch->finallyBlock) collect_old_paths_in_block(*tryCatch->finallyBlock, out);
+        }
+        else if (const auto* phase = dynamic_cast<const UowPhaseBlockStatement*>(stmt.get()))
+        {
+            if (phase->body) collect_old_paths_in_block(*phase->body, out);
+        }
+    }
+}
+
+// `old()` in member code — transaction bodies (including after `commit;`) and
+// catch/finally arms — reads the same entry snapshots the checked claims use,
+// so pre-state stays observable for the whole member lifetime.
+void Generator::setup_body_old_snapshots(const Block* body,
+                                         const std::vector<const CatchClause*>& catchArms,
+                                         const Block* finallyBlock)
+{
+    std::vector<const Expression*> oldPaths;
+    if (body) collect_old_paths_in_block(*body, oldPaths);
+    for (const auto* arm : catchArms)
+    {
+        if (arm && arm->body) collect_old_paths_in_block(*arm->body, oldPaths);
+    }
+    if (finallyBlock) collect_old_paths_in_block(*finallyBlock, oldPaths);
+
+    for (const auto* path : oldPaths)
+    {
+        const std::string key = old_path_key(*path);
+        if (key.empty() || oldSnapshots_.contains(key)) continue;
+        auto* value = generate_expression(*path);
+        auto* snapshot = builder->CreateAlloca(value->getType(), nullptr, "__old");
+        builder->CreateStore(value, snapshot);
+        oldSnapshots_[key] = snapshot;
+    }
 }
 
 // Non-zero parameter entry check: the parameter type is an implicit
@@ -466,6 +706,7 @@ void Generator::emit_contract_requirements()
     for (const auto& contract : currentContracts_)
     {
         if (!contract || !contract->isRequire() || !contract->condition) continue;
+        if (contract->mode != ContractClause::Mode::Check) continue;
 
         if (const auto proven = non_zero_proven_identifier(*contract->condition);
             proven && currentScope->lookup_variable_non_zero(*proven).value_or(false))
@@ -502,6 +743,7 @@ void Generator::emit_contract_ensures()
     for (const auto& contract : currentContracts_)
     {
         if (!contract || !contract->isEnsure() || !contract->condition) continue;
+        if (contract->mode != ContractClause::Mode::Check) continue;
 
         auto* condVal = generate_expression(*contract->condition);
         if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(condVal))
@@ -568,46 +810,47 @@ void Generator::emit_error_throw_with_tag(const int32_t tag, const SourceLocatio
     emit_error_return_path();
 }
 
-// Block-form try/catch/finally (native mode only). The try body runs with a
-// landing whose pads catchret to a normal dispatch block, so handler bodies,
-// return/break/continue and nested tries all behave like ordinary code; the
-// arms match by error tag exactly like outcome-switch arms, and unmatched
-// errors re-throw. `finally` runs inline on every non-unwinding path and once
-// more before a re-throw.
-void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
+// Shared guarded-region lowering: a body running under one landing, catch
+// arms matched by error tag in source order, optional finally on every
+// non-unwinding path plus once before a re-throw. Used by the try/catch
+// statement and the function-level handler suffix.
+void Generator::generate_guarded_region(const SourceLocation& loc,
+                                        const std::function<void()>& generateBody,
+                                        const std::vector<const CatchClause*>& arms,
+                                        const Block* finallyBlock)
 {
     if (!nativeExceptions)
     {
         GENERATOR_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
-                        "block-form try/catch requires the exceptions mode ('--exceptions')",
-                        stmt.location);
+                        "catch handlers require the exceptions mode ('--exceptions')",
+                        loc);
     }
     if (!eh_is_msvc_target())
     {
         GENERATOR_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
                         "native exceptions are not supported on this target yet",
-                        stmt.location);
+                        loc);
     }
 
     push_scope();
 
     auto* func = builder->GetInsertBlock()->getParent();
-    auto* dispatchBB = llvm::BasicBlock::Create(*context, "trycatch.dispatch", func);
-    auto* contBB = llvm::BasicBlock::Create(*context, "trycatch.cont", func);
-    auto* rethrowBB = llvm::BasicBlock::Create(*context, "trycatch.rethrow", func);
-    auto* finallyBB = stmt.finallyBlock
-                          ? llvm::BasicBlock::Create(*context, "trycatch.finally", func)
+    auto* dispatchBB = llvm::BasicBlock::Create(*context, "guard.dispatch", func);
+    auto* contBB = llvm::BasicBlock::Create(*context, "guard.cont", func);
+    auto* rethrowBB = llvm::BasicBlock::Create(*context, "guard.rethrow", func);
+    auto* finallyBB = finallyBlock
+                          ? llvm::BasicBlock::Create(*context, "guard.finally", func)
                           : contBB;
 
     const auto landing = push_native_landing(false);
 
     const bool prevInsideTry = insideTryOperand_;
     insideTryOperand_ = true;
-    generate_block(*stmt.tryBlock);
+    generateBody();
     insideTryOperand_ = prevInsideTry;
     ehLandingStack_.pop_back();
 
-    // Normal completion of the try body skips the dispatch entirely — the
+    // Normal completion of the guarded body skips the dispatch entirely — the
     // dispatcher is only for unwinding pads, and dispatching an unset error
     // flag would rethrow garbage
     if (!builder->GetInsertBlock()->getTerminator())
@@ -618,23 +861,23 @@ void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
     // Arms match by tag in source order (specific types match derived errors
     // too; Error/_ catch everything) — same semantics as outcome-switch arms
     builder->SetInsertPoint(dispatchBB);
-    auto* thrownTag = errno_load_i32(1, "trycatch.tag");
+    auto* thrownTag = errno_load_i32(1, "guard.tag");
 
-    for (size_t i = 0; i < stmt.catches.size(); ++i)
+    for (size_t i = 0; i < arms.size(); ++i)
     {
-        const auto& clause = stmt.catches[i];
-        auto* armBB = llvm::BasicBlock::Create(*context, "trycatch.arm." + clause.errorType.token_name, func);
-        llvm::BasicBlock* nextArmBB = i + 1 < stmt.catches.size()
-                                          ? llvm::BasicBlock::Create(*context, "trycatch.next", func)
+        const auto* clause = arms[i];
+        auto* armBB = llvm::BasicBlock::Create(*context, "guard.arm." + clause->errorType.token_name, func);
+        llvm::BasicBlock* nextArmBB = i + 1 < arms.size()
+                                          ? llvm::BasicBlock::Create(*context, "guard.next", func)
                                           : rethrowBB;
 
-        const auto errSym = resolve_error_struct(clause.errorType.token_name);
+        const auto errSym = resolve_error_struct(clause->errorType.token_name);
         if (errSym)
         {
             llvm::Value* matched = nullptr;
             for (const int32_t tag : djinn::error_arm_matched_tags(*symbols, *errSym))
             {
-                auto* cmp = builder->CreateICmpEQ(thrownTag, builder->getInt32(tag), "trycatch.cmp");
+                auto* cmp = builder->CreateICmpEQ(thrownTag, builder->getInt32(tag), "guard.cmp");
                 matched = matched ? builder->CreateOr(matched, cmp) : cmp;
             }
             builder->CreateCondBr(matched, armBB, nextArmBB);
@@ -649,19 +892,19 @@ void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
         errno_clear_flag();
 
         push_scope();
-        if (clause.binding)
+        if (clause->binding)
         {
             auto* errType = djinn_error_value_type(*context, *builder);
-            auto* errAlloca = builder->CreateAlloca(errType, nullptr, clause.binding->token_name);
+            auto* errAlloca = builder->CreateAlloca(errType, nullptr, clause->binding->token_name);
             builder->CreateStore(thrownTag,
                                  builder->CreateStructGEP(errType, errAlloca, 0, "bind.tag"));
             builder->CreateStore(errno_load_ptr(2, "bind.msg"),
                                  builder->CreateStructGEP(errType, errAlloca, 1, "bind.msg.ptr"));
             builder->CreateStore(errno_load_ptr(3, "bind.type"),
                                  builder->CreateStructGEP(errType, errAlloca, 2, "bind.type.ptr"));
-            currentScope->define_variable(clause.binding->token_name, errAlloca);
+            currentScope->define_variable(clause->binding->token_name, errAlloca);
         }
-        generate_block(*clause.body);
+        generate_block(*clause->body);
         pop_scope();
 
         if (!builder->GetInsertBlock()->getTerminator())
@@ -669,24 +912,24 @@ void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
             builder->CreateBr(finallyBB);
         }
 
-        if (i + 1 < stmt.catches.size())
+        if (i + 1 < arms.size())
         {
             builder->SetInsertPoint(nextArmBB);
         }
     }
 
-    // No arm matched (or no catch arms at all — finally-only try): run
+    // No arm matched (or no catch arms at all — finally-only guard): run
     // finally once more, then re-throw
-    if (stmt.catches.empty())
+    if (arms.empty())
     {
         builder->SetInsertPoint(dispatchBB);
         builder->CreateBr(rethrowBB);
     }
     builder->SetInsertPoint(rethrowBB);
-    if (stmt.finallyBlock)
+    if (finallyBlock)
     {
         push_scope();
-        generate_block(*stmt.finallyBlock);
+        generate_block(*finallyBlock);
         pop_scope();
     }
     ensure_error_globals_declared();
@@ -694,11 +937,11 @@ void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
                       errno_load_ptr(2, "rethrow.msg"),
                       errno_load_ptr(3, "rethrow.type"));
 
-    if (stmt.finallyBlock)
+    if (finallyBlock)
     {
         builder->SetInsertPoint(finallyBB);
         push_scope();
-        generate_block(*stmt.finallyBlock);
+        generate_block(*finallyBlock);
         pop_scope();
         if (!builder->GetInsertBlock()->getTerminator())
         {
@@ -711,6 +954,22 @@ void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
 
     builder->SetInsertPoint(contBB);
     pop_scope();
+}
+
+// Block-form try/catch/finally (native mode only). The try body runs with a
+// landing whose pads catchret to a normal dispatch block, so handler bodies,
+// return/break/continue and nested tries all behave like ordinary code.
+void Generator::generate_try_catch_statement(const TryCatchStatement& stmt)
+{
+    std::vector<const CatchClause*> arms;
+    for (const auto& clause : stmt.catches)
+    {
+        arms.push_back(&clause);
+    }
+
+    generate_guarded_region(stmt.location,
+                            [&] { generate_block(*stmt.tryBlock); },
+                            arms, stmt.finallyBlock.get());
 }
 
 // After a child coroutine completes: transfers its promise error slot (the

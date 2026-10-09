@@ -16,8 +16,8 @@ namespace djinn::binder
     std::shared_ptr<Symbol> MethodCallHandler::handle(
         const FunctionCall& call,
         Binder& binder,
-        std::shared_ptr<ScopedSymbolTable> /*scope*/,
-        DiagnosticEngine& /*diagnostics*/)
+        std::shared_ptr<ScopedSymbolTable> scope,
+        DiagnosticEngine& diagnostics)
     {
         const auto receiver = binder.bindExpression(*call.receiver);
         if (!receiver) return nullptr;
@@ -72,13 +72,26 @@ namespace djinn::binder
         // Calls to throwing methods require `try` (or a throwing caller to propagate)
         if (const auto method = std::dynamic_pointer_cast<MethodSymbol>(methodSym))
         {
-            binder.check_throwing_call(call.name.token_name, method->isThrowing(), call.name.location);
+            binder.check_throwing_call(call.name.token_name, method->effectivelyThrowing(), call.name.location);
             // Record the resolved method so the verification pass can check
             // this call site against the method's contracts.
             if (!method->structName.empty())
             {
                 call.resolvedCalleeName = method->name;
                 call.resolvedCalleeStruct = method->structName;
+            }
+
+            // Uow reference parameters need a mutable struct variable argument.
+            size_t paramIdx = 0;
+            for (size_t argIdx = 0; argIdx < call.arguments.size() && argIdx < parameters.size(); argIdx++)
+            {
+                while (paramIdx < method->paramTypes.size() &&
+                       method->paramHasAttribute(paramIdx, "Location"))
+                    paramIdx++;
+                if (paramIdx < method->paramTypes.size())
+                    check_uow_reference_param(*method, paramIdx, *call.arguments[argIdx],
+                                              parameters[argIdx], scope, diagnostics);
+                paramIdx++;
             }
         }
 

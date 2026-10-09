@@ -469,17 +469,20 @@ namespace djinn::verification
                 }
             }
 
-            if (scaled.lo)
+            // Interval addition: a missing (unbounded) side absorbs any
+            // finite contribution — treating it as 0 here once produced
+            // unsound bounds like balance - amount <= -1.
+            if (scaled.lo && total.lo)
             {
                 int64_t merged = 0;
-                if (!checked_add(total.lo.value_or(0), *scaled.lo, merged)) return std::nullopt;
+                if (!checked_add(*total.lo, *scaled.lo, merged)) return std::nullopt;
                 total.lo = merged;
             }
             else total.lo = std::nullopt;
-            if (scaled.hi)
+            if (scaled.hi && total.hi)
             {
                 int64_t merged = 0;
-                if (!checked_add(total.hi.value_or(0), *scaled.hi, merged)) return std::nullopt;
+                if (!checked_add(*total.hi, *scaled.hi, merged)) return std::nullopt;
                 total.hi = merged;
             }
             else total.hi = std::nullopt;

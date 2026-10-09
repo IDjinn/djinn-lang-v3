@@ -275,6 +275,64 @@ inline const char* semantic_effect_name(const SemanticEffect effect)
     return "?";
 }
 
+// Transaction phase a function attaches to inside a uow (spec §5.1). Bare
+// attachment is the body phase; the suffixes select the lifecycle hooks.
+enum class UowPhase
+{
+    Body,
+    BeforeCommit,
+    AfterCommit,
+};
+
+inline const char* uow_phase_suffix(const UowPhase phase)
+{
+    switch (phase)
+    {
+        case UowPhase::BeforeCommit: return ".before_commit";
+        case UowPhase::AfterCommit: return ".after_commit";
+        case UowPhase::Body: return "";
+    }
+    return "";
+}
+
+inline const char* uow_phase_name(const UowPhase phase)
+{
+    switch (phase)
+    {
+        case UowPhase::BeforeCommit: return "before_commit";
+        case UowPhase::AfterCommit: return "after_commit";
+        case UowPhase::Body: return "body";
+    }
+    return "?";
+}
+
+// Contextual keywords of the uow surface (VERIFICATION-SPEC.md §5.1): the
+// declaration intro, the lifecycle blocks, and the invariant clause shared
+// with structs. The lexer only produces plain identifiers; the parser maps
+// each word to this closed set so keyword handling never compares raw
+// strings.
+enum class UowKeyword
+{
+    Uow,
+    Body,
+    BeforeCommit,
+    AfterCommit,
+    Invariant,
+};
+
+inline const char* uow_keyword_name(const UowKeyword keyword)
+{
+    switch (keyword)
+    {
+        case UowKeyword::Uow: return "uow";
+        case UowKeyword::Body: return "body";
+        case UowKeyword::BeforeCommit: return "before_commit";
+        case UowKeyword::AfterCommit: return "after_commit";
+        case UowKeyword::Invariant: return "invariant";
+    }
+    return "?";
+}
+
 // One entry of a semantic section: a dotted resource path ("from.balance")
 // plus an optional qualifier (shared/exclusive, ascending/descending,
 // allowed/disabled, snapshot/serializable, join) or effect (effects lists).
@@ -302,6 +360,12 @@ struct ContractSurface
 {
     std::vector<ContractClause> clauses;
     std::vector<SemanticSection> sections;
+
+    // `uow (Name)` attachment, when present in the same area.
+    bool hasUow = false;
+    std::string uowName;
+    SourceLocation uowLocation;
+    UowPhase uowPhase = UowPhase::Body;
 };
 
 struct StructMethodDeclaration : Location
@@ -324,6 +388,18 @@ struct StructMethodDeclaration : Location
     std::vector<Type> throwsTypes;
     std::vector<ContractClause> contracts;
     std::vector<SemanticSection> sections;
+
+    // `uow (Name)` attachment (VERIFICATION-SPEC.md §5.1); empty name
+    // means the method does not participate in any uow.
+    bool hasUow = false;
+    std::string uowName;
+    SourceLocation uowLocation;
+    UowPhase uowPhase = UowPhase::Body;
+
+    // Function-level handler suffix: `{ body } catch (T e) { ... } finally { ... }`.
+    // Handled types are removed from the method's effective throws set.
+    std::vector<CatchClause> catchArms;
+    std::unique_ptr<Block> finallyBlock;
 
     [[nodiscard]] bool hasAttribute(const std::string& attr) const
     {
@@ -678,6 +754,18 @@ struct FunctionDeclaration : Location
     std::vector<Type> throwsTypes;
     std::vector<ContractClause> contracts;
     std::vector<SemanticSection> sections;
+
+    // `uow (Name)` attachment (VERIFICATION-SPEC.md §5.1); empty name
+    // means the function does not participate in any uow.
+    bool hasUow = false;
+    std::string uowName;
+    SourceLocation uowLocation;
+    UowPhase uowPhase = UowPhase::Body;
+
+    // Function-level handler suffix: `{ body } catch (T e) { ... } finally { ... }`.
+    // Handled types are removed from the function's effective throws set.
+    std::vector<CatchClause> catchArms;
+    std::unique_ptr<Block> finallyBlock;
 
     FunctionDeclaration(std::unique_ptr<Type> retType, SourceIdentifier name, std::vector<Parameter>& parameters,
                         std::unique_ptr<Block> block)
@@ -1125,18 +1213,16 @@ struct StaticVarDeclaration : Location
     }
 };
 
-// Unit of work (VERIFICATION-SPEC.md §5.1/§10): a named verification scope
-// with contracts, semantic sections, invariants and lifecycle blocks.
-// Static checks only in v1 — nothing is ever generated for it.
+// Unit of work (VERIFICATION-SPEC.md §5.1/§10): a named verification scope —
+// contracts, semantic sections, invariants. Pure specification: functions
+// implement it by attaching with `uow (Name)`, and nothing is ever
+// generated for it.
 struct UowDeclaration : Location
 {
     SourceIdentifier name;
     std::vector<ContractClause> contracts;
     std::vector<ContractClause> invariants;
     std::vector<SemanticSection> sections;
-    std::unique_ptr<Block> body;
-    std::unique_ptr<Block> beforeCommit;
-    std::unique_ptr<Block> afterCommit;
     std::vector<std::unique_ptr<UowDeclaration>> nested;
 
     void print(std::ostream& os, const int indent = 0) const override

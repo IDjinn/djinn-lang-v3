@@ -49,6 +49,14 @@ namespace djinn
         void visit(const ThrowStatement& stmt) override;
 
         void visit(const TryCatchStatement& stmt) override;
+
+        void visit(const UowPhaseBlockStatement& stmt) override;
+
+        void visit(const LockStatement& stmt) override;
+
+        void visit(const RollbackStatement& stmt) override;
+
+        void visit(const CommitStatement& stmt) override;
     };
 } // namespace djinn
 

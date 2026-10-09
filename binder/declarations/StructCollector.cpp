@@ -18,6 +18,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
 {
     const std::string qualifiedName = prefix.empty() ? decl.name.token_name : prefix + "::" + decl.name.token_name;
     const auto structSym = std::make_shared<StructSymbol>(qualifiedName);
+    structSym->isFromLibrary = _bindingStdLib;
 
     // Generic parameters
     for (const auto& genParam : decl.genericParams.params)
@@ -87,6 +88,7 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
                                           : *method->returnType;
 
         const auto methodSym = std::make_shared<MethodSymbol>(method->name.token_name, methodReturnType);
+        methodSym->isFromLibrary = _bindingStdLib;
         methodSym->isAbstract = method->isAbstract();
         methodSym->isStatic = method->isStatic() || method->isOperatorMethod;
         if (method->variadic)
@@ -104,6 +106,10 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
         {
             methodSym->sections.push_back(&section);
         }
+        methodSym->uowName = method->uowName;
+        methodSym->uowLocation = method->uowLocation;
+        methodSym->uowPhase = method->uowPhase;
+        methodSym->structName = qualifiedName;
         // Contracts implicitly throw ContractViolation on violation
         if (!method->contracts.empty() && !methodSym->throwsAny)
         {
@@ -115,11 +121,35 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
                 methodSym->throwsTypes.push_back(Type::struct_type("ContractViolation"));
             }
         }
-        methodSym->isConstructor = isConstructorMethod;
-        if (isConstructorMethod)
+
+        // Function-level handler suffix
+        for (const auto& arm : method->catchArms)
         {
-            methodSym->structName = qualifiedName;
+            methodSym->catchArms.push_back(&arm);
+            const auto& armName = arm.errorType.token_name;
+            if (armName == "Error" || armName == "_") methodSym->catchesAllErrors = true;
         }
+        methodSym->finallyBlock = method->finallyBlock.get();
+        if (!methodSym->catchArms.empty() || methodSym->finallyBlock)
+        {
+            if (methodSym->isAsync)
+            {
+                BINDER_ERROR(DiagnosticCode::INVALID_MODIFIERS,
+                             "method '" + method->name.token_name + "' cannot combine 'async' with a "
+                                 "catch suffix (deferred error travel across await is a later phase)",
+                             *method, method->name.location);
+            }
+            if (!nativeExceptions_)
+            {
+                BINDER_ERROR(DiagnosticCode::TRY_CATCH_REQUIRES_EXCEPTIONS,
+                             "a catch suffix requires the exceptions mode ('--exceptions' or "
+                                 "compiler.exceptions in djinn.proj)",
+                             *method, method->name.location);
+            }
+        }
+        methodSym->throwsAfterArms = throws_after_arms(methodSym->catchArms, methodSym->catchesAllErrors,
+                                                       methodSym->throwsAny, methodSym->throwsTypes);
+        methodSym->isConstructor = isConstructorMethod;
 
         for (const auto& attr : method->attributes)
         {
@@ -141,7 +171,11 @@ void Binder::collectStruct(const StructDeclaration& decl, const std::string& pre
             std::vector<AttributeSymbol> paramAttrs;
             for (const auto& attr : param.attributes)
                 paramAttrs.emplace_back(attr.name.token_name, attr.args);
-            methodSym->addParameter(param.name.token_name, *param.type, std::move(paramAttrs));
+            // Uow members take struct parameters by reference (spec §5.1).
+            Type paramType = !method->uowName.empty() && param.type->kind == TypeKind::STRUCT
+                                 ? Type::pointer(*param.type)
+                                 : *param.type;
+            methodSym->addParameter(param.name.token_name, paramType, std::move(paramAttrs));
         }
 
         // Add variadic arr<object> parameter AFTER normal params
