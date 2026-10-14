@@ -78,6 +78,11 @@ namespace djinn::binder
             case Intrinsic::Alignof:
                 returnType = Type::integer(32, false);
                 break;
+            case Intrinsic::Old:
+                // old(path) yields the entry snapshot: same type as the path itself
+                if (!parameters.empty() && parameters.front())
+                    returnType = parameters.front()->type;
+                break;
             default:
                 break;
             }

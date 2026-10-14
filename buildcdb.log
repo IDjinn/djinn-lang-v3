@@ -1,0 +1,54 @@
+Opened log file 'buildcdb.log'
+No .natvis files found at C:\WINDOWS\SYSTEM32\Visualizers.
+No .natvis files found at C:\Users\lucas\AppData\Local\Dbg\Visualizers.
+
+Microsoft (R) Windows Debugger Version 10.0.26100.1 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+CommandLine: build/eh-probe.exe
+Unable to add extension DLL: ntsdexts
+Unable to add extension DLL: uext
+Unable to add extension DLL: exts
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*
+Symbol search path is: srv*
+Executable search path is: 
+
++------------------------------------------------------------------------+
+| This target supports Hardware-enforced Stack Protection. A HW based    |
+| "Shadow Stack" may be available to assist in debugging and analysis.   |
+| See aka.ms/userhsp for more info.                                      |
+|                                                                        |
+| dps @ssp                                                               |
+|                                                                        |
++------------------------------------------------------------------------+
+
+ModLoad: 00007ff7`619b0000 00007ff7`61a55000   eh-probe.exe
+ModLoad: 00007ffc`4c4e0000 00007ffc`4c747000   ntdll.dll
+ModLoad: 00007ffc`4c030000 00007ffc`4c0fb000   C:\WINDOWS\System32\KERNEL32.DLL
+ModLoad: 00007ffc`49900000 00007ffc`49d01000   C:\WINDOWS\System32\KERNELBASE.dll
+ModLoad: 00007ffc`4a560000 00007ffc`4a5e1000   C:\WINDOWS\System32\WS2_32.dll
+ModLoad: 00007ffc`49e80000 00007ffc`49fcc000   C:\WINDOWS\System32\ucrtbase.dll
+ModLoad: 00007ffc`4bd40000 00007ffc`4be58000   C:\WINDOWS\System32\RPCRT4.dll
+ModLoad: 00007ffc`488e0000 00007ffc`4894c000   C:\WINDOWS\system32\mswsock.dll
+(df8.7b74): C++ EH exception - code e06d7363 (first chance)
+(df8.7b74): C++ EH exception - code e06d7363 (!!! second chance !!!)
+*** WARNING: Unable to verify checksum for eh-probe.exe
+KERNELBASE!RaiseException+0x8a:
+00007ffc`499c483a 0f1f440000      nop     dword ptr [rax+rax]
+0:000> g; k 25; qd
+WARNING: Continuing a non-continuable exception
+(df8.7b74): C++ EH exception - code e06d7363 (first chance)
+(df8.7b74): C++ EH exception - code e06d7363 (!!! second chance !!!)
+Child-SP          RetAddr               Call Site
+0000007a`5e3af650 00007ff7`619b3fb9     KERNELBASE!RaiseException+0x8a
+0000007a`5e3af750 00007ff7`619b2740     eh_probe!_CxxThrowException+0x99
+0000007a`5e3af7b0 00007ff7`619b10c7     eh_probe!__djinn_throw+0x1e0
+0000007a`5e3af830 00007ff7`619b320f     eh_probe!main+0xc7
+(Inline Function) --------`--------     eh_probe!invoke_main+0x22
+0000007a`5e3af870 00007ffc`4c05cdf7     eh_probe!__scrt_common_main_seh+0x10f
+0000007a`5e3af8b0 00007ffc`4c55ee4c     KERNEL32!BaseThreadInitThunk+0x17
+0000007a`5e3af8e0 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+quit:

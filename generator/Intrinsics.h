@@ -23,6 +23,7 @@ enum class Intrinsic
     Typeof,
     AwaitBlock,
     Assume,
+    Old,
 };
 
 inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
@@ -39,7 +40,8 @@ inline std::optional<Intrinsic> get_intrinsic(const std::string& name)
         {"likely", Intrinsic::Likely},
         {"unlikely", Intrinsic::Unlikely},
         {"typeof", Intrinsic::Typeof},
-        {"await_block", Intrinsic::AwaitBlock}
+        {"await_block", Intrinsic::AwaitBlock},
+        {"old", Intrinsic::Old}
     };
 
     if (const auto it = intrinsics.find(name); it != intrinsics.end())

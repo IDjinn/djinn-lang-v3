@@ -56,6 +56,9 @@ namespace djinn::verification
             // When non-null, lifecycle statements are folded into this phase
             // semantics instead of the member's transaction-phase sets.
             BodySemantics* _phase_target = nullptr;
+            // Whether a `commit;` was already seen: the lifecycle is one-way,
+            // a second one is an illegal transition.
+            bool _committed = false;
 
             // Behavior notes land in the phase target when one is open (inline
             // before_commit/after_commit blocks are checked separately).
@@ -272,11 +275,19 @@ namespace djinn::verification
                 }
 
                 // `commit;`: the transaction ends here — the rest of the block
-                // belongs to the member's after-commit window.
-                if (dynamic_cast<const CommitStatement*>(&statement))
+                // belongs to the member's after-commit window. The lifecycle
+                // is one-way: a second commit has no legal transition.
+                if (const auto* commit = dynamic_cast<const CommitStatement*>(&statement))
                 {
                     if (_semantics)
                     {
+                        if (_committed)
+                            _semantics->illegal_commit_sites.push_back(commit->location);
+                        else
+                        {
+                            _committed = true;
+                            _semantics->commit_sites.push_back(commit->location);
+                        }
                         auto& slot = _semantics->phase_blocks[static_cast<int>(UowPhase::AfterCommit)];
                         if (!slot) slot = std::make_shared<BodySemantics>();
                         _phase_target = slot.get();

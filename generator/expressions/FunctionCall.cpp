@@ -322,6 +322,35 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
 
             return alloca;
         }
+
+    case Intrinsic::Old:
+        {
+            // old(path) reads the entry snapshot captured at function entry
+            // (setup_contracts for checked claims, setup_body_old_snapshots for
+            // uses in member code — transaction bodies, catch/finally arms).
+            if (call.arguments.size() != 1)
+            {
+                GENERATOR_ERROR(
+                    DiagnosticCode::INVALID_ARGUMENT_COUNT,
+                    "old requires 1 argument",
+                    call.location
+                );
+            }
+            const std::string key = old_path_key(*call.arguments.front());
+            if (key.empty())
+            {
+                GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
+                                "old() espera um caminho de campo (objeto.campo)",
+                                call.name.location);
+            }
+            const auto snapshot = oldSnapshots_.find(key);
+            if (snapshot != oldSnapshots_.end())
+                return builder->CreateLoad(snapshot->second->getAllocatedType(),
+                                           snapshot->second, "old.load");
+            GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
+                            "old() não tem snapshot de entrada para '" + key + "'",
+                            call.name.location);
+        }
     }
 
     return nullptr;
@@ -459,27 +488,6 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     // if (expr.hasVariadicForward) {
     //     return generate_variadic_forward_call(expr);
     // }
-
-    // `old(path)` reads an entry snapshot captured at function entry
-    // (setup_contracts for checked claims, setup_body_old_snapshots for uses
-    // in member code — transaction bodies, catch/finally arms).
-    if (expr.name.token_name == "old" && expr.arguments.size() == 1 && !expr.receiver)
-    {
-        const std::string key = old_path_key(*expr.arguments.front());
-        if (key.empty())
-        {
-            GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
-                            "old() espera um caminho de campo (objeto.campo)",
-                            expr.name.location);
-        }
-        const auto snapshot = oldSnapshots_.find(key);
-        if (snapshot != oldSnapshots_.end())
-            return builder->CreateLoad(snapshot->second->getAllocatedType(),
-                                       snapshot->second, "old.load");
-        GENERATOR_ERROR(DiagnosticCode::UNDEFINED_FUNCTION,
-                        "old() não tem snapshot de entrada para '" + key + "'",
-                        expr.name.location);
-    }
 
     // Resolve short-name aliases (namespace / file namespace) to the qualified
     // name used as the functions-map key (e.g. "division" -> "test::division")

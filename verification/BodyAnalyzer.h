@@ -70,6 +70,11 @@ namespace djinn::verification
         // the member's transaction-phase behavior. Keyed by UowPhase; nested
         // phase blocks fold into their enclosing phase.
         std::map<int, std::shared_ptr<BodySemantics>> phase_blocks;
+        // `commit;` statements in walk order: the first ends the transaction
+        // window; any further one is an illegal lifecycle transition (the
+        // member is already in AFTER_COMMIT).
+        std::vector<SourceLocation> commit_sites;
+        std::vector<SourceLocation> illegal_commit_sites;
         // Path lists from listed `rollback (a.b, ...);` statements in the body.
         std::vector<std::vector<std::string>> rollback_paths;
     };

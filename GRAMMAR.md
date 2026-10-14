@@ -217,7 +217,7 @@ catch_suffix         = { "catch" "(" error_type [ IDENTIFIER ] ")" block }
                        [ "finally" block ] ;
 
 (* Statements inside a uow member body: *)
-commit_stmt          = "commit" ";" ;   (* ends the transaction; the rest of the body is after-commit *)
+commit_stmt          = "commit" ";" ;   (* ends the transaction; the rest of the body is after-commit; a second commit is E-CONTRACT-048 *)
 uow_phase_block      = ( "before_commit" | "after_commit" ) block ;  (* deferred to the member's success path *)
 rollback_stmt        = "rollback" [ "(" path { "," path } ")" ] ";" ; (* catch arms only *)
 lock_stmt            = "lock" "(" expression { "," expression } ")" block ;

@@ -1818,6 +1818,31 @@ void Verifier::verify_uow(VerificationResult& result, const UowDeclaration& uow,
         }
     }
 
+    // §10 lifecycle: the state machine is one-way — `commit;` is the
+    // transition into COMMITTED, and a member attached as
+    // `uow (Name.after_commit)` is already past it. A second `commit;` (or
+    // any commit in an after_commit member) has no legal transition.
+    for (const auto& member : attached)
+    {
+        const auto sem_it = _semantics.find(member.key);
+        if (sem_it == _semantics.end()) continue;
+        const auto& memberSemantics = sem_it->second;
+
+        std::vector<SourceLocation> illegal = memberSemantics.illegal_commit_sites;
+        if (member.phase == UowPhase::AfterCommit)
+            illegal.insert(illegal.end(), memberSemantics.commit_sites.begin(),
+                           memberSemantics.commit_sites.end());
+        if (illegal.empty()) continue;
+
+        Diagnostic diagnostic(Severity::Error, DiagnosticCode::E_CONTRACT_ILLEGAL_TRANSITION,
+                              "member '" + member_name(member) + "' of uow '" + uow.name.token_name +
+                                  "' commits after the transaction has already committed",
+                              illegal.front());
+        diagnostic.withHelp("the lifecycle is one-way: keep a single 'commit;' — statements "
+                            "after it already run in the after-commit window");
+        fail(diagnostic);
+    }
+
     // §9/§11 retry-safety: non-idempotent effects (output, spawned
     // processes, durable file mutations) cannot run twice. memory, time and
     // random are safe — a retry allocates fresh resources and re-observes

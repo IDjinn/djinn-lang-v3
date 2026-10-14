@@ -109,7 +109,6 @@ void Generator::generate_function_body(const FunctionSymbol& func)
 
     currentContracts_.clear();
     contractReturnAlloca = nullptr;
-    oldSnapshots_.clear();
 
     if (builder->GetInsertBlock()->getTerminator())
     {
@@ -120,6 +119,8 @@ void Generator::generate_function_body(const FunctionSymbol& func)
     }
 
     emit_deferred_uow_blocks();
+    // Deferred after-commit statements may still read old() entry snapshots
+    oldSnapshots_.clear();
     emit_scope_cleanup();
 
     llvm::Type* returnType = llvmFunc->getReturnType();

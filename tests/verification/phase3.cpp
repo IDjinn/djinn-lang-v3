@@ -1020,6 +1020,36 @@ TEST(VerificationTransactional, CommitAllowsExternalIoAfterIt)
     EXPECT_EQ(result.diagnostics.size(), 0);
 }
 
+TEST(VerificationTransactional, CommitTwiceIsIllegalTransition)
+{
+    // The lifecycle is one-way: the first `commit;` moves the member into
+    // COMMITTED, and COMMITTED has no transition back to committing. A
+    // second `commit;` is E-CONTRACT-048, anchored at the offending line.
+    const char* source = R"(
+        import std::sys;
+
+        uow Probe {
+            retry: allowed
+        }
+
+        void work()
+            uow (Probe)
+        {
+            commit;
+            printf("after\n");
+            commit;
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_ILLEGAL_TRANSITION));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
 TEST(VerificationTransactional, UowSectionsRequireColonSyntax)
 {
     // The parenthesized section form is only valid on function signatures;
@@ -1041,4 +1071,63 @@ TEST(VerificationTransactional, UowSectionsRequireColonSyntax)
     const auto result = DjinnCompiler::run(source, report_options());
     EXPECT_EQ(result.returnCode, 1);
     EXPECT_EQ(errorCount(result), 1);
+}
+
+TEST(VerificationTransactional, OldSnapshotReadableAfterCommit)
+{
+    // `old(path)` in member code reads the ENTRY snapshot, including in the
+    // after-commit window: statements after `commit;` are deferred to the
+    // function epilogue, so the snapshot map must survive until they are
+    // generated (regression: it was cleared before the deferred flush).
+    const char* source = R"(
+        import std::sys;
+
+        struct Purse {
+            i32 cents;
+        }
+
+        struct Receipt {
+            i32 before;
+        }
+
+        impl Purse {
+            i32 take(i32 amount)
+                require(amount > 0)
+                writes(self.cents)
+                reads(self.cents)
+            {
+                self.cents = self.cents - amount;
+                return self.cents;
+            }
+        }
+
+        uow Charge {
+            reads: p.cents
+            writes: p.cents, r.before
+        }
+
+        void charge(Purse p, Receipt r)
+            uow (Charge)
+        {
+            p.take(30);
+            commit;
+            r.before = old(p.cents);
+        }
+
+        i32 main() {
+            Purse mut purse = { 100 };
+            Receipt mut receipt = { 0 };
+
+            charge(purse, receipt);
+
+            if (receipt.before == 100 && purse.cents == 70) {
+                return 42;
+            }
+            return 1;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options(true));
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_EQ(result.returnCode, DJINN_EXIT(42));
 }
