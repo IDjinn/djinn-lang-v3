@@ -72,7 +72,10 @@ namespace djinn::binder
         // Calls to throwing methods require `try` (or a throwing caller to propagate)
         if (const auto method = std::dynamic_pointer_cast<MethodSymbol>(methodSym))
         {
-            binder.check_throwing_call(call.name.token_name, method->effectivelyThrowing(), call.name.location);
+            binder.check_throwing_call(call.name.token_name, method->throwsAny,
+                                       binder.escaping_throw_types(method->throwsTypes, method->catchArms,
+                                                                   method->catchesAllErrors),
+                                       call.name.location);
             // Record the resolved method so the verification pass can check
             // this call site against the method's contracts.
             if (!method->structName.empty())

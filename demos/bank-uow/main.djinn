@@ -5,7 +5,12 @@
 //
 // - Function-level catch suffix: `transferMoney` handles its own errors
 //   (ContractViolation from the check-mode requires, BalanceModifyException
-//   from the domain throw), so callers need no `try` and no `throws`.
+//   from the domain throw), so callers need no `try` and no `throws`. Inside
+//   the member, calls whose error set the arms cover need no `try` either.
+// - Errors AFTER `commit;` are the member's own responsibility: the
+//   transaction is already committed, so the catch suffix no longer covers
+//   that code — `notify_transfer` (external I/O, can fail) must be called
+//   with an explicit `try` expression, or the compiler rejects the call.
 // - Bare `rollback;` restores the whole-object entry snapshots of every
 //   parameter — the uow runs or it does not run (spec §10).
 // - `commit;` ends the transaction: everything after it (the notification,
@@ -22,14 +27,17 @@
 //   reads an entry snapshot, including after `commit;` (the commit line
 //   prints the entry balance, 1000).
 //
-// Run: .\cmake-build-debug-visual-studio\djinn.exe -r .\demos\bank-uow\
-// Expected: compiles clean under --verify (trace logs obligations and
-// members), prints the transfer + commit + notification lines, exit code 0.
+// Run: .\cmake-build-debug-visual-studio\djinn.exe -r .\demos\bank-uow\ --exceptions --verify
+// Expected: compiles clean under --exceptions --verify (trace logs
+// obligations and members), prints the transfer + commit + notification
+// lines, exit code 0.
 
 import std::types;
 import std::sys;
 
 namespace bank;
+
+struct BalanceModifyException : Exception;
 
 struct Account {
     i32 balance;
@@ -38,12 +46,16 @@ struct Account {
 
 impl Account {
     i32 withdraw(i32 amount)
+        throws(BalanceModifyException)
         require(amount > 0)
         require(this.balance >= amount)
         ensure(return == old(this.balance) - amount)
         writes(self.balance)
         reads(self.balance)
     {
+        if (amount > 1000) {
+            throw BalanceModifyException("withdraw exceeds the single-operation limit");
+        }
         this.balance = this.balance - amount;
         return this.balance;
     }
@@ -60,10 +72,11 @@ impl Account {
 }
 
 i32 notify_transfer(i32 amount)
+    throws(Exception)
     effects(external_io)
 {
     printf("[email]   transfer of %d confirmed\n", amount);
-    return 0;
+    throw Exception("fuck u");
 }
 
 // The spec: claims only — no body, no generated code. Sections inside a uow
@@ -86,7 +99,9 @@ uow Transfer {
 // Transaction member: writes exactly the declared atomic set, restores every
 // parameter's CALLER object on failure, and commits — the notification and
 // the commit print run only when the transaction commits. `old(from.balance)`
-// reads the entry snapshot (1000) even after `commit;`.
+// reads the entry snapshot (1000) even after `commit;`. The notification is
+// after-commit code: the transaction is already committed, so its failure is
+// handled right there with `try` — the suffix arms no longer cover it.
 void transferMoney(Account from, Account to, i32 amount)
     uow (Transfer)
 {
@@ -94,11 +109,14 @@ void transferMoney(Account from, Account to, i32 amount)
     to.deposit(amount);
     commit;
 
-    notify_transfer(amount);
+    try notify_transfer(amount) ?: printf("error");
     printf("[commit]   transferred %d: from = %d, to = %d\n", amount, old(from.balance), to.balance);
 } catch (ContractViolation violation) {
     rollback;
     printf("[rollback] contract violated, balances restored\n");
+} catch (BalanceModifyException error) {
+    rollback;
+    printf("[rollback] balance modification rejected, balances restored\n");
 }
 
 i32 main() {

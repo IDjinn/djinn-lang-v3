@@ -1131,3 +1131,84 @@ TEST(VerificationTransactional, OldSnapshotReadableAfterCommit)
     EXPECT_EQ(result.diagnostics.size(), 0);
     EXPECT_EQ(result.returnCode, DJINN_EXIT(42));
 }
+
+TEST(VerificationUow, MemberCannotDeclareEscapingThrows)
+{
+    // A transaction member handles its errors (suffix arms or try) — a
+    // throws clause that survives the arms would let an error escape the
+    // all-or-nothing window (E-CONTRACT-056).
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        struct BoxError : Exception;
+
+        uow Move {
+            atomic: a.value
+        }
+
+        void moveValue(Box a, Box b)
+            throws(BoxError)
+            uow (Move)
+        {
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, report_options());
+    EXPECT_TRUE(hasErrorCode(result, DiagnosticCode::E_CONTRACT_UOW_ESCAPING_THROWS));
+    EXPECT_EQ(result.returnCode, 1);
+}
+
+TEST(VerificationUow, MemberThrowsFullyCoveredBySuffixIsAccepted)
+{
+    // Throws types the member's own catch arms handle leave the effective
+    // throws set — the member propagates nothing and is accepted.
+    CompilerOptions options;
+    options.generateBinary = false;
+    options.exceptions = true;
+    options.verificationMode = VerificationMode::Report;
+
+    const char* source = R"(
+        struct Box {
+            i32 value;
+        }
+
+        struct BoxError : Exception;
+
+        uow Move {
+            atomic: a.value
+            strategy: database
+        }
+
+        impl Box {
+            void drain() throws(BoxError)
+                writes(self.value)
+            {
+                this.value = 0;
+                return;
+            }
+        }
+
+        void moveValue(Box a, Box b)
+            throws(BoxError)
+            uow (Move)
+        {
+            a.drain();
+            commit;
+        } catch (BoxError e) {
+            rollback;
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, options);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}

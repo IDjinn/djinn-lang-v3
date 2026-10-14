@@ -99,7 +99,8 @@ namespace DiagnosticCode
     constexpr uint32_t CATCH_ARM_NOT_ERROR_TYPE = 9010;
     constexpr uint32_t AWAIT_INSIDE_LOCK = 9011;
 
-    // Contract verification (95xx) — emitted by the verification/ pass.
+    // Contract verification (95xx) — emitted by the verification/ pass, and
+    // by the binder for the structural uow-member throws rules.
     // Stable string aliases (E-CONTRACT-*) live in the JSON diagnostic
     // envelope (VERIFICATION-IDEAS.md §5.2).
     constexpr uint32_t E_CONTRACT_PRECONDITION_NOT_ESTABLISHED = 9501; // E-CONTRACT-007
@@ -118,6 +119,7 @@ namespace DiagnosticCode
     constexpr uint32_t E_CONTRACT_ATOMIC_NOT_DISCHARGED = 9514;        // E-CONTRACT-053
     constexpr uint32_t E_CONTRACT_ROLLBACK_INCOMPLETE = 9515;          // E-CONTRACT-054
     constexpr uint32_t E_CONTRACT_VIOLATION_UNHANDLED = 9516;          // E-CONTRACT-055
+    constexpr uint32_t E_CONTRACT_UOW_ESCAPING_THROWS = 9517;          // E-CONTRACT-056
 }
 
 struct SourceLocation

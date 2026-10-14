@@ -681,7 +681,14 @@ bool Generator::verify() const
             std::string fnErr;
             llvm::raw_string_ostream fnStream(fnErr);
             if (llvm::verifyFunction(fn, &fnStream))
+            {
                 LOG_ERROR("  broken function: '%s': %s", fn.getName().str().c_str(), fnErr.c_str());
+                // Dump the full body so the failing CFG is inspectable from the log
+                std::string fnIr;
+                llvm::raw_string_ostream irStream(fnIr);
+                fn.print(irStream, nullptr);
+                LOG_ERROR("  ---- IR of '%s' ----\n%s", fn.getName().str().c_str(), fnIr.c_str());
+            }
         }
         return false;
     }

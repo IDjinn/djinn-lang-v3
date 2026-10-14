@@ -1079,6 +1079,18 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
         callResult = builder->CreateLoad(alloca->getAllocatedType(), alloca, "try_load");
     }
 
+    // The call result is produced between two funclet trees (the invoke's
+    // normal edge); LLVM's funclet verifier rejects a phi below the landing
+    // reading it — spill to an entry-block slot and load after the merge.
+    llvm::AllocaInst* resultSlot = nullptr;
+    if (!callResult->getType()->isVoidTy())
+    {
+        auto* fn = builder->GetInsertBlock()->getParent();
+        llvm::IRBuilder<> entryBuilder(&fn->getEntryBlock(), fn->getEntryBlock().getFirstInsertionPt());
+        resultSlot = entryBuilder.CreateAlloca(callResult->getType(), nullptr, "try.result.slot");
+        builder->CreateStore(callResult, resultSlot);
+    }
+
     llvm::Value* errorFlag = nullptr;
     if (nativeLanding)
     {
@@ -1089,6 +1101,9 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
         errorFlag = errno_load_flag("try_err_flag");
         finalize_native_landing(landing, checkBB);
         ehLandingStack_.pop_back();
+        // finalize leaves the builder past the pads' catchrets; the flag check
+        // keeps emitting into the check block.
+        builder->SetInsertPoint(checkBB);
     }
     else
     {
@@ -1113,6 +1128,8 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
 
             builder->SetInsertPoint(okBB);
         }
+        if (resultSlot)
+            return builder->CreateLoad(resultSlot->getAllocatedType(), resultSlot, "try.result");
         return callResult;
     }
 
@@ -1133,11 +1150,14 @@ llvm::Value* Generator::generate_try_expression(const TryExpression& expr)
     {
         fallbackVal = builder->CreateLoad(alloca->getAllocatedType(), alloca, "try_fb_load");
     }
+    if (resultSlot)
+    {
+        builder->CreateStore(fallbackVal, resultSlot);
+    }
     builder->CreateBr(mergeBB);
 
     builder->SetInsertPoint(mergeBB);
-    auto* phi = builder->CreatePHI(callResult->getType(), 2, "try_result");
-    phi->addIncoming(callResult, okBB);
-    phi->addIncoming(fallbackVal, errBB);
-    return phi;
+    if (resultSlot)
+        return builder->CreateLoad(resultSlot->getAllocatedType(), resultSlot, "try.result");
+    return callResult;
 }

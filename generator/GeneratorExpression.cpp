@@ -70,6 +70,18 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
         matchValue = builder->CreateLoad(alloca->getAllocatedType(), alloca, "switch_load");
     }
 
+    // Same funclet rationale as the try expression: the value is produced
+    // between funclet trees (the invoke's normal edge), so spill it to an
+    // entry-block slot and reload below the landing's check block.
+    llvm::AllocaInst* valueSlot = nullptr;
+    if (nativeLanding)
+    {
+        auto* fn = builder->GetInsertBlock()->getParent();
+        llvm::IRBuilder<> entryBuilder(&fn->getEntryBlock(), fn->getEntryBlock().getFirstInsertionPt());
+        valueSlot = entryBuilder.CreateAlloca(matchValue->getType(), nullptr, "switch.value.slot");
+        builder->CreateStore(matchValue, valueSlot);
+    }
+
     llvm::Value* errorFlag = nullptr;
     if (nativeLanding)
     {
@@ -79,6 +91,13 @@ llvm::Value* Generator::generate_switch_expression(const SwitchExpression& expr)
         errorFlag = errno_load_flag("switch_err_flag");
         finalize_native_landing(ehLanding, checkBB);
         ehLandingStack_.pop_back();
+        // finalize leaves the builder past the pads' catchrets; the arm
+        // dispatch keeps emitting into the check block.
+        builder->SetInsertPoint(checkBB);
+        if (valueSlot)
+        {
+            matchValue = builder->CreateLoad(valueSlot->getAllocatedType(), valueSlot, "switch.value");
+        }
     }
     else
     {

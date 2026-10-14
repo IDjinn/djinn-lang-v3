@@ -264,12 +264,19 @@ namespace djinn
 
     // Inline uow lifecycle block: compiled normally; the deferral to the
     // member's success path is a generator concern, the placement rules are
-    // verifier concerns.
+    // verifier concerns. An after_commit block runs in the after-commit
+    // window — the transaction is over, so throwing calls there need `try`.
     void BinderStatementVisitor::visit(const UowPhaseBlockStatement& stmt)
     {
+        const bool prevAfterCommit = _binder.currentFunctionAfterCommit_;
+        if (_binder.currentFunctionIsUowMember_ && stmt.phase == UowPhase::AfterCommit)
+        {
+            _binder.currentFunctionAfterCommit_ = true;
+        }
         _binder.pushScope();
         _binder.bindBlock(*stmt.body);
         _binder.popScope();
+        _binder.currentFunctionAfterCommit_ = prevAfterCommit;
     }
 
     void BinderStatementVisitor::visit(const LockStatement& stmt)
@@ -319,6 +326,11 @@ namespace djinn
     void BinderStatementVisitor::visit(const CommitStatement&/*stmt*/)
     {
         // A marker for the analyzer/generator: everything after it belongs to
-        // the after-commit window. Nothing to bind.
+        // the after-commit window, where the catch suffix no longer covers
+        // errors — throwing calls there need an explicit `try`.
+        if (_binder.currentFunctionIsUowMember_)
+        {
+            _binder.currentFunctionAfterCommit_ = true;
+        }
     }
 } // namespace djinn

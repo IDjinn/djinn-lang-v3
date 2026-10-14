@@ -85,9 +85,13 @@ private:
     [[nodiscard]] CalleeView resolve_callee(const FunctionCall& call,
                                             const std::shared_ptr<ScopedSymbolTable>& globalScope) const;
 
-    void check_call_site(VerificationResult& result, const FunctionCall& call,
+    // Checks the callee's require clauses against the facts holding at the
+    // call. Decided-False sites record their diagnostic for the subject
+    // being analyzed; the decision phase flushes them once the callee
+    // summaries feeding the decision are final.
+    void check_call_site(const FunctionCall& call,
                          const djinn::verification::FactSet& facts,
-                         const std::shared_ptr<ScopedSymbolTable>& globalScope, bool emit);
+                         const std::shared_ptr<ScopedSymbolTable>& globalScope);
 
     [[nodiscard]] std::optional<djinn::verification::Affine> call_postcondition(
         const FunctionCall& call, const std::shared_ptr<ScopedSymbolTable>& globalScope) const;
@@ -143,6 +147,13 @@ private:
     std::unordered_map<const Symbol*, djinn::verification::PostconditionSummary> _postconditions;
     std::unordered_map<const Symbol*, djinn::verification::BodySemantics> _semantics;
     std::unordered_map<const Symbol*, std::set<SemanticEffect>> _effect_sets;
+    // The final body summary of each subject's last analysis, consumed by the
+    // decision phase without re-walking the body.
+    std::unordered_map<const Symbol*, djinn::verification::BodySummary> _summaries;
+    // Call-site diagnostics recorded by a subject's latest analysis; a
+    // re-analysis replaces them, the decision phase flushes the survivors.
+    std::unordered_map<const Symbol*, std::vector<Diagnostic>> _pending_diagnostics;
+    const Symbol* _current_subject = nullptr;
     // Call sites whose require was decided false: the callee never returns
     // normally, so its postcondition must not seed any facts.
     std::set<const FunctionCall*> _failed_calls;

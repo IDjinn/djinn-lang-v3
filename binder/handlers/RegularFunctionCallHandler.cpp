@@ -36,7 +36,10 @@ namespace djinn::binder {
         if (!binder.check_compile_time_call(*funcSym, call))
         {
             // Calls to throwing functions require `try` (or a throwing caller to propagate)
-            binder.check_throwing_call(call.name.token_name, funcSym->effectivelyThrowing(), call.name.location);
+            binder.check_throwing_call(call.name.token_name, funcSym->throwsAny,
+                                       binder.escaping_throw_types(funcSym->throwsTypes, funcSym->catchArms,
+                                                                   funcSym->catchesAllErrors),
+                                       call.name.location);
         }
 
         const size_t expectedArgs = funcSym->callerArity();

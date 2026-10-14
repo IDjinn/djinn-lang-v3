@@ -104,7 +104,14 @@ catch_pattern        = ( error_type | "Error" | "_" ) [ identifier ] ;
 - A `switch` over a throwing call matches its outcome (`Result`/`_` for
   success, `Error`/error types for failures) — see Switch expressions.
 - Calling a throwing function without `try` is an error outside `throws`
-  functions; inside them the error propagates automatically.
+  functions; inside them the error propagates automatically. Inside a
+  function whose catch suffix covers the callee's error set, no `try` is
+  needed either — except in a uow member's after-commit window, where every
+  throwing call needs an explicit `try` (the transaction is already
+  committed; see UOW members).
+- A uow member may not declare a `throws` set its own catch suffix does not
+  fully cover (E-CONTRACT-056): a transaction member handles its errors, it
+  never propagates.
 - An exception escaping `main() throws` is reported at runtime (`Type: message`,
   pointing at the outermost unhandled call — the origin rises as the error
   propagates; debug builds also print the stack trace captured at the throw
@@ -282,7 +289,12 @@ Transactional surface on members (VERIFICATION-SPEC.md §10):
   after the body. Handled types leave the function's effective throws set, so
   callers need no `try`. A member whose body can violate a check-mode contract
   must catch `ContractViolation` (E-CONTRACT-055) or declare the clause
-  `in mode prove`.
+  `in mode prove`. A member may not declare a `throws` set its own suffix
+  fails to cover (E-CONTRACT-056) — a transaction member propagates nothing.
+  Inside the member, throwing calls the suffix covers need no `try`; after
+  `commit;` (and in whole-`after_commit` members) every throwing call needs
+  an explicit `try` — the transaction is already committed, the suffix no
+  longer covers that code.
 - **`rollback;`** — only inside catch arms of uow members. Snapshots of every
   struct parameter (and `self`) are taken at member entry; the bare statement
   restores them all. Listed form `rollback (a.b, c.d);` restores exactly those

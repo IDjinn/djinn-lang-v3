@@ -182,3 +182,108 @@ TEST(NativeExceptions, NonThrowingFunctionsStayNounwindFreeOfEh)
     EXPECT_EQ(result.ir.find("__djinn_throw"), std::string::npos);
     EXPECT_EQ(result.ir.find("catchswitch"), std::string::npos);
 }
+
+TEST(NativeExceptions, PropagatingCallFollowedByCodeStaysWellFormed)
+{
+    // An unchecked propagating call runs under a cleanup-only landing; the
+    // statements after it (and main's ret) must keep emitting into the
+    // invoke's ok block, not past the cleanup pad's cleanupret.
+    const auto source = R"(
+        i32 inner() throws {
+            throw Generic("boom");
+        }
+
+        i32 main() throws {
+            i32 v = inner();
+            Console.write("after");
+            return v;
+        }
+    )";
+
+    const auto result = compileWith(source, true);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+    EXPECT_NE(result.ir.find("cleanupret"), std::string::npos);
+}
+
+TEST(NativeExceptions, UowSuffixCoversPreCommitCallsAndAfterCommitNeedsTry)
+{
+    // Pre-commit: the member's catch suffix handles the callee's error set —
+    // no per-call try. After `commit;` the transaction is over: the suffix no
+    // longer covers that code, so the throwing call needs an explicit try.
+    const auto source = R"(
+        struct Account { i32 balance; }
+        struct BalanceModifyException : Exception;
+
+        uow Transfer {
+            atomic: from.balance, to.balance
+            strategy: database
+        }
+
+        impl Account {
+            i32 withdraw(i32 amount) throws(BalanceModifyException) {
+                return 0;
+            }
+        }
+
+        i32 notify(i32 amount) throws(ForeignError) {
+            return 0;
+        }
+
+        void transfer(Account from, Account to, i32 amount)
+            uow (Transfer)
+        {
+            from.withdraw(amount);
+            commit;
+            try notify(amount) ?: 0;
+        } catch (BalanceModifyException e) {
+            rollback;
+        }
+
+        i32 main() {
+            Account mut a = { 10 };
+            Account mut b = { 20 };
+            transfer(a, b, 5);
+            return 0;
+        }
+    )";
+
+    const auto result = compileWith(source, true);
+    EXPECT_EQ(result.diagnostics.size(), 0);
+}
+
+TEST(NativeExceptions, UowAfterCommitCallRequiresTryEvenWhenSuffixCovers)
+{
+    // Suffix coverage is not enough after `commit;` — the transaction is
+    // already committed, so the post-commit throwing call is rejected.
+    const auto source = R"(
+        struct Account { i32 balance; }
+
+        uow Transfer {
+            atomic: from.balance, to.balance
+            strategy: database
+        }
+
+        i32 notify(i32 amount) throws(ForeignError) {
+            return 0;
+        }
+
+        void transfer(Account from, Account to, i32 amount)
+            uow (Transfer)
+        {
+            commit;
+            notify(amount);
+        } catch (ForeignError e) {
+            rollback;
+        }
+
+        i32 main() {
+            Account mut a = { 10 };
+            Account mut b = { 20 };
+            transfer(a, b, 5);
+            return 0;
+        }
+    )";
+
+    const auto result = compileWith(source, true);
+    EXPECT_TRUE(hasDiagnostic(result, 9001));
+}

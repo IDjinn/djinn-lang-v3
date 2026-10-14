@@ -190,6 +190,9 @@ llvm::CallBase* Generator::emit_call_or_invoke(llvm::Function* callee, const std
     builder->SetInsertPoint(okBB);
     finalize_native_landing(landing, nullptr);
     ehLandingStack_.pop_back();
+    // finalize leaves the builder past the cleanupret; the normal path keeps
+    // emitting into the invoke's ok block.
+    builder->SetInsertPoint(okBB);
     return invoke;
 }
 

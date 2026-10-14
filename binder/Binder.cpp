@@ -384,10 +384,46 @@ bool Binder::throws_after_arms(const std::vector<const CatchClause*>& arms, cons
     return false;
 }
 
-void Binder::check_throwing_call(const std::string& calleeName, const bool calleeThrows, const SourceLocation& loc)
+std::vector<Type> Binder::escaping_throw_types(const std::vector<Type>& throwsTypes,
+                                               const std::vector<const CatchClause*>& arms,
+                                               const bool catchesAllErrors) const
+{
+    std::vector<Type> escaping;
+    for (const auto& t : throwsTypes)
+    {
+        if (!arm_covers_throw(arms, catchesAllErrors, t.structName)) escaping.push_back(t);
+    }
+    return escaping;
+}
+
+bool Binder::suffix_covers_throws(const bool calleeEscapesAny, const std::vector<Type>& escapingThrowsTypes) const
+{
+    if (currentFunctionCaughtNames_.empty() && !currentFunctionCatchesAll_) return false;
+    if (calleeEscapesAny) return currentFunctionCatchesAll_;
+
+    for (const auto& thrown : escapingThrowsTypes)
+    {
+        if (thrown.kind != TypeKind::STRUCT) return false;
+        if (currentFunctionCatchesAll_) continue;
+        bool covered = false;
+        for (const auto& caught : currentFunctionCaughtNames_)
+        {
+            if (caught == "_" || caught == "Error" || is_error_derived_from(thrown.structName, caught))
+            {
+                covered = true;
+                break;
+            }
+        }
+        if (!covered) return false;
+    }
+    return true;
+}
+
+void Binder::check_throwing_call(const std::string& calleeName, const bool calleeEscapesAny,
+                                 const std::vector<Type>& escapingThrowsTypes, const SourceLocation& loc)
 {
     if (enforcement_ == ErrorEnforcement::Off) return;
-    if (!calleeThrows) return;
+    if (!calleeEscapesAny && escapingThrowsTypes.empty()) return;
 
     if (insideTryExpression_)
     {
@@ -397,13 +433,27 @@ void Binder::check_throwing_call(const std::string& calleeName, const bool calle
 
     // Unchecked call inside another throwing function: error propagates.
     // Strict mode rejects it — propagate explicitly with a bare `try`.
-    if (currentFunctionThrows_&& enforcement_ != ErrorEnforcement::Strict) return;
+    if (currentFunctionThrows_ && enforcement_ != ErrorEnforcement::Strict) return;
+
+    // A catch suffix is the guarded body's handler: a call whose whole error
+    // set the arms handle needs no try. Inside a uow member's after-commit
+    // window the transaction is over — the suffix no longer covers this code,
+    // so every throwing call must be handled explicitly.
+    const bool afterCommit = currentFunctionIsUowMember_ && currentFunctionAfterCommit_;
+    if (!afterCommit && insideCatchSuffixBody_ && suffix_covers_throws(calleeEscapesAny, escapingThrowsTypes))
+    {
+        return;
+    }
 
     const bool strict = enforcement_ == ErrorEnforcement::Strict;
+    std::string message = "call to throwing function '" + calleeName + "' must be wrapped in 'try'";
+    if (afterCommit)
+        message += " (after 'commit;' a uow member must handle errors with 'try': the transaction is already committed)";
+    else if (strict)
+        message += " (strict error enforcement: use a bare 'try' to propagate)";
     _diagnostics.emitAndPrint(Diagnostic(
         Severity::Error, DiagnosticCode::MISSING_TRY,
-        "call to throwing function '" + calleeName + "' must be wrapped in 'try'" +
-        (strict ? " (strict error enforcement: use a bare 'try' to propagate)" : ""),
+        message,
         loc
     ));
 }
@@ -442,9 +492,9 @@ ConstEvaluator& Binder::getCompileTimeEvaluator() const
 bool Binder::check_compile_time_call(const FunctionSymbol& funcSym, const FunctionCall& call)
 {
     if (_bindingStdLib) return false;
-    // A call inside `try` is handled (fallback or propagation), so provable
-    // failures have nothing to report
-    if (insideTryExpression_) return false;
+    // A call inside `try` (or a catch-suffix body, whose arms handle it) is
+    // handled, so provable failures have nothing to report
+    if (insideTryExpression_ || insideCatchSuffixBody_) return false;
     if (enforcement_ != ErrorEnforcement::CompileTime && enforcement_ != ErrorEnforcement::Strict) return false;
     if (!funcSym.hasBody()) return false;
     if (call.arguments.size() != funcSym.paramNames.size()) return false;

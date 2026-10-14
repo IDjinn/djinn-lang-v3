@@ -265,6 +265,37 @@ TEST(ErrorHandling, MissingTryDiagnostic)
     EXPECT_GE(result.diagnostics.size(), 1);
 }
 
+TEST(ErrorHandling, UowMemberCallWithoutTryIsRejected)
+{
+    // A uow member propagates nothing: a throwing call must be wrapped in
+    // `try` (or covered by the member's catch suffix), like anywhere outside
+    // a `throws` function.
+    const auto source = R"(
+        struct BoxError : Exception;
+
+        uow Move {
+            atomic: a.value
+        }
+
+        i32 risky() throws(BoxError) {
+            throw BoxError("boom");
+        }
+
+        void moveValue(i32 a)
+            uow (Move)
+        {
+            risky();
+        }
+
+        i32 main() {
+            return 0;
+        }
+    )";
+
+    const auto result = DjinnCompiler::run(source, {});
+    EXPECT_GE(result.diagnostics.size(), 1);
+}
+
 TEST(ErrorHandling, ThrowOutsideThrowsDiagnostic)
 {
     const auto source = R"(

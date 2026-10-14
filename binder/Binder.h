@@ -118,6 +118,14 @@ private:
     bool currentFunctionThrowsAny_ = false;
     std::vector<Type> currentFunctionThrowsTypes_;
     bool insideTryExpression_ = false;
+    // Uow member context: everything after `commit;` (and whole after_commit
+    // members) runs outside the transaction window, where the catch suffix no
+    // longer covers errors — throwing calls there need an explicit `try`.
+    bool currentFunctionIsUowMember_ = false;
+    bool currentFunctionAfterCommit_ = false;
+    // Binding the body of a function/method with a catch suffix: the arms are
+    // the handler scope, distinct from an actual `try` expression operand.
+    bool insideCatchSuffixBody_ = false;
 
     // >0 while binding inside a lock scope: await/spawn are rejected there.
     int lockScopeDepth_ = 0;
@@ -248,9 +256,23 @@ private:
 
     bool is_error_derived_from(const std::string& structName, const std::string& baseName) const;
 
-    // Error handling checks: enforce `try` on calls to throwing functions
+    // Error handling checks: enforce `try` on calls to throwing functions.
+    // calleeEscapesAny + escapingThrowsTypes describe the error set that
+    // leaves the callee: bare `throws` escapes anything (flag), otherwise the
+    // declared types its own catch suffix does not handle.
     bool tryOperandSawThrowingCall_ = false;
-    void check_throwing_call(const std::string& calleeName, bool calleeThrows, const SourceLocation& loc);
+    void check_throwing_call(const std::string& calleeName, bool calleeEscapesAny,
+                             const std::vector<Type>& escapingThrowsTypes, const SourceLocation& loc);
+
+    // Declared types a callee's own catch suffix does not handle — the set a
+    // caller's suffix has to cover.
+    std::vector<Type> escaping_throw_types(const std::vector<Type>& throwsTypes,
+                                           const std::vector<const CatchClause*>& arms,
+                                           bool catchesAllErrors) const;
+
+    // Does the current function's catch suffix handle the whole error set of a
+    // callee ("Error"/"_" arms handle everything, subtypes count as handled)?
+    bool suffix_covers_throws(bool calleeEscapesAny, const std::vector<Type>& escapingThrowsTypes) const;
 
     // Function-level catch suffix: does one arm of the suffix handle thrownType
     // (directly or via the error hierarchy)? "Error"/"_" arms handle everything.

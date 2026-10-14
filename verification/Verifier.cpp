@@ -483,17 +483,15 @@ VerificationResult Verifier::run(const std::vector<std::shared_ptr<Program>>& pr
         return seeds;
     };
 
-    // Interprocedural analysis hooks. Silent passes only harvest facts; the
-    // emitting pass additionally checks every call site it walks through.
-    const auto analyze = [this, &globalScope, &result, &seeds_of](const Subject& subject, const bool emit,
-                                                                  BodySemantics* semantics)
+    // Interprocedural analysis hook. Every pass harvests facts and records
+    // call-site decisions; the decision phase prints the surviving ones.
+    const auto analyze = [this, &globalScope, &seeds_of](const Subject& subject,
+                                                         BodySemantics* semantics)
     {
         const auto seeds = seeds_of(subject);
-        const auto on_call = [this, &globalScope, &result, emit](const FunctionCall& call, const FactSet& facts)
+        const auto on_call = [this, &globalScope](const FunctionCall& call, const FactSet& facts)
         {
-            // Require decisions run on every pass (they poison postcondition
-            // harvesting); only the emitting pass prints diagnostics.
-            check_call_site(result, call, facts, globalScope, emit);
+            check_call_site(call, facts, globalScope);
         };
         const auto postcondition = [this, &globalScope](const FunctionCall& call)
         {
@@ -522,74 +520,127 @@ VerificationResult Verifier::run(const std::vector<std::shared_ptr<Program>>& pr
                                 : subject.method->structName + "::" + subject.method->name;
     };
 
-    // Convergence: postconditions extracted from proven ensures and effect
-    // sets assembled from callee summaries feed the next round of body
-    // analyses, so chains (transfer → debit → credit) settle in a few passes.
-    // Churning summaries mean a cycle — drop propagation entirely rather
-    // than trust an unstable fixpoint.
-    bool converged = false;
-    for (int iteration = 0; iteration < 8 && !converged; iteration++)
+    // Propagation over a worklist: postconditions extracted from proven
+    // ensures and effect sets assembled from callee summaries feed the
+    // callers, so chains (transfer → debit → credit) settle by re-analyzing
+    // only the direct callers of whatever changed. The first pass analyzes
+    // every subject once and records who calls whom. Exhausting the budget
+    // means a cycle is churning — drop propagation entirely rather than
+    // trust an unstable fixpoint, then re-record once against the cleared
+    // facts.
+    std::unordered_map<const Symbol*, const Subject*> subject_of_key;
+    for (const auto& subject : subjects)
+        subject_of_key.emplace(subject.key, &subject);
+    std::unordered_map<const Symbol*, std::set<const Symbol*>> dependents;
+
+    int iteration = 0;
+    const auto analyze_subject = [&](const Subject& subject) -> bool
     {
-        converged = true;
-        for (const auto& subject : subjects)
+        PostconditionSummary before_post;
+        if (const auto it = _postconditions.find(subject.key); it != _postconditions.end())
+            before_post = it->second;
+        std::set<SemanticEffect> before_effects;
+        if (const auto it = _effect_sets.find(subject.key); it != _effect_sets.end())
+            before_effects = it->second;
+
+        BodySemantics raw;
+        if (trace)
         {
-            PostconditionSummary before_post;
-            if (const auto it = _postconditions.find(subject.key); it != _postconditions.end())
-                before_post = it->second;
-            std::set<SemanticEffect> before_effects;
-            if (const auto it = _effect_sets.find(subject.key); it != _effect_sets.end())
-                before_effects = it->second;
+            LOG_INFO("[verification] analyzing %s (iteration %d, key=%p)", name_of(subject).c_str(),
+                     iteration, static_cast<const void*>(subject.key));
+        }
+        iteration++;
+        _current_subject = subject.key;
+        _pending_diagnostics.erase(subject.key);
 
-            BodySemantics raw;
-            if (trace)
+        BodySummary summary = analyze(subject, &raw);
+        derive_postcondition(*subject.key, contracts_of(subject), params_of(subject), summary);
+        _summaries[subject.key] = std::move(summary);
+
+        std::set<SemanticEffect> effects;
+        for (const auto& callee : raw.calls)
+        {
+            if (callee.find("::") == std::string::npos)
             {
-                LOG_INFO("[verification] analyzing %s (iteration %d, key=%p)", name_of(subject).c_str(),
-                         iteration, static_cast<const void*>(subject.key));
+                if (const auto* builtin = builtin_effects(callee))
+                    effects.insert(builtin->begin(), builtin->end());
             }
-            derive_postcondition(*subject.key, contracts_of(subject), params_of(subject),
-                                 analyze(subject, false, &raw));
-
-            std::set<SemanticEffect> effects;
-            for (const auto& callee : raw.calls)
+            if (const Symbol* callee_symbol = resolve_callee_by_name(callee, globalScope))
             {
-                if (callee.find("::") == std::string::npos)
-                {
-                    if (const auto* builtin = builtin_effects(callee))
-                        effects.insert(builtin->begin(), builtin->end());
-                }
-                if (const Symbol* callee_symbol = resolve_callee_by_name(callee, globalScope))
-                {
-                    if (const auto it = _effect_sets.find(callee_symbol); it != _effect_sets.end())
-                        effects.insert(it->second.begin(), it->second.end());
-                }
+                if (subject_of_key.contains(callee_symbol))
+                    dependents[callee_symbol].insert(subject.key);
+                if (const auto it = _effect_sets.find(callee_symbol); it != _effect_sets.end())
+                    effects.insert(it->second.begin(), it->second.end());
             }
+        }
 
-            _semantics[subject.key] = std::move(raw);
-            _effect_sets[subject.key] = effects;
+        _semantics[subject.key] = std::move(raw);
+        _effect_sets[subject.key] = effects;
 
-            PostconditionSummary after_post;
-            if (const auto it = _postconditions.find(subject.key); it != _postconditions.end())
-                after_post = it->second;
+        PostconditionSummary after_post;
+        if (const auto it = _postconditions.find(subject.key); it != _postconditions.end())
+            after_post = it->second;
 
-            if (!summary_equal(before_post, after_post) || before_effects != effects)
-                converged = false;
+        return !summary_equal(before_post, after_post) || before_effects != effects;
+    };
+
+    std::vector<const Symbol*> queue;
+    std::set<const Symbol*> queued;
+    for (const auto& subject : subjects)
+    {
+        queue.push_back(subject.key);
+        queued.insert(subject.key);
+    }
+    size_t budget = subjects.size() * 8;
+    bool churned = false;
+    for (size_t next = 0; next < queue.size(); next++)
+    {
+        if (budget == 0)
+        {
+            churned = true;
+            break;
+        }
+        budget--;
+        const Symbol* key = queue[next];
+        queued.erase(key);
+        if (analyze_subject(*subject_of_key[key]))
+        {
+            for (const Symbol* caller : dependents[key])
+                if (queued.insert(caller).second)
+                    queue.push_back(caller);
         }
     }
-    if (!converged)
+    if (churned)
     {
         _postconditions.clear();
         _effect_sets.clear();
+        _summaries.clear();
+        _pending_diagnostics.clear();
+        for (const auto& subject : subjects)
+            analyze_subject(subject);
     }
 
-    // Emitting pass: decisions and diagnostics run on the converged facts.
+    // Decision phase: flush the call-site diagnostics recorded by each
+    // subject's final analysis — its callees' summaries are final by now —
+    // and run the contract diffs on the stored summary, so no body is
+    // walked twice.
     for (const auto& subject : subjects)
     {
         if (trace)
         {
-            LOG_INFO("[verification] checking %s (key=%p)", name_of(subject).c_str(),
+            LOG_INFO("[verification] deciding %s (key=%p)", name_of(subject).c_str(),
                      static_cast<const void*>(subject.key));
         }
-        const auto summary = analyze(subject, true, nullptr);
+        if (const auto pending = _pending_diagnostics.find(subject.key);
+            pending != _pending_diagnostics.end())
+        {
+            for (const auto& diagnostic : pending->second)
+            {
+                _diagnostics.emitAndPrint(diagnostic);
+                result.success = false;
+            }
+        }
+        const BodySummary& summary = _summaries[subject.key];
         diff_contracts(result, contracts_of(subject), subject.obligation_rows, name_of(subject), summary);
         diff_sections(result, sections_of(subject), _semantics[subject.key], _effect_sets[subject.key],
                       name_of(subject));
@@ -655,9 +706,9 @@ Verifier::CalleeView Verifier::resolve_callee(const FunctionCall& call,
     return view;
 }
 
-void Verifier::check_call_site(VerificationResult& result, const FunctionCall& call,
+void Verifier::check_call_site(const FunctionCall& call,
                                const djinn::verification::FactSet& facts,
-                               const std::shared_ptr<ScopedSymbolTable>& globalScope, const bool emit)
+                               const std::shared_ptr<ScopedSymbolTable>& globalScope)
 {
     // Spec-first stubs (§12.3): a callee with contracts but no visible body
     // — extern or prototype — is checked exactly like an implemented one.
@@ -688,9 +739,9 @@ void Verifier::check_call_site(VerificationResult& result, const FunctionCall& c
 
         // The callee provably throws here: it has no normal return, so no
         // postcondition may be harvested from this call site. The decision
-        // happens on every pass; the diagnostic only on the emitting one.
+        // runs on every analysis; only the one against final callee
+        // summaries is flushed by the decision phase.
         _failed_calls.insert(&call);
-        if (!emit) continue;
 
         Diagnostic diagnostic(Severity::Error,
                               DiagnosticCode::E_CONTRACT_PRECONDITION_NOT_ESTABLISHED,
@@ -701,8 +752,7 @@ void Verifier::check_call_site(VerificationResult& result, const FunctionCall& c
         if (!evidence.empty())
             diagnostic.withNote(evidence);
         diagnostic.withHelp("pass arguments that satisfy the require, or weaken it");
-        _diagnostics.emitAndPrint(diagnostic);
-        result.success = false;
+        _pending_diagnostics[_current_subject].push_back(std::move(diagnostic));
     }
 }
 

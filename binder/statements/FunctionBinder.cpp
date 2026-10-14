@@ -67,6 +67,19 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
             currentFunctionCaughtNames_.push_back(arm->errorType.token_name);
     }
 
+    // Uow members are transactions: the catch suffix (with rollback arms) or
+    // in-body try handles their errors — an escaping throw breaks the
+    // all-or-nothing guarantee, so an uncovered throws clause is rejected.
+    currentFunctionIsUowMember_ = funcSym && !funcSym->uowName.empty();
+    currentFunctionAfterCommit_ = currentFunctionIsUowMember_ && funcSym->uowPhase == UowPhase::AfterCommit;
+    if (currentFunctionIsUowMember_ && funcSym->effectivelyThrowing())
+    {
+        BINDER_ERROR(DiagnosticCode::E_CONTRACT_UOW_ESCAPING_THROWS,
+                     "uow member '" + qualifiedName + "' cannot declare 'throws': a transaction member must "
+                         "handle its errors with catch arms or 'try', not propagate",
+                     func, funcSym->uowLocation);
+    }
+
     pushScope();
 
     size_t paramIdx = 0;
@@ -121,11 +134,11 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     if (funcSym && funcSym->body)
     {
         // A catch suffix turns the whole body into a checked scope: throwing
-        // calls are handled by the arms, not by the function's propagation.
-        const bool prevInsideTry = insideTryExpression_;
-        if (!funcSym->catchArms.empty()) insideTryExpression_ = true;
+        // calls covered by the arms need no try of their own.
+        const bool prevInsideSuffixBody = insideCatchSuffixBody_;
+        if (!funcSym->catchArms.empty()) insideCatchSuffixBody_ = true;
         bindBlock(*funcSym->body);
-        insideTryExpression_ = prevInsideTry;
+        insideCatchSuffixBody_ = prevInsideSuffixBody;
     }
 
     // Handler suffix: catch arms (each its own scope with the binding) + finally.
@@ -171,6 +184,9 @@ void Binder::bindFunction(const FunctionDeclaration& func, const std::string& pr
     currentFunctionThrowsTypes_.clear();
     currentFunctionCaughtNames_.clear();
     currentFunctionCatchesAll_ = false;
+    currentFunctionIsUowMember_ = false;
+    currentFunctionAfterCommit_ = false;
+    insideCatchSuffixBody_ = false;
 }
 
 void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration& struc)
@@ -193,6 +209,18 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     currentFunctionCaughtNames_.clear();
     for (const auto& arm : method.catchArms)
         currentFunctionCaughtNames_.push_back(arm.errorType.token_name);
+
+    // Same transaction rule as free-function uow members: errors are handled
+    // by the suffix or by try, never propagated out of the member.
+    currentFunctionIsUowMember_ = !method.uowName.empty();
+    currentFunctionAfterCommit_ = currentFunctionIsUowMember_ && method.uowPhase == UowPhase::AfterCommit;
+    if (currentFunctionIsUowMember_ && currentFunctionThrows_)
+    {
+        BINDER_ERROR(DiagnosticCode::E_CONTRACT_UOW_ESCAPING_THROWS,
+                     "uow member '" + currentFunction_ + "' cannot declare 'throws': a transaction member must "
+                         "handle its errors with catch arms or 'try', not propagate",
+                     method, method.uowLocation);
+    }
 
     pushScope();
 
@@ -301,10 +329,10 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     if (method.body)
     {
         // A catch suffix turns the whole body into a checked scope.
-        const bool prevInsideTry = insideTryExpression_;
-        if (!method.catchArms.empty()) insideTryExpression_ = true;
+        const bool prevInsideSuffixBody = insideCatchSuffixBody_;
+        if (!method.catchArms.empty()) insideCatchSuffixBody_ = true;
         bindBlock(*method.body);
-        insideTryExpression_ = prevInsideTry;
+        insideCatchSuffixBody_ = prevInsideSuffixBody;
     }
     else if (method.expression)
     {
@@ -368,6 +396,9 @@ void Binder::bindMethod(StructMethodDeclaration& method, const StructDeclaration
     currentFunctionThrowsTypes_.clear();
     currentFunctionCaughtNames_.clear();
     currentFunctionCatchesAll_ = false;
+    currentFunctionIsUowMember_ = false;
+    currentFunctionAfterCommit_ = false;
+    insideCatchSuffixBody_ = false;
 }
 
 void Binder::bind_contract_conditions(const std::vector<const ContractClause*>& contracts,

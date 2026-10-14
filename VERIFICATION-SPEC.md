@@ -393,6 +393,13 @@ v1 checks (static only, per attached member and across members):
 - ContractViolation coverage (E-CONTRACT-055): a member whose body can violate
   a check-mode contract (its own or a callee's) must catch it in its handler
   suffix, or the clause must be `in mode prove`.
+- No escaping throws (E-CONTRACT-056): a member may not declare a `throws`
+  set that survives its handler suffix — a transaction member handles its
+  errors (suffix arms or `try`), it never propagates. Inside the member, a
+  throwing call whose error set the suffix covers needs no `try`; after
+  `commit;` (and in whole-`after_commit` members) the transaction is over —
+  the suffix no longer covers that code, so every throwing call there needs
+  an explicit `try`.
 - Retry safety: with `retry: allowed`, non-idempotent effects
   (`external_io`, `process`, `filesystem`) cannot appear in the transaction
   window (E-CONTRACT-042) — they belong in `after_commit` blocks.
@@ -450,6 +457,7 @@ names the parser rejects until their strategies land.
 | `E-CONTRACT-053` | atomic claim not discharged by a lock scope (strategy provides no atomicity) |
 | `E-CONTRACT-054` | member can fail mid-transaction without rolling back an atomic path |
 | `E-CONTRACT-055` | uow member does not handle `ContractViolation` |
+| `E-CONTRACT-056` | uow member declares a `throws` set its handler suffix does not fully cover |
 | `E-CONTRACT-051` | function attaches to an unknown uow |
 | `E-CONTRACT-052` | uow has no participating functions (warning) |
 
