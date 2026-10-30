@@ -515,7 +515,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             if (options.runAfterCompile)
             {
                 auto _phase = summary.phase("run");
-                programReturnCode = system(exePath.c_str());
+                programReturnCode = system(("\"" + fs::absolute(exePath).make_preferred().string() + "\"").c_str());
 #ifndef _WIN32
                 if (WIFEXITED(programReturnCode))
                     programReturnCode = WEXITSTATUS(programReturnCode);
@@ -879,7 +879,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
         if (options.runAfterCompile)
         {
             auto _phase = summary.phase("run");
-            programReturnCode = system(exePath.c_str());
+            programReturnCode = system(("\"" + fs::absolute(exePath).make_preferred().string() + "\"").c_str());
 #ifndef _WIN32
             if (WIFEXITED(programReturnCode))
             {

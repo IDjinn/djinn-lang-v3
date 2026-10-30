@@ -41,6 +41,10 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
             if (!val)
             {
                 val = generate_expression(*stmt.value);
+                if (asyncReturnType->isPointerTy())
+                {
+                    val = coerce_str_to_ptr(val);
+                }
                 val = cast_value(val, asyncReturnType);
             }
 
@@ -94,6 +98,10 @@ void Generator::generate_return_statement(const ReturnStatement& stmt)
 
         auto val = generate_expression(*stmt.value);
         llvm::Type* returnType = currentFunction->getReturnType();
+        if (returnType->isPointerTy())
+        {
+            val = coerce_str_to_ptr(val);
+        }
         // Load struct from alloca for return (e.g., string literal returning str)
         if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(val))
         {

@@ -1129,8 +1129,10 @@ void __djinn_runtime_init(int num_threads)
     memset(&runtime, 0, sizeof(runtime));
     logger = logger_create("RUNTIME", 1, LOG_TRACE);
     logger_configure_from_properties(logger, "runtime.properties");
-
 #ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
     // Initialize Winsock
     WSADATA wsadata;
     const int wsa_err = WSAStartup(MAKEWORD(2, 2), &wsadata);
@@ -1895,6 +1897,7 @@ int __djinn_thread_is_alive(djinn_thread_t* thread)
 
 void __djinn_thread_sleep(int64_t milliseconds)
 {
+    DJINN_TRACE("sleeping thread for %lld milliseconds", milliseconds );
 #ifdef _WIN32
     Sleep((DWORD)milliseconds);
 #else
@@ -1903,6 +1906,7 @@ void __djinn_thread_sleep(int64_t milliseconds)
     ts.tv_nsec = (milliseconds % 1000) * 1000000;
     nanosleep(&ts, NULL);
 #endif
+    DJINN_TRACE("sleep thread ended", milliseconds );
 }
 
 // ── Mutex ──
@@ -2058,6 +2062,15 @@ void __djinn_raw_disable(void)
     tcsetattr(STDIN_FILENO, TCSANOW, &__djinn_original_termios);
 #endif
     __djinn_raw_saved = 0;
+}
+
+static int32_t djinn_open_line = 0;
+
+int32_t __djinn_console_open_line(int32_t set)
+{
+    const int32_t previous = djinn_open_line;
+    if (set >= 0) djinn_open_line = set;
+    return previous;
 }
 
 int32_t __djinn_read_line(char* buf, int32_t maxLen)
