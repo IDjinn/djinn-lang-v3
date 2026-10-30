@@ -5,6 +5,7 @@
 #include "Generator.h"
 
 #include <cassert>
+#include <regex>
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -583,6 +584,12 @@ std::string Generator::print() const
     std::string str;
     llvm::raw_string_ostream stream(str);
     module->print(stream, nullptr);
+
+    // LLVM 21 declares llvm.coro.end as returning i1, but the clang consuming this text (23+) expects void.
+    static const std::regex coroEndCall(R"((%[\w.$-]+ = )?call i1 @llvm\.coro\.end\()");
+    static const std::regex coroEndDecl(R"(declare i1 @llvm\.coro\.end\()");
+    str = std::regex_replace(str, coroEndCall, "call void @llvm.coro.end(");
+    str = std::regex_replace(str, coroEndDecl, "declare void @llvm.coro.end(");
     return str;
 }
 

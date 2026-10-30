@@ -9,6 +9,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if (MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
+    set_property(GLOBAL PROPERTY JOB_POOLS djinn_compile=4 djinn_link=1)
+    set(CMAKE_JOB_POOL_COMPILE djinn_compile)
+    set(CMAKE_JOB_POOL_LINK djinn_link)
+endif ()
+
 if (MSVC)
     set(DJINN_WARNINGS
             /W4
@@ -67,6 +73,7 @@ if (MSVC)
     string(REGEX REPLACE "/RTC[^ ]*" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     add_compile_options($<$<CONFIG:Debug>:/fsanitize=address>)
     add_link_options($<$<CONFIG:Debug>:/INCREMENTAL:NO>)
+    add_link_options($<$<CONFIG:Debug>:/DEBUG:FASTLINK>)
     # Disable STL container annotations — LLVM libs were built without ASan
     add_compile_definitions($<$<CONFIG:Debug>:_DISABLE_STRING_ANNOTATION>)
     add_compile_definitions($<$<CONFIG:Debug>:_DISABLE_VECTOR_ANNOTATION>)

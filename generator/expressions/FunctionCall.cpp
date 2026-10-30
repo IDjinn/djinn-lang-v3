@@ -556,6 +556,14 @@ llvm::Value* Generator::generate_function_call(const FunctionCall& expr)
     // at the calling line, not the function definition
     emit_frame_set_line(expr.name.location);
 
+    if (args.size() != funcType->getNumParams() && !(funcType->isVarArg() && args.size() > funcType->getNumParams()))
+    {
+        GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                        "call to '" + func->getName().str() + "' passes " + std::to_string(args.size()) +
+                        " argument(s) but the function takes " + std::to_string(funcType->getNumParams()),
+                        expr.name.location);
+    }
+
     auto call = builder->CreateCall(func, args);
     auto isExternFunctionDeclaration = func->isDeclaration() && !func->isIntrinsic();
     if (isExternFunctionDeclaration)
@@ -1136,6 +1144,14 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
     }
 
     emit_frame_set_line(call.name.location);
+
+    if (args.size() != funcType->getNumParams() && !(funcType->isVarArg() && args.size() > funcType->getNumParams()))
+    {
+        GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                        "call to '" + func->getName().str() + "' passes " + std::to_string(args.size()) +
+                        " argument(s) but the function takes " + std::to_string(funcType->getNumParams()),
+                        call.name.location);
+    }
 
     auto* methodCall = builder->CreateCall(func, args);
 
