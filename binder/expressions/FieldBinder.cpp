@@ -3,8 +3,20 @@
 //
 
 #include <memory>
+#include <sstream>
 
 #include "../Binder.h"
+
+static bool destroyFreesField(const StructSymbol& structSym, const std::string& fieldName)
+{
+    const auto destroy = structSym.getMethod("destroy");
+    if (!destroy || !destroy->body) return false;
+
+    std::ostringstream printed;
+    destroy->body->print(printed);
+    const std::string text = printed.str();
+    return text.find("free") != std::string::npos && text.find(fieldName) != std::string::npos;
+}
 
 std::shared_ptr<Symbol> Binder::bindFieldAccess(const FieldAccess& access)
 {
@@ -149,6 +161,21 @@ std::shared_ptr<Symbol> Binder::bindBraceInitializer(const BraceInitializer& ini
                 {
                     bindExpression(*elem.value);
                     if (fieldType) checkTypeCompatibility(*fieldType, *elem.value, elem.value->location);
+
+                    const auto* call = dynamic_cast<const FunctionCall*>(elem.value.get());
+                    if (call && !call->receiver && (call->name.token_name == "malloc" || call->name.token_name == "__djinn_malloc"))
+                    {
+                        const std::string& fieldName = elem.isDesignated()
+                                                           ? elem.fieldName.token_name
+                                                           : structSym->fields[fieldIndex - 1].name;
+                        if (!destroyFreesField(*structSym, fieldName))
+                        {
+                            BINDER_ERROR(DiagnosticCode::MEMORY_LEAK,
+                                         "field '" + fieldName + "' receives heap memory from '" + call->name.token_name +
+                                         "' but 'destroy()' of struct '" + structSym->name + "' never frees it",
+                                         elem, elem.value->location);
+                        }
+                    }
                 }
             }
             return nullptr;

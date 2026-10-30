@@ -404,6 +404,10 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
         currentScope->set_variable_non_zero(expr.name.token_name, expr.type.nonZero);
     }
     builder->CreateStore(initVal, alloca);
+    if (dynamic_cast<const BraceInitializer*>(expr.value.get()) && find_destroy_method(alloca))
+    {
+        currentScope->register_cleanup(expr.name.token_name, alloca);
+    }
     if (expr.type.kind == TypeKind::INTEGER)
     {
         emit_var_track(alloca, expr.name.token_name, expr.name.location);
