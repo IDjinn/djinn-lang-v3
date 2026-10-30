@@ -458,10 +458,23 @@ void Generator::generate_coro_wrappers()
         builder->SetInsertPoint(bb);
         auto* promiseFn = llvm::Intrinsic::getOrInsertDeclaration(
             module.get(), llvm::Intrinsic::coro_promise);
-        auto* result = builder->CreateCall(promiseFn, {
-                                               fn->getArg(0), fn->getArg(1), builder->getFalse()
-                                           }, "promise");
-        builder->CreateRet(result);
+
+        // coro.promise only accepts a constant alignment
+        auto* defaultBB = llvm::BasicBlock::Create(*context, "align.default", fn);
+        auto* dispatch = builder->CreateSwitch(fn->getArg(1), defaultBB, 5);
+        for (const unsigned align : {1u, 2u, 4u, 8u, 16u})
+        {
+            auto* alignBB = llvm::BasicBlock::Create(*context, "align." + std::to_string(align), fn);
+            dispatch->addCase(builder->getInt32(align), alignBB);
+            builder->SetInsertPoint(alignBB);
+            auto* result = builder->CreateCall(promiseFn, {
+                                                   fn->getArg(0), builder->getInt32(align), builder->getFalse()
+                                               }, "promise");
+            builder->CreateRet(result);
+        }
+
+        builder->SetInsertPoint(defaultBB);
+        builder->CreateRet(llvm::ConstantPointerNull::get(ptrTy));
     }
 }
 
