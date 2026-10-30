@@ -471,19 +471,19 @@ struct FunctionCall : Expression
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression>> args)
         : name(std::move(n)), arguments(std::move(args))
     {
-        location = n.location;
+        location = name.location;
     }
 
     FunctionCall(SourceIdentifier n, std::vector<std::unique_ptr<Expression>> args, std::unique_ptr<Expression> recv)
         : name(std::move(n)), arguments(std::move(args)), receiver(std::move(recv))
     {
-        location = n.location;
+        location = name.location;
     }
 
     FunctionCall(SourceIdentifier n, std::vector<Type> typeArgs, std::vector<std::unique_ptr<Expression>> args)
         : name(std::move(n)), arguments(std::move(args)), typeArguments(std::move(typeArgs))
     {
-        location = n.location;
+        location = name.location;
     }
 
     [[nodiscard]] bool isMethodCall() const { return receiver != nullptr; }
