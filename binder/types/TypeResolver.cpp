@@ -46,6 +46,19 @@ bool Binder::isTypeDefined(const Type& type) const
 
     case TypeKind::STRUCT:
         {
+            if (!currentStructName_.empty())
+            {
+                if (const auto owner = _global_scope->lookupStruct(currentStructName_))
+                {
+                    for (const auto& param : owner->genericParams)
+                    {
+                        if (param.name == mutableType.structName)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
             if (_global_scope->lookupInterface(mutableType.structName) != nullptr)
             {
                 return true;
@@ -428,9 +441,17 @@ void Binder::checkTypeCompatibility(const Type& expected, const Expression& expr
             {
                 compatible = false;
             }
-            else if (expectedElem->kind == TypeKind::STRUCT && expectedElem->structName != inferredElem->structName)
+            else if (expectedElem->kind == TypeKind::STRUCT)
             {
-                compatible = false;
+                const auto canonicalName = [this](const std::string& name)
+                {
+                    const auto sym = _global_scope->lookupStruct(name);
+                    return sym ? sym->name : name;
+                };
+                if (canonicalName(expectedElem->structName) != canonicalName(inferredElem->structName))
+                {
+                    compatible = false;
+                }
             }
 
             if (!compatible)

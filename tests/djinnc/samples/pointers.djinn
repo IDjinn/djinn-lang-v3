@@ -1,0 +1,17 @@
+extern "C" {
+    i32 printf(i8* format, ...);
+}
+
+void fill(i32* values, i32 count) {
+    for (mut i32 i = 0; i < count; i = i + 1) {
+        values[i] = i * i;
+    }
+}
+
+i32 main() {
+    mut i32 buffer = 0;
+    i32* slot = &buffer;
+    *slot = 7;
+    printf("slot=%d\n", buffer);
+    return buffer;
+}

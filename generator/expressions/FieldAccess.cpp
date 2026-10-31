@@ -301,6 +301,47 @@ llvm::Value* Generator::generate_field_access(const FieldAccess& expr)
             builder->CreateStore(callResult, tmpAlloca);
             basePtr = tmpAlloca;
         }
+        else if (callResult->getType()->isPointerTy())
+        {
+            const Type* returnType = nullptr;
+            std::shared_ptr<MethodSymbol> method;
+            if (const auto* callInst = llvm::dyn_cast<llvm::CallInst>(callResult))
+            {
+                if (const llvm::Function* callee = callInst->getCalledFunction())
+                {
+                    const std::string calleeName = callee->getName().str();
+                    const auto separator = calleeName.rfind("__");
+                    if (separator != std::string::npos)
+                    {
+                        if (const StructDef* owner = currentScope->lookup_struct(calleeName.substr(0, separator)))
+                        {
+                            method = owner->getMethod(calleeName.substr(separator + 2));
+                            if (method) returnType = &method->returnType;
+                        }
+                    }
+                    else if (const auto funcSym = symbols->lookupFunction(calleeName))
+                    {
+                        returnType = &funcSym->returnType;
+                    }
+                }
+            }
+
+            if (!returnType || returnType->kind != TypeKind::POINTER || !returnType->elementType
+                || returnType->elementType->kind != TypeKind::STRUCT)
+            {
+                GENERATOR_ERROR(DiagnosticCode::NOT_A_STRUCT,
+                                "acesso a campo em resultado de função que não retorna ponteiro para struct",
+                                expr.fieldName.location);
+            }
+
+            structName = currentScope->resolve_alias(returnType->elementType->structName);
+            structType = currentScope->get_llvm_struct(structName);
+            if (!structType)
+            {
+                GENERATOR_ERROR(DiagnosticCode::UNDEFINED_STRUCT, "struct não encontrada: " + structName,
+                                expr.fieldName.location);
+            }
+        }
         else
         {
             GENERATOR_ERROR(DiagnosticCode::NOT_A_STRUCT, "acesso a campo em resultado de função que não é struct",

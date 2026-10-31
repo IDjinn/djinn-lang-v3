@@ -26,6 +26,7 @@ llvm::Value* Generator::generate_variable_declaration(const VariableDeclaration&
     else if ((expr.type.kind == TypeKind::POINTER || expr.type.kind == TypeKind::ARRAY) && expr.type.elementType)
     {
         pointeeType = generate_type(*expr.type.elementType);
+        structTypeName = pointer_struct_name(expr.type);
     }
     else
     {

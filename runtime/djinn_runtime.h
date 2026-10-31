@@ -208,6 +208,11 @@ typedef struct djinn_continuation
 void __djinn_runtime_init(int num_threads);
 void __djinn_runtime_shutdown(void);
 
+// Process command line. Captured without changing main's signature, so the JIT
+// path (which calls main as int(void)) keeps working.
+int __djinn_argc(void);
+char* __djinn_argv(int index);
+
 // ── Runtime error reporting (traps: integer overflow, division by zero) ──
 //
 // The generator bakes a djinn_error_info_t at each trap site and calls

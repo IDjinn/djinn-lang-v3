@@ -1,0 +1,150 @@
+namespace djinnc;
+
+struct TypeKind {
+    const i32 VOID = 0;
+    const i32 INTEGER = 1;
+    const i32 FLOAT = 2;
+    const i32 POINTER = 3;
+    const i32 NAMED = 4;
+    const i32 AUTO = 5;
+}
+
+struct TypeRef {
+    i32 kind;
+    i32 bits;
+    bool is_signed;
+    bool nullable;
+    TypeRef* element;
+    i8* name;
+
+    public static TypeRef* create(i32 kind) {
+        TypeRef* type = (TypeRef*)Mem.zalloc(sizeof(TypeRef));
+        type.kind = kind;
+        return type;
+    }
+
+    public static TypeRef* integer(i32 bits, bool is_signed) {
+        TypeRef* type = TypeRef.create(TypeKind.INTEGER);
+        type.bits = bits;
+        type.is_signed = is_signed;
+        return type;
+    }
+
+    public static TypeRef* floating(i32 bits) {
+        TypeRef* type = TypeRef.create(TypeKind.FLOAT);
+        type.bits = bits;
+        type.is_signed = true;
+        return type;
+    }
+
+    public static TypeRef* pointer_to(TypeRef* element) {
+        TypeRef* type = TypeRef.create(TypeKind.POINTER);
+        type.element = element;
+        return type;
+    }
+
+    public static TypeRef* named(i8* name) {
+        TypeRef* type = TypeRef.create(TypeKind.NAMED);
+        type.name = name;
+        return type;
+    }
+
+    public static TypeRef* from_primitive_name(i8* text, i32 length) {
+        if (Str.equals(text, length, "void")) {
+            return TypeRef.create(TypeKind.VOID);
+        }
+        if (Str.equals(text, length, "auto")) {
+            return TypeRef.create(TypeKind.AUTO);
+        }
+        if (Str.equals(text, length, "bool")) {
+            return TypeRef.integer(1, false);
+        }
+        if (Str.equals(text, length, "nint")) {
+            return TypeRef.integer(64, true);
+        }
+        if (Str.equals(text, length, "nfloat") || Str.equals(text, length, "ndouble")) {
+            return TypeRef.floating(64);
+        }
+        if (length < 2) {
+            return (TypeRef*)0;
+        }
+
+        i32 lead = text[0];
+        bool isIntegerLead = lead == 105 || lead == 117;
+        if (!isIntegerLead && lead != 102) {
+            return (TypeRef*)0;
+        }
+
+        mut i32 pos = 1;
+        mut i32 bits = 0;
+        while (pos < length && Str.is_digit(text[pos])) {
+            bits = bits * 10 + (text[pos] - 48);
+            pos = pos + 1;
+        }
+        if (pos == 1 || bits == 0) {
+            return (TypeRef*)0;
+        }
+
+        while (pos < length) {
+            i32 suffix = text[pos];
+            bool validSuffix = suffix == 119 || suffix == 116 || suffix == 99 || suffix == 115 || suffix == 110;
+            if (!validSuffix || lead == 102) {
+                return (TypeRef*)0;
+            }
+            pos = pos + 1;
+        }
+
+        if (lead == 102) {
+            return TypeRef.floating(bits);
+        }
+        return TypeRef.integer(bits, lead == 105);
+    }
+
+    public bool is_void() {
+        return this.kind == TypeKind.VOID;
+    }
+
+    public bool is_integer() {
+        return this.kind == TypeKind.INTEGER;
+    }
+
+    public bool is_float() {
+        return this.kind == TypeKind.FLOAT;
+    }
+
+    public bool is_pointer() {
+        return this.kind == TypeKind.POINTER;
+    }
+
+    public void describe(ByteBuf* out) {
+        if (this.kind == TypeKind.VOID) {
+            out.append("void");
+        } else if (this.kind == TypeKind.AUTO) {
+            out.append("auto");
+        } else if (this.kind == TypeKind.INTEGER) {
+            if (this.bits == 1) {
+                out.append("bool");
+            } else {
+                if (this.is_signed) {
+                    out.append_char(105);
+                } else {
+                    out.append_char(117);
+                }
+                out.append_int(this.bits);
+            }
+        } else if (this.kind == TypeKind.FLOAT) {
+            out.append_char(102);
+            out.append_int(this.bits);
+        } else if (this.kind == TypeKind.POINTER) {
+            TypeRef* inner = this.element;
+            inner.describe(out);
+            out.append_char(42);
+        } else {
+            out.append(this.name);
+        }
+
+        if (this.nullable) {
+            out.append_char(63);
+        }
+    }
+}

@@ -153,6 +153,8 @@ private:
 
     llvm::Type* generate_type(const Type& type);
 
+    std::string pointer_struct_name(const Type& type) const;
+
     llvm::StructType* monomorphize_struct(const std::string& baseName, const std::vector<Type>& typeArgs);
 
     llvm::StructType* monomorphize_enum(const std::string& baseName, const std::vector<Type>& typeArgs);
@@ -214,6 +216,8 @@ private:
     llvm::Value* extract_slice_data_ptr(llvm::Value* value);
 
     llvm::Value* generate_binary_expression(const BinaryExpression& expr);
+
+    llvm::Value* generate_short_circuit(const BinaryExpression& expr, llvm::Value* left);
 
     llvm::Value* generate_unary_expression(const UnaryExpression& expr);
 

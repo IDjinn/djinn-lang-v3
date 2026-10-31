@@ -138,6 +138,7 @@ struct CompilerConfig
     InternalsConfig internals;
     GeneratorConfig generator;
     std::vector<std::string> libs = {"std"}; // "std" = djinn stdlib, others = .ll link targets
+    std::vector<std::string> nativeLibs;
     std::optional<bool> libraryMode;
     std::optional<bool> noCache;
     std::optional<std::string> buildMode;
@@ -206,6 +207,7 @@ struct ProjectConfig
         // compiler.libs
         if (root.has("compiler.libs"))
             config.compiler.libs = root.get_string_list("compiler.libs");
+        config.compiler.nativeLibs = root.get_string_list("compiler.native-libs");
 
         // compiler (top-level)
         config.compiler.libraryMode = root.get<bool>("compiler.library-mode");
@@ -284,6 +286,9 @@ struct ProjectConfig
                 options.linkLibraries.emplace_back(lib);
         }
         options.includeStd = hasStd;
+
+        for (const auto& nativeLib : cc.nativeLibs)
+            options.nativeLibraries.push_back(nativeLib);
 
         options.runtimeProperties.loggerLevel = runtime.logger.level;
         options.runtimeProperties.loggerFormat = runtime.logger.format;

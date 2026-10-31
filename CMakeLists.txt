@@ -73,7 +73,7 @@ if (MSVC)
     string(REGEX REPLACE "/RTC[^ ]*" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     add_compile_options($<$<CONFIG:Debug>:/fsanitize=address>)
     add_link_options($<$<CONFIG:Debug>:/INCREMENTAL:NO>)
-    add_link_options($<$<CONFIG:Debug>:/DEBUG:FASTLINK>)
+    add_link_options($<$<CONFIG:Debug>:/DEBUG:NONE>)
     # Disable STL container annotations — LLVM libs were built without ASan
     add_compile_definitions($<$<CONFIG:Debug>:_DISABLE_STRING_ANNOTATION>)
     add_compile_definitions($<$<CONFIG:Debug>:_DISABLE_VECTOR_ANNOTATION>)

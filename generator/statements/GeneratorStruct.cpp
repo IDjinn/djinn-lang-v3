@@ -539,7 +539,9 @@ void Generator::generate_method(const StructSymbol& struc, const MethodSymbol& m
 
         auto* alloca = builder->CreateAlloca(argIt->getType(), nullptr, paramName);
         builder->CreateStore(&*argIt, alloca);
-        std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        std::string paramStructType = paramType.kind == TypeKind::STRUCT
+                                          ? paramType.structName
+                                          : pointer_struct_name(paramType);
         currentScope->define_variable(paramName, alloca, paramStructType);
         if (paramType.kind == TypeKind::INTEGER)
         {
@@ -720,7 +722,9 @@ void Generator::generate_async_method_body(const StructSymbol& struc, const Meth
 
         auto* alloca = builder->CreateAlloca(argIt->getType(), nullptr, paramName);
         builder->CreateStore(&*argIt, alloca);
-        std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        std::string paramStructType = paramType.kind == TypeKind::STRUCT
+                                          ? paramType.structName
+                                          : pointer_struct_name(paramType);
         currentScope->define_variable(paramName, alloca, paramStructType);
 
         ++argIt;

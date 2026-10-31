@@ -1,0 +1,65 @@
+namespace djinnc;
+
+struct Options {
+    i8* input;
+    i8* output;
+    i8* runtime_dir;
+    bool emit_tokens;
+    bool emit_ast;
+    bool emit_ir;
+    bool no_link;
+    bool ok;
+
+    public static Options* parse() {
+        Options* options = (Options*)Mem.zalloc(sizeof(Options));
+        options.output = "a.out";
+        options.runtime_dir = "runtime";
+        options.ok = true;
+
+        i32 count = Process.argc();
+        mut i32 i = 1;
+        while (i < count) {
+            i8* argument = Process.argv(i) ?? "";
+            if (Str.same(argument, "--emit-tokens")) {
+                options.emit_tokens = true;
+            } else if (Str.same(argument, "--emit-ast")) {
+                options.emit_ast = true;
+            } else if (Str.same(argument, "--emit-ir")) {
+                options.emit_ir = true;
+            } else if (Str.same(argument, "--no-link")) {
+                options.no_link = true;
+            } else if (Str.same(argument, "-o") || Str.same(argument, "--runtime-dir")) {
+                i = i + 1;
+                if (i >= count) {
+                    printf("djinnc: missing value for %s\n", argument);
+                    options.ok = false;
+                    return options;
+                }
+                i8* value = Process.argv(i) ?? "";
+                if (Str.same(argument, "-o")) {
+                    options.output = value;
+                } else {
+                    options.runtime_dir = value;
+                }
+            } else if (Str.starts_with(argument, 0, strlen(argument), "-")) {
+                printf("djinnc: unknown option '%s'\n", argument);
+                options.ok = false;
+                return options;
+            } else {
+                options.input = argument;
+            }
+            i = i + 1;
+        }
+
+        if (options.input == null) {
+            options.ok = false;
+        }
+        return options;
+    }
+
+    public static void usage() {
+        printf("usage: djinnc <input.djinn> [-o <output>] [--runtime-dir <dir>] [--no-link]\n");
+        printf("              [--emit-tokens] [--emit-ast] [--emit-ir]\n");
+        printf("environment: DJINN_CLANG overrides the clang executable\n");
+    }
+}

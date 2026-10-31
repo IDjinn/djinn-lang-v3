@@ -1,0 +1,121 @@
+namespace djinnc;
+
+struct NodeKind {
+    const i32 PROGRAM = 0;
+    const i32 IMPORT = 1;
+    const i32 NAMESPACE_DECL = 2;
+    const i32 FUNCTION = 3;
+    const i32 EXTERN_FUNCTION = 4;
+    const i32 PARAMETER = 5;
+    const i32 STRUCT_DECL = 6;
+    const i32 FIELD_DECL = 7;
+
+    const i32 BLOCK = 20;
+    const i32 VAR_DECL = 21;
+    const i32 EXPR_STMT = 22;
+    const i32 RETURN = 23;
+    const i32 IF = 24;
+    const i32 WHILE = 25;
+    const i32 DO_WHILE = 26;
+    const i32 FOR = 27;
+    const i32 BREAK = 28;
+    const i32 CONTINUE = 29;
+
+    const i32 INT_LITERAL = 40;
+    const i32 FLOAT_LITERAL = 41;
+    const i32 STRING_LITERAL = 42;
+    const i32 BOOL_LITERAL = 43;
+    const i32 NULL_LITERAL = 44;
+    const i32 IDENTIFIER = 45;
+    const i32 UNARY = 46;
+    const i32 BINARY = 47;
+    const i32 ASSIGN = 48;
+    const i32 CALL = 49;
+    const i32 CAST = 50;
+    const i32 INDEX = 51;
+    const i32 FIELD_ACCESS = 52;
+    const i32 SIZEOF = 53;
+
+    public static i8* name(i32 kind) {
+        if (kind == NodeKind.PROGRAM) { return "Program"; }
+        if (kind == NodeKind.IMPORT) { return "Import"; }
+        if (kind == NodeKind.NAMESPACE_DECL) { return "Namespace"; }
+        if (kind == NodeKind.FUNCTION) { return "Function"; }
+        if (kind == NodeKind.EXTERN_FUNCTION) { return "ExternFunction"; }
+        if (kind == NodeKind.PARAMETER) { return "Parameter"; }
+        if (kind == NodeKind.STRUCT_DECL) { return "Struct"; }
+        if (kind == NodeKind.FIELD_DECL) { return "Field"; }
+        if (kind == NodeKind.BLOCK) { return "Block"; }
+        if (kind == NodeKind.VAR_DECL) { return "VarDecl"; }
+        if (kind == NodeKind.EXPR_STMT) { return "ExprStmt"; }
+        if (kind == NodeKind.RETURN) { return "Return"; }
+        if (kind == NodeKind.IF) { return "If"; }
+        if (kind == NodeKind.WHILE) { return "While"; }
+        if (kind == NodeKind.DO_WHILE) { return "DoWhile"; }
+        if (kind == NodeKind.FOR) { return "For"; }
+        if (kind == NodeKind.BREAK) { return "Break"; }
+        if (kind == NodeKind.CONTINUE) { return "Continue"; }
+        if (kind == NodeKind.INT_LITERAL) { return "IntLiteral"; }
+        if (kind == NodeKind.FLOAT_LITERAL) { return "FloatLiteral"; }
+        if (kind == NodeKind.STRING_LITERAL) { return "StringLiteral"; }
+        if (kind == NodeKind.BOOL_LITERAL) { return "BoolLiteral"; }
+        if (kind == NodeKind.NULL_LITERAL) { return "NullLiteral"; }
+        if (kind == NodeKind.IDENTIFIER) { return "Identifier"; }
+        if (kind == NodeKind.UNARY) { return "Unary"; }
+        if (kind == NodeKind.BINARY) { return "Binary"; }
+        if (kind == NodeKind.ASSIGN) { return "Assign"; }
+        if (kind == NodeKind.CALL) { return "Call"; }
+        if (kind == NodeKind.CAST) { return "Cast"; }
+        if (kind == NodeKind.INDEX) { return "Index"; }
+        if (kind == NodeKind.FIELD_ACCESS) { return "FieldAccess"; }
+        if (kind == NodeKind.SIZEOF) { return "SizeOf"; }
+        return "?";
+    }
+}
+
+struct Node {
+    i32 kind;
+    i32 line;
+    i32 column;
+    i32 op;
+    i8* text;
+    i64 int_value;
+    f64 float_value;
+    bool flag;
+    bool is_variadic;
+    TypeRef* type;
+    Node* first;
+    Node* second;
+    Node* third;
+    Node* fourth;
+    PtrVec* items;
+
+    public static Node* create(i32 kind, Token* at) {
+        Node* node = (Node*)Mem.zalloc(sizeof(Node));
+        node.kind = kind;
+        node.line = at.line;
+        node.column = at.column;
+        return node;
+    }
+
+    public static Node* create_list(i32 kind, Token* at) {
+        Node* node = Node.create(kind, at);
+        node.items = PtrVec.create();
+        return node;
+    }
+
+    public void add(Node* child) {
+        PtrVec* list = this.items;
+        list.push(child);
+    }
+
+    public Node* child(i32 index) {
+        PtrVec* list = this.items;
+        return (Node*)list.get(index);
+    }
+
+    public i32 count() {
+        PtrVec* list = this.items;
+        return list.length;
+    }
+}

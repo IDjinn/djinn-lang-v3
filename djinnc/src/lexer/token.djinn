@@ -1,0 +1,27 @@
+namespace djinnc;
+
+struct Token {
+    i32 kind;
+    i8* text;
+    i32 length;
+    i32 line;
+    i32 column;
+
+    public static Token* create(i32 kind, i8* text, i32 length, i32 line, i32 column) {
+        Token* token = (Token*)Mem.zalloc(sizeof(Token));
+        token.kind = kind;
+        token.text = text;
+        token.length = length;
+        token.line = line;
+        token.column = column;
+        return token;
+    }
+
+    public i8* copy_text() {
+        return Str.duplicate(this.text, this.length);
+    }
+
+    public bool has_kind(i32 expected) {
+        return this.kind == expected;
+    }
+}

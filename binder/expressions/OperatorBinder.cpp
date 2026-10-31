@@ -181,9 +181,18 @@ std::shared_ptr<Symbol> Binder::bindBinaryExpression(const BinaryExpression& exp
         );
     }
 
+    const bool isPointerEquality =
+        (expr.op == TokenType::EQUAL_EQUAL || expr.op == TokenType::BANG_EQUAL) &&
+        leftResolved.kind == TypeKind::POINTER && rightResolved.kind == TypeKind::POINTER &&
+        leftResolved.elementType && rightResolved.elementType &&
+        (leftResolved.elementType->kind == TypeKind::VOID ||
+            rightResolved.elementType->kind == TypeKind::VOID ||
+            (leftResolved.elementType->kind == rightResolved.elementType->kind &&
+                leftResolved.elementType->structName == rightResolved.elementType->structName));
+
     // Type mismatch check (allow integer width differences - generator handles widening)
     // Skip for generic types (validated at monomorphization)
-    if (leftResolved != rightResolved && !hasGeneric && !hasOperatorOverride)
+    if (leftResolved != rightResolved && !hasGeneric && !hasOperatorOverride && !isPointerEquality)
     {
         const bool bothIntegers = leftResolved.kind == TypeKind::INTEGER && rightResolved.kind == TypeKind::INTEGER;
         const bool bothFloats =

@@ -57,6 +57,16 @@ llvm::Value* Generator::generate_intrinsic_call(const FunctionCall& call)
                 }
             }
 
+            if (const auto* ident = dynamic_cast<const Identifier*>(call.arguments[0].get()))
+            {
+                const auto& name = ident->identifier.token_name;
+                if (!currentScope->lookup_variable(name) && symbols->lookupStruct(name))
+                {
+                    llvm::Type* structType = generate_type(Type::struct_type(name));
+                    return builder->getInt64(module->getDataLayout().getTypeAllocSize(structType));
+                }
+            }
+
             const llvm::Value* arg = generate_expression(*call.arguments[0]);
             const auto type = arg->getType();
             const auto& dataLayout = module->getDataLayout();

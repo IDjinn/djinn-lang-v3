@@ -32,6 +32,36 @@ bool Generator::is_provably_non_zero(const Expression& expr) const
     return false;
 }
 
+llvm::Value* Generator::generate_short_circuit(const BinaryExpression& expr, llvm::Value* left)
+{
+    const bool isAnd = expr.op == TokenType::AND_AND;
+    llvm::Function* func = builder->GetInsertBlock()->getParent();
+    auto* leftEnd = builder->GetInsertBlock();
+    auto* rhsBB = llvm::BasicBlock::Create(*context, isAnd ? "and.rhs" : "or.rhs", func);
+    auto* mergeBB = llvm::BasicBlock::Create(*context, isAnd ? "and.end" : "or.end", func);
+
+    if (isAnd)
+        builder->CreateCondBr(left, rhsBB, mergeBB);
+    else
+        builder->CreateCondBr(left, mergeBB, rhsBB);
+
+    builder->SetInsertPoint(rhsBB);
+    llvm::Value* right = generate_expression(*expr.right);
+    if (!right) return nullptr;
+    if (!right->getType()->isIntegerTy(1))
+    {
+        right = builder->CreateICmpNE(right, llvm::Constant::getNullValue(right->getType()), "tobool");
+    }
+    auto* rightEnd = builder->GetInsertBlock();
+    builder->CreateBr(mergeBB);
+
+    builder->SetInsertPoint(mergeBB);
+    auto* phi = builder->CreatePHI(builder->getInt1Ty(), 2, isAnd ? "andtmp" : "ortmp");
+    phi->addIncoming(builder->getInt1(!isAnd), leftEnd);
+    phi->addIncoming(right, rightEnd);
+    return phi;
+}
+
 llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
 {
     if (expr.op == TokenType::QUESTION_QUESTION)
@@ -70,6 +100,12 @@ llvm::Value* Generator::generate_binary_expression(const BinaryExpression& expr)
     }
 
     auto* left = generate_expression(*expr.left);
+    const bool insideFunction = builder->GetInsertBlock() && builder->GetInsertBlock()->getParent();
+    if (left && insideFunction && (expr.op == TokenType::AND_AND || expr.op == TokenType::OR_OR) &&
+        left->getType()->isIntegerTy(1))
+    {
+        return generate_short_circuit(expr, left);
+    }
     auto* right = generate_expression(*expr.right);
 
     if (!left || !right) return nullptr;

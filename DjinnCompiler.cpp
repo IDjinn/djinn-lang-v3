@@ -99,6 +99,21 @@ namespace
         }
     };
 
+    void collect_declared_type_names(const std::filesystem::path& filePath, std::vector<std::string>& names)
+    {
+        std::ifstream file(filePath);
+        if (!file) return;
+
+        const std::string source((std::istreambuf_iterator(file)), std::istreambuf_iterator<char>());
+        const auto tokens = Lexer(source, filePath.string()).tokenize();
+        for (size_t i = 0; i + 1 < tokens.size(); ++i)
+        {
+            const bool declaresType = tokens[i].type == TokenType::STRUCT || tokens[i].type == TokenType::ENUM;
+            if (declaresType && tokens[i + 1].type == TokenType::IDENTIFIER)
+                names.push_back(tokens[i + 1].value);
+        }
+    }
+
     std::map<std::string, std::string> hash_source_files(const std::set<std::filesystem::path>& files)
     {
         std::map<std::string, std::string> result;
@@ -378,6 +393,7 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
     std::vector<std::string> preludeTypeNames;
     std::vector<std::string> stdTypeNames;
+    std::vector<std::string> userTypeNames;
 
     const auto parseFile = [&](const fs::path& filePath, const bool registerPrelude, const bool isUserCode)
     {
@@ -414,6 +430,8 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             if (isUserCode)
             {
                 for (const auto& name : stdTypeNames)
+                    parser.registerKnownType(name);
+                for (const auto& name : userTypeNames)
                     parser.registerKnownType(name);
             }
 
@@ -668,28 +686,41 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
 
         if (fs::exists(path))
         {
+            std::vector<fs::path> userFiles;
             for (const auto& entry : fs::recursive_directory_iterator(path))
+            {
+                if (!entry.is_regular_file()) continue;
+                if (entry.path().extension() != ".djinn") continue;
+
+                auto canonical = fs::canonical(entry.path());
+                if (parsedFiles.contains(canonical)) continue;
+
+                if (!stdCanonical.empty())
+                {
+                    auto rel = canonical.lexically_relative(stdCanonical);
+                    if (!rel.empty() && !rel.string().starts_with("..")) continue;
+                }
+
+                parsedFiles.insert(canonical);
+                userFiles.push_back(entry.path());
+            }
+
+            // Every user file must see the types declared by the others, otherwise
+            // `Foo* x = ...` is parsed as a multiplication in files that do not declare Foo
+            for (const auto& userFile : userFiles)
+            {
+                collect_declared_type_names(userFile, userTypeNames);
+            }
+
+            for (const auto& userFile : userFiles)
             {
                 try
                 {
-                    if (!entry.is_regular_file()) continue;
-                    if (entry.path().extension() != ".djinn") continue;
-
-                    auto canonical = fs::canonical(entry.path());
-                    if (parsedFiles.contains(canonical)) continue;
-
-                    if (!stdCanonical.empty())
-                    {
-                        auto rel = canonical.lexically_relative(stdCanonical);
-                        if (!rel.empty() && !rel.string().starts_with("..")) continue;
-                    }
-
-                    parsedFiles.insert(canonical);
-                    parseFile(entry.path(), true, true);
+                    parseFile(userFile, true, true);
                 }
                 catch (const CompileError& compile_error)
                 {
-                    LOG_ERROR("Error parsing %s: %s", entry.path().string().c_str(), compile_error.message().c_str());
+                    LOG_ERROR("Error parsing %s: %s", userFile.string().c_str(), compile_error.message().c_str());
                 }
             }
         }
@@ -857,6 +888,10 @@ CompilerResult DjinnCompiler::compileFromDirectory(const std::filesystem::path& 
             for (auto& runtime_path : runtimePaths)
             {
                 runtimeArg += " " + runtime_path.string();
+            }
+            for (const auto& nativeLib : options.nativeLibraries)
+            {
+                runtimeArg += " " + nativeLib;
             }
 
             auto optFlag = "-O" + std::to_string(options.optimizationLevel);
@@ -1174,6 +1209,10 @@ CompilerResult DjinnCompiler::run(const std::string& source, const CompilerOptio
         for (const auto& runtime_path : runtimePaths)
         {
             runtimeArg += " " + runtime_path.string();
+        }
+        for (const auto& nativeLib : options.nativeLibraries)
+        {
+            runtimeArg += " " + nativeLib;
         }
 
         auto optFlag = "-O" + std::to_string(options.optimizationLevel);

@@ -1,0 +1,23 @@
+namespace djinnc;
+
+struct Linker {
+    public static i32 link(Options* options, i8* ir_path) {
+        i8* clang = Process.env("DJINN_CLANG") ?? "clang";
+
+        ByteBuf* command = ByteBuf.create();
+        command.append("\"");
+        command.append("\"");
+        command.append(clang);
+        command.append("\" \"");
+        command.append(ir_path);
+        command.append("\" \"");
+        command.append(options.runtime_dir);
+        command.append("/djinn_runtime.c\" \"");
+        command.append(options.runtime_dir);
+        command.append("/logger.c\" -flto -fuse-ld=lld -O2 -o \"");
+        command.append(options.output);
+        command.append("\"\"");
+
+        return Process.run(command.cstr());
+    }
+}

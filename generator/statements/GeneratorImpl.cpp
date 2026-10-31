@@ -99,7 +99,9 @@ void Generator::generate_primitive_impl_method(const StructSymbol& struc, const 
 
         auto* alloca = builder->CreateAlloca(argIt->getType(), nullptr, paramName);
         builder->CreateStore(&*argIt, alloca);
-        std::string paramStructType = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        std::string paramStructType = paramType.kind == TypeKind::STRUCT
+                                          ? paramType.structName
+                                          : pointer_struct_name(paramType);
         currentScope->define_variable(paramName, alloca, paramStructType);
         if (paramType.kind == TypeKind::INTEGER)
         {

@@ -1,0 +1,50 @@
+namespace djinnc;
+
+struct Dump {
+    public static void tokens(PtrVec* tokens) {
+        for (mut i32 i = 0; i < tokens.length; i = i + 1) {
+            Token* token = (Token*)tokens.get(i);
+            printf("%d:%d %s '%s'\n", token.line, token.column, TokenKind.name(token.kind), token.text);
+        }
+    }
+
+    public static void indent(i32 depth) {
+        for (mut i32 i = 0; i < depth; i = i + 1) {
+            printf("  ");
+        }
+    }
+
+    public static void node(Node* node, i32 depth) {
+        if (node == null) {
+            return;
+        }
+        Dump.indent(depth);
+        printf("%s", NodeKind.name(node.kind));
+        if (node.text != null) {
+            printf(" %s", node.text);
+        }
+        if (node.op != 0) {
+            printf(" op=%s", TokenKind.name(node.op));
+        }
+        if (node.kind == NodeKind.INT_LITERAL || node.kind == NodeKind.BOOL_LITERAL) {
+            printf(" %lld", node.int_value);
+        }
+        if (node.type != null) {
+            ByteBuf* description = ByteBuf.create();
+            TypeRef* type = node.type;
+            type.describe(description);
+            printf(" : %s", description.cstr());
+        }
+        printf("\n");
+
+        Dump.node(node.first, depth + 1);
+        Dump.node(node.second, depth + 1);
+        Dump.node(node.third, depth + 1);
+        Dump.node(node.fourth, depth + 1);
+        if (node.items != null) {
+            for (mut i32 i = 0; i < node.count(); i = i + 1) {
+                Dump.node(node.child(i), depth + 1);
+            }
+        }
+    }
+}

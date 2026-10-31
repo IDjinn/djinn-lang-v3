@@ -1,0 +1,21 @@
+project: "djinnc"
+version: "0.1.0"
+
+compiler:
+  library-mode: false
+  no-cache: true
+
+  output:
+    directory: "djinnc/build"
+
+  generator:
+    optimization-level: 2
+
+  libs: [
+    'std'
+  ]
+
+  native-libs: [
+    '-LC:/dev/llvm-21.1.1/llvm-21.1.1-windows-amd64-msvc17-msvcrt/lib',
+    '-lLLVM-C'
+  ]

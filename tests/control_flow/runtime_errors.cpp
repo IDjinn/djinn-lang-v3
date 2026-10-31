@@ -302,7 +302,7 @@ TEST(RuntimeErrors, ReleaseModeOmitsShadowStackAndVarTracking)
             return v;
         }
         i32 main() {
-            i32t x = 1t;
+            mut i32t x = 1t;
             x = 2t;
             return helper(x);
         }
