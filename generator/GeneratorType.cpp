@@ -383,7 +383,7 @@ void Generator::monomorphize_method(const MethodSymbol& method,
         Type substitutedParam = ctx.substitute(paramType);
         std::string paramStructType = substitutedParam.kind == TypeKind::STRUCT
                                           ? substitutedParam.structName
-                                          : "";
+                                          : pointer_struct_name(substitutedParam);
         currentScope->define_variable(paramName, alloca, paramStructType);
         if (substitutedParam.kind == TypeKind::INTEGER)
         {
@@ -723,6 +723,22 @@ llvm::Type* Generator::generate_type(const Type& type)
         throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo auto deve ser inferido antes da geração de código");
     default: throw CompileError(DiagnosticCode::INVALID_TYPE, "tipo inválido");
     }
+}
+
+std::string Generator::pointer_struct_name(const Type& type) const
+{
+    if (type.kind != TypeKind::POINTER || !type.elementType || type.elementType->kind != TypeKind::STRUCT)
+        return "";
+
+    const Type& element = *type.elementType;
+    std::string name = currentScope->resolve_alias(element.structName);
+    if (element.hasGenericArgs())
+        name = Mangler::mangle_generic_struct(name, element.genericArgs);
+
+    const StructDef* def = currentScope->lookup_struct(name);
+    if (!def || def->isTransparent || !def->llvmType)
+        return "";
+    return name;
 }
 
 llvm::Value* Generator::cast_value(llvm::Value* value, llvm::Type* targetType, bool isSigned) const

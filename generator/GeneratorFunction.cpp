@@ -64,7 +64,9 @@ void Generator::generate_function_body(const FunctionSymbol& func)
 
         auto* alloca = builder->CreateAlloca(arg.getType(), nullptr, paramName);
         builder->CreateStore(&arg, alloca);
-        std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        std::string structTypeName = paramType.kind == TypeKind::STRUCT
+                                         ? paramType.structName
+                                         : pointer_struct_name(paramType);
         currentScope->define_variable(paramName, alloca, structTypeName);
         if (paramType.kind == TypeKind::INTEGER)
         {
@@ -278,7 +280,9 @@ void Generator::generate_async_function_body(const FunctionSymbol& func)
 
         auto* alloca = builder->CreateAlloca(arg.getType(), nullptr, paramName);
         builder->CreateStore(&arg, alloca);
-        std::string structTypeName = paramType.kind == TypeKind::STRUCT ? paramType.structName : "";
+        std::string structTypeName = paramType.kind == TypeKind::STRUCT
+                                         ? paramType.structName
+                                         : pointer_struct_name(paramType);
         currentScope->define_variable(paramName, alloca, structTypeName);
         if (paramType.kind == TypeKind::INTEGER)
         {

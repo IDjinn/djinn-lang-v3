@@ -56,6 +56,7 @@ struct CompilerOptions
     std::filesystem::path stdLibPath{"./std"};
     std::vector<std::filesystem::path> linkLibraries{};
     std::vector<std::filesystem::path> djlibPaths{};
+    std::vector<std::string> nativeLibraries{}; // passed verbatim to the clang link step (e.g. LLVM-C.lib)
     RuntimeProperties runtimeProperties{};
 };
 

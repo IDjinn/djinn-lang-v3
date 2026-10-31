@@ -28,6 +28,7 @@ void printUsage(const char* programName)
         << "  --lib         Compile as library (no main required)\n"
         << "  --bundle      Bundle all into single .ll (default: per namespace)\n"
         << "  -l <file.ll>  Link external .ll module (can be used multiple times)\n"
+        << "  --native-lib <lib>  Pass a native library to the final link (can be used multiple times)\n"
         << "  --debug       Set build mode to debug: full runtime error reports (source\n"
         << "                snippets, stack traces, variable history) baked into the binary\n"
         << "  --release     Set build mode to release: minimal runtime error reports\n"
@@ -246,6 +247,10 @@ int main(int argc, char* argv[])
         else if (arg == "--std-decl")
         {
             options.stdDeclOnly = true;
+        }
+        else if (arg == "--native-lib" && i + 1 < argc)
+        {
+            options.nativeLibraries.emplace_back(argv[++i]);
         }
         else if ((arg == "-l" || arg == "--link") && i + 1 < argc)
         {

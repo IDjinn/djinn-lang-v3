@@ -1,0 +1,11 @@
+i32 add(i32 a, i32 b) {
+    return a + b;
+}
+
+i32 main() {
+    mut i32 total = 0;
+    for (mut i32 i = 1; i <= 10; i = i + 1) {
+        total = total + add(i, i);
+    }
+    return total;
+}

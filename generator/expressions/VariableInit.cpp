@@ -365,7 +365,11 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
             structTypeName = Mangler::mangle_generic_struct(structTypeName, expr.type.genericArgs);
         }
     }
-    else if (expr.type.kind != TypeKind::POINTER && expr.type.kind != TypeKind::ARRAY)
+    else if (expr.type.kind == TypeKind::POINTER)
+    {
+        structTypeName = pointer_struct_name(expr.type);
+    }
+    else if (expr.type.kind != TypeKind::ARRAY)
     {
         std::string primName = get_primitive_type_name(type);
         if (!primName.empty() && currentScope->lookup_struct(primName))

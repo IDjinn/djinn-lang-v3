@@ -1,0 +1,258 @@
+namespace djinnc;
+
+extern "C" {
+    i32 memcmp(void* left, void* right, u64 count);
+    f64 strtod(i8* text, i8** end);
+}
+
+struct Mem {
+    public static void* zalloc(i64 count) {
+        void* block = malloc((u64)count);
+        memset(block, 0, (u64)count);
+        return block;
+    }
+}
+
+struct Str {
+    public static bool equals(i8* text, i32 length, i8* literal) {
+        i32 literalLength = strlen(literal);
+        if (literalLength != length) {
+            return false;
+        }
+        return memcmp(text, literal, (u64)length) == 0;
+    }
+
+    public static bool same(i8* left, i8* right) {
+        i32 leftLength = strlen(left);
+        return Str.equals(left, leftLength, right);
+    }
+
+    public static bool starts_with(i8* source, i32 pos, i32 length, i8* prefix) {
+        i32 prefixLength = strlen(prefix);
+        if (pos + prefixLength > length) {
+            return false;
+        }
+        return memcmp(source + pos, prefix, (u64)prefixLength) == 0;
+    }
+
+    public static i8* duplicate(i8* text, i32 length) {
+        i8* copy = (i8*)Mem.zalloc((i64)length + 1);
+        memcpy(copy, text, (u64)length);
+        return copy;
+    }
+
+    public static bool is_digit(i32 c) {
+        return c >= 48 && c <= 57;
+    }
+
+    public static bool is_hex_digit(i32 c) {
+        return (c >= 48 && c <= 57) || (c >= 97 && c <= 102) || (c >= 65 && c <= 70);
+    }
+
+    public static bool is_letter(i32 c) {
+        return (c >= 97 && c <= 122) || (c >= 65 && c <= 90);
+    }
+
+    public static bool is_ident_start(i32 c) {
+        return Str.is_letter(c) || c == 95;
+    }
+
+    public static bool is_ident_part(i32 c) {
+        return Str.is_letter(c) || Str.is_digit(c) || c == 95;
+    }
+
+    public static i32 digit_value(i32 c) {
+        if (c >= 48 && c <= 57) {
+            return c - 48;
+        }
+        if (c >= 97 && c <= 102) {
+            return c - 97 + 10;
+        }
+        if (c >= 65 && c <= 70) {
+            return c - 65 + 10;
+        }
+        return 0 - 1;
+    }
+
+    public static i64 parse_integer(i8* text, i32 length) {
+        mut i32 pos = 0;
+        mut i64 radix = 10;
+        if (length > 2 && text[0] == 48 && (text[1] == 120 || text[1] == 88)) {
+            radix = 16;
+            pos = 2;
+        } else if (length > 2 && text[0] == 48 && (text[1] == 98 || text[1] == 66)) {
+            radix = 2;
+            pos = 2;
+        }
+
+        mut i64 value = 0;
+        while (pos < length) {
+            i32 c = text[pos];
+            i32 digit = Str.digit_value(c);
+            if (digit < 0 || digit >= radix) {
+                if (c == 95 || c == 39) {
+                    pos = pos + 1;
+                    continue;
+                }
+                return value;
+            }
+            value = value * radix + digit;
+            pos = pos + 1;
+        }
+        return value;
+    }
+
+    public static f64 parse_float(i8* text, i32 length) {
+        ByteBuf* clean = ByteBuf.create();
+        for (mut i32 i = 0; i < length; i = i + 1) {
+            i32 c = text[i];
+            if (c != 95 && c != 39) {
+                clean.append_char(c);
+            }
+        }
+        return strtod(clean.cstr(), (i8**)0);
+    }
+}
+
+struct PtrVec {
+    void** data;
+    i32 length;
+    i32 capacity;
+
+    public static PtrVec* create() {
+        PtrVec* vec = (PtrVec*)Mem.zalloc(sizeof(PtrVec));
+        vec.capacity = 8;
+        vec.data = (void**)Mem.zalloc(64);
+        return vec;
+    }
+
+    public void push(void* item) {
+        if (this.length == this.capacity) {
+            this.grow();
+        }
+        this.data[this.length] = item;
+        this.length = this.length + 1;
+    }
+
+    public void* get(i32 index) {
+        return this.data[index];
+    }
+
+    public void truncate(i32 count) {
+        this.length = count;
+    }
+
+    void grow() {
+        i32 newCapacity = this.capacity * 2;
+        void** newData = (void**)Mem.zalloc((i64)newCapacity * 8);
+        memcpy(newData, this.data, (u64)this.length * 8);
+        free(this.data);
+        this.data = newData;
+        this.capacity = newCapacity;
+    }
+}
+
+struct ByteBuf {
+    i8* data;
+    i32 length;
+    i32 capacity;
+
+    public static ByteBuf* create() {
+        ByteBuf* buf = (ByteBuf*)Mem.zalloc(sizeof(ByteBuf));
+        buf.capacity = 64;
+        buf.data = (i8*)Mem.zalloc(64);
+        return buf;
+    }
+
+    public void append_char(i32 c) {
+        this.reserve(1);
+        this.data[this.length] = (i8)c;
+        this.length = this.length + 1;
+    }
+
+    public void append(i8* text) {
+        i32 count = strlen(text);
+        this.append_slice(text, count);
+    }
+
+    public void append_slice(i8* text, i32 count) {
+        this.reserve(count);
+        memcpy(this.data + this.length, text, (u64)count);
+        this.length = this.length + count;
+    }
+
+    public void append_int(i64 value) {
+        if (value < 0) {
+            this.append_char(45);
+            this.append_int(0 - value);
+            return;
+        }
+        if (value >= 10) {
+            this.append_int(value / 10);
+        }
+        this.append_char(48 + (i32)(value % 10));
+    }
+
+    public i8* cstr() {
+        this.reserve(1);
+        this.data[this.length] = 0;
+        return this.data;
+    }
+
+    void reserve(i32 extra) {
+        i32 needed = this.length + extra + 1;
+        if (needed <= this.capacity) {
+            return;
+        }
+        mut i32 newCapacity = this.capacity * 2;
+        while (newCapacity < needed) {
+            newCapacity = newCapacity * 2;
+        }
+        i8* newData = (i8*)Mem.zalloc((i64)newCapacity);
+        memcpy(newData, this.data, (u64)this.length);
+        free(this.data);
+        this.data = newData;
+        this.capacity = newCapacity;
+    }
+}
+
+struct Files {
+    public static i8* read_all(i8* path) {
+        void* file = fopen(path, "rb");
+        if (file == null) {
+            return (i8*)0;
+        }
+        fseek(file, 0, 2);
+        i32 length = (i32)ftell(file);
+        fseek(file, 0, 0);
+        i8* buffer = (i8*)Mem.zalloc((i64)length + 1);
+        fread(buffer, 1, (u64)length, file);
+        fclose(file);
+        return buffer;
+    }
+}
+
+struct Diagnostics {
+    i8* file;
+    i32 errors;
+
+    public static Diagnostics* create(i8* file) {
+        Diagnostics* diagnostics = (Diagnostics*)Mem.zalloc(sizeof(Diagnostics));
+        diagnostics.file = file;
+        return diagnostics;
+    }
+
+    public void error(i32 line, i32 column, i8* message) {
+        printf("%s:%d:%d: error: %s\n", this.file, line, column, message);
+        this.errors = this.errors + 1;
+    }
+
+    public void error_near(i32 line, i32 column, i8* message, i8* found) {
+        printf("%s:%d:%d: error: %s (found '%s')\n", this.file, line, column, message, found);
+        this.errors = this.errors + 1;
+    }
+
+    public bool failed() {
+        return this.errors > 0;
+    }
+}

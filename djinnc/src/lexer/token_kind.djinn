@@ -1,0 +1,441 @@
+namespace djinnc;
+
+struct TokenKind {
+    const i32 UNKNOWN = 0;
+    const i32 END_OF_FILE = 1;
+    const i32 IDENTIFIER = 2;
+    const i32 STRING_LITERAL = 3;
+    const i32 INTEGER_LITERAL = 4;
+    const i32 FLOAT_LITERAL = 5;
+    const i32 VOID = 6;
+    const i32 RETURN = 7;
+    const i32 AUTO = 8;
+    const i32 EXTERN = 9;
+    const i32 STRUCT = 10;
+    const i32 NAMESPACE = 11;
+    const i32 IMPORT = 12;
+    const i32 MUT = 13;
+    const i32 IF = 14;
+    const i32 ELSE = 15;
+    const i32 FOR = 16;
+    const i32 WHILE = 17;
+    const i32 DO = 18;
+    const i32 SWITCH = 19;
+    const i32 CASE = 20;
+    const i32 DEFAULT = 21;
+    const i32 BREAK = 22;
+    const i32 CONTINUE = 23;
+    const i32 INTERFACE = 24;
+    const i32 PUBLIC = 25;
+    const i32 PRIVATE = 26;
+    const i32 STATIC = 27;
+    const i32 THIS = 28;
+    const i32 ENUM = 29;
+    const i32 NEW = 30;
+    const i32 IMPL = 31;
+    const i32 WHERE = 32;
+    const i32 ASYNC = 33;
+    const i32 AWAIT = 34;
+    const i32 YIELD = 35;
+    const i32 SPAWN = 36;
+    const i32 IN = 37;
+    const i32 TRUE = 38;
+    const i32 FALSE = 39;
+    const i32 OPERATOR = 40;
+    const i32 CONST = 41;
+    const i32 CONSTEXPR = 42;
+    const i32 CONSTEVAL = 43;
+    const i32 MACRO = 44;
+    const i32 IS = 45;
+    const i32 NULL = 46;
+    const i32 THROW = 47;
+    const i32 THROWS = 48;
+    const i32 TRY = 49;
+    const i32 REQUIRE = 50;
+    const i32 ENSURE = 51;
+    const i32 LPAREN = 52;
+    const i32 RPAREN = 53;
+    const i32 LBRACE = 54;
+    const i32 RBRACE = 55;
+    const i32 LBRACKET = 56;
+    const i32 RBRACKET = 57;
+    const i32 SEMICOLON = 58;
+    const i32 COMMA = 59;
+    const i32 COLON = 60;
+    const i32 COLON_COLON = 61;
+    const i32 DOT = 62;
+    const i32 DOT_DOT = 63;
+    const i32 DOT_DOT_EQUAL = 64;
+    const i32 DOT_DOT_DOT = 65;
+    const i32 PLUS = 66;
+    const i32 MINUS = 67;
+    const i32 PLUS_PLUS = 68;
+    const i32 MINUS_MINUS = 69;
+    const i32 STAR = 70;
+    const i32 SLASH = 71;
+    const i32 PERCENT = 72;
+    const i32 EQUAL_EQUAL = 73;
+    const i32 BANG_EQUAL = 74;
+    const i32 LESS = 75;
+    const i32 LESS_EQUAL = 76;
+    const i32 GREATER = 77;
+    const i32 GREATER_EQUAL = 78;
+    const i32 BANG = 79;
+    const i32 AND_AND = 80;
+    const i32 OR_OR = 81;
+    const i32 AMPERSAND = 82;
+    const i32 PIPE = 83;
+    const i32 CARET = 84;
+    const i32 TILDE = 85;
+    const i32 LESS_LESS = 86;
+    const i32 GREATER_GREATER = 87;
+    const i32 EQUAL = 88;
+    const i32 ARROW = 89;
+    const i32 THIN_ARROW = 90;
+    const i32 PLUS_EQUAL = 91;
+    const i32 MINUS_EQUAL = 92;
+    const i32 STAR_EQUAL = 93;
+    const i32 SLASH_EQUAL = 94;
+    const i32 PERCENT_EQUAL = 95;
+    const i32 AMPERSAND_EQUAL = 96;
+    const i32 PIPE_EQUAL = 97;
+    const i32 CARET_EQUAL = 98;
+    const i32 LESS_LESS_EQUAL = 99;
+    const i32 GREATER_GREATER_EQUAL = 100;
+    const i32 AT = 101;
+    const i32 QUESTION = 102;
+    const i32 QUESTION_DOT = 103;
+    const i32 QUESTION_QUESTION = 104;
+    const i32 QUESTION_QUESTION_EQUAL = 105;
+    const i32 BANG_DOT = 106;
+    const i32 COUNT = 107;
+
+    public static bool is_keyword(i32 kind) {
+        return kind >= 6 && kind <= 51;
+    }
+
+    public static i32 keyword(i8* text, i32 length) {
+        if (Str.equals(text, length, "void")) { return TokenKind.VOID; }
+        if (Str.equals(text, length, "return")) { return TokenKind.RETURN; }
+        if (Str.equals(text, length, "auto")) { return TokenKind.AUTO; }
+        if (Str.equals(text, length, "extern")) { return TokenKind.EXTERN; }
+        if (Str.equals(text, length, "struct")) { return TokenKind.STRUCT; }
+        if (Str.equals(text, length, "namespace")) { return TokenKind.NAMESPACE; }
+        if (Str.equals(text, length, "import")) { return TokenKind.IMPORT; }
+        if (Str.equals(text, length, "mut")) { return TokenKind.MUT; }
+        if (Str.equals(text, length, "if")) { return TokenKind.IF; }
+        if (Str.equals(text, length, "else")) { return TokenKind.ELSE; }
+        if (Str.equals(text, length, "for")) { return TokenKind.FOR; }
+        if (Str.equals(text, length, "while")) { return TokenKind.WHILE; }
+        if (Str.equals(text, length, "do")) { return TokenKind.DO; }
+        if (Str.equals(text, length, "switch")) { return TokenKind.SWITCH; }
+        if (Str.equals(text, length, "case")) { return TokenKind.CASE; }
+        if (Str.equals(text, length, "default")) { return TokenKind.DEFAULT; }
+        if (Str.equals(text, length, "break")) { return TokenKind.BREAK; }
+        if (Str.equals(text, length, "continue")) { return TokenKind.CONTINUE; }
+        if (Str.equals(text, length, "interface")) { return TokenKind.INTERFACE; }
+        if (Str.equals(text, length, "public")) { return TokenKind.PUBLIC; }
+        if (Str.equals(text, length, "private")) { return TokenKind.PRIVATE; }
+        if (Str.equals(text, length, "static")) { return TokenKind.STATIC; }
+        if (Str.equals(text, length, "this")) { return TokenKind.THIS; }
+        if (Str.equals(text, length, "enum")) { return TokenKind.ENUM; }
+        if (Str.equals(text, length, "new")) { return TokenKind.NEW; }
+        if (Str.equals(text, length, "impl")) { return TokenKind.IMPL; }
+        if (Str.equals(text, length, "where")) { return TokenKind.WHERE; }
+        if (Str.equals(text, length, "async")) { return TokenKind.ASYNC; }
+        if (Str.equals(text, length, "await")) { return TokenKind.AWAIT; }
+        if (Str.equals(text, length, "yield")) { return TokenKind.YIELD; }
+        if (Str.equals(text, length, "spawn")) { return TokenKind.SPAWN; }
+        if (Str.equals(text, length, "in")) { return TokenKind.IN; }
+        if (Str.equals(text, length, "true")) { return TokenKind.TRUE; }
+        if (Str.equals(text, length, "false")) { return TokenKind.FALSE; }
+        if (Str.equals(text, length, "operator")) { return TokenKind.OPERATOR; }
+        if (Str.equals(text, length, "const")) { return TokenKind.CONST; }
+        if (Str.equals(text, length, "constexpr")) { return TokenKind.CONSTEXPR; }
+        if (Str.equals(text, length, "consteval")) { return TokenKind.CONSTEVAL; }
+        if (Str.equals(text, length, "macro")) { return TokenKind.MACRO; }
+        if (Str.equals(text, length, "is")) { return TokenKind.IS; }
+        if (Str.equals(text, length, "null")) { return TokenKind.NULL; }
+        if (Str.equals(text, length, "throw")) { return TokenKind.THROW; }
+        if (Str.equals(text, length, "throws")) { return TokenKind.THROWS; }
+        if (Str.equals(text, length, "try")) { return TokenKind.TRY; }
+        if (Str.equals(text, length, "require")) { return TokenKind.REQUIRE; }
+        if (Str.equals(text, length, "ensure")) { return TokenKind.ENSURE; }
+        return TokenKind.IDENTIFIER;
+    }
+
+    public static i32 symbol(i8* source, i32 pos, i32 length) {
+        if (Str.starts_with(source, pos, length, "..=")) { return TokenKind.DOT_DOT_EQUAL; }
+        if (Str.starts_with(source, pos, length, "...")) { return TokenKind.DOT_DOT_DOT; }
+        if (Str.starts_with(source, pos, length, "<<=")) { return TokenKind.LESS_LESS_EQUAL; }
+        if (Str.starts_with(source, pos, length, ">>=")) { return TokenKind.GREATER_GREATER_EQUAL; }
+        if (Str.starts_with(source, pos, length, "??=")) { return TokenKind.QUESTION_QUESTION_EQUAL; }
+        if (Str.starts_with(source, pos, length, "::")) { return TokenKind.COLON_COLON; }
+        if (Str.starts_with(source, pos, length, "..")) { return TokenKind.DOT_DOT; }
+        if (Str.starts_with(source, pos, length, "++")) { return TokenKind.PLUS_PLUS; }
+        if (Str.starts_with(source, pos, length, "--")) { return TokenKind.MINUS_MINUS; }
+        if (Str.starts_with(source, pos, length, "==")) { return TokenKind.EQUAL_EQUAL; }
+        if (Str.starts_with(source, pos, length, "!=")) { return TokenKind.BANG_EQUAL; }
+        if (Str.starts_with(source, pos, length, "<=")) { return TokenKind.LESS_EQUAL; }
+        if (Str.starts_with(source, pos, length, ">=")) { return TokenKind.GREATER_EQUAL; }
+        if (Str.starts_with(source, pos, length, "&&")) { return TokenKind.AND_AND; }
+        if (Str.starts_with(source, pos, length, "||")) { return TokenKind.OR_OR; }
+        if (Str.starts_with(source, pos, length, "<<")) { return TokenKind.LESS_LESS; }
+        if (Str.starts_with(source, pos, length, ">>")) { return TokenKind.GREATER_GREATER; }
+        if (Str.starts_with(source, pos, length, "=>")) { return TokenKind.ARROW; }
+        if (Str.starts_with(source, pos, length, "->")) { return TokenKind.THIN_ARROW; }
+        if (Str.starts_with(source, pos, length, "+=")) { return TokenKind.PLUS_EQUAL; }
+        if (Str.starts_with(source, pos, length, "-=")) { return TokenKind.MINUS_EQUAL; }
+        if (Str.starts_with(source, pos, length, "*=")) { return TokenKind.STAR_EQUAL; }
+        if (Str.starts_with(source, pos, length, "/=")) { return TokenKind.SLASH_EQUAL; }
+        if (Str.starts_with(source, pos, length, "%=")) { return TokenKind.PERCENT_EQUAL; }
+        if (Str.starts_with(source, pos, length, "&=")) { return TokenKind.AMPERSAND_EQUAL; }
+        if (Str.starts_with(source, pos, length, "|=")) { return TokenKind.PIPE_EQUAL; }
+        if (Str.starts_with(source, pos, length, "^=")) { return TokenKind.CARET_EQUAL; }
+        if (Str.starts_with(source, pos, length, "?.")) { return TokenKind.QUESTION_DOT; }
+        if (Str.starts_with(source, pos, length, "??")) { return TokenKind.QUESTION_QUESTION; }
+        if (Str.starts_with(source, pos, length, "!.")) { return TokenKind.BANG_DOT; }
+        if (Str.starts_with(source, pos, length, "(")) { return TokenKind.LPAREN; }
+        if (Str.starts_with(source, pos, length, ")")) { return TokenKind.RPAREN; }
+        if (Str.starts_with(source, pos, length, "{")) { return TokenKind.LBRACE; }
+        if (Str.starts_with(source, pos, length, "}")) { return TokenKind.RBRACE; }
+        if (Str.starts_with(source, pos, length, "[")) { return TokenKind.LBRACKET; }
+        if (Str.starts_with(source, pos, length, "]")) { return TokenKind.RBRACKET; }
+        if (Str.starts_with(source, pos, length, ";")) { return TokenKind.SEMICOLON; }
+        if (Str.starts_with(source, pos, length, ",")) { return TokenKind.COMMA; }
+        if (Str.starts_with(source, pos, length, ":")) { return TokenKind.COLON; }
+        if (Str.starts_with(source, pos, length, ".")) { return TokenKind.DOT; }
+        if (Str.starts_with(source, pos, length, "+")) { return TokenKind.PLUS; }
+        if (Str.starts_with(source, pos, length, "-")) { return TokenKind.MINUS; }
+        if (Str.starts_with(source, pos, length, "*")) { return TokenKind.STAR; }
+        if (Str.starts_with(source, pos, length, "/")) { return TokenKind.SLASH; }
+        if (Str.starts_with(source, pos, length, "%")) { return TokenKind.PERCENT; }
+        if (Str.starts_with(source, pos, length, "<")) { return TokenKind.LESS; }
+        if (Str.starts_with(source, pos, length, ">")) { return TokenKind.GREATER; }
+        if (Str.starts_with(source, pos, length, "!")) { return TokenKind.BANG; }
+        if (Str.starts_with(source, pos, length, "&")) { return TokenKind.AMPERSAND; }
+        if (Str.starts_with(source, pos, length, "|")) { return TokenKind.PIPE; }
+        if (Str.starts_with(source, pos, length, "^")) { return TokenKind.CARET; }
+        if (Str.starts_with(source, pos, length, "~")) { return TokenKind.TILDE; }
+        if (Str.starts_with(source, pos, length, "=")) { return TokenKind.EQUAL; }
+        if (Str.starts_with(source, pos, length, "@")) { return TokenKind.AT; }
+        if (Str.starts_with(source, pos, length, "?")) { return TokenKind.QUESTION; }
+        return TokenKind.UNKNOWN;
+    }
+
+    public static i8* text(i32 kind) {
+        if (kind == TokenKind.VOID) { return "void"; }
+        if (kind == TokenKind.RETURN) { return "return"; }
+        if (kind == TokenKind.AUTO) { return "auto"; }
+        if (kind == TokenKind.EXTERN) { return "extern"; }
+        if (kind == TokenKind.STRUCT) { return "struct"; }
+        if (kind == TokenKind.NAMESPACE) { return "namespace"; }
+        if (kind == TokenKind.IMPORT) { return "import"; }
+        if (kind == TokenKind.MUT) { return "mut"; }
+        if (kind == TokenKind.IF) { return "if"; }
+        if (kind == TokenKind.ELSE) { return "else"; }
+        if (kind == TokenKind.FOR) { return "for"; }
+        if (kind == TokenKind.WHILE) { return "while"; }
+        if (kind == TokenKind.DO) { return "do"; }
+        if (kind == TokenKind.SWITCH) { return "switch"; }
+        if (kind == TokenKind.CASE) { return "case"; }
+        if (kind == TokenKind.DEFAULT) { return "default"; }
+        if (kind == TokenKind.BREAK) { return "break"; }
+        if (kind == TokenKind.CONTINUE) { return "continue"; }
+        if (kind == TokenKind.INTERFACE) { return "interface"; }
+        if (kind == TokenKind.PUBLIC) { return "public"; }
+        if (kind == TokenKind.PRIVATE) { return "private"; }
+        if (kind == TokenKind.STATIC) { return "static"; }
+        if (kind == TokenKind.THIS) { return "this"; }
+        if (kind == TokenKind.ENUM) { return "enum"; }
+        if (kind == TokenKind.NEW) { return "new"; }
+        if (kind == TokenKind.IMPL) { return "impl"; }
+        if (kind == TokenKind.WHERE) { return "where"; }
+        if (kind == TokenKind.ASYNC) { return "async"; }
+        if (kind == TokenKind.AWAIT) { return "await"; }
+        if (kind == TokenKind.YIELD) { return "yield"; }
+        if (kind == TokenKind.SPAWN) { return "spawn"; }
+        if (kind == TokenKind.IN) { return "in"; }
+        if (kind == TokenKind.TRUE) { return "true"; }
+        if (kind == TokenKind.FALSE) { return "false"; }
+        if (kind == TokenKind.OPERATOR) { return "operator"; }
+        if (kind == TokenKind.CONST) { return "const"; }
+        if (kind == TokenKind.CONSTEXPR) { return "constexpr"; }
+        if (kind == TokenKind.CONSTEVAL) { return "consteval"; }
+        if (kind == TokenKind.MACRO) { return "macro"; }
+        if (kind == TokenKind.IS) { return "is"; }
+        if (kind == TokenKind.NULL) { return "null"; }
+        if (kind == TokenKind.THROW) { return "throw"; }
+        if (kind == TokenKind.THROWS) { return "throws"; }
+        if (kind == TokenKind.TRY) { return "try"; }
+        if (kind == TokenKind.REQUIRE) { return "require"; }
+        if (kind == TokenKind.ENSURE) { return "ensure"; }
+        if (kind == TokenKind.LPAREN) { return "("; }
+        if (kind == TokenKind.RPAREN) { return ")"; }
+        if (kind == TokenKind.LBRACE) { return "{"; }
+        if (kind == TokenKind.RBRACE) { return "}"; }
+        if (kind == TokenKind.LBRACKET) { return "["; }
+        if (kind == TokenKind.RBRACKET) { return "]"; }
+        if (kind == TokenKind.SEMICOLON) { return ";"; }
+        if (kind == TokenKind.COMMA) { return ","; }
+        if (kind == TokenKind.COLON) { return ":"; }
+        if (kind == TokenKind.COLON_COLON) { return "::"; }
+        if (kind == TokenKind.DOT) { return "."; }
+        if (kind == TokenKind.DOT_DOT) { return ".."; }
+        if (kind == TokenKind.DOT_DOT_EQUAL) { return "..="; }
+        if (kind == TokenKind.DOT_DOT_DOT) { return "..."; }
+        if (kind == TokenKind.PLUS) { return "+"; }
+        if (kind == TokenKind.MINUS) { return "-"; }
+        if (kind == TokenKind.PLUS_PLUS) { return "++"; }
+        if (kind == TokenKind.MINUS_MINUS) { return "--"; }
+        if (kind == TokenKind.STAR) { return "*"; }
+        if (kind == TokenKind.SLASH) { return "/"; }
+        if (kind == TokenKind.PERCENT) { return "%"; }
+        if (kind == TokenKind.EQUAL_EQUAL) { return "=="; }
+        if (kind == TokenKind.BANG_EQUAL) { return "!="; }
+        if (kind == TokenKind.LESS) { return "<"; }
+        if (kind == TokenKind.LESS_EQUAL) { return "<="; }
+        if (kind == TokenKind.GREATER) { return ">"; }
+        if (kind == TokenKind.GREATER_EQUAL) { return ">="; }
+        if (kind == TokenKind.BANG) { return "!"; }
+        if (kind == TokenKind.AND_AND) { return "&&"; }
+        if (kind == TokenKind.OR_OR) { return "||"; }
+        if (kind == TokenKind.AMPERSAND) { return "&"; }
+        if (kind == TokenKind.PIPE) { return "|"; }
+        if (kind == TokenKind.CARET) { return "^"; }
+        if (kind == TokenKind.TILDE) { return "~"; }
+        if (kind == TokenKind.LESS_LESS) { return "<<"; }
+        if (kind == TokenKind.GREATER_GREATER) { return ">>"; }
+        if (kind == TokenKind.EQUAL) { return "="; }
+        if (kind == TokenKind.ARROW) { return "=>"; }
+        if (kind == TokenKind.THIN_ARROW) { return "->"; }
+        if (kind == TokenKind.PLUS_EQUAL) { return "+="; }
+        if (kind == TokenKind.MINUS_EQUAL) { return "-="; }
+        if (kind == TokenKind.STAR_EQUAL) { return "*="; }
+        if (kind == TokenKind.SLASH_EQUAL) { return "/="; }
+        if (kind == TokenKind.PERCENT_EQUAL) { return "%="; }
+        if (kind == TokenKind.AMPERSAND_EQUAL) { return "&="; }
+        if (kind == TokenKind.PIPE_EQUAL) { return "|="; }
+        if (kind == TokenKind.CARET_EQUAL) { return "^="; }
+        if (kind == TokenKind.LESS_LESS_EQUAL) { return "<<="; }
+        if (kind == TokenKind.GREATER_GREATER_EQUAL) { return ">>="; }
+        if (kind == TokenKind.AT) { return "@"; }
+        if (kind == TokenKind.QUESTION) { return "?"; }
+        if (kind == TokenKind.QUESTION_DOT) { return "?."; }
+        if (kind == TokenKind.QUESTION_QUESTION) { return "??"; }
+        if (kind == TokenKind.QUESTION_QUESTION_EQUAL) { return "??="; }
+        if (kind == TokenKind.BANG_DOT) { return "!."; }
+        return "";
+    }
+
+    public static i8* name(i32 kind) {
+        if (kind == TokenKind.UNKNOWN) { return "UNKNOWN"; }
+        if (kind == TokenKind.END_OF_FILE) { return "END_OF_FILE"; }
+        if (kind == TokenKind.IDENTIFIER) { return "IDENTIFIER"; }
+        if (kind == TokenKind.STRING_LITERAL) { return "STRING_LITERAL"; }
+        if (kind == TokenKind.INTEGER_LITERAL) { return "INTEGER_LITERAL"; }
+        if (kind == TokenKind.FLOAT_LITERAL) { return "FLOAT_LITERAL"; }
+        if (kind == TokenKind.VOID) { return "VOID"; }
+        if (kind == TokenKind.RETURN) { return "RETURN"; }
+        if (kind == TokenKind.AUTO) { return "AUTO"; }
+        if (kind == TokenKind.EXTERN) { return "EXTERN"; }
+        if (kind == TokenKind.STRUCT) { return "STRUCT"; }
+        if (kind == TokenKind.NAMESPACE) { return "NAMESPACE"; }
+        if (kind == TokenKind.IMPORT) { return "IMPORT"; }
+        if (kind == TokenKind.MUT) { return "MUT"; }
+        if (kind == TokenKind.IF) { return "IF"; }
+        if (kind == TokenKind.ELSE) { return "ELSE"; }
+        if (kind == TokenKind.FOR) { return "FOR"; }
+        if (kind == TokenKind.WHILE) { return "WHILE"; }
+        if (kind == TokenKind.DO) { return "DO"; }
+        if (kind == TokenKind.SWITCH) { return "SWITCH"; }
+        if (kind == TokenKind.CASE) { return "CASE"; }
+        if (kind == TokenKind.DEFAULT) { return "DEFAULT"; }
+        if (kind == TokenKind.BREAK) { return "BREAK"; }
+        if (kind == TokenKind.CONTINUE) { return "CONTINUE"; }
+        if (kind == TokenKind.INTERFACE) { return "INTERFACE"; }
+        if (kind == TokenKind.PUBLIC) { return "PUBLIC"; }
+        if (kind == TokenKind.PRIVATE) { return "PRIVATE"; }
+        if (kind == TokenKind.STATIC) { return "STATIC"; }
+        if (kind == TokenKind.THIS) { return "THIS"; }
+        if (kind == TokenKind.ENUM) { return "ENUM"; }
+        if (kind == TokenKind.NEW) { return "NEW"; }
+        if (kind == TokenKind.IMPL) { return "IMPL"; }
+        if (kind == TokenKind.WHERE) { return "WHERE"; }
+        if (kind == TokenKind.ASYNC) { return "ASYNC"; }
+        if (kind == TokenKind.AWAIT) { return "AWAIT"; }
+        if (kind == TokenKind.YIELD) { return "YIELD"; }
+        if (kind == TokenKind.SPAWN) { return "SPAWN"; }
+        if (kind == TokenKind.IN) { return "IN"; }
+        if (kind == TokenKind.TRUE) { return "TRUE"; }
+        if (kind == TokenKind.FALSE) { return "FALSE"; }
+        if (kind == TokenKind.OPERATOR) { return "OPERATOR"; }
+        if (kind == TokenKind.CONST) { return "CONST"; }
+        if (kind == TokenKind.CONSTEXPR) { return "CONSTEXPR"; }
+        if (kind == TokenKind.CONSTEVAL) { return "CONSTEVAL"; }
+        if (kind == TokenKind.MACRO) { return "MACRO"; }
+        if (kind == TokenKind.IS) { return "IS"; }
+        if (kind == TokenKind.NULL) { return "NULL"; }
+        if (kind == TokenKind.THROW) { return "THROW"; }
+        if (kind == TokenKind.THROWS) { return "THROWS"; }
+        if (kind == TokenKind.TRY) { return "TRY"; }
+        if (kind == TokenKind.REQUIRE) { return "REQUIRE"; }
+        if (kind == TokenKind.ENSURE) { return "ENSURE"; }
+        if (kind == TokenKind.LPAREN) { return "LPAREN"; }
+        if (kind == TokenKind.RPAREN) { return "RPAREN"; }
+        if (kind == TokenKind.LBRACE) { return "LBRACE"; }
+        if (kind == TokenKind.RBRACE) { return "RBRACE"; }
+        if (kind == TokenKind.LBRACKET) { return "LBRACKET"; }
+        if (kind == TokenKind.RBRACKET) { return "RBRACKET"; }
+        if (kind == TokenKind.SEMICOLON) { return "SEMICOLON"; }
+        if (kind == TokenKind.COMMA) { return "COMMA"; }
+        if (kind == TokenKind.COLON) { return "COLON"; }
+        if (kind == TokenKind.COLON_COLON) { return "COLON_COLON"; }
+        if (kind == TokenKind.DOT) { return "DOT"; }
+        if (kind == TokenKind.DOT_DOT) { return "DOT_DOT"; }
+        if (kind == TokenKind.DOT_DOT_EQUAL) { return "DOT_DOT_EQUAL"; }
+        if (kind == TokenKind.DOT_DOT_DOT) { return "DOT_DOT_DOT"; }
+        if (kind == TokenKind.PLUS) { return "PLUS"; }
+        if (kind == TokenKind.MINUS) { return "MINUS"; }
+        if (kind == TokenKind.PLUS_PLUS) { return "PLUS_PLUS"; }
+        if (kind == TokenKind.MINUS_MINUS) { return "MINUS_MINUS"; }
+        if (kind == TokenKind.STAR) { return "STAR"; }
+        if (kind == TokenKind.SLASH) { return "SLASH"; }
+        if (kind == TokenKind.PERCENT) { return "PERCENT"; }
+        if (kind == TokenKind.EQUAL_EQUAL) { return "EQUAL_EQUAL"; }
+        if (kind == TokenKind.BANG_EQUAL) { return "BANG_EQUAL"; }
+        if (kind == TokenKind.LESS) { return "LESS"; }
+        if (kind == TokenKind.LESS_EQUAL) { return "LESS_EQUAL"; }
+        if (kind == TokenKind.GREATER) { return "GREATER"; }
+        if (kind == TokenKind.GREATER_EQUAL) { return "GREATER_EQUAL"; }
+        if (kind == TokenKind.BANG) { return "BANG"; }
+        if (kind == TokenKind.AND_AND) { return "AND_AND"; }
+        if (kind == TokenKind.OR_OR) { return "OR_OR"; }
+        if (kind == TokenKind.AMPERSAND) { return "AMPERSAND"; }
+        if (kind == TokenKind.PIPE) { return "PIPE"; }
+        if (kind == TokenKind.CARET) { return "CARET"; }
+        if (kind == TokenKind.TILDE) { return "TILDE"; }
+        if (kind == TokenKind.LESS_LESS) { return "LESS_LESS"; }
+        if (kind == TokenKind.GREATER_GREATER) { return "GREATER_GREATER"; }
+        if (kind == TokenKind.EQUAL) { return "EQUAL"; }
+        if (kind == TokenKind.ARROW) { return "ARROW"; }
+        if (kind == TokenKind.THIN_ARROW) { return "THIN_ARROW"; }
+        if (kind == TokenKind.PLUS_EQUAL) { return "PLUS_EQUAL"; }
+        if (kind == TokenKind.MINUS_EQUAL) { return "MINUS_EQUAL"; }
+        if (kind == TokenKind.STAR_EQUAL) { return "STAR_EQUAL"; }
+        if (kind == TokenKind.SLASH_EQUAL) { return "SLASH_EQUAL"; }
+        if (kind == TokenKind.PERCENT_EQUAL) { return "PERCENT_EQUAL"; }
+        if (kind == TokenKind.AMPERSAND_EQUAL) { return "AMPERSAND_EQUAL"; }
+        if (kind == TokenKind.PIPE_EQUAL) { return "PIPE_EQUAL"; }
+        if (kind == TokenKind.CARET_EQUAL) { return "CARET_EQUAL"; }
+        if (kind == TokenKind.LESS_LESS_EQUAL) { return "LESS_LESS_EQUAL"; }
+        if (kind == TokenKind.GREATER_GREATER_EQUAL) { return "GREATER_GREATER_EQUAL"; }
+        if (kind == TokenKind.AT) { return "AT"; }
+        if (kind == TokenKind.QUESTION) { return "QUESTION"; }
+        if (kind == TokenKind.QUESTION_DOT) { return "QUESTION_DOT"; }
+        if (kind == TokenKind.QUESTION_QUESTION) { return "QUESTION_QUESTION"; }
+        if (kind == TokenKind.QUESTION_QUESTION_EQUAL) { return "QUESTION_QUESTION_EQUAL"; }
+        if (kind == TokenKind.BANG_DOT) { return "BANG_DOT"; }
+        return "?";
+    }
+}

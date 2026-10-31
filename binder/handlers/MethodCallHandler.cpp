@@ -31,7 +31,11 @@ namespace djinn::binder
         // Resolve method return type from the struct
         Type returnType = Type::voided();
         std::string structName;
-        if (receiver->type.kind == TypeKind::POINTER && receiver->type.elementType)
+        if (const auto staticReceiver = std::dynamic_pointer_cast<StructSymbol>(receiver))
+        {
+            structName = staticReceiver->name;
+        }
+        else if (receiver->type.kind == TypeKind::POINTER && receiver->type.elementType)
         {
             structName = receiver->type.elementType->structName;
         }

@@ -1,0 +1,988 @@
+namespace djinnc;
+
+struct Value {
+    void* ref;
+    TypeRef* type;
+
+    public static Value* create(void* ref, TypeRef* type) {
+        Value* value = (Value*)Mem.zalloc(sizeof(Value));
+        value.ref = ref;
+        value.type = type;
+        return value;
+    }
+}
+
+struct Local {
+    i8* name;
+    void* slot;
+    TypeRef* type;
+    bool is_mutable;
+}
+
+struct FuncInfo {
+    i8* name;
+    void* function;
+    void* function_type;
+    TypeRef* return_type;
+    PtrVec* param_types;
+    bool is_variadic;
+    bool is_extern;
+}
+
+struct CodeGen {
+    void* context;
+    void* module;
+    void* builder;
+    void* alloca_builder;
+    Diagnostics* diagnostics;
+    PtrVec* functions;
+    PtrVec* locals;
+    FuncInfo* current;
+    void* break_target;
+    void* continue_target;
+
+    public static CodeGen* create(Diagnostics* diagnostics, i8* module_name) {
+        CodeGen* gen = (CodeGen*)Mem.zalloc(sizeof(CodeGen));
+        gen.context = LLVMContextCreate();
+        gen.module = LLVMModuleCreateWithNameInContext(module_name, gen.context);
+        gen.builder = LLVMCreateBuilderInContext(gen.context);
+        gen.alloca_builder = LLVMCreateBuilderInContext(gen.context);
+        gen.diagnostics = diagnostics;
+        gen.functions = PtrVec.create();
+        gen.locals = PtrVec.create();
+        i8* triple = LLVMGetDefaultTargetTriple();
+        LLVMSetTarget(gen.module, triple);
+        LLVMDisposeMessage(triple);
+        return gen;
+    }
+
+    public bool generate(Node* program) {
+        this.declare_all(program);
+        this.define_all(program);
+        this.emit_entry_point();
+        Diagnostics* diagnostics = this.diagnostics;
+        if (diagnostics.failed()) {
+            return false;
+        }
+
+        i8* message = (i8*)0;
+        i32 invalid = LLVMVerifyModule(this.module, LlvmConst.VERIFY_RETURN_STATUS, &message);
+        if (invalid != 0) {
+            printf("djinnc: LLVM module verification failed:\n%s\n", message);
+            return false;
+        }
+        return true;
+    }
+
+    public bool write_ir(i8* path) {
+        i8* message = (i8*)0;
+        i32 failed = LLVMPrintModuleToFile(this.module, path, &message);
+        if (failed != 0) {
+            printf("djinnc: cannot write '%s': %s\n", path, message);
+            return false;
+        }
+        return true;
+    }
+
+    void error(Node* at, i8* message) {
+        Diagnostics* diagnostics = this.diagnostics;
+        diagnostics.error(at.line, at.column, message);
+    }
+
+    static void** array_of(i32 count) {
+        return (void**)Mem.zalloc(((i64)count + 1) * 8);
+    }
+
+    static i8* base_name(i8* qualified) {
+        i32 length = strlen(qualified);
+        mut i32 last = 0;
+        for (mut i32 i = 0; i + 1 < length; i = i + 1) {
+            if (qualified[i] == 58 && qualified[i + 1] == 58) {
+                last = i + 2;
+            }
+        }
+        return qualified + last;
+    }
+
+    void* llvm_type(TypeRef* ty, Node* at) {
+        if (ty.kind == TypeKind.VOID) {
+            return LLVMVoidTypeInContext(this.context);
+        }
+        if (ty.kind == TypeKind.INTEGER) {
+            return LLVMIntTypeInContext(this.context, (u32)ty.bits);
+        }
+        if (ty.kind == TypeKind.FLOAT) {
+            if (ty.bits == 32) {
+                return LLVMFloatTypeInContext(this.context);
+            }
+            return LLVMDoubleTypeInContext(this.context);
+        }
+        if (ty.kind == TypeKind.POINTER) {
+            return LLVMPointerTypeInContext(this.context, 0);
+        }
+        this.error(at, "this type is not supported by code generation yet");
+        return LLVMIntTypeInContext(this.context, 32);
+    }
+
+    FuncInfo* find_function(i8* name) {
+        PtrVec* list = this.functions;
+        for (mut i32 i = 0; i < list.length; i = i + 1) {
+            FuncInfo* info = (FuncInfo*)list.get(i);
+            if (Str.same(info.name, name)) {
+                return info;
+            }
+        }
+        return (FuncInfo*)0;
+    }
+
+    void declare_all(Node* container) {
+        for (mut i32 i = 0; i < container.count(); i = i + 1) {
+            Node* declaration = container.child(i);
+            if (declaration.kind == NodeKind.NAMESPACE_DECL) {
+                this.declare_all(declaration);
+            } else if (declaration.kind == NodeKind.FUNCTION) {
+                this.declare_function(declaration, false);
+            } else if (declaration.kind == NodeKind.EXTERN_FUNCTION) {
+                this.declare_function(declaration, true);
+            } else if (declaration.kind == NodeKind.STRUCT_DECL) {
+                this.error(declaration, "structs are not supported by code generation yet");
+            }
+        }
+    }
+
+    void declare_function(Node* declaration, bool is_extern) {
+        if (this.find_function(declaration.text) != null) {
+            if (!is_extern) {
+                this.error(declaration, "function is already defined");
+            }
+            return;
+        }
+
+        FuncInfo* info = (FuncInfo*)Mem.zalloc(sizeof(FuncInfo));
+        info.name = declaration.text;
+        info.return_type = declaration.type;
+        info.param_types = PtrVec.create();
+        info.is_variadic = declaration.is_variadic;
+        info.is_extern = is_extern;
+
+        i32 count = declaration.count();
+        void** params = CodeGen.array_of(count);
+        PtrVec* param_types = info.param_types;
+        for (mut i32 i = 0; i < count; i = i + 1) {
+            Node* parameter = declaration.child(i);
+            param_types.push(parameter.type);
+            params[i] = this.llvm_type(parameter.type, parameter);
+        }
+
+        void* return_type = this.llvm_type(declaration.type, declaration);
+        mut i32 variadic = 0;
+        if (declaration.is_variadic) {
+            variadic = 1;
+        }
+        info.function_type = LLVMFunctionType(return_type, params, (u32)count, variadic);
+
+        mut i8* symbol = declaration.text;
+        if (!is_extern && Str.same(symbol, "main")) {
+            symbol = "__djinn_sync_main";
+        }
+        info.function = LLVMAddFunction(this.module, symbol, info.function_type);
+
+        PtrVec* list = this.functions;
+        list.push(info);
+    }
+
+    void define_all(Node* container) {
+        for (mut i32 i = 0; i < container.count(); i = i + 1) {
+            Node* declaration = container.child(i);
+            if (declaration.kind == NodeKind.NAMESPACE_DECL) {
+                this.define_all(declaration);
+            } else if (declaration.kind == NodeKind.FUNCTION) {
+                this.define_function(declaration);
+            }
+        }
+    }
+
+    void define_function(Node* declaration) {
+        FuncInfo* info = this.find_function(declaration.text);
+        this.current = info;
+
+        void* entry = LLVMAppendBasicBlockInContext(this.context, info.function, "entry");
+        void* body = LLVMAppendBasicBlockInContext(this.context, info.function, "body");
+        LLVMPositionBuilderAtEnd(this.builder, entry);
+        void* jump = LLVMBuildBr(this.builder, body);
+        LLVMPositionBuilderBefore(this.alloca_builder, jump);
+        LLVMPositionBuilderAtEnd(this.builder, body);
+
+        PtrVec* list = this.locals;
+        list.truncate(0);
+        for (mut i32 i = 0; i < declaration.count(); i = i + 1) {
+            Node* parameter = declaration.child(i);
+            void* slot = this.create_slot(parameter.type, parameter.text, parameter);
+            LLVMBuildStore(this.builder, LLVMGetParam(info.function, (u32)i), slot);
+            this.add_local(parameter.text, slot, parameter.type, parameter.flag);
+        }
+
+        this.gen_statement(declaration.first);
+
+        if (!this.is_terminated()) {
+            if (info.return_type.is_void()) {
+                LLVMBuildRetVoid(this.builder);
+            } else {
+                LLVMBuildUnreachable(this.builder);
+            }
+        }
+    }
+
+    void* create_slot(TypeRef* ty, i8* name, Node* at) {
+        return LLVMBuildAlloca(this.alloca_builder, this.llvm_type(ty, at), name);
+    }
+
+    void add_local(i8* name, void* slot, TypeRef* ty, bool is_mutable) {
+        Local* local = (Local*)Mem.zalloc(sizeof(Local));
+        local.name = name;
+        local.slot = slot;
+        local.type = ty;
+        local.is_mutable = is_mutable;
+        PtrVec* list = this.locals;
+        list.push(local);
+    }
+
+    Local* find_local(i8* name) {
+        PtrVec* list = this.locals;
+        mut i32 i = list.length - 1;
+        while (i >= 0) {
+            Local* local = (Local*)list.get(i);
+            if (Str.same(local.name, name)) {
+                return local;
+            }
+            i = i - 1;
+        }
+        return (Local*)0;
+    }
+
+    bool is_terminated() {
+        void* block = LLVMGetInsertBlock(this.builder);
+        return LLVMGetBasicBlockTerminator(block) != null;
+    }
+
+    void* new_block(i8* name) {
+        return LLVMAppendBasicBlockInContext(this.context, this.current.function, name);
+    }
+
+    void branch_if_open(void* target) {
+        if (!this.is_terminated()) {
+            LLVMBuildBr(this.builder, target);
+        }
+    }
+
+    void start_dead_block() {
+        void* dead = this.new_block("dead");
+        LLVMPositionBuilderAtEnd(this.builder, dead);
+    }
+
+    void emit_entry_point() {
+        FuncInfo* user = this.find_function("main");
+        if (user == null) {
+            Diagnostics* diagnostics = this.diagnostics;
+            diagnostics.error(1, 1, "no 'main' function defined");
+            return;
+        }
+
+        void* i32_type = LLVMIntTypeInContext(this.context, 32);
+        void* void_type = LLVMVoidTypeInContext(this.context);
+        void** init_params = CodeGen.array_of(1);
+        init_params[0] = i32_type;
+        void* init_type = LLVMFunctionType(void_type, init_params, 1, 0);
+        void* init_fn = LLVMAddFunction(this.module, "__djinn_runtime_init", init_type);
+        void* shutdown_type = LLVMFunctionType(void_type, CodeGen.array_of(0), 0, 0);
+        void* shutdown_fn = LLVMAddFunction(this.module, "__djinn_runtime_shutdown", shutdown_type);
+
+        void* main_type = LLVMFunctionType(i32_type, CodeGen.array_of(0), 0, 0);
+        void* main_fn = LLVMAddFunction(this.module, "main", main_type);
+        void* entry = LLVMAppendBasicBlockInContext(this.context, main_fn, "entry");
+        LLVMPositionBuilderAtEnd(this.builder, entry);
+
+        void** init_args = CodeGen.array_of(1);
+        init_args[0] = LLVMConstInt(i32_type, 4, 0);
+        LLVMBuildCall2(this.builder, init_type, init_fn, init_args, 1, "");
+
+        mut void* exit_code = LLVMConstInt(i32_type, 0, 0);
+        if (user.return_type.is_void()) {
+            LLVMBuildCall2(this.builder, user.function_type, user.function, CodeGen.array_of(0), 0, "");
+        } else {
+            void* returned = LLVMBuildCall2(this.builder, user.function_type, user.function, CodeGen.array_of(0), 0, "exit");
+            Value* wrapped = Value.create(returned, user.return_type);
+            exit_code = this.coerce(wrapped, TypeRef.integer(32, true));
+        }
+
+        LLVMBuildCall2(this.builder, shutdown_type, shutdown_fn, CodeGen.array_of(0), 0, "");
+        LLVMBuildRet(this.builder, exit_code);
+    }
+
+    void* coerce(Value* source, TypeRef* target) {
+        TypeRef* from = source.type;
+        void* ref = source.ref;
+        if (target == null) {
+            return ref;
+        }
+        void* destination = this.llvm_type(target, (Node*)0);
+
+        if (from.kind == TypeKind.INTEGER && target.kind == TypeKind.INTEGER) {
+            if (from.bits == target.bits) {
+                return ref;
+            }
+            if (from.bits > target.bits) {
+                return LLVMBuildCast(this.builder, LlvmConst.OP_TRUNC, ref, destination, "trunc");
+            }
+            if (from.is_signed && from.bits > 1) {
+                return LLVMBuildCast(this.builder, LlvmConst.OP_SEXT, ref, destination, "sext");
+            }
+            return LLVMBuildCast(this.builder, LlvmConst.OP_ZEXT, ref, destination, "zext");
+        }
+        if (from.kind == TypeKind.INTEGER && target.kind == TypeKind.FLOAT) {
+            if (from.is_signed) {
+                return LLVMBuildCast(this.builder, LlvmConst.OP_SITOFP, ref, destination, "sitofp");
+            }
+            return LLVMBuildCast(this.builder, LlvmConst.OP_UITOFP, ref, destination, "uitofp");
+        }
+        if (from.kind == TypeKind.FLOAT && target.kind == TypeKind.INTEGER) {
+            if (target.is_signed) {
+                return LLVMBuildCast(this.builder, LlvmConst.OP_FPTOSI, ref, destination, "fptosi");
+            }
+            return LLVMBuildCast(this.builder, LlvmConst.OP_FPTOUI, ref, destination, "fptoui");
+        }
+        if (from.kind == TypeKind.FLOAT && target.kind == TypeKind.FLOAT) {
+            if (from.bits == target.bits) {
+                return ref;
+            }
+            if (from.bits < target.bits) {
+                return LLVMBuildCast(this.builder, LlvmConst.OP_FPEXT, ref, destination, "fpext");
+            }
+            return LLVMBuildCast(this.builder, LlvmConst.OP_FPTRUNC, ref, destination, "fptrunc");
+        }
+        if (from.kind == TypeKind.INTEGER && target.kind == TypeKind.POINTER) {
+            return LLVMBuildCast(this.builder, LlvmConst.OP_INTTOPTR, ref, destination, "inttoptr");
+        }
+        if (from.kind == TypeKind.POINTER && target.kind == TypeKind.INTEGER) {
+            return LLVMBuildCast(this.builder, LlvmConst.OP_PTRTOINT, ref, destination, "ptrtoint");
+        }
+        return ref;
+    }
+
+    void* to_condition(Value* source) {
+        TypeRef* ty = source.type;
+        void* ref = source.ref;
+        if (ty.kind == TypeKind.INTEGER && ty.bits == 1) {
+            return ref;
+        }
+        void* zero = LLVMConstNull(LLVMTypeOf(ref));
+        if (ty.kind == TypeKind.FLOAT) {
+            return LLVMBuildFCmp(this.builder, LlvmConst.REAL_UNE, ref, zero, "tobool");
+        }
+        return LLVMBuildICmp(this.builder, LlvmConst.INT_NE, ref, zero, "tobool");
+    }
+
+    void gen_statement(Node* node) {
+        i32 kind = node.kind;
+
+        if (kind == NodeKind.BLOCK) {
+            PtrVec* list = this.locals;
+            i32 mark = list.length;
+            for (mut i32 i = 0; i < node.count(); i = i + 1) {
+                this.gen_statement(node.child(i));
+            }
+            list.truncate(mark);
+        } else if (kind == NodeKind.VAR_DECL) {
+            this.gen_variable(node);
+        } else if (kind == NodeKind.EXPR_STMT) {
+            this.gen_expression(node.first, (TypeRef*)0);
+        } else if (kind == NodeKind.RETURN) {
+            this.gen_return(node);
+        } else if (kind == NodeKind.IF) {
+            this.gen_if(node);
+        } else if (kind == NodeKind.WHILE) {
+            this.gen_while(node);
+        } else if (kind == NodeKind.DO_WHILE) {
+            this.gen_do_while(node);
+        } else if (kind == NodeKind.FOR) {
+            this.gen_for(node);
+        } else if (kind == NodeKind.BREAK) {
+            if (this.break_target == null) {
+                this.error(node, "'break' outside of a loop");
+                return;
+            }
+            LLVMBuildBr(this.builder, this.break_target);
+            this.start_dead_block();
+        } else if (kind == NodeKind.CONTINUE) {
+            if (this.continue_target == null) {
+                this.error(node, "'continue' outside of a loop");
+                return;
+            }
+            LLVMBuildBr(this.builder, this.continue_target);
+            this.start_dead_block();
+        } else {
+            this.error(node, "statement is not supported by code generation yet");
+        }
+    }
+
+    void gen_variable(Node* node) {
+        mut TypeRef* declared = node.type;
+        mut Value* initial = (Value*)0;
+
+        if (node.first != null) {
+            initial = this.gen_expression(node.first, declared);
+        }
+        if (declared.kind == TypeKind.AUTO) {
+            if (initial == null) {
+                this.error(node, "'auto' variable needs an initializer");
+                return;
+            }
+            declared = initial.type;
+        }
+
+        void* slot = this.create_slot(declared, node.text, node);
+        if (initial != null) {
+            LLVMBuildStore(this.builder, this.coerce(initial, declared), slot);
+        } else {
+            LLVMBuildStore(this.builder, LLVMConstNull(this.llvm_type(declared, node)), slot);
+        }
+        this.add_local(node.text, slot, declared, node.flag);
+    }
+
+    void gen_return(Node* node) {
+        TypeRef* expected = this.current.return_type;
+        if (node.first == null) {
+            LLVMBuildRetVoid(this.builder);
+        } else if (expected.is_void()) {
+            this.error(node, "void function cannot return a value");
+        } else {
+            Value* returned = this.gen_expression(node.first, expected);
+            LLVMBuildRet(this.builder, this.coerce(returned, expected));
+        }
+        this.start_dead_block();
+    }
+
+    void gen_if(Node* node) {
+        void* condition = this.to_condition(this.gen_expression(node.first, (TypeRef*)0));
+        void* then_block = this.new_block("if.then");
+        void* end_block = this.new_block("if.end");
+        mut void* else_block = end_block;
+        if (node.third != null) {
+            else_block = this.new_block("if.else");
+        }
+
+        LLVMBuildCondBr(this.builder, condition, then_block, else_block);
+        LLVMPositionBuilderAtEnd(this.builder, then_block);
+        this.gen_statement(node.second);
+        this.branch_if_open(end_block);
+
+        if (node.third != null) {
+            LLVMPositionBuilderAtEnd(this.builder, else_block);
+            this.gen_statement(node.third);
+            this.branch_if_open(end_block);
+        }
+        LLVMPositionBuilderAtEnd(this.builder, end_block);
+    }
+
+    void gen_while(Node* node) {
+        void* condition_block = this.new_block("while.cond");
+        void* body_block = this.new_block("while.body");
+        void* end_block = this.new_block("while.end");
+
+        this.branch_if_open(condition_block);
+        LLVMPositionBuilderAtEnd(this.builder, condition_block);
+        void* condition = this.to_condition(this.gen_expression(node.first, (TypeRef*)0));
+        LLVMBuildCondBr(this.builder, condition, body_block, end_block);
+
+        this.run_loop_body(node.second, body_block, end_block, condition_block);
+        this.branch_if_open(condition_block);
+        LLVMPositionBuilderAtEnd(this.builder, end_block);
+    }
+
+    void gen_do_while(Node* node) {
+        void* body_block = this.new_block("do.body");
+        void* condition_block = this.new_block("do.cond");
+        void* end_block = this.new_block("do.end");
+
+        this.branch_if_open(body_block);
+        this.run_loop_body(node.second, body_block, end_block, condition_block);
+        this.branch_if_open(condition_block);
+
+        LLVMPositionBuilderAtEnd(this.builder, condition_block);
+        void* condition = this.to_condition(this.gen_expression(node.first, (TypeRef*)0));
+        LLVMBuildCondBr(this.builder, condition, body_block, end_block);
+        LLVMPositionBuilderAtEnd(this.builder, end_block);
+    }
+
+    void gen_for(Node* node) {
+        PtrVec* list = this.locals;
+        i32 mark = list.length;
+        if (node.first != null) {
+            this.gen_statement(node.first);
+        }
+
+        void* condition_block = this.new_block("for.cond");
+        void* body_block = this.new_block("for.body");
+        void* step_block = this.new_block("for.step");
+        void* end_block = this.new_block("for.end");
+
+        this.branch_if_open(condition_block);
+        LLVMPositionBuilderAtEnd(this.builder, condition_block);
+        if (node.second != null) {
+            void* condition = this.to_condition(this.gen_expression(node.second, (TypeRef*)0));
+            LLVMBuildCondBr(this.builder, condition, body_block, end_block);
+        } else {
+            LLVMBuildBr(this.builder, body_block);
+        }
+
+        this.run_loop_body(node.fourth, body_block, end_block, step_block);
+        this.branch_if_open(step_block);
+
+        LLVMPositionBuilderAtEnd(this.builder, step_block);
+        if (node.third != null) {
+            this.gen_expression(node.third, (TypeRef*)0);
+        }
+        LLVMBuildBr(this.builder, condition_block);
+        LLVMPositionBuilderAtEnd(this.builder, end_block);
+        list.truncate(mark);
+    }
+
+    void run_loop_body(Node* body, void* body_block, void* break_block, void* continue_block) {
+        void* saved_break = this.break_target;
+        void* saved_continue = this.continue_target;
+        this.break_target = break_block;
+        this.continue_target = continue_block;
+        LLVMPositionBuilderAtEnd(this.builder, body_block);
+        this.gen_statement(body);
+        this.break_target = saved_break;
+        this.continue_target = saved_continue;
+    }
+
+    bool is_untyped_literal(Node* node) {
+        if (node.kind == NodeKind.INT_LITERAL) {
+            return true;
+        }
+        return node.kind == NodeKind.UNARY && node.op == TokenKind.MINUS && node.first.kind == NodeKind.INT_LITERAL;
+    }
+
+    Value* fallback(void* hint) {
+        return Value.create(LLVMConstInt(LLVMIntTypeInContext(this.context, 32), 0, 0), TypeRef.integer(32, true));
+    }
+
+    Value* gen_expression(Node* node, TypeRef* expected) {
+        i32 kind = node.kind;
+
+        if (kind == NodeKind.INT_LITERAL) {
+            return this.gen_integer_literal(node, expected);
+        }
+        if (kind == NodeKind.FLOAT_LITERAL) {
+            mut TypeRef* ty = TypeRef.floating(64);
+            if (expected != null && expected.kind == TypeKind.FLOAT) {
+                ty = expected;
+            }
+            return Value.create(LLVMConstReal(this.llvm_type(ty, node), node.float_value), ty);
+        }
+        if (kind == NodeKind.STRING_LITERAL) {
+            void* text = LLVMBuildGlobalStringPtr(this.builder, node.text, "str");
+            return Value.create(text, TypeRef.pointer_to(TypeRef.integer(8, true)));
+        }
+        if (kind == NodeKind.BOOL_LITERAL) {
+            TypeRef* flag = TypeRef.integer(1, false);
+            return Value.create(LLVMConstInt(this.llvm_type(flag, node), (u64)node.int_value, 0), flag);
+        }
+        if (kind == NodeKind.NULL_LITERAL) {
+            TypeRef* any = TypeRef.pointer_to(TypeRef.create(TypeKind.VOID));
+            any.nullable = true;
+            return Value.create(LLVMConstNull(this.llvm_type(any, node)), any);
+        }
+        if (kind == NodeKind.IDENTIFIER) {
+            return this.gen_identifier(node);
+        }
+        if (kind == NodeKind.UNARY) {
+            return this.gen_unary(node, expected);
+        }
+        if (kind == NodeKind.BINARY) {
+            return this.gen_binary(node, expected);
+        }
+        if (kind == NodeKind.ASSIGN) {
+            return this.gen_assign(node);
+        }
+        if (kind == NodeKind.CALL) {
+            return this.gen_call(node);
+        }
+        if (kind == NodeKind.CAST) {
+            Value* operand = this.gen_expression(node.first, node.type);
+            return Value.create(this.coerce(operand, node.type), node.type);
+        }
+        if (kind == NodeKind.INDEX) {
+            Value* address = this.gen_address(node);
+            return this.load_through(address, node);
+        }
+        if (kind == NodeKind.SIZEOF) {
+            return this.gen_sizeof(node);
+        }
+
+        this.error(node, "expression is not supported by code generation yet");
+        return this.fallback((void*)0);
+    }
+
+    Value* gen_integer_literal(Node* node, TypeRef* expected) {
+        if (expected != null && expected.kind == TypeKind.FLOAT) {
+            return Value.create(LLVMConstReal(this.llvm_type(expected, node), (f64)node.int_value), expected);
+        }
+        mut TypeRef* ty = TypeRef.integer(32, true);
+        if (expected != null && expected.kind == TypeKind.INTEGER) {
+            ty = expected;
+        } else if (node.int_value > 2147483647) {
+            ty = TypeRef.integer(64, true);
+        }
+        return Value.create(LLVMConstInt(this.llvm_type(ty, node), (u64)node.int_value, 0), ty);
+    }
+
+    Value* gen_sizeof(Node* node) {
+        TypeRef* ty = node.type;
+        mut i64 bytes = 8;
+        if (ty.kind == TypeKind.INTEGER) {
+            bytes = (i64)((ty.bits + 7) / 8);
+        } else if (ty.kind == TypeKind.FLOAT) {
+            bytes = (i64)(ty.bits / 8);
+        } else if (ty.kind != TypeKind.POINTER) {
+            this.error(node, "sizeof of this type is not supported yet");
+        }
+        TypeRef* result = TypeRef.integer(64, true);
+        return Value.create(LLVMConstInt(this.llvm_type(result, node), (u64)bytes, 0), result);
+    }
+
+    Value* gen_identifier(Node* node) {
+        Local* local = this.find_local(node.text);
+        if (local == null) {
+            this.error(node, "undefined variable");
+            return this.fallback((void*)0);
+        }
+        void* loaded = LLVMBuildLoad2(this.builder, this.llvm_type(local.type, node), local.slot, node.text);
+        return Value.create(loaded, local.type);
+    }
+
+    Value* load_through(Value* address, Node* at) {
+        TypeRef* pointer = address.type;
+        TypeRef* element = pointer.element;
+        void* loaded = LLVMBuildLoad2(this.builder, this.llvm_type(element, at), address.ref, "load");
+        return Value.create(loaded, element);
+    }
+
+    Value* gen_address(Node* node) {
+        if (node.kind == NodeKind.IDENTIFIER) {
+            Local* local = this.find_local(node.text);
+            if (local == null) {
+                this.error(node, "undefined variable");
+                return this.fallback((void*)0);
+            }
+            return Value.create(local.slot, TypeRef.pointer_to(local.type));
+        }
+
+        if (node.kind == NodeKind.INDEX) {
+            Value* base = this.gen_expression(node.first, (TypeRef*)0);
+            TypeRef* base_type = base.type;
+            if (base_type.kind != TypeKind.POINTER || base_type.element.kind == TypeKind.VOID) {
+                this.error(node, "only pointers to sized types can be indexed");
+                return this.fallback((void*)0);
+            }
+            Value* index = this.gen_expression(node.second, TypeRef.integer(64, true));
+            void** indices = CodeGen.array_of(1);
+            indices[0] = this.coerce(index, TypeRef.integer(64, true));
+            void* element_type = this.llvm_type(base_type.element, node);
+            void* address = LLVMBuildGEP2(this.builder, element_type, base.ref, indices, 1, "index");
+            return Value.create(address, base_type);
+        }
+
+        if (node.kind == NodeKind.UNARY && node.op == TokenKind.STAR) {
+            Value* pointer = this.gen_expression(node.first, (TypeRef*)0);
+            TypeRef* pointer_type = pointer.type;
+            if (pointer_type.kind != TypeKind.POINTER || pointer_type.element.kind == TypeKind.VOID) {
+                this.error(node, "cannot dereference this value");
+                return this.fallback((void*)0);
+            }
+            return pointer;
+        }
+
+        this.error(node, "expression is not addressable");
+        return this.fallback((void*)0);
+    }
+
+    Value* gen_unary(Node* node, TypeRef* expected) {
+        i32 op = node.op;
+
+        if (op == TokenKind.AMPERSAND) {
+            return this.gen_address(node.first);
+        }
+        if (op == TokenKind.STAR) {
+            Value* address = this.gen_address(node);
+            return this.load_through(address, node);
+        }
+
+        Value* operand = this.gen_expression(node.first, expected);
+        TypeRef* ty = operand.type;
+        if (op == TokenKind.MINUS) {
+            if (ty.kind == TypeKind.FLOAT) {
+                return Value.create(LLVMBuildFNeg(this.builder, operand.ref, "neg"), ty);
+            }
+            return Value.create(LLVMBuildNeg(this.builder, operand.ref, "neg"), ty);
+        }
+        if (op == TokenKind.TILDE) {
+            return Value.create(LLVMBuildNot(this.builder, operand.ref, "not"), ty);
+        }
+        if (op == TokenKind.BANG) {
+            void* condition = this.to_condition(operand);
+            return Value.create(LLVMBuildNot(this.builder, condition, "lnot"), TypeRef.integer(1, false));
+        }
+
+        this.error(node, "unary operator is not supported by code generation yet");
+        return this.fallback((void*)0);
+    }
+
+    Value* gen_assign(Node* node) {
+        Node* target = node.first;
+        if (target.kind == NodeKind.IDENTIFIER) {
+            Local* local = this.find_local(target.text);
+            if (local != null && !local.is_mutable) {
+                this.error(target, "cannot assign to an immutable variable");
+            }
+        }
+
+        Value* address = this.gen_address(target);
+        TypeRef* pointer = address.type;
+        TypeRef* element = pointer.element;
+        Value* value = this.gen_expression(node.second, element);
+        void* stored = this.coerce(value, element);
+        LLVMBuildStore(this.builder, stored, address.ref);
+        return Value.create(stored, element);
+    }
+
+    Value* gen_logical(Node* node) {
+        bool is_and = node.op == TokenKind.AND_AND;
+        TypeRef* flag = TypeRef.integer(1, false);
+        void* left = this.to_condition(this.gen_expression(node.first, (TypeRef*)0));
+        void* left_block = LLVMGetInsertBlock(this.builder);
+        void* right_block = this.new_block("logic.rhs");
+        void* end_block = this.new_block("logic.end");
+
+        if (is_and) {
+            LLVMBuildCondBr(this.builder, left, right_block, end_block);
+        } else {
+            LLVMBuildCondBr(this.builder, left, end_block, right_block);
+        }
+
+        LLVMPositionBuilderAtEnd(this.builder, right_block);
+        void* right = this.to_condition(this.gen_expression(node.second, (TypeRef*)0));
+        void* right_end = LLVMGetInsertBlock(this.builder);
+        LLVMBuildBr(this.builder, end_block);
+
+        LLVMPositionBuilderAtEnd(this.builder, end_block);
+        void* merged = LLVMBuildPhi(this.builder, this.llvm_type(flag, node), "logic");
+        void** values = CodeGen.array_of(2);
+        void** blocks = CodeGen.array_of(2);
+        mut u64 shortcut = 1;
+        if (is_and) {
+            shortcut = 0;
+        }
+        values[0] = LLVMConstInt(this.llvm_type(flag, node), shortcut, 0);
+        blocks[0] = left_block;
+        values[1] = right;
+        blocks[1] = right_end;
+        LLVMAddIncoming(merged, values, blocks, 2);
+        return Value.create(merged, flag);
+    }
+
+    static bool is_comparison(i32 op) {
+        return op == TokenKind.EQUAL_EQUAL || op == TokenKind.BANG_EQUAL || op == TokenKind.LESS
+            || op == TokenKind.LESS_EQUAL || op == TokenKind.GREATER || op == TokenKind.GREATER_EQUAL;
+    }
+
+    Value* gen_binary(Node* node, TypeRef* expected) {
+        i32 op = node.op;
+        if (op == TokenKind.AND_AND || op == TokenKind.OR_OR) {
+            return this.gen_logical(node);
+        }
+
+        mut TypeRef* hint = expected;
+        if (CodeGen.is_comparison(op)) {
+            hint = (TypeRef*)0;
+        }
+
+        mut Value* left = (Value*)0;
+        mut Value* right = (Value*)0;
+        if (this.is_untyped_literal(node.first) && !this.is_untyped_literal(node.second)) {
+            right = this.gen_expression(node.second, hint);
+            left = this.gen_expression(node.first, right.type);
+        } else {
+            left = this.gen_expression(node.first, hint);
+            right = this.gen_expression(node.second, left.type);
+        }
+
+        TypeRef* left_type = left.type;
+        TypeRef* right_type = right.type;
+
+        if (left_type.kind == TypeKind.POINTER && right_type.kind == TypeKind.INTEGER
+            && (op == TokenKind.PLUS || op == TokenKind.MINUS)) {
+            return this.gen_pointer_offset(node, left, right);
+        }
+
+        mut TypeRef* common = left_type;
+        if (right_type.kind == TypeKind.FLOAT && left_type.kind == TypeKind.INTEGER) {
+            common = right_type;
+        } else if (left_type.kind == TypeKind.INTEGER && right_type.kind == TypeKind.INTEGER
+            && right_type.bits > left_type.bits) {
+            common = right_type;
+        } else if (left_type.kind == TypeKind.FLOAT && right_type.kind == TypeKind.FLOAT
+            && right_type.bits > left_type.bits) {
+            common = right_type;
+        }
+
+        void* lhs = this.coerce(left, common);
+        void* rhs = this.coerce(right, common);
+
+        if (CodeGen.is_comparison(op)) {
+            return this.gen_comparison(node, common, lhs, rhs);
+        }
+        return this.gen_arithmetic(node, common, lhs, rhs);
+    }
+
+    Value* gen_pointer_offset(Node* node, Value* pointer, Value* offset) {
+        mut void* amount = this.coerce(offset, TypeRef.integer(64, true));
+        if (node.op == TokenKind.MINUS) {
+            amount = LLVMBuildNeg(this.builder, amount, "negoffset");
+        }
+        void** indices = CodeGen.array_of(1);
+        indices[0] = amount;
+        void* byte_type = LLVMIntTypeInContext(this.context, 8);
+        void* moved = LLVMBuildGEP2(this.builder, byte_type, pointer.ref, indices, 1, "ptradd");
+        return Value.create(moved, pointer.type);
+    }
+
+    Value* gen_comparison(Node* node, TypeRef* common, void* lhs, void* rhs) {
+        i32 op = node.op;
+        TypeRef* flag = TypeRef.integer(1, false);
+
+        if (common.kind == TypeKind.FLOAT) {
+            mut i32 real = LlvmConst.REAL_OEQ;
+            if (op == TokenKind.BANG_EQUAL) { real = LlvmConst.REAL_UNE; }
+            if (op == TokenKind.LESS) { real = LlvmConst.REAL_OLT; }
+            if (op == TokenKind.LESS_EQUAL) { real = LlvmConst.REAL_OLE; }
+            if (op == TokenKind.GREATER) { real = LlvmConst.REAL_OGT; }
+            if (op == TokenKind.GREATER_EQUAL) { real = LlvmConst.REAL_OGE; }
+            return Value.create(LLVMBuildFCmp(this.builder, real, lhs, rhs, "fcmp"), flag);
+        }
+
+        bool is_signed = common.kind == TypeKind.INTEGER && common.is_signed;
+        mut i32 predicate = LlvmConst.INT_EQ;
+        if (op == TokenKind.BANG_EQUAL) { predicate = LlvmConst.INT_NE; }
+        if (op == TokenKind.LESS) { predicate = LlvmConst.INT_ULT; }
+        if (op == TokenKind.LESS_EQUAL) { predicate = LlvmConst.INT_ULE; }
+        if (op == TokenKind.GREATER) { predicate = LlvmConst.INT_UGT; }
+        if (op == TokenKind.GREATER_EQUAL) { predicate = LlvmConst.INT_UGE; }
+        if (is_signed) {
+            if (op == TokenKind.LESS) { predicate = LlvmConst.INT_SLT; }
+            if (op == TokenKind.LESS_EQUAL) { predicate = LlvmConst.INT_SLE; }
+            if (op == TokenKind.GREATER) { predicate = LlvmConst.INT_SGT; }
+            if (op == TokenKind.GREATER_EQUAL) { predicate = LlvmConst.INT_SGE; }
+        }
+        return Value.create(LLVMBuildICmp(this.builder, predicate, lhs, rhs, "icmp"), flag);
+    }
+
+    Value* gen_arithmetic(Node* node, TypeRef* common, void* lhs, void* rhs) {
+        i32 op = node.op;
+        void* builder = this.builder;
+
+        if (common.kind == TypeKind.FLOAT) {
+            if (op == TokenKind.PLUS) { return Value.create(LLVMBuildFAdd(builder, lhs, rhs, "fadd"), common); }
+            if (op == TokenKind.MINUS) { return Value.create(LLVMBuildFSub(builder, lhs, rhs, "fsub"), common); }
+            if (op == TokenKind.STAR) { return Value.create(LLVMBuildFMul(builder, lhs, rhs, "fmul"), common); }
+            if (op == TokenKind.SLASH) { return Value.create(LLVMBuildFDiv(builder, lhs, rhs, "fdiv"), common); }
+            if (op == TokenKind.PERCENT) { return Value.create(LLVMBuildFRem(builder, lhs, rhs, "frem"), common); }
+            this.error(node, "operator is not valid for floating point operands");
+            return Value.create(lhs, common);
+        }
+
+        if (common.kind != TypeKind.INTEGER) {
+            this.error(node, "operator is not valid for these operands");
+            return Value.create(lhs, common);
+        }
+
+        if (op == TokenKind.PLUS) { return Value.create(LLVMBuildAdd(builder, lhs, rhs, "add"), common); }
+        if (op == TokenKind.MINUS) { return Value.create(LLVMBuildSub(builder, lhs, rhs, "sub"), common); }
+        if (op == TokenKind.STAR) { return Value.create(LLVMBuildMul(builder, lhs, rhs, "mul"), common); }
+        if (op == TokenKind.AMPERSAND) { return Value.create(LLVMBuildAnd(builder, lhs, rhs, "and"), common); }
+        if (op == TokenKind.PIPE) { return Value.create(LLVMBuildOr(builder, lhs, rhs, "or"), common); }
+        if (op == TokenKind.CARET) { return Value.create(LLVMBuildXor(builder, lhs, rhs, "xor"), common); }
+        if (op == TokenKind.LESS_LESS) { return Value.create(LLVMBuildShl(builder, lhs, rhs, "shl"), common); }
+        if (op == TokenKind.SLASH) {
+            if (common.is_signed) { return Value.create(LLVMBuildSDiv(builder, lhs, rhs, "sdiv"), common); }
+            return Value.create(LLVMBuildUDiv(builder, lhs, rhs, "udiv"), common);
+        }
+        if (op == TokenKind.PERCENT) {
+            if (common.is_signed) { return Value.create(LLVMBuildSRem(builder, lhs, rhs, "srem"), common); }
+            return Value.create(LLVMBuildURem(builder, lhs, rhs, "urem"), common);
+        }
+        if (op == TokenKind.GREATER_GREATER) {
+            if (common.is_signed) { return Value.create(LLVMBuildAShr(builder, lhs, rhs, "ashr"), common); }
+            return Value.create(LLVMBuildLShr(builder, lhs, rhs, "lshr"), common);
+        }
+
+        this.error(node, "binary operator is not supported by code generation yet");
+        return Value.create(lhs, common);
+    }
+
+    Value* promote_variadic(Value* argument) {
+        TypeRef* ty = argument.type;
+        if (ty.kind == TypeKind.INTEGER && ty.bits < 32) {
+            TypeRef* wide = TypeRef.integer(32, ty.is_signed);
+            return Value.create(this.coerce(argument, wide), wide);
+        }
+        if (ty.kind == TypeKind.FLOAT && ty.bits < 64) {
+            TypeRef* wide = TypeRef.floating(64);
+            return Value.create(this.coerce(argument, wide), wide);
+        }
+        return argument;
+    }
+
+    Value* gen_call(Node* node) {
+        Node* callee = node.first;
+        if (callee.kind != NodeKind.IDENTIFIER) {
+            this.error(node, "only calls to named functions are supported by code generation yet");
+            return this.fallback((void*)0);
+        }
+
+        FuncInfo* info = this.find_function(CodeGen.base_name(callee.text));
+        if (info == null) {
+            this.error(callee, "call to an undeclared function");
+            return this.fallback((void*)0);
+        }
+
+        PtrVec* param_types = info.param_types;
+        i32 fixed = param_types.length;
+        i32 given = node.count();
+        if (given < fixed || (given > fixed && !info.is_variadic)) {
+            this.error(node, "wrong number of arguments");
+            return this.fallback((void*)0);
+        }
+
+        void** args = CodeGen.array_of(given);
+        for (mut i32 i = 0; i < given; i = i + 1) {
+            if (i < fixed) {
+                TypeRef* wanted = (TypeRef*)param_types.get(i);
+                Value* argument = this.gen_expression(node.child(i), wanted);
+                args[i] = this.coerce(argument, wanted);
+            } else {
+                Value* extra = this.promote_variadic(this.gen_expression(node.child(i), (TypeRef*)0));
+                args[i] = extra.ref;
+            }
+        }
+
+        mut i8* label = "call";
+        if (info.return_type.is_void()) {
+            label = "";
+        }
+        void* result = LLVMBuildCall2(this.builder, info.function_type, info.function, args, (u32)given, label);
+        return Value.create(result, info.return_type);
+    }
+}

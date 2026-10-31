@@ -1,0 +1,120 @@
+namespace djinnc;
+
+extern "C" {
+    void* LLVMContextCreate();
+    void LLVMContextDispose(void* context);
+    void* LLVMModuleCreateWithNameInContext(i8* name, void* context);
+    void LLVMDisposeModule(void* module);
+    void LLVMSetTarget(void* module, i8* triple);
+    i8* LLVMGetDefaultTargetTriple();
+    void LLVMDisposeMessage(i8* message);
+    void* LLVMCreateBuilderInContext(void* context);
+    void LLVMDisposeBuilder(void* builder);
+
+    void* LLVMVoidTypeInContext(void* context);
+    void* LLVMIntTypeInContext(void* context, u32 bits);
+    void* LLVMFloatTypeInContext(void* context);
+    void* LLVMDoubleTypeInContext(void* context);
+    void* LLVMPointerTypeInContext(void* context, u32 addressSpace);
+    void* LLVMFunctionType(void* returnType, void** paramTypes, u32 paramCount, i32 isVarArg);
+    u32 LLVMGetIntTypeWidth(void* integerType);
+    i32 LLVMGetTypeKind(void* type);
+    void* LLVMTypeOf(void* value);
+
+    void* LLVMAddFunction(void* module, i8* name, void* functionType);
+    void* LLVMGetNamedFunction(void* module, i8* name);
+    void* LLVMGetParam(void* function, u32 index);
+    void LLVMSetValueName2(void* value, i8* name, u64 length);
+
+    void* LLVMAppendBasicBlockInContext(void* context, void* function, i8* name);
+    void LLVMPositionBuilderAtEnd(void* builder, void* block);
+    void LLVMPositionBuilderBefore(void* builder, void* instruction);
+    void* LLVMGetInsertBlock(void* builder);
+    void* LLVMGetBasicBlockTerminator(void* block);
+
+    void* LLVMConstInt(void* type, u64 value, i32 signExtend);
+    void* LLVMConstReal(void* type, f64 value);
+    void* LLVMConstNull(void* type);
+
+    void* LLVMBuildRet(void* builder, void* value);
+    void* LLVMBuildRetVoid(void* builder);
+    void* LLVMBuildBr(void* builder, void* block);
+    void* LLVMBuildCondBr(void* builder, void* condition, void* thenBlock, void* elseBlock);
+    void* LLVMBuildUnreachable(void* builder);
+
+    void* LLVMBuildAlloca(void* builder, void* type, i8* name);
+    void* LLVMBuildLoad2(void* builder, void* type, void* pointer, i8* name);
+    void* LLVMBuildStore(void* builder, void* value, void* pointer);
+    void* LLVMBuildGEP2(void* builder, void* type, void* pointer, void** indices, u32 count, i8* name);
+    void* LLVMBuildGlobalStringPtr(void* builder, i8* text, i8* name);
+
+    void* LLVMBuildAdd(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildSub(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildMul(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildSDiv(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildUDiv(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildSRem(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildURem(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildFAdd(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildFSub(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildFMul(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildFDiv(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildFRem(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildAnd(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildOr(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildXor(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildShl(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildLShr(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildAShr(void* builder, void* left, void* right, i8* name);
+    void* LLVMBuildNeg(void* builder, void* value, i8* name);
+    void* LLVMBuildFNeg(void* builder, void* value, i8* name);
+    void* LLVMBuildNot(void* builder, void* value, i8* name);
+    void* LLVMBuildICmp(void* builder, i32 predicate, void* left, void* right, i8* name);
+    void* LLVMBuildFCmp(void* builder, i32 predicate, void* left, void* right, i8* name);
+    void* LLVMBuildCast(void* builder, i32 opcode, void* value, void* destType, i8* name);
+
+    void* LLVMBuildCall2(void* builder, void* functionType, void* function, void** args, u32 count, i8* name);
+    void* LLVMBuildPhi(void* builder, void* type, i8* name);
+    void LLVMAddIncoming(void* phi, void** values, void** blocks, u32 count);
+
+    i32 LLVMVerifyModule(void* module, i32 action, i8** errorMessage);
+    i32 LLVMPrintModuleToFile(void* module, i8* filename, i8** errorMessage);
+}
+
+struct LlvmConst {
+    const i32 TYPE_VOID = 0;
+    const i32 TYPE_POINTER = 12;
+
+    const i32 OP_TRUNC = 30;
+    const i32 OP_ZEXT = 31;
+    const i32 OP_SEXT = 32;
+    const i32 OP_FPTOUI = 33;
+    const i32 OP_FPTOSI = 34;
+    const i32 OP_UITOFP = 35;
+    const i32 OP_SITOFP = 36;
+    const i32 OP_FPTRUNC = 37;
+    const i32 OP_FPEXT = 38;
+    const i32 OP_PTRTOINT = 39;
+    const i32 OP_INTTOPTR = 40;
+    const i32 OP_BITCAST = 41;
+
+    const i32 INT_EQ = 32;
+    const i32 INT_NE = 33;
+    const i32 INT_UGT = 34;
+    const i32 INT_UGE = 35;
+    const i32 INT_ULT = 36;
+    const i32 INT_ULE = 37;
+    const i32 INT_SGT = 38;
+    const i32 INT_SGE = 39;
+    const i32 INT_SLT = 40;
+    const i32 INT_SLE = 41;
+
+    const i32 REAL_OEQ = 1;
+    const i32 REAL_OGT = 2;
+    const i32 REAL_OGE = 3;
+    const i32 REAL_OLT = 4;
+    const i32 REAL_OLE = 5;
+    const i32 REAL_UNE = 14;
+
+    const i32 VERIFY_RETURN_STATUS = 2;
+}

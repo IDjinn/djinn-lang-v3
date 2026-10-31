@@ -1220,6 +1220,41 @@ void __djinn_runtime_init(int num_threads)
     DJINN_TRACE("runtime initialized (threads=%d, iocp/epoll=active)", num_threads);
 }
 
+#ifdef _WIN32
+int __djinn_argc(void)
+{
+    return __argc;
+}
+
+char* __djinn_argv(int index)
+{
+    if (index < 0 || index >= __argc || !__argv) return NULL;
+    return __argv[index];
+}
+#else
+static int djinn_saved_argc = 0;
+static char** djinn_saved_argv = NULL;
+
+// glibc and dyld pass (argc, argv, envp) to initializers in .init_array
+__attribute__((constructor)) static void djinn_capture_args(int argc, char** argv, char** envp)
+{
+    (void)envp;
+    djinn_saved_argc = argc;
+    djinn_saved_argv = argv;
+}
+
+int __djinn_argc(void)
+{
+    return djinn_saved_argc;
+}
+
+char* __djinn_argv(int index)
+{
+    if (index < 0 || index >= djinn_saved_argc || !djinn_saved_argv) return NULL;
+    return djinn_saved_argv[index];
+}
+#endif
+
 void __djinn_runtime_shutdown(void)
 {
     DJINN_TRACE("runtime shutting down");

@@ -1,0 +1,15 @@
+i32 main() {
+    mut i32 count = 0;
+    mut i32 n = 0;
+    while (n < 20) {
+        n = n + 1;
+        if (n % 2 == 0 && n > 4) {
+            continue;
+        }
+        if (n > 15) {
+            break;
+        }
+        count = count + 1;
+    }
+    return count;
+}

@@ -1,0 +1,904 @@
+namespace djinnc;
+
+struct Parser {
+    PtrVec* tokens;
+    i32 pos;
+    bool failed;
+    Diagnostics* diagnostics;
+    PtrVec* type_names;
+
+    public static Parser* create(PtrVec* tokens, Diagnostics* diagnostics) {
+        Parser* parser = (Parser*)Mem.zalloc(sizeof(Parser));
+        parser.tokens = tokens;
+        parser.diagnostics = diagnostics;
+        parser.type_names = PtrVec.create();
+        parser.collect_type_names();
+        return parser;
+    }
+
+    public Node* parse_program() {
+        Token* first = this.current();
+        Node* program = Node.create_list(NodeKind.PROGRAM, first);
+        while (!this.at_end()) {
+            Node* declaration = this.parse_declaration();
+            if (declaration != null) {
+                program.add(declaration);
+            }
+        }
+        return program;
+    }
+
+    Token* current() {
+        return this.peek_token(0);
+    }
+
+    Token* peek_token(i32 offset) {
+        PtrVec* list = this.tokens;
+        mut i32 index = this.pos + offset;
+        if (index >= list.length) {
+            index = list.length - 1;
+        }
+        return (Token*)list.get(index);
+    }
+
+    bool at_end() {
+        Token* token = this.current();
+        return this.failed || token.kind == TokenKind.END_OF_FILE;
+    }
+
+    Token* advance() {
+        Token* token = this.current();
+        if (token.kind != TokenKind.END_OF_FILE) {
+            this.pos = this.pos + 1;
+        }
+        return token;
+    }
+
+    bool check(i32 kind) {
+        Token* token = this.current();
+        return token.kind == kind;
+    }
+
+    bool match(i32 kind) {
+        if (this.check(kind)) {
+            this.advance();
+            return true;
+        }
+        return false;
+    }
+
+    void fail(i8* message) {
+        if (this.failed) {
+            return;
+        }
+        Token* token = this.current();
+        Diagnostics* diagnostics = this.diagnostics;
+        mut i8* found = token.copy_text();
+        if (token.kind == TokenKind.END_OF_FILE) {
+            found = "end of file";
+        }
+        diagnostics.error_near(token.line, token.column, message, found);
+        this.failed = true;
+    }
+
+    Token* expect(i32 kind, i8* message) {
+        Token* token = this.current();
+        if (token.kind != kind) {
+            this.fail(message);
+            return token;
+        }
+        return this.advance();
+    }
+
+    void collect_type_names() {
+        PtrVec* list = this.tokens;
+        PtrVec* names = this.type_names;
+        for (mut i32 i = 0; i + 1 < list.length; i = i + 1) {
+            Token* token = (Token*)list.get(i);
+            Token* next = (Token*)list.get(i + 1);
+            bool declaresType = token.kind == TokenKind.STRUCT || token.kind == TokenKind.ENUM;
+            if (declaresType && next.kind == TokenKind.IDENTIFIER) {
+                names.push(next.copy_text());
+            }
+        }
+    }
+
+    bool is_known_type(Token* token) {
+        PtrVec* names = this.type_names;
+        for (mut i32 i = 0; i < names.length; i = i + 1) {
+            i8* name = (i8*)names.get(i);
+            if (Str.equals(token.text, token.length, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool is_type_start(Token* token) {
+        if (token.kind == TokenKind.VOID || token.kind == TokenKind.AUTO) {
+            return true;
+        }
+        if (token.kind != TokenKind.IDENTIFIER) {
+            return false;
+        }
+        TypeRef* primitive = TypeRef.from_primitive_name(token.text, token.length);
+        if (primitive != null) {
+            return true;
+        }
+        return this.is_known_type(token);
+    }
+
+    i32 scan_type_end(i32 start) {
+        mut i32 offset = start;
+        Token* first = this.peek_token(offset);
+        if (!this.is_type_start(first)) {
+            return 0 - 1;
+        }
+        offset = offset + 1;
+        while (true) {
+            Token* separator = this.peek_token(offset);
+            Token* part = this.peek_token(offset + 1);
+            if (separator.kind == TokenKind.COLON_COLON && part.kind == TokenKind.IDENTIFIER) {
+                offset = offset + 2;
+            } else {
+                break;
+            }
+        }
+        while (this.peek_token(offset).kind == TokenKind.STAR) {
+            offset = offset + 1;
+        }
+        if (this.peek_token(offset).kind == TokenKind.QUESTION) {
+            offset = offset + 1;
+        }
+        return offset;
+    }
+
+    bool is_declaration_start() {
+        if (this.check(TokenKind.MUT)) {
+            return true;
+        }
+        i32 end = this.scan_type_end(0);
+        if (end < 0) {
+            return false;
+        }
+        Token* after = this.peek_token(end);
+        return after.kind == TokenKind.IDENTIFIER || after.kind == TokenKind.MUT;
+    }
+
+    i8* qualified_name() {
+        Token* first = this.expect(TokenKind.IDENTIFIER, "expected identifier");
+        ByteBuf* name = ByteBuf.create();
+        name.append_slice(first.text, first.length);
+        while (this.check(TokenKind.COLON_COLON)) {
+            this.advance();
+            Token* part = this.expect(TokenKind.IDENTIFIER, "expected identifier after '::'");
+            name.append("::");
+            name.append_slice(part.text, part.length);
+        }
+        return name.cstr();
+    }
+
+    void skip_attributes() {
+        while (this.check(TokenKind.LBRACKET) && !this.failed) {
+            mut i32 depth = 0;
+            while (!this.at_end()) {
+                Token* token = this.advance();
+                if (token.kind == TokenKind.LBRACKET) {
+                    depth = depth + 1;
+                } else if (token.kind == TokenKind.RBRACKET) {
+                    depth = depth - 1;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    TypeRef* parse_type() {
+        Token* token = this.current();
+        mut TypeRef* base = (TypeRef*)0;
+
+        if (token.kind == TokenKind.VOID || token.kind == TokenKind.AUTO) {
+            this.advance();
+            base = TypeRef.from_primitive_name(token.text, token.length);
+        } else if (token.kind == TokenKind.IDENTIFIER) {
+            TypeRef* primitive = TypeRef.from_primitive_name(token.text, token.length);
+            if (primitive != null) {
+                this.advance();
+                base = primitive;
+            } else {
+                base = TypeRef.named(this.qualified_name());
+            }
+        } else {
+            this.fail("expected a type");
+            return TypeRef.create(TypeKind.VOID);
+        }
+
+        while (this.match(TokenKind.STAR)) {
+            base = TypeRef.pointer_to(base);
+        }
+
+        if (this.check(TokenKind.LBRACKET) && this.peek_token(1).kind == TokenKind.RBRACKET) {
+            this.fail("array types are not supported yet");
+        }
+
+        if (this.check(TokenKind.LESS) && base.kind == TypeKind.NAMED) {
+            this.fail("generic types are not supported yet");
+        }
+
+        if (this.match(TokenKind.QUESTION)) {
+            base.nullable = true;
+        }
+        return base;
+    }
+
+    Node* parse_declaration() {
+        this.skip_attributes();
+        Token* token = this.current();
+
+        if (token.kind == TokenKind.IMPORT) {
+            this.advance();
+            Node* import_node = Node.create(NodeKind.IMPORT, token);
+            import_node.text = this.qualified_name();
+            this.expect(TokenKind.SEMICOLON, "expected ';' after import");
+            return import_node;
+        }
+
+        if (token.kind == TokenKind.NAMESPACE) {
+            return this.parse_namespace();
+        }
+
+        if (token.kind == TokenKind.EXTERN) {
+            return this.parse_extern();
+        }
+
+        if (token.kind == TokenKind.STRUCT) {
+            return this.parse_struct();
+        }
+
+        if (token.kind == TokenKind.ENUM || token.kind == TokenKind.INTERFACE || token.kind == TokenKind.IMPL
+            || token.kind == TokenKind.MACRO) {
+            this.fail("this declaration is not supported yet");
+            return (Node*)0;
+        }
+
+        return this.parse_function(false);
+    }
+
+    Node* parse_namespace() {
+        Token* start = this.advance();
+        Node* node = Node.create_list(NodeKind.NAMESPACE_DECL, start);
+        node.text = this.qualified_name();
+        if (this.match(TokenKind.SEMICOLON)) {
+            return node;
+        }
+
+        this.expect(TokenKind.LBRACE, "expected ';' or '{' after namespace name");
+        while (!this.check(TokenKind.RBRACE) && !this.at_end()) {
+            Node* declaration = this.parse_declaration();
+            if (declaration != null) {
+                node.add(declaration);
+            }
+        }
+        this.expect(TokenKind.RBRACE, "expected '}' to close namespace");
+        return node;
+    }
+
+    Node* parse_extern() {
+        Token* start = this.advance();
+        Node* group = Node.create_list(NodeKind.NAMESPACE_DECL, start);
+        group.text = "";
+        group.flag = true;
+
+        if (this.check(TokenKind.STRING_LITERAL)) {
+            this.advance();
+        }
+
+        if (this.match(TokenKind.LBRACE)) {
+            while (!this.check(TokenKind.RBRACE) && !this.at_end()) {
+                this.skip_attributes();
+                group.add(this.parse_extern_function());
+            }
+            this.expect(TokenKind.RBRACE, "expected '}' to close extern block");
+            return group;
+        }
+
+        group.add(this.parse_extern_function());
+        return group;
+    }
+
+    Node* parse_extern_function() {
+        Token* start = this.current();
+        Node* node = Node.create_list(NodeKind.EXTERN_FUNCTION, start);
+        node.type = this.parse_type();
+        Token* name = this.expect(TokenKind.IDENTIFIER, "expected extern function name");
+        node.text = name.copy_text();
+        this.expect(TokenKind.LPAREN, "expected '(' after function name");
+        this.parse_parameters(node);
+        this.expect(TokenKind.RPAREN, "expected ')' after parameters");
+        this.expect(TokenKind.SEMICOLON, "expected ';' after extern function");
+        return node;
+    }
+
+    void parse_parameters(Node* owner) {
+        if (this.check(TokenKind.RPAREN)) {
+            return;
+        }
+        while (!this.at_end()) {
+            if (this.check(TokenKind.DOT_DOT_DOT)) {
+                this.advance();
+                owner.is_variadic = true;
+                if (this.check(TokenKind.IDENTIFIER)) {
+                    this.advance();
+                }
+                break;
+            }
+
+            Token* start = this.current();
+            Node* parameter = Node.create(NodeKind.PARAMETER, start);
+            if (this.match(TokenKind.MUT)) {
+                parameter.flag = true;
+            }
+            parameter.type = this.parse_type();
+            Token* name = this.expect(TokenKind.IDENTIFIER, "expected parameter name");
+            parameter.text = name.copy_text();
+            if (this.match(TokenKind.MUT)) {
+                parameter.flag = true;
+            }
+            owner.add(parameter);
+
+            if (!this.match(TokenKind.COMMA)) {
+                break;
+            }
+        }
+    }
+
+    Node* parse_function(bool allowConstructor) {
+        mut bool is_static = false;
+        while (this.check(TokenKind.PUBLIC) || this.check(TokenKind.PRIVATE) || this.check(TokenKind.STATIC)) {
+            Token* modifier = this.advance();
+            if (modifier.kind == TokenKind.STATIC) {
+                is_static = true;
+            }
+        }
+
+        if (this.check(TokenKind.ASYNC) || this.check(TokenKind.CONSTEXPR) || this.check(TokenKind.CONSTEVAL)) {
+            this.fail("async, constexpr and consteval functions are not supported yet");
+            return (Node*)0;
+        }
+
+        Token* start = this.current();
+        Node* function = Node.create_list(NodeKind.FUNCTION, start);
+        function.flag = is_static;
+        function.type = this.parse_type();
+        Token* name = this.expect(TokenKind.IDENTIFIER, "expected function name");
+        function.text = name.copy_text();
+        this.expect(TokenKind.LPAREN, "expected '(' after function name");
+        this.parse_parameters(function);
+        this.expect(TokenKind.RPAREN, "expected ')' after parameters");
+
+        if (this.check(TokenKind.THROWS) || this.check(TokenKind.REQUIRE) || this.check(TokenKind.ENSURE)) {
+            this.fail("throws and contracts are not supported yet");
+            return function;
+        }
+
+        if (this.match(TokenKind.ARROW)) {
+            Token* arrow = this.current();
+            Node* body = Node.create_list(NodeKind.BLOCK, arrow);
+            Node* ret = Node.create(NodeKind.RETURN, arrow);
+            ret.first = this.parse_expression();
+            body.add(ret);
+            this.expect(TokenKind.SEMICOLON, "expected ';' after expression body");
+            function.first = body;
+            return function;
+        }
+
+        function.first = this.parse_block();
+        return function;
+    }
+
+    Node* parse_struct() {
+        Token* start = this.advance();
+        Node* node = Node.create_list(NodeKind.STRUCT_DECL, start);
+        Token* name = this.expect(TokenKind.IDENTIFIER, "expected struct name");
+        node.text = name.copy_text();
+
+        if (this.check(TokenKind.LESS)) {
+            this.fail("generic structs are not supported yet");
+            return node;
+        }
+
+        if (this.match(TokenKind.COLON)) {
+            node.type = this.parse_type();
+            while (this.match(TokenKind.COMMA)) {
+                this.parse_type();
+            }
+        }
+
+        if (this.match(TokenKind.SEMICOLON)) {
+            return node;
+        }
+
+        this.expect(TokenKind.LBRACE, "expected '{' to open struct body");
+        while (!this.check(TokenKind.RBRACE) && !this.at_end()) {
+            this.skip_attributes();
+            this.parse_struct_member(node);
+        }
+        this.expect(TokenKind.RBRACE, "expected '}' to close struct body");
+        return node;
+    }
+
+    void parse_struct_member(Node* owner) {
+        Token* start = this.current();
+        mut i32 lookahead = 0;
+        while (this.peek_token(lookahead).kind == TokenKind.PUBLIC || this.peek_token(lookahead).kind == TokenKind.PRIVATE
+            || this.peek_token(lookahead).kind == TokenKind.STATIC) {
+            lookahead = lookahead + 1;
+        }
+        Token* head = this.peek_token(lookahead);
+
+        if (head.kind == TokenKind.CONST) {
+            for (mut i32 i = 0; i < lookahead; i = i + 1) {
+                this.advance();
+            }
+            this.advance();
+            Node* constant = Node.create(NodeKind.FIELD_DECL, head);
+            constant.flag = true;
+            constant.type = this.parse_type();
+            Token* constName = this.expect(TokenKind.IDENTIFIER, "expected constant name");
+            constant.text = constName.copy_text();
+            this.expect(TokenKind.EQUAL, "expected '=' in constant declaration");
+            constant.first = this.parse_expression();
+            this.expect(TokenKind.SEMICOLON, "expected ';' after constant");
+            owner.add(constant);
+            return;
+        }
+
+        Token* afterHead = this.peek_token(lookahead + 1);
+        bool isConstructor = head.kind == TokenKind.IDENTIFIER && afterHead.kind == TokenKind.LPAREN;
+        if (isConstructor) {
+            this.fail("constructors are not supported yet");
+            return;
+        }
+
+        if (head.kind == TokenKind.OPERATOR) {
+            this.fail("operator overloads are not supported yet");
+            return;
+        }
+
+        mut i32 typeEnd = this.scan_type_end(lookahead);
+        if (typeEnd < 0) {
+            this.fail("expected a struct member");
+            return;
+        }
+
+        Token* afterType = this.peek_token(typeEnd);
+        Token* afterName = this.peek_token(typeEnd + 1);
+        if (afterType.kind == TokenKind.IDENTIFIER && afterName.kind == TokenKind.LPAREN) {
+            Node* method = this.parse_function(false);
+            if (method != null) {
+                owner.add(method);
+            }
+            return;
+        }
+
+        for (mut i32 i = 0; i < lookahead; i = i + 1) {
+            this.advance();
+        }
+        Node* field = Node.create(NodeKind.FIELD_DECL, start);
+        if (this.match(TokenKind.MUT)) {
+            field.flag = true;
+        }
+        field.type = this.parse_type();
+        Token* fieldName = this.expect(TokenKind.IDENTIFIER, "expected field name");
+        field.text = fieldName.copy_text();
+        this.expect(TokenKind.SEMICOLON, "expected ';' after field");
+        owner.add(field);
+    }
+
+    Node* parse_block() {
+        Token* start = this.expect(TokenKind.LBRACE, "expected '{'");
+        Node* block = Node.create_list(NodeKind.BLOCK, start);
+        while (!this.check(TokenKind.RBRACE) && !this.at_end()) {
+            Node* statement = this.parse_statement();
+            if (statement != null) {
+                block.add(statement);
+            }
+        }
+        this.expect(TokenKind.RBRACE, "expected '}' to close block");
+        return block;
+    }
+
+    Node* parse_statement() {
+        Token* token = this.current();
+
+        if (token.kind == TokenKind.LBRACE) {
+            return this.parse_block();
+        }
+        if (token.kind == TokenKind.SEMICOLON) {
+            this.advance();
+            return (Node*)0;
+        }
+        if (token.kind == TokenKind.RETURN) {
+            this.advance();
+            Node* ret = Node.create(NodeKind.RETURN, token);
+            if (!this.check(TokenKind.SEMICOLON)) {
+                ret.first = this.parse_expression();
+            }
+            this.expect(TokenKind.SEMICOLON, "expected ';' after return");
+            return ret;
+        }
+        if (token.kind == TokenKind.IF) {
+            return this.parse_if();
+        }
+        if (token.kind == TokenKind.WHILE) {
+            this.advance();
+            Node* loop = Node.create(NodeKind.WHILE, token);
+            this.expect(TokenKind.LPAREN, "expected '(' after while");
+            loop.first = this.parse_expression();
+            this.expect(TokenKind.RPAREN, "expected ')' after condition");
+            loop.second = this.parse_statement_or_empty();
+            return loop;
+        }
+        if (token.kind == TokenKind.DO) {
+            this.advance();
+            Node* loop = Node.create(NodeKind.DO_WHILE, token);
+            loop.second = this.parse_statement_or_empty();
+            this.expect(TokenKind.WHILE, "expected 'while' after do body");
+            this.expect(TokenKind.LPAREN, "expected '(' after while");
+            loop.first = this.parse_expression();
+            this.expect(TokenKind.RPAREN, "expected ')' after condition");
+            this.expect(TokenKind.SEMICOLON, "expected ';' after do-while");
+            return loop;
+        }
+        if (token.kind == TokenKind.FOR) {
+            return this.parse_for();
+        }
+        if (token.kind == TokenKind.BREAK) {
+            this.advance();
+            this.expect(TokenKind.SEMICOLON, "expected ';' after break");
+            return Node.create(NodeKind.BREAK, token);
+        }
+        if (token.kind == TokenKind.CONTINUE) {
+            this.advance();
+            this.expect(TokenKind.SEMICOLON, "expected ';' after continue");
+            return Node.create(NodeKind.CONTINUE, token);
+        }
+        if (token.kind == TokenKind.SWITCH) {
+            this.fail("switch is not supported yet");
+            return (Node*)0;
+        }
+
+        if (this.is_declaration_start()) {
+            Node* declaration = this.parse_variable_declaration();
+            this.expect(TokenKind.SEMICOLON, "expected ';' after declaration");
+            return declaration;
+        }
+
+        Node* statement = Node.create(NodeKind.EXPR_STMT, token);
+        statement.first = this.parse_expression();
+        this.expect(TokenKind.SEMICOLON, "expected ';' after expression");
+        return statement;
+    }
+
+    Node* parse_statement_or_empty() {
+        Token* token = this.current();
+        Node* statement = this.parse_statement();
+        if (statement == null) {
+            return Node.create_list(NodeKind.BLOCK, token);
+        }
+        return statement;
+    }
+
+    Node* parse_variable_declaration() {
+        Token* start = this.current();
+        Node* declaration = Node.create(NodeKind.VAR_DECL, start);
+        if (this.match(TokenKind.MUT)) {
+            declaration.flag = true;
+        }
+        declaration.type = this.parse_type();
+        if (this.match(TokenKind.MUT)) {
+            declaration.flag = true;
+        }
+        Token* name = this.expect(TokenKind.IDENTIFIER, "expected variable name");
+        declaration.text = name.copy_text();
+        if (this.match(TokenKind.EQUAL)) {
+            declaration.first = this.parse_expression();
+        }
+        return declaration;
+    }
+
+    Node* parse_if() {
+        Token* start = this.advance();
+        Node* node = Node.create(NodeKind.IF, start);
+        this.expect(TokenKind.LPAREN, "expected '(' after if");
+        node.first = this.parse_expression();
+        this.expect(TokenKind.RPAREN, "expected ')' after condition");
+        node.second = this.parse_statement_or_empty();
+        if (this.match(TokenKind.ELSE)) {
+            node.third = this.parse_statement_or_empty();
+        }
+        return node;
+    }
+
+    Node* parse_for() {
+        Token* start = this.advance();
+        Node* node = Node.create(NodeKind.FOR, start);
+        this.expect(TokenKind.LPAREN, "expected '(' after for");
+
+        if (!this.check(TokenKind.SEMICOLON)) {
+            if (this.is_declaration_start()) {
+                node.first = this.parse_variable_declaration();
+                if (this.check(TokenKind.IN)) {
+                    this.fail("range-for is not supported yet");
+                    return node;
+                }
+            } else {
+                Token* initToken = this.current();
+                Node* init = Node.create(NodeKind.EXPR_STMT, initToken);
+                init.first = this.parse_expression();
+                node.first = init;
+            }
+        }
+        this.expect(TokenKind.SEMICOLON, "expected ';' after for initializer");
+
+        if (!this.check(TokenKind.SEMICOLON)) {
+            node.second = this.parse_expression();
+        }
+        this.expect(TokenKind.SEMICOLON, "expected ';' after for condition");
+
+        if (!this.check(TokenKind.RPAREN)) {
+            node.third = this.parse_expression();
+        }
+        this.expect(TokenKind.RPAREN, "expected ')' after for clauses");
+        node.fourth = this.parse_statement_or_empty();
+        return node;
+    }
+
+    public Node* parse_expression() {
+        return this.parse_assignment();
+    }
+
+    static i32 compound_operator(i32 kind) {
+        if (kind == TokenKind.PLUS_EQUAL) { return TokenKind.PLUS; }
+        if (kind == TokenKind.MINUS_EQUAL) { return TokenKind.MINUS; }
+        if (kind == TokenKind.STAR_EQUAL) { return TokenKind.STAR; }
+        if (kind == TokenKind.SLASH_EQUAL) { return TokenKind.SLASH; }
+        if (kind == TokenKind.PERCENT_EQUAL) { return TokenKind.PERCENT; }
+        if (kind == TokenKind.AMPERSAND_EQUAL) { return TokenKind.AMPERSAND; }
+        if (kind == TokenKind.PIPE_EQUAL) { return TokenKind.PIPE; }
+        if (kind == TokenKind.CARET_EQUAL) { return TokenKind.CARET; }
+        if (kind == TokenKind.LESS_LESS_EQUAL) { return TokenKind.LESS_LESS; }
+        if (kind == TokenKind.GREATER_GREATER_EQUAL) { return TokenKind.GREATER_GREATER; }
+        return 0;
+    }
+
+    static i32 precedence(i32 kind) {
+        if (kind == TokenKind.OR_OR) { return 1; }
+        if (kind == TokenKind.AND_AND) { return 2; }
+        if (kind == TokenKind.PIPE) { return 3; }
+        if (kind == TokenKind.CARET) { return 4; }
+        if (kind == TokenKind.AMPERSAND) { return 5; }
+        if (kind == TokenKind.EQUAL_EQUAL || kind == TokenKind.BANG_EQUAL) { return 6; }
+        if (kind == TokenKind.LESS || kind == TokenKind.LESS_EQUAL
+            || kind == TokenKind.GREATER || kind == TokenKind.GREATER_EQUAL) { return 7; }
+        if (kind == TokenKind.LESS_LESS || kind == TokenKind.GREATER_GREATER) { return 8; }
+        if (kind == TokenKind.PLUS || kind == TokenKind.MINUS) { return 9; }
+        if (kind == TokenKind.STAR || kind == TokenKind.SLASH || kind == TokenKind.PERCENT) { return 10; }
+        return 0;
+    }
+
+    Node* make_assignment(Node* target, Node* value, Token* at) {
+        Node* assign = Node.create(NodeKind.ASSIGN, at);
+        assign.first = target;
+        assign.second = value;
+        return assign;
+    }
+
+    Node* make_binary(i32 op, Node* left, Node* right, Token* at) {
+        Node* binary = Node.create(NodeKind.BINARY, at);
+        binary.op = op;
+        binary.first = left;
+        binary.second = right;
+        return binary;
+    }
+
+    Node* make_step(Node* target, i32 op, Token* at) {
+        Node* one = Node.create(NodeKind.INT_LITERAL, at);
+        one.int_value = 1;
+        one.text = "1";
+        Node* sum = this.make_binary(op, target, one, at);
+        return this.make_assignment(target, sum, at);
+    }
+
+    Node* parse_assignment() {
+        Node* left = this.parse_binary(1);
+        Token* token = this.current();
+
+        if (token.kind == TokenKind.EQUAL) {
+            this.advance();
+            Node* value = this.parse_assignment();
+            return this.make_assignment(left, value, token);
+        }
+
+        i32 compound = Parser.compound_operator(token.kind);
+        if (compound != 0) {
+            this.advance();
+            Node* rhs = this.parse_assignment();
+            Node* combined = this.make_binary(compound, left, rhs, token);
+            return this.make_assignment(left, combined, token);
+        }
+        return left;
+    }
+
+    Node* parse_binary(i32 min_precedence) {
+        mut Node* left = this.parse_unary();
+        while (true) {
+            Token* op = this.current();
+            i32 level = Parser.precedence(op.kind);
+            if (level == 0 || level < min_precedence) {
+                break;
+            }
+            this.advance();
+            Node* right = this.parse_binary(level + 1);
+            left = this.make_binary(op.kind, left, right, op);
+        }
+        return left;
+    }
+
+    Node* parse_unary() {
+        Token* token = this.current();
+        bool isPrefix = token.kind == TokenKind.BANG || token.kind == TokenKind.MINUS
+            || token.kind == TokenKind.TILDE || token.kind == TokenKind.STAR || token.kind == TokenKind.AMPERSAND;
+        if (isPrefix) {
+            this.advance();
+            Node* unary = Node.create(NodeKind.UNARY, token);
+            unary.op = token.kind;
+            unary.first = this.parse_unary();
+            return unary;
+        }
+
+        if (token.kind == TokenKind.PLUS_PLUS || token.kind == TokenKind.MINUS_MINUS) {
+            this.advance();
+            Node* target = this.parse_unary();
+            mut i32 op = TokenKind.PLUS;
+            if (token.kind == TokenKind.MINUS_MINUS) {
+                op = TokenKind.MINUS;
+            }
+            return this.make_step(target, op, token);
+        }
+
+        if (token.kind == TokenKind.AWAIT || token.kind == TokenKind.SPAWN || token.kind == TokenKind.TRY
+            || token.kind == TokenKind.NEW || token.kind == TokenKind.THROW) {
+            this.fail("this expression is not supported yet");
+            return Node.create(NodeKind.NULL_LITERAL, token);
+        }
+
+        Node* primary = this.parse_primary();
+        return this.parse_postfix(primary);
+    }
+
+    Node* parse_postfix(Node* start) {
+        mut Node* expr = start;
+        while (!this.failed) {
+            Token* token = this.current();
+            if (token.kind == TokenKind.LPAREN) {
+                this.advance();
+                Node* call = Node.create_list(NodeKind.CALL, token);
+                call.first = expr;
+                if (!this.check(TokenKind.RPAREN)) {
+                    call.add(this.parse_expression());
+                    while (this.match(TokenKind.COMMA)) {
+                        call.add(this.parse_expression());
+                    }
+                }
+                this.expect(TokenKind.RPAREN, "expected ')' after arguments");
+                expr = call;
+            } else if (token.kind == TokenKind.LBRACKET) {
+                this.advance();
+                Node* index = Node.create(NodeKind.INDEX, token);
+                index.first = expr;
+                index.second = this.parse_expression();
+                this.expect(TokenKind.RBRACKET, "expected ']' after index");
+                expr = index;
+            } else if (token.kind == TokenKind.DOT) {
+                this.advance();
+                Node* access = Node.create(NodeKind.FIELD_ACCESS, token);
+                access.first = expr;
+                Token* member = this.expect(TokenKind.IDENTIFIER, "expected member name after '.'");
+                access.text = member.copy_text();
+                expr = access;
+            } else if (token.kind == TokenKind.PLUS_PLUS) {
+                this.advance();
+                expr = this.make_step(expr, TokenKind.PLUS, token);
+            } else if (token.kind == TokenKind.MINUS_MINUS) {
+                this.advance();
+                expr = this.make_step(expr, TokenKind.MINUS, token);
+            } else {
+                break;
+            }
+        }
+        return expr;
+    }
+
+    Node* parse_primary() {
+        Token* token = this.current();
+
+        if (token.kind == TokenKind.INTEGER_LITERAL) {
+            this.advance();
+            Node* literal = Node.create(NodeKind.INT_LITERAL, token);
+            literal.text = token.copy_text();
+            literal.int_value = Str.parse_integer(token.text, token.length);
+            return literal;
+        }
+        if (token.kind == TokenKind.FLOAT_LITERAL) {
+            this.advance();
+            Node* literal = Node.create(NodeKind.FLOAT_LITERAL, token);
+            literal.text = token.copy_text();
+            literal.float_value = Str.parse_float(token.text, token.length);
+            return literal;
+        }
+        if (token.kind == TokenKind.STRING_LITERAL) {
+            this.advance();
+            Node* literal = Node.create(NodeKind.STRING_LITERAL, token);
+            literal.text = token.text;
+            literal.int_value = token.length;
+            return literal;
+        }
+        if (token.kind == TokenKind.TRUE || token.kind == TokenKind.FALSE) {
+            this.advance();
+            Node* literal = Node.create(NodeKind.BOOL_LITERAL, token);
+            if (token.kind == TokenKind.TRUE) {
+                literal.int_value = 1;
+            }
+            return literal;
+        }
+        if (token.kind == TokenKind.NULL) {
+            this.advance();
+            return Node.create(NodeKind.NULL_LITERAL, token);
+        }
+        if (token.kind == TokenKind.THIS) {
+            this.advance();
+            Node* self = Node.create(NodeKind.IDENTIFIER, token);
+            self.text = "this";
+            return self;
+        }
+
+        if (token.kind == TokenKind.IDENTIFIER) {
+            bool isSizeof = Str.equals(token.text, token.length, "sizeof")
+                && this.peek_token(1).kind == TokenKind.LPAREN;
+            if (isSizeof) {
+                this.advance();
+                this.advance();
+                Node* size_node = Node.create(NodeKind.SIZEOF, token);
+                size_node.type = this.parse_type();
+                this.expect(TokenKind.RPAREN, "expected ')' after sizeof type");
+                return size_node;
+            }
+
+            Node* identifier = Node.create(NodeKind.IDENTIFIER, token);
+            identifier.text = this.qualified_name();
+            return identifier;
+        }
+
+        if (token.kind == TokenKind.LPAREN) {
+            i32 typeEnd = this.scan_type_end(1);
+            bool isCast = typeEnd > 0 && this.peek_token(typeEnd).kind == TokenKind.RPAREN;
+            this.advance();
+            if (isCast) {
+                Node* cast = Node.create(NodeKind.CAST, token);
+                cast.type = this.parse_type();
+                this.expect(TokenKind.RPAREN, "expected ')' after cast type");
+                cast.first = this.parse_unary();
+                return cast;
+            }
+            Node* inner = this.parse_expression();
+            this.expect(TokenKind.RPAREN, "expected ')'");
+            return inner;
+        }
+
+        this.fail("expected an expression");
+        return Node.create(NodeKind.NULL_LITERAL, token);
+    }
+}

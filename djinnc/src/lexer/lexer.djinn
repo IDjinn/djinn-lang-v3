@@ -1,0 +1,251 @@
+namespace djinnc;
+
+struct Lexer {
+    i8* source;
+    i32 length;
+    i32 pos;
+    i32 line;
+    i32 column;
+    Diagnostics* diagnostics;
+    PtrVec* tokens;
+
+    public static Lexer* create(i8* source, i32 length, Diagnostics* diagnostics) {
+        Lexer* lexer = (Lexer*)Mem.zalloc(sizeof(Lexer));
+        lexer.source = source;
+        lexer.length = length;
+        lexer.line = 1;
+        lexer.column = 1;
+        lexer.diagnostics = diagnostics;
+        lexer.tokens = PtrVec.create();
+        return lexer;
+    }
+
+    public PtrVec* tokenize() {
+        while (true) {
+            this.skip_trivia();
+            if (this.pos >= this.length) {
+                break;
+            }
+
+            i32 c = this.peek(0);
+            if (c == 34) {
+                this.read_string();
+            } else if (Str.is_digit(c)) {
+                this.read_number();
+            } else if (Str.is_ident_start(c)) {
+                this.read_identifier();
+            } else {
+                this.read_symbol();
+            }
+        }
+
+        this.emit(TokenKind.END_OF_FILE, this.pos, 0, this.line, this.column);
+        return this.tokens;
+    }
+
+    i32 peek(i32 offset) {
+        i32 at = this.pos + offset;
+        if (at >= this.length) {
+            return 0;
+        }
+        i8 c = this.source[at];
+        return c;
+    }
+
+    i32 advance() {
+        i32 c = this.peek(0);
+        this.pos = this.pos + 1;
+        if (c == 10) {
+            this.line = this.line + 1;
+            this.column = 1;
+        } else {
+            this.column = this.column + 1;
+        }
+        return c;
+    }
+
+    void emit(i32 kind, i32 start, i32 count, i32 startLine, i32 startColumn) {
+        Token* token = Token.create(kind, this.source + start, count, startLine, startColumn);
+        PtrVec* list = this.tokens;
+        list.push(token);
+    }
+
+    void skip_trivia() {
+        while (this.pos < this.length) {
+            i32 c = this.peek(0);
+            if (c == 32 || c == 9 || c == 10 || c == 13) {
+                this.advance();
+            } else if (c == 47 && this.peek(1) == 47) {
+                while (this.pos < this.length && this.peek(0) != 10) {
+                    this.advance();
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    void read_identifier() {
+        i32 start = this.pos;
+        i32 startLine = this.line;
+        i32 startColumn = this.column;
+        while (Str.is_ident_part(this.peek(0))) {
+            this.advance();
+        }
+
+        i32 count = this.pos - start;
+        i32 kind = TokenKind.keyword(this.source + start, count);
+        this.emit(kind, start, count, startLine, startColumn);
+    }
+
+    void read_suffix(bool allowC) {
+        i32 c = this.peek(0);
+        bool isSuffix = c == 117 || c == 105 || c == 119 || c == 116 || c == 115;
+        if (isSuffix || (allowC && c == 99)) {
+            this.advance();
+        }
+    }
+
+    void read_number() {
+        i32 start = this.pos;
+        i32 startLine = this.line;
+        i32 startColumn = this.column;
+
+        if (this.peek(0) == 48 && (this.peek(1) == 120 || this.peek(1) == 88)) {
+            this.advance();
+            this.advance();
+            while (Str.is_hex_digit(this.peek(0)) || this.peek(0) == 95 || this.peek(0) == 39) {
+                this.advance();
+            }
+            this.read_suffix(false);
+            this.emit(TokenKind.INTEGER_LITERAL, start, this.pos - start, startLine, startColumn);
+            return;
+        }
+
+        if (this.peek(0) == 48 && (this.peek(1) == 98 || this.peek(1) == 66)) {
+            this.advance();
+            this.advance();
+            while (this.peek(0) == 48 || this.peek(0) == 49 || this.peek(0) == 95 || this.peek(0) == 39) {
+                this.advance();
+            }
+            this.read_suffix(true);
+            this.emit(TokenKind.INTEGER_LITERAL, start, this.pos - start, startLine, startColumn);
+            return;
+        }
+
+        while (Str.is_digit(this.peek(0)) || this.peek(0) == 95 || this.peek(0) == 39) {
+            this.advance();
+        }
+
+        mut bool isFloat = false;
+        if (this.peek(0) == 46 && Str.is_digit(this.peek(1))) {
+            isFloat = true;
+            this.advance();
+            while (Str.is_digit(this.peek(0)) || this.peek(0) == 95 || this.peek(0) == 39) {
+                this.advance();
+            }
+        }
+
+        if (this.peek(0) == 101 || this.peek(0) == 69) {
+            isFloat = true;
+            this.advance();
+            if (this.peek(0) == 43 || this.peek(0) == 45) {
+                this.advance();
+            }
+            if (!Str.is_digit(this.peek(0))) {
+                Diagnostics* diagnostics = this.diagnostics;
+                diagnostics.error(this.line, this.column, "invalid exponent in number literal");
+            }
+            while (Str.is_digit(this.peek(0))) {
+                this.advance();
+            }
+        }
+
+        if (isFloat) {
+            this.emit(TokenKind.FLOAT_LITERAL, start, this.pos - start, startLine, startColumn);
+            return;
+        }
+
+        this.read_suffix(true);
+        this.emit(TokenKind.INTEGER_LITERAL, start, this.pos - start, startLine, startColumn);
+    }
+
+    void read_string() {
+        i32 startLine = this.line;
+        i32 startColumn = this.column;
+        ByteBuf* value = ByteBuf.create();
+
+        if (this.peek(1) == 34 && this.peek(2) == 34) {
+            this.advance();
+            this.advance();
+            this.advance();
+            while (this.pos < this.length) {
+                if (this.peek(0) == 34 && this.peek(1) == 34 && this.peek(2) == 34) {
+                    this.advance();
+                    this.advance();
+                    this.advance();
+                    this.emit_string(value, startLine, startColumn);
+                    return;
+                }
+                value.append_char(this.advance());
+            }
+            Diagnostics* blockDiagnostics = this.diagnostics;
+            blockDiagnostics.error(startLine, startColumn, "unterminated block string literal");
+            this.emit_string(value, startLine, startColumn);
+            return;
+        }
+
+        this.advance();
+        while (this.pos < this.length && this.peek(0) != 34) {
+            if (this.peek(0) == 92) {
+                this.advance();
+                i32 escaped = this.advance();
+                if (escaped == 110) {
+                    value.append_char(10);
+                } else if (escaped == 116) {
+                    value.append_char(9);
+                } else {
+                    value.append_char(escaped);
+                }
+            } else {
+                value.append_char(this.advance());
+            }
+        }
+
+        if (this.peek(0) == 34) {
+            this.advance();
+        } else {
+            Diagnostics* diagnostics = this.diagnostics;
+            diagnostics.error(startLine, startColumn, "unterminated string literal");
+        }
+        this.emit_string(value, startLine, startColumn);
+    }
+
+    void emit_string(ByteBuf* value, i32 startLine, i32 startColumn) {
+        i8* text = value.cstr();
+        Token* token = Token.create(TokenKind.STRING_LITERAL, text, value.length, startLine, startColumn);
+        PtrVec* list = this.tokens;
+        list.push(token);
+    }
+
+    void read_symbol() {
+        i32 startLine = this.line;
+        i32 startColumn = this.column;
+        i32 start = this.pos;
+        i32 kind = TokenKind.symbol(this.source, this.pos, this.length);
+
+        if (kind == TokenKind.UNKNOWN) {
+            Diagnostics* diagnostics = this.diagnostics;
+            diagnostics.error(startLine, startColumn, "unexpected character");
+            this.advance();
+            this.emit(TokenKind.UNKNOWN, start, 1, startLine, startColumn);
+            return;
+        }
+
+        i32 count = strlen(TokenKind.text(kind));
+        for (mut i32 i = 0; i < count; i = i + 1) {
+            this.advance();
+        }
+        this.emit(kind, start, count, startLine, startColumn);
+    }
+}

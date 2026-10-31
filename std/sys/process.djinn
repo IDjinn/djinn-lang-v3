@@ -1,0 +1,28 @@
+import std::types;
+
+namespace std::sys;
+
+extern "C" {
+    i32 __djinn_argc();
+    i8*? __djinn_argv(i32 index);
+    c_result system(i8* command);
+    i8*? getenv(i8* name);
+}
+
+struct Process {
+    public static i32 argc() {
+        return __djinn_argc();
+    }
+
+    public static i8*? argv(i32 index) {
+        return __djinn_argv(index);
+    }
+
+    public static i32 run(i8* command) {
+        return system(command);
+    }
+
+    public static i8*? env(i8* name) {
+        return getenv(name);
+    }
+}
