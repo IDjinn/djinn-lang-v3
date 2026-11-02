@@ -6,24 +6,6 @@
 
 llvm::Type* Generator::resolve_index_element_type(const Expression& objectExpr)
 {
-    // Scalar elements need no generic substitution, so the binder's type is final
-    if (const Type* boundType = type_of(objectExpr);
-        boundType && (boundType->kind == TypeKind::POINTER || boundType->kind == TypeKind::ARRAY) &&
-        boundType->elementType)
-    {
-        switch (boundType->elementType->kind)
-        {
-        case TypeKind::INTEGER:
-        case TypeKind::F16:
-        case TypeKind::F32:
-        case TypeKind::F64:
-        case TypeKind::F128:
-            return generate_type(*boundType->elementType);
-        default:
-            break;
-        }
-    }
-
     // Case 1: Simple identifier — lookup from scope's pointee type tracking
     if (const auto* ident = dynamic_cast<const Identifier*>(&objectExpr))
     {

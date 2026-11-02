@@ -236,7 +236,7 @@ namespace djlib
         {
             auto name = j.at("name").get<std::string>();
             auto type = j.at("type").get<Type>();
-            scope.addConstExpr(name, {type, nullptr});
+            scope.constExprConstants[name] = {type, nullptr};
 
             auto sym = std::make_shared<Symbol>(SymbolKind::Variable, name, type);
             scope.define(sym);
@@ -244,7 +244,7 @@ namespace djlib
             if (auto pos = name.rfind("::"); pos != std::string::npos)
             {
                 auto shortName = name.substr(pos + 2);
-                scope.addConstExpr(shortName, {type, nullptr});
+                scope.constExprConstants[shortName] = {type, nullptr};
                 auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, shortName, type);
                 scope.define(shortSym);
             }

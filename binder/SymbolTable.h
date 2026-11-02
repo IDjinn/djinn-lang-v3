@@ -425,13 +425,6 @@ public:
     };
 
     std::unordered_map<std::string, ConstExprEntry> constExprConstants;
-    std::vector<std::string> constExprOrder;
-
-    void addConstExpr(const std::string& name, ConstExprEntry entry)
-    {
-        if (constExprConstants.insert_or_assign(name, std::move(entry)).second)
-            constExprOrder.push_back(name);
-    }
 
     struct StaticVarEntry
     {
@@ -441,21 +434,6 @@ public:
     };
 
     std::unordered_map<std::string, StaticVarEntry> staticVars;
-
-    std::unordered_map<const Expression*, Type> expressionTypes;
-
-    [[nodiscard]] const Type* typeOf(const Expression& expr) const
-    {
-        const auto it = expressionTypes.find(&expr);
-        return it == expressionTypes.end() ? nullptr : &it->second;
-    }
-    std::vector<std::string> staticVarOrder;
-
-    void addStaticVar(const std::string& name, StaticVarEntry entry)
-    {
-        if (staticVars.insert_or_assign(name, std::move(entry)).second)
-            staticVarOrder.push_back(name);
-    }
 
 private:
     std::shared_ptr<ScopedSymbolTable> parentScoped_;

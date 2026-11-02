@@ -102,7 +102,6 @@ struct Options {
     public static void usage() {
         logger_error(Log.get(), "usage: djinnc <input.djinn>...|<project dir> [-o <output>] [--runtime-dir <dir>] [--runtime-lib <lib>] [--link-arg <arg>]... [--no-link]");
         logger_error(Log.get(), "              [--emit-tokens] [--emit-ast] [--emit-ir] [--keep-ir] [--lld] [-O2] [--stats] [--selftest]");
-        logger_error(Log.get(), "environment: DJINN_CLANG overrides the clang executable, DJINN_LLD_LINK the lld-link executable (Windows),");
-        logger_error(Log.get(), "             DJINN_LD_LLD, DJINN_CRT_DIR and DJINN_DYNAMIC_LINKER configure --lld on POSIX");
+        logger_error(Log.get(), "environment: DJINN_CLANG overrides the clang executable, DJINN_LLD_LINK the lld-link executable");
     }
 }

@@ -154,10 +154,6 @@ llvm::Value* Generator::generate_variable_init(const VariableInit& expr)
     {
         initVal = generate_expression(*expr.value);
     }
-    if (!valuePointee.type && expr.type.kind == TypeKind::AUTO)
-    {
-        valuePointee = bound_pointee(*expr.value);
-    }
     if (!initVal)
     {
         throw CompileError(DiagnosticCode::INVALID_OPERATION,

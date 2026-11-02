@@ -58,18 +58,8 @@ struct Project {
                     output_directory = Project.read_value(manifest, first + 10, i);
                 } else if (first < i && (manifest[first] == 39 || manifest[first] == 34)) {
                     ByteBuffer* link_args = options.link_args;
-                    i8* value = Project.read_value(manifest, first, i);
-                    i32 value_length = strlen(value);
                     link_args.append(" \"");
-                    if (options.use_lld && Linker.is_windows() && Strings.starts_with(value, 0, value_length, "-L")) {
-                        link_args.append("/libpath:");
-                        link_args.append(value + 2);
-                    } else if (options.use_lld && Linker.is_windows() && Strings.starts_with(value, 0, value_length, "-l")) {
-                        link_args.append(value + 2);
-                        link_args.append(".lib");
-                    } else {
-                        link_args.append(value);
-                    }
+                    link_args.append(Project.read_value(manifest, first, i));
                     link_args.append("\"");
                 }
                 start = i + 1;

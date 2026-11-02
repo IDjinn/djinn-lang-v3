@@ -5,25 +5,6 @@
 #include "../Generator.h"
 #include "../../utils/Logger.h"
 
-PointeeHint Generator::bound_pointee(const Expression& expr)
-{
-    PointeeHint hint;
-    const Type* boundType = type_of(expr);
-    if (!boundType || boundType->kind != TypeKind::POINTER || !boundType->elementType ||
-        boundType->elementType->kind != TypeKind::STRUCT || boundType->elementType->hasGenericArgs())
-    {
-        return hint;
-    }
-
-    std::string resolved = currentScope->resolve_alias(boundType->elementType->structName);
-    if (llvm::StructType* pointeeSt = currentScope->get_llvm_struct(resolved))
-    {
-        hint.type = pointeeSt;
-        hint.structName = std::move(resolved);
-    }
-    return hint;
-}
-
 PointeeHint Generator::resolve_field_pointee(const std::string& ownerStruct, const unsigned fieldIdx,
                                              llvm::Type* fieldType)
 {

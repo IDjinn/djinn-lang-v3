@@ -162,9 +162,8 @@ namespace djlib
 
     void DjLibWriter::collectConstExprs(const ScopedSymbolTable& symbols)
     {
-        for (const auto& name : symbols.constExprOrder)
+        for (const auto& [name, entry] : symbols.constExprConstants)
         {
-            const auto& entry = symbols.constExprConstants.at(name);
             nlohmann::json j;
             j["name"] = name;
             j["type"] = entry.type;
@@ -174,9 +173,8 @@ namespace djlib
 
     void DjLibWriter::collectStaticVars(const ScopedSymbolTable& symbols)
     {
-        for (const auto& name : symbols.staticVarOrder)
+        for (const auto& [name, entry] : symbols.staticVars)
         {
-            const auto& entry = symbols.staticVars.at(name);
             nlohmann::json j;
             j["name"] = name;
             j["type"] = entry.type;

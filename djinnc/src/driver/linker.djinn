@@ -1,49 +1,10 @@
 namespace djinnc;
 
 struct Linker {
-    public static bool is_windows() {
-        return getenv("OS") != null;
-    }
-
-    static i32 link_ld_lld(Options* options, i8* object_path) {
-        i8* lld = Process.env_or("DJINN_LD_LLD", "ld.lld");
-        i8* crt = Process.env_or("DJINN_CRT_DIR", "/usr/lib/x86_64-linux-gnu");
-        i8* loader = Process.env_or("DJINN_DYNAMIC_LINKER", "/lib64/ld-linux-x86-64.so.2");
-
-        ByteBuffer* command = ByteBuffer.create();
-        command.append("\"");
-        command.append(lld);
-        command.append("\" -dynamic-linker \"");
-        command.append(loader);
-        command.append("\" \"");
-        command.append(crt);
-        command.append("/crt1.o\" \"");
-        command.append(crt);
-        command.append("/crti.o\" \"");
-        command.append(object_path);
-        command.append("\" \"");
-        command.append(options.runtime_lib);
-        command.append("\" -L\"");
-        command.append(crt);
-        command.append("\" -L/usr/lib -L/lib/x86_64-linux-gnu -lc -lm \"");
-        command.append(crt);
-        command.append("/crtn.o\"");
-        ByteBuffer* link_args = options.link_args;
-        command.append(link_args.cstr());
-        command.append(" -o \"");
-        command.append(options.output);
-        command.append("\"");
-
-        return Process.run(command.cstr());
-    }
-
     static i32 link_lld(Options* options, i8* object_path) {
         if (options.runtime_lib == null) {
             logger_error(Log.get(), "djinnc: --lld needs --runtime-lib");
             return 1;
-        }
-        if (!Linker.is_windows()) {
-            return Linker.link_ld_lld(options, object_path);
         }
         i8* lld = Process.env_or("DJINN_LLD_LINK", "lld-link");
 

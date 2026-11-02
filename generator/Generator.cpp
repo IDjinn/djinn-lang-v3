@@ -24,6 +24,23 @@
 #include "../utils/Logger.h"
 #include "RuntimeDiagnostics.h"
 
+namespace
+{
+    // unordered_map iteration order is unspecified; emission order must not depend on it
+    template <typename Map>
+    std::vector<const typename Map::value_type*> sorted_entries(const Map& map)
+    {
+        std::vector<const typename Map::value_type*> entries;
+        entries.reserve(map.size());
+        for (const auto& entry : map)
+        {
+            entries.push_back(&entry);
+        }
+        std::ranges::sort(entries, [](const auto* a, const auto* b) { return a->first < b->first; });
+        return entries;
+    }
+}
+
 Generator::Generator(DiagnosticEngine& diagnostics, const std::shared_ptr<ScopedSymbolTable>& symbols)
     : _diagnostics(diagnostics),
       symbols(symbols),
@@ -146,44 +163,34 @@ void Generator::generate()
     register_intrinsic_constants();
 
     // PASS 0b: Evaluate constexpr declarations and register in the compile-time evaluator
-    // A constant may depend on one declared after it, so retry until a pass makes no progress
-    std::vector<const std::string*> pendingConsts;
-    for (const auto& name : symbols->constExprOrder)
+    for (const auto* constEntry : sorted_entries(symbols->constExprConstants))
     {
-        if (symbols->constExprConstants.at(name).value) // intrinsic — already defined in PASS 0a
-            pendingConsts.push_back(&name);
-    }
-    for (bool progressed = true; progressed && !pendingConsts.empty();)
-    {
-        progressed = false;
-        std::erase_if(pendingConsts, [&](const std::string* namePtr)
-        {
-            const auto& name = *namePtr;
-            const ConstValue val = constEvaluator.evaluate(*symbols->constExprConstants.at(name).value);
-            if (val.isError()) return false;
+        const auto& [name, entry] = *constEntry;
+        if (!entry.value)
+            continue; // intrinsic — already defined in PASS 0a
 
+        ConstValue val = constEvaluator.evaluate(*entry.value);
+        if (!val.isError())
+        {
             constEvaluator.defineConstant(name, val);
             if (const auto pos = name.rfind("::"); pos != std::string::npos)
             {
                 constEvaluator.defineConstant(name.substr(pos + 2), val);
             }
             LOG_DEBUG("[generator] constexpr '%s' evaluated to int=%lld", name.c_str(), val.intVal);
-            progressed = true;
-            return true;
-        });
-    }
-    if (!pendingConsts.empty())
-    {
-        const auto& name = *pendingConsts.front();
-        GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
-                        "constexpr '" + name + "' could not be evaluated at compile time",
-                        symbols->constExprConstants.at(name).value->location);
+        }
+        else
+        {
+            GENERATOR_ERROR(DiagnosticCode::TYPE_MISMATCH,
+                            "constexpr '" + name + "' could not be evaluated at compile time",
+                            entry.value->location);
+        }
     }
 
     // PASS 0c: Generate global static variables
-    for (const auto& name : symbols->staticVarOrder)
+    for (const auto* staticEntry : sorted_entries(symbols->staticVars))
     {
-        const auto& entry = symbols->staticVars.at(name);
+        const auto& [name, entry] = *staticEntry;
         if (name.find("::") != std::string::npos && name != name.substr(name.rfind("::") + 2))
             continue;
 

@@ -803,10 +803,6 @@ llvm::Value* Generator::generate_method_call_internal(const FunctionCall& call)
             {
                 receiverVal = generate_expression(*call.receiver);
             }
-            if (!receiverPointee.type)
-            {
-                receiverPointee = bound_pointee(*call.receiver);
-            }
             if (receiverVal)
             {
                 llvm::Type* recvType = receiverVal->getType();

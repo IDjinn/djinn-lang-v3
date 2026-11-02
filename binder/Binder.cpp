@@ -74,7 +74,7 @@ BindingResult Binder::bind(const Program& program)
     for (const auto& ce : program.constExprs)
     {
         const std::string qualifiedName = prefix + ce->name.token_name;
-        _global_scope->addConstExpr(qualifiedName, {ce->type, ce->isIntrinsic ? nullptr : ce->value.get()});
+        _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->isIntrinsic ? nullptr : ce->value.get()};
         auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, ce->type, ce->name.location);
         _global_scope->define(sym);
         if (!prefix.empty())
@@ -82,9 +82,9 @@ BindingResult Binder::bind(const Program& program)
             auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, ce->name.token_name, ce->type,
                                                      ce->name.location);
             _global_scope->define(shortSym);
-            _global_scope->addConstExpr(ce->name.token_name, {
+            _global_scope->constExprConstants[ce->name.token_name] = {
                 ce->type, ce->isIntrinsic ? nullptr : ce->value.get()
-            });
+            };
         }
     }
 
@@ -260,7 +260,7 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
         for (const auto& ce : program->constExprs)
         {
             const std::string qualifiedName = prefix + ce->name.token_name;
-            _global_scope->addConstExpr(qualifiedName, {ce->type, ce->isIntrinsic ? nullptr : ce->value.get()});
+            _global_scope->constExprConstants[qualifiedName] = {ce->type, ce->isIntrinsic ? nullptr : ce->value.get()};
             auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, ce->type, ce->name.location);
             _global_scope->define(sym);
             if (!prefix.empty())
@@ -268,9 +268,9 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
                 auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, ce->name.token_name, ce->type,
                                                          ce->name.location);
                 _global_scope->define(shortSym);
-                _global_scope->addConstExpr(ce->name.token_name, {
+                _global_scope->constExprConstants[ce->name.token_name] = {
                     ce->type, ce->isIntrinsic ? nullptr : ce->value.get()
-                });
+                };
             }
             LOG_DEBUG("[binder] constexpr registered: '%s'%s", qualifiedName.c_str(),
                       ce->isIntrinsic ? " [intrinsic]" : "");
@@ -286,14 +286,14 @@ BindingResult Binder::bindAll(const std::vector<std::shared_ptr<Program>>& progr
             auto sym = std::make_shared<Symbol>(SymbolKind::Variable, qualifiedName, sv->type, sv->name.location);
             sym->isMutable = sv->isMutable;
             _global_scope->define(sym);
-            _global_scope->addStaticVar(qualifiedName, {sv->type, sv->initializer.get(), sv->isMutable});
+            _global_scope->staticVars[qualifiedName] = {sv->type, sv->initializer.get(), sv->isMutable};
             if (!prefix.empty())
             {
                 auto shortSym = std::make_shared<Symbol>(SymbolKind::Variable, sv->name.token_name, sv->type,
                                                          sv->name.location);
                 shortSym->isMutable = sv->isMutable;
                 _global_scope->define(shortSym);
-                _global_scope->addStaticVar(sv->name.token_name, {sv->type, sv->initializer.get(), sv->isMutable});
+                _global_scope->staticVars[sv->name.token_name] = {sv->type, sv->initializer.get(), sv->isMutable};
             }
             LOG_DEBUG("[binder] static var registered: '%s' (mut=%d)", qualifiedName.c_str(), sv->isMutable);
         }
@@ -383,24 +383,12 @@ ConstEvaluator& Binder::getCompileTimeEvaluator() const
 
     auto eval = std::make_unique<ConstEvaluator>();
 
-    // A constant may depend on one declared after it, so retry until a pass makes no progress
-    std::vector<const std::string*> pending;
-    for (const auto& name : _global_scope->constExprOrder)
+    for (const auto& [name, entry] : _global_scope->constExprConstants)
     {
-        if (_global_scope->constExprConstants.at(name).value) // intrinsics carry no expression
-            pending.push_back(&name);
-    }
-    for (bool progressed = true; progressed && !pending.empty();)
-    {
-        progressed = false;
-        std::erase_if(pending, [&](const std::string* name)
-        {
-            const ConstValue val = eval->evaluate(*_global_scope->constExprConstants.at(*name).value);
-            if (val.isError() || val.isThrown()) return false;
-            eval->defineConstant(*name, val);
-            progressed = true;
-            return true;
-        });
+        if (!entry.value) continue; // intrinsics carry no expression
+        const ConstValue val = eval->evaluate(*entry.value);
+        if (!val.isError() && !val.isThrown())
+            eval->defineConstant(name, val);
     }
 
     // Registered under the symbol name (qualified) — aliases in the symbol

@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
 set -u
-compiler="${1:?usage: run.sh <djinnc executable> <runtime dir> [runtime lib]}"
-runtime="${2:?usage: run.sh <djinnc executable> <runtime dir> [runtime lib]}"
-runtime_lib="${3:-}"
-link_flags=()
-if [ -n "$runtime_lib" ]; then
-    link_flags+=(--runtime-lib "$runtime_lib")
-    if [ -n "${DJINN_USE_LLD:-}" ]; then
-        link_flags+=(--lld)
-    fi
-fi
+compiler="${1:?usage: run.sh <djinnc executable> <runtime dir>}"
+runtime="${2:?usage: run.sh <djinnc executable> <runtime dir>}"
 here="$(cd "$(dirname "$0")" && pwd)"
 out="$(mktemp -d)"
 failed=0
@@ -24,7 +16,7 @@ fi
 for source in "$here"/samples/*.djinn; do
     name="$(basename "$source" .djinn)"
     expected="$(cat "$here/samples/$name.expected")"
-    if ! "$compiler" "$source" -o "$out/$name" --runtime-dir "$runtime" ${link_flags[@]+"${link_flags[@]}"} >"$out/$name.log" 2>&1; then
+    if ! "$compiler" "$source" -o "$out/$name" --runtime-dir "$runtime" >"$out/$name.log" 2>&1; then
         echo "FAIL $name (compile)"
         cat "$out/$name.log"
         failed=1

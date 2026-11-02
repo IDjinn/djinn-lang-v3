@@ -368,23 +368,6 @@ TEST(ConstExpr, SimpleConstExprVariable)
     EXPECT_EQ(result.returnCode, 42);
 }
 
-TEST(ConstExpr, ConstExprDependingOnLaterDeclaration)
-{
-    const auto source = R"(
-        constexpr i32 A = B + 1;
-        constexpr i32 B = C * 2;
-        constexpr i32 C = 20;
-
-        i32 main() {
-            return A;
-        }
-    )";
-
-    const auto result = DjinnCompiler::run(source, {.generateBinary = true});
-    EXPECT_EQ(result.diagnostics.size(), 0);
-    EXPECT_EQ(result.returnCode, 41);
-}
-
 TEST(ConstExpr, ConstExprWithArithmetic)
 {
     const auto source = R"(

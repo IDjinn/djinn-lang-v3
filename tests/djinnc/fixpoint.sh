@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
 set -eu
-stage1="${1:?usage: fixpoint.sh <stage1 djinnc> <runtime dir> [runtime lib]}"
-runtime="${2:?usage: fixpoint.sh <stage1 djinnc> <runtime dir> [runtime lib]}"
-runtime_lib="${3:-}"
-link_flags=()
-if [ -n "$runtime_lib" ]; then
-    link_flags+=(--runtime-lib "$runtime_lib")
-    if [ -n "${DJINN_USE_LLD:-}" ]; then
-        link_flags+=(--lld)
-    fi
-fi
+stage1="${1:?usage: fixpoint.sh <stage1 djinnc> <runtime dir>}"
+runtime="${2:?usage: fixpoint.sh <stage1 djinnc> <runtime dir>}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 out="$(mktemp -d)"
 
-"$stage1" "$root/djinnc" -o "$out/stage2" --runtime-dir "$runtime" ${link_flags[@]+"${link_flags[@]}"} --keep-ir
+"$stage1" "$root/djinnc" -o "$out/stage2" --runtime-dir "$runtime" --keep-ir
 "$out/stage2" "$root/djinnc" --no-link -o "$out/stage3"
 
 if cmp -s "$out/stage2.ll" "$out/stage3.ll"; then

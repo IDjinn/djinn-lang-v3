@@ -288,16 +288,6 @@ gtest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_test(NAME djinn_all_tests COMMAND tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 set_tests_properties(djinn_all_tests PROPERTIES LABELS aggregate)
 
-find_program(BASH_PROGRAM bash)
-if (BASH_PROGRAM)
-    add_test(NAME djinnc_bootstrap
-            COMMAND ${BASH_PROGRAM} ${CMAKE_SOURCE_DIR}/tools/bootstrap.sh
-            --stage0 $<TARGET_FILE:djinn>
-            --runtime-dir ${CMAKE_BINARY_DIR}/runtime
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    set_tests_properties(djinnc_bootstrap PROPERTIES LABELS bootstrap)
-endif ()
-
 add_custom_target(clean_djinn_build
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{TEMP}/djinn_build"
         COMMENT "Cleaning djinn_build temp directory"
