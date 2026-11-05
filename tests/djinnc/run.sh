@@ -59,7 +59,7 @@ for source in "$here"/std/*.djinn; do
     if [ "$actual" != "$expected" ]; then
         echo "FAIL std/$name (expected exit $expected, got $actual)"
         failed=1
-    elif [ -f "$here/std/$name.stdout" ] && ! diff <(tr -d '' <"$out/std_$name.stdout") "$here/std/$name.stdout" >/dev/null; then
+    elif [ -f "$here/std/$name.stdout" ] && ! diff <(tr -d '\r' <"$out/std_$name.stdout") "$here/std/$name.stdout" >/dev/null; then
         echo "FAIL std/$name (stdout differs)"
         failed=1
     else
