@@ -12,13 +12,34 @@ impl Parser {
                 use.line = this.line_of(name);
                 use.column = this.column_of(name);
                 if (this.match(TokenKind::LPAREN)) {
-                    while (!this.check(TokenKind::RPAREN) && !this.at_end()) {
-                        i32 argument = this.advance();
-                        if (this.kind_of(argument) == TokenKind::INTEGER_LITERAL) {
-                            use.int_arg = Strings.parse_integer(this.text_of(argument), this.length_of(argument));
-                        } else if (this.kind_of(argument) == TokenKind::STRING_LITERAL) {
-                            use.text_arg = this.copy_of(argument);
+                    Node* payload = Node.create_list(NodeKind::STRUCT_INIT, name);
+                    while (!this.check(TokenKind::RPAREN) && !this.at_end() && !this.failed) {
+                        i32 argument = this.current();
+                        mut Node* field = (Node*)0;
+                        if (this.kind_of(argument) == TokenKind::IDENTIFIER && this.kind_of(this.peek_token(1)) == TokenKind::EQUAL) {
+                            this.advance();
+                            this.advance();
+                            field = Node.create(NodeKind::FIELD_INIT, argument);
+                            field.set_text(this.copy_of(argument));
+                        } else {
+                            field = Node.create(NodeKind::FIELD_INIT, argument);
                         }
+                        i32 value_start = this.current();
+                        field.set_first(this.parse_expression());
+                        payload.add(field);
+                        if (this.current() == value_start + 1) {
+                            if (this.kind_of(value_start) == TokenKind::INTEGER_LITERAL) {
+                                use.int_arg = Strings.parse_integer(this.text_of(value_start), this.length_of(value_start));
+                            } else if (this.kind_of(value_start) == TokenKind::STRING_LITERAL) {
+                                use.text_arg = this.copy_of(value_start);
+                            }
+                        }
+                        if (!this.match(TokenKind::COMMA)) {
+                            break;
+                        }
+                    }
+                    if (payload.count() > 0) {
+                        use.payload = payload;
                     }
                     this.expect(TokenKind::RPAREN, "expected ')' after the attribute arguments");
                 }
@@ -44,7 +65,7 @@ impl Parser {
                 message.append("unknown attribute '");
                 message.append(use.name);
                 message.append("'");
-                diagnostics.error(use.line, use.column, message.cstr());
+                diagnostics.error(DiagnosticErrors.UNKNOWN_ATTRIBUTE, use.line, use.column, message.cstr());
                 continue;
             }
             if (target != null && (allowed & target_kind) == 0) {
@@ -53,10 +74,10 @@ impl Parser {
                 message.append(use.name);
                 message.append("' is not valid on ");
                 message.append(Attributes.target_name(target_kind));
-                diagnostics.warning(use.line, use.column, message.cstr());
+                diagnostics.warning(DiagnosticWarnings.INVALID_ATTRIBUTE_TARGET, use.line, use.column, message.cstr());
             }
             if (target != null && target_kind == AttributeTarget.FIELD && Strings.same(use.name, "Align")) {
-                diagnostics.warning(use.line, use.column, "attribute 'Align' on a field is accepted but not applied yet");
+                diagnostics.warning(DiagnosticWarnings.ATTRIBUTE_NOT_APPLIED, use.line, use.column, "attribute 'Align' on a field is accepted but not applied yet");
             }
             if (target != null) {
                 Attributes.record(use);

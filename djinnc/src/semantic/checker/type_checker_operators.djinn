@@ -8,7 +8,7 @@ impl TypeChecker {
             u32 addressed = this.check_lvalue(node.first());
             Node* operand = node.first();
             if (operand.symbol_kind() == SymbolKind.PROPERTY_GET || operand.symbol_kind() == SymbolKind.INDEX_GET) {
-                this.error(node, "cannot take the address of a property or an indexer");
+                this.error_code(node, DiagnosticErrors.NOT_ADDRESSABLE, "cannot take the address of a property or an indexer");
             }
             return Types.pointer_to(addressed);
         }
@@ -19,19 +19,21 @@ impl TypeChecker {
             return this.check_count(node);
         }
 
+        Node* negated = node.first();
+        this.negated_literal = op == TokenKind::MINUS && negated.kind() == NodeKind::INT_LITERAL;
         u32 operand = this.check_expression(node.first(), expected);
         if (Types.is_struct(operand) && (op == TokenKind::MINUS || op == TokenKind::TILDE || op == TokenKind::BANG)) {
             return this.check_unary_operator(node, op, operand);
         }
         if (op == TokenKind::MINUS) {
             if (!Types.is_integer(operand) && !Types.is_float(operand)) {
-                this.error(node, "operator is not valid for this operand");
+                this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "operator is not valid for this operand");
             }
             return operand;
         }
         if (op == TokenKind::TILDE) {
             if (!Types.is_integer(operand)) {
-                this.error(node, "operator is not valid for this operand");
+                this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "operator is not valid for this operand");
             }
             return operand;
         }
@@ -39,26 +41,26 @@ impl TypeChecker {
             return Types.bool_type();
         }
 
-        this.error(node, "unary operator is not supported yet");
+        this.error_code(node, DiagnosticErrors.NOT_SUPPORTED_YET, "unary operator is not supported yet");
         return Types.i32_type();
     }
 
     unsafe u32 check_count(Node* node) {
         Node* target = node.first();
         if (!this.is_addressable(target)) {
-            this.error(node, "the operand of ++ and -- must be a variable, a field or an element");
+            this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "the operand of ++ and -- must be a variable, a field or an element");
             return Types.i32_type();
         }
         u32 type = this.check_lvalue(target);
         if (target.symbol_kind() == SymbolKind.PROPERTY_GET || target.symbol_kind() == SymbolKind.INDEX_GET
             || target.symbol_kind() == SymbolKind.IMPLICIT_GET) {
-            this.error(node, "++ and -- cannot be applied to a property or an indexer");
+            this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "++ and -- cannot be applied to a property or an indexer");
             return type;
         }
         if (target.kind() == NodeKind::IDENTIFIER && (target.symbol_kind() == SymbolKind.LOCAL || target.symbol_kind() == SymbolKind.GLOBAL)) {
             LocalVariable* variable = (LocalVariable*)target.symbol();
             if (!variable.is_mutable) {
-                this.error(target, "cannot assign to an immutable variable");
+                this.error_code(target, DiagnosticErrors.ASSIGN_TO_IMMUTABLE, "cannot assign to an immutable variable");
             }
             this.require_not_borrowed(target, variable, "assign to");
         }
@@ -69,7 +71,7 @@ impl TypeChecker {
             return type;
         }
         if (!Types.is_integer(type) && !Types.is_float(type)) {
-            this.error(node, "++ and -- need an integer, a float or a pointer");
+            this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "++ and -- need an integer, a float or a pointer");
         }
         return type;
     }
@@ -113,7 +115,7 @@ impl TypeChecker {
         StructInfo* owner = symbols.struct_at(Types.struct_index(operand));
         mut FunctionInfo* walk = this.find_operator(owner, op);
         if (walk == null) {
-            this.error(node, "struct does not define this operator");
+            this.error_code(node, DiagnosticErrors.OPERATOR_NOT_DEFINED, "struct does not define this operator");
             return Types.i32_type();
         }
         while (walk != null) {
@@ -124,7 +126,7 @@ impl TypeChecker {
             }
             walk = walk.overload;
         }
-        this.error(node, "operator operand does not match its parameter");
+        this.error_code(node, DiagnosticErrors.OPERATOR_NOT_DEFINED, "operator operand does not match its parameter");
         return Types.i32_type();
     }
 
@@ -134,7 +136,7 @@ impl TypeChecker {
         mut FunctionInfo* method = this.find_operator_named(owner, "operatorget[]");
         if (method == null) {
             this.check_expression(node.second(), Types.i64_type());
-            this.error(node, "struct does not define operator get[]");
+            this.error_code(node, DiagnosticErrors.OPERATOR_NOT_DEFINED, "struct does not define operator get[]");
             return Types.i32_type();
         }
         u32 index = this.check_expression(node.second(), 0);
@@ -150,7 +152,7 @@ impl TypeChecker {
             walk = walk.overload;
         }
         if (exact == null) {
-            this.error(node, "operator get[] does not accept this collection");
+            this.error_code(node, DiagnosticErrors.OPERATOR_NOT_DEFINED, "operator get[] does not accept this collection");
             return Types.i32_type();
         }
         IdList* chosen_params = exact.param_types;
@@ -176,7 +178,7 @@ impl TypeChecker {
             }
             walk = walk.overload;
         }
-        this.error(target, "struct does not define a matching operator set[]");
+        this.error_code(target, DiagnosticErrors.OPERATOR_NOT_DEFINED, "struct does not define a matching operator set[]");
     }
 
     u32 check_operator(Node* node, TokenKind op, u32 left, u32 right) {
@@ -189,7 +191,7 @@ impl TypeChecker {
             kind = SymbolKind.NEGATED_OPERATOR;
         }
         if (method == null) {
-            this.error(node, "struct does not define this operator");
+            this.error_code(node, DiagnosticErrors.OPERATOR_NOT_DEFINED, "struct does not define this operator");
             return Types.i32_type();
         }
         mut FunctionInfo* exact = (FunctionInfo*)0;
@@ -203,7 +205,7 @@ impl TypeChecker {
             walk = walk.overload;
         }
         if (exact == null) {
-            this.error(node, "operator operands do not match its parameters");
+            this.error_code(node, DiagnosticErrors.OPERATOR_NOT_DEFINED, "operator operands do not match its parameters");
             return method.return_type;
         }
         method = exact;
@@ -228,10 +230,13 @@ impl TypeChecker {
         if (op == TokenKind::QUESTION_QUESTION) {
             u32 pointer = this.check_expression(node.first(), expected);
             if (!Types.is_pointer(pointer)) {
-                this.error(node, "the left operand of ?? must be a pointer");
+                this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "the left operand of ?? must be a pointer");
                 return pointer;
             }
-            this.check_expression(node.second(), pointer);
+            u32 fallback = this.check_expression(node.second(), pointer);
+            if (Types.is_nullable_pointer(pointer) && Types.is_safe_pointer(fallback)) {
+                return fallback;
+            }
             return pointer;
         }
 
@@ -260,7 +265,7 @@ impl TypeChecker {
         if (this.is_plain_enum(left) || this.is_plain_enum(right)) {
             bool equality = op == TokenKind::EQUAL_EQUAL || op == TokenKind::BANG_EQUAL;
             if (!equality || left != right) {
-                this.error(node, "an enum is its own type: it only supports == and != with a value of the same enum, compare other values with getValue()");
+                this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "an enum is its own type: it only supports == and != with a value of the same enum, compare other values with getValue()");
             }
             return Types.bool_type();
         }
@@ -269,7 +274,12 @@ impl TypeChecker {
             return this.check_operator(node, op, left, right);
         }
 
+        bool numbers = (Types.is_integer(left) || Types.is_float(left)) && (Types.is_integer(right) || Types.is_float(right));
+        if (numbers && !Types.widens(left, right) && !Types.widens(right, left)) {
+            this.error_code(node, DiagnosticErrors.IMPLICIT_CONVERSION, "operands of different types need an explicit cast");
+        }
         u32 common = Types.common(left, right);
+        this.check_constant_operands(node, op, common);
         if (TypeChecker.is_comparison(op)) {
             return Types.bool_type();
         }
@@ -277,10 +287,10 @@ impl TypeChecker {
             bool valid = op == TokenKind::PLUS || op == TokenKind::MINUS || op == TokenKind::STAR
                 || op == TokenKind::SLASH || op == TokenKind::PERCENT;
             if (!valid) {
-                this.error(node, "operator is not valid for floating point operands");
+                this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "operator is not valid for floating point operands");
             }
         } else if (!Types.is_integer(common)) {
-            this.error(node, "operator is not valid for these operands");
+            this.error_code(node, DiagnosticErrors.INVALID_OPERATOR_OPERAND, "operator is not valid for these operands");
         }
         return common;
     }
@@ -289,12 +299,12 @@ impl TypeChecker {
         Node* target = node.first();
         this.assign_target = target;
         u32 type = this.check_lvalue(target);
-        this.assign_target = null;
+        this.assign_target = (Node*)0;
         if (target.kind() == NodeKind::FIELD_ACCESS && target.symbol_kind() == SymbolKind.PROPERTY_GET) {
             FunctionInfo* getter = (FunctionInfo*)target.symbol();
             FunctionInfo* setter = this.find_accessor(getter.owner, "set:", target.text());
             if (setter == null) {
-                this.error(target, "property has no setter");
+                this.error_code(target, DiagnosticErrors.PROPERTY_WITHOUT_SETTER, "property has no setter");
             } else {
                 target.set_symbol(SymbolKind.PROPERTY_SET, (ptr)setter);
             }
@@ -305,7 +315,7 @@ impl TypeChecker {
         if (target.kind() == NodeKind::IDENTIFIER && target.symbol_kind() == SymbolKind.IMPLICIT_GET) {
             FunctionInfo* implicit_setter = this.implicit_accessor(target, "set:");
             if (implicit_setter == null) {
-                this.error(target, "property has no setter");
+                this.error_code(target, DiagnosticErrors.PROPERTY_WITHOUT_SETTER, "property has no setter");
             } else {
                 target.set_symbol(SymbolKind.IMPLICIT_SET, (ptr)implicit_setter);
             }
@@ -313,11 +323,12 @@ impl TypeChecker {
         if (target.kind() == NodeKind::IDENTIFIER && (target.symbol_kind() == SymbolKind.LOCAL || target.symbol_kind() == SymbolKind.GLOBAL)) {
             LocalVariable* variable = (LocalVariable*)target.symbol();
             if (!variable.is_mutable) {
-                this.error(target, "cannot assign to an immutable variable");
+                this.error_code(target, DiagnosticErrors.ASSIGN_TO_IMMUTABLE, "cannot assign to an immutable variable");
             }
             this.require_not_borrowed(target, variable, "assign to");
         }
-        this.check_expression(node.second(), type);
+        u32 assigned = this.check_expression(node.second(), type);
+        this.require_value_type(node.second(), assigned, type);
         if (target.kind() == NodeKind::IDENTIFIER) {
             this.move_from(node.second(), target);
         }

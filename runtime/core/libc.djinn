@@ -1,5 +1,7 @@
 extern "C" {
     void* __djinn_malloc(u64 size);
+    i32 __djinn_reflected_count();
+    void* __djinn_reflected_type(i32 index);
     void* __djinn_malloc_aligned(u64 size, u64 alignment);
     void __djinn_free_aligned(void* pointer);
     void* memcpy(void* destination, void* source, u64 count);

@@ -283,14 +283,14 @@ impl CodeGenerator {
         ptr<ptr> args = CodeGenerator.array_of(1);
         if (Strings.equals(name + length - 6, 6, "handle")) {
             if (!function_context.is_async) {
-                this.error(call, "coro.handle is only valid inside an async function");
+                this.error_code(call, DiagnosticErrors.CORO_OUTSIDE_ASYNC, "coro.handle is only valid inside an async function");
                 return this.fallback();
             }
             return Value.create(function_context.handle, Types.byte_pointer());
         }
         if (Strings.equals(name + length - 7, 7, "suspend")) {
             if (!function_context.is_async) {
-                this.error(call, "coro.suspend is only valid inside an async function");
+                this.error_code(call, DiagnosticErrors.CORO_OUTSIDE_ASYNC, "coro.suspend is only valid inside an async function");
                 return this.fallback();
             }
             ptr ready = this.new_block("coro.resumed");

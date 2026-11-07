@@ -1,9 +1,0 @@
-i32 main() {
-    mut i32 value = 5;
-    i32* present = &value;
-    i32* missing = null;
-    i32* chosen = missing ?? present;
-    i32* kept = present ?? missing;
-    i32* last = missing ?? missing ?? present;
-    return *chosen + *kept + *last;
-}

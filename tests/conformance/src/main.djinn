@@ -1,0 +1,14 @@
+namespace conformance;
+
+import djinnc::testing;
+
+i32 main() {
+    Config* config = Runner.parse_config();
+    if (!config.ok) {
+        Runner.print_usage();
+        return 2;
+    }
+    Verify* verify = Verify.create(config);
+    verify.discover();
+    return Runner.run(verify);
+}

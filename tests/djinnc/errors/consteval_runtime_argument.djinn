@@ -1,8 +1,0 @@
-consteval i32 twice(i32 n) {
-    return n * 2;
-}
-
-i32 main() {
-    mut i32 x = 4;
-    return twice(x);
-}

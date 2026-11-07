@@ -1,0 +1,603 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct BinderTests {
+    [Test]
+    void AllowsValidCode() {
+        str source = """
+i32 add(i32 a, i32 b) {
+    return a + b;
+}
+
+i32 main() {
+    i32 x = 10;
+    i32 y = 20;
+    return add(x, y);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+
+    [Test]
+    void VariableDeclarationAndUsage() {
+        str source = """
+i32 main() {
+    i32 x = 42;
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void FunctionCallWithCorrectArgs() {
+        str source = """
+i32 sum(i32 a, i32 b, i32 c) {
+    return a + b + c;
+}
+
+i32 main() {
+    return sum(1, 2, 3);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+
+    [Test]
+    void NamespaceQualifiedNames() {
+        str source = """
+namespace math {
+    i32 add(i32 a, i32 b) {
+        return a + b;
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void NestedNamespaceQualifiedNames() {
+        str source = """
+namespace std {
+    namespace io {
+        i32 read_io() {
+            return 0;
+        }
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void FileScopedNamespaceBinding() {
+        str source = """
+namespace mylib;
+
+i32 helper() {
+    return 10;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void StructFieldAccess() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { .x = 5, .y = 10 };
+    return p.x + p.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(15));
+    }
+
+    [Test]
+    void MultipleVariables() {
+        str source = """
+i32 main() {
+    i32 a = 1;
+    i32 b = 2;
+    i32 c = 3;
+    return a + b + c;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+}
+
+struct BootstrapSubsetTests {
+    [Test]
+    void PointerParameterFieldReadWrite() {
+        str source = """
+struct Node {
+    i32 value;
+}
+
+void set_value(Node* node, i32 v) {
+    node.value = v;
+}
+
+i32 get_value(Node* node) {
+    return node.value;
+}
+
+i32 main() {
+    Node* n = malloc(sizeof(Node));
+    set_value(n, 41);
+    n.value = n.value + 1;
+    i32 result = get_value(n);
+    free(n);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void PointerLocalMethodCall() {
+        str source = """
+struct Counter {
+    i32 count;
+
+    void bump() {
+        this.count = this.count + 1;
+    }
+}
+
+i32 main() {
+    Counter* c = malloc(sizeof(Counter));
+    c.count = 0;
+    c.bump();
+    c.bump();
+    i32 result = c.count;
+    free(c);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(2));
+    }
+
+    [Test]
+    void PointerParameterInMethod() {
+        str source = """
+struct Node {
+    i32 value;
+}
+
+struct Sum {
+    i32 total;
+
+    void add(Node* node) {
+        this.total = this.total + node.value;
+    }
+}
+
+i32 main() {
+    Node* n = malloc(sizeof(Node));
+    n.value = 9;
+    Sum* s = malloc(sizeof(Sum));
+    s.total = 1;
+    s.add(n);
+    i32 result = s.total;
+    free(n);
+    free(s);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void PointerArrayOfStructPointers() {
+        str source = """
+struct Item {
+    i32 weight;
+}
+
+i32 main() {
+    void** items = malloc(8 * 3);
+    for (mut i32 i = 0; i < 3; i = i + 1) {
+        Item* item = malloc(sizeof(Item));
+        item.weight = i + 1;
+        items[i] = item;
+    }
+    mut i32 total = 0;
+    for (mut i32 i = 0; i < 3; i = i + 1) {
+        Item* item = items[i];
+        total = total + item.weight;
+    }
+    return total;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+}
+
+struct FunctionContextTests {
+    [Test]
+    void BreakAndContinueAfterGenericInstantiation() {
+        str source = """
+struct Box<T> {
+    T value;
+
+    public T get() {
+        while (true) {
+            break;
+        }
+        return this.value;
+    }
+}
+
+i32 main() {
+    mut i32 total = 0;
+    for (mut i32 i = 0; i < 10; i = i + 1) {
+        Box<i32> box = { .value = i };
+        if (box.get() % 2 == 0) {
+            continue;
+        }
+        if (i > 6) {
+            break;
+        }
+        total = total + box.get();
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(9));
+    }
+
+    [Test]
+    void MonomorphizedStructVisibleToLaterFunctions() {
+        str source = """
+struct Box<T> {
+    T value;
+
+    public T get() {
+        return this.value;
+    }
+}
+
+i32 first() {
+    Box<i32> box = { .value = 3 };
+    return box.get();
+}
+
+i32 second() {
+    Box<i32> box = { .value = 4 };
+    return box.get();
+}
+
+i32 main() {
+    return first() + second();
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void PointerFieldMethodDispatchThroughAuto() {
+        str source = """
+struct Node {
+    i32 value;
+
+    public i32 get() {
+        return this.value;
+    }
+}
+
+struct Holder {
+    Node* node;
+}
+
+i32 main() {
+    Node n = { .value = 9 };
+    Holder h = { .node = &n };
+    auto p = h.node;
+    return p.get();
+}
+""";
+        Verify.source(source).runs(Expected.exit(9));
+    }
+}
+
+struct DeterminismTests {
+    [Test]
+    void SameSourceProducesIdenticalIr() {
+        str source = """
+struct Alpha { i32 a; }
+struct Beta { i32 b; }
+struct Gamma { i32 c; }
+
+struct Box<T> {
+    T value;
+
+    public T get() {
+        return this.value;
+    }
+}
+
+i32 zeta() { return 1; }
+i32 alpha() { return 2; }
+i32 middle() { return 3; }
+
+i32 main() {
+    Alpha x = { .a = zeta() };
+    Beta y = { .b = alpha() };
+    Gamma z = { .c = middle() };
+    Box<i32> box = { .value = x.a + y.b + z.c };
+    return box.get();
+}
+""";
+        Verify.source(source).compiles();
+    }
+}
+
+struct ObjectTests {
+    [Test]
+    void TypeInfoStructDefinition() {
+        str source = """
+i32 main() {
+    TypeInfo info = { .id = 1, .size = 4, .name = "i32", .kind = 0 };
+    return info.id;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void ObjectStructDefinition() {
+        str source = """
+i32 main() {
+    TypeInfo info = { .id = 1, .size = 4, .name = "i32", .kind = 0 };
+    i32 value = 42;
+    object obj = { .type = &info, .data = &value };
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void TypeInfoKindInt() {
+        str source = """
+struct Inspector {
+    public static i32 first_kind(...args) {
+        object first = args[0];
+        return (i32)first.type.kind;
+    }
+}
+
+i32 main() {
+    return Inspector.first_kind(42);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void TypeInfoKindFloat() {
+        str source = """
+struct Inspector {
+    public static i32 first_kind(...args) {
+        object first = args[0];
+        return (i32)first.type.kind;
+    }
+}
+
+i32 main() {
+    return Inspector.first_kind(3.14);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void VariadicMethodCompiles() {
+        str source = """
+struct File {
+    public static void test(...args) {
+    }
+}
+
+i32 main() {
+    File.test(42, 3);
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void VariadicEmptyArgs() {
+        str source = """
+struct File {
+    public static void test(...args) {
+    }
+}
+
+i32 main() {
+    File.test();
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void VariadicArgsLength() {
+        str source = """
+struct Util {
+    public static i32 count(...args) {
+        return (i32)args.length;
+    }
+}
+
+i32 main() {
+    return Util.count(1, 2, 3);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(3));
+    }
+
+    [Test]
+    void VariadicWithNormalParams() {
+        str source = """
+struct Formatter {
+    public static i32 format(i8* fmt, ...args) {
+        return (i32)args.length;
+    }
+}
+
+i32 main() {
+    return Formatter.format("hello {} {}", 42, 99);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(2));
+    }
+
+    [Test]
+    void VariadicAccessTypeInfo() {
+        str source = """
+struct Inspector {
+    public static i32 first_type_size(...args) {
+        object first = args[0];
+        return first.type.size;
+    }
+}
+
+i32 main() {
+    return Inspector.first_type_size(42);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(4));
+    }
+
+    [Test]
+    void SyncPrintIntViaVariadic() {
+        str source = """
+struct Printer {
+    public static i32 print_first_int(...args) {
+        object first = args[0];
+        u8 kind = first.type.kind;
+        if (kind == (u8)0) {
+            i32* ip = (i32*)first.data;
+            printf("value=%d\n", *ip);
+            return *ip;
+        }
+        return -1;
+    }
+}
+
+i32 main() {
+    return Printer.print_first_int(42);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void AutoBoxPrimitiveToObject() {
+        str source = """
+i32 main() {
+    object boxed = 42;
+    return (i32)boxed.type.kind;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void AutoBoxStructToObject() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { 10, 20 };
+    object boxed = (object)p;
+    return boxed.type.size;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(8));
+    }
+
+    [Test]
+    void AutoBoxStructToObjectKind() {
+        str source = """
+struct Vec2 {
+    f32 x;
+    f32 y;
+}
+
+i32 main() {
+    Vec2 v = { 1.0, 2.0 };
+    object boxed = (object)v;
+    return (i32)boxed.type.kind;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(3));
+    }
+
+    [Test]
+    void AutoBoxFloatToObject() {
+        str source = """
+i32 main() {
+    object boxed = 3.14;
+    return (i32)boxed.type.kind;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IsExpressionWithAutoBoxedPrimitive() {
+        str source = """
+i32 main() {
+    object boxed = 42;
+    if (boxed is i32) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IsExpressionBindingWithAutoBoxed() {
+        str source = """
+i32 main() {
+    object boxed = 99;
+    if (boxed is i32 value) {
+        return value;
+    }
+    return -1;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void NoWarningOnLiteralBoxing() {
+        str source = """
+i32 main() {
+    object a = 42;
+    object b = "hello";
+    object c = 3.14;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+}

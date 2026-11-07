@@ -27,6 +27,12 @@ struct Reflection {
         }
         return left[i] == right[i];
     }
+    public static i32 type_count() {
+        return __djinn_reflected_count();
+    }
+    public static TypeInfo* type_at(i32 index) {
+        return (TypeInfo*)__djinn_reflected_type(index);
+    }
     public static bool reflected(TypeInfo* info) {
         return (info.flags & 1) != 0;
     }

@@ -1,0 +1,13 @@
+project: "testing"
+version: "0.1.0"
+
+compiler:
+  library-mode: true
+
+  output:
+    file: "testing.djlib"
+    directory: "build/libs"
+
+  libs: [
+    'std'
+  ]

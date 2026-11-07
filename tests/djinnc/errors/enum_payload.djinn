@@ -1,8 +1,0 @@
-enum Shape {
-    Circle(i32),
-    Square
-}
-
-i32 main() {
-    return 0;
-}

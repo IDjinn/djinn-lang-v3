@@ -1,0 +1,51 @@
+namespace djinnc;
+
+impl TypeChecker {
+    unsafe void check_attribute_payloads() {
+        PointerList* uses = Attributes.all();
+        for (mut i32 i = 0; i < uses.length; i = i + 1) {
+            AttributeUse* use = (AttributeUse*)uses.get(i);
+            if (use.payload == null || use.payload_type != 0) {
+                continue;
+            }
+            this.check_attribute_payload(use);
+        }
+    }
+
+    unsafe void check_attribute_payload(AttributeUse* use) {
+        SymbolTable* symbols = this.symbols;
+        u32 atom = Ast.intern_base_name(use.name, (i32)strlen(use.name));
+        StructInfo* info = symbols.find_struct_named(atom);
+        Node* payload = use.payload;
+        if (info == null) {
+            return;
+        }
+        this.scope = info.namespace_id;
+        this.function = (FunctionInfo*)0;
+        LocalScopes* scopes = this.scopes;
+        scopes.reset_to(0);
+        use.payload_type = info.type_id;
+        this.check_expression(payload, info.type_id);
+        ConstEval* evaluator = this.const_eval;
+        for (mut i32 a = 0; a < payload.count(); a = a + 1) {
+            Node* init = payload.child(a);
+            FieldInfo* field = (FieldInfo*)init.symbol();
+            if (field == null) {
+                continue;
+            }
+            Node* value = init.first();
+            if (evaluator.evaluate(value, value.value_type(), field.type)) {
+                evaluator.fold(value, field.type);
+            } else {
+                mut Node* at = evaluator.failure_node;
+                if (at == null) {
+                    at = value;
+                }
+                ByteBuffer* message = ByteBuffer.create();
+                message.append("attribute argument is not a compile-time constant: ");
+                message.append(evaluator.failure);
+                this.error_code(at, DiagnosticErrors.INVALID_ATTRIBUTE_ARGUMENT, message.cstr());
+            }
+        }
+    }
+}

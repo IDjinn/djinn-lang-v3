@@ -1,0 +1,244 @@
+namespace djinnc::testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+import testing;
+
+unsafe static mut ptr current_verify = null;
+
+struct Verify {
+    ItemList* cases;
+    Config* config;
+    ptr<i8> name;
+    bool std;
+    i32 retry;
+    i32 timeout;
+    i32 required;
+    i32 checks;
+    Source* pending;
+
+    public static unsafe Verify* create(Config* config) {
+        Verify* verify = (Verify*)Allocator.zeroed(sizeof(Verify));
+        verify.cases = ItemList.create();
+        verify.config = config;
+        return verify;
+    }
+
+    unsafe Verify* test(ptr<i8> name) {
+        this.name = name;
+        this.std = false;
+        this.retry = 0;
+        this.timeout = 0;
+        this.required = 0;
+        this.checks = 0;
+        return this;
+    }
+
+    public static unsafe Verify* with_source(Source* source) {
+        Verify* verify = (Verify*)current_verify;
+        verify.pending = source;
+        return verify;
+    }
+
+    public static unsafe Verify* source(str text) {
+        return Verify.with_source(Sources.text(Reflection.terminated_view(text)));
+    }
+
+    public unsafe void discover() {
+        current_verify = (ptr)this;
+        for (mut i32 i = 0; i < Reflection.type_count(); i = i + 1) {
+            TypeInfo* type = Reflection.type_at(i);
+            if (TestMethods.has_tests(type)) {
+                this.suite(type);
+            }
+        }
+    }
+
+    unsafe void suite(TypeInfo* type) {
+        TypeInfoExt* info = Reflection.ext(type);
+        for (mut i32 i = 0; i < (i32)info.methodCount; i = i + 1) {
+            MethodInfo* method = &info.methods[i];
+            if (TestMethods.is_test(method)) {
+                this.run_test(type, method);
+            }
+        }
+    }
+
+    unsafe void run_test(TypeInfo* type, MethodInfo* method) {
+        this.test((ptr<i8>)method.name);
+        this.policy(method);
+        if (!TestMethods.can_call(method)) {
+            this.fail_case("a [Test] takes no parameters and is not async yet");
+            return;
+        }
+        TestMethods.call(type, method);
+        if (this.checks == 0) {
+            this.fail_case("this [Test] checks nothing");
+        }
+    }
+
+    unsafe void fail_case(ptr<i8> reason) {
+        Config* config = this.config;
+        TestCase* test = Runner.new_case(config, this.name, "", Kind.SELFTEST);
+        TestNode* node = test.node;
+        node.fail(reason);
+        this.select(test);
+    }
+
+    unsafe void select(TestCase* test) {
+        TestNode* node = test.node;
+        if (this.selected(node.name)) {
+            ItemList* cases = this.cases;
+            cases.push((ptr)test);
+        }
+    }
+
+    unsafe bool selected(ptr<i8> name) {
+        Config* config = this.config;
+        return config.filter == null || Text.contains(name, config.filter);
+    }
+
+    public unsafe Verify* with_std() {
+        this.std = true;
+        return this;
+    }
+
+    unsafe Verify* policy(MethodInfo* method) {
+        ptr retry = TestMethods.attribute(method, "TestPolicy");
+        if (retry != null) {
+            TestPolicy* policy = (TestPolicy*)retry;
+            this.retry = policy.retry;
+            this.timeout = policy.timeout;
+        }
+        ptr paths = TestMethods.attribute(method, "Requires");
+        if (paths != null) {
+            Requires* requires = (Requires*)paths;
+            this.required = requires.paths;
+        }
+        return this;
+    }
+
+    unsafe void resolve_paths(TestCase* test, i32 minimum) {
+        Config* config = this.config;
+        mut i32 paths = this.required;
+        if (paths == 0) {
+            paths = minimum & (0 - minimum);
+        }
+        if ((paths & minimum) == 0) {
+            TestNode* node = test.node;
+            node.fail("[Requires] asks for less than this test needs");
+            return;
+        }
+        if (test.kind == Kind.RUN) {
+            paths = paths | config.forced_paths;
+        }
+        if (config.out_dir == null && (paths & TestPath.LINK) != 0) {
+            config.skipped_links = config.skipped_links + 1;
+            paths = paths - TestPath.LINK;
+        }
+        test.requires = paths;
+        test.path = Runner.first_path(test);
+        if (test.path == 0 && test.kind != Kind.SELFTEST) {
+            test.skipped = true;
+        }
+    }
+
+    unsafe ptr<i8> case_name() {
+        if (this.checks < 2) {
+            return this.name;
+        }
+        TextBuffer* name = TextBuffer.create();
+        name.append(this.name);
+        name.append("#");
+        name.append_int((i64)this.checks);
+        return name.cstr();
+    }
+
+    unsafe TestCase* add(Source* source, i32 kind, Expected* expected, i32 minimum) {
+        Config* config = this.config;
+        ptr<i8> name = this.case_name();
+        if (source.path == null) {
+            source.path = Runner.output_path(config, name, ".djinn");
+        }
+        TestCase* test = Runner.new_case(config, name, source.path, kind);
+        test.std = this.std;
+        test.expected = expected;
+        TestNode* node = test.node;
+        if (kind != Kind.CRASH) {
+            node.max_retries = this.retry;
+        }
+        if (this.timeout > 0) {
+            node.timeout_us = (i64)this.timeout * 1000;
+        }
+        this.resolve_paths(test, minimum);
+        if (!test.skipped) {
+            if (source.text != null && this.selected(name)) {
+                TextFiles.write(source.path, source.text, (i32)strlen(source.text));
+            }
+            this.select(test);
+        }
+        return test;
+    }
+
+    public unsafe Verify* runs(Expected* expected) {
+        this.checks = this.checks + 1;
+        this.add(this.pending, Kind.RUN, expected, TestPath.JIT | TestPath.LINK);
+        return this;
+    }
+
+    public unsafe Verify* compiles() {
+        this.checks = this.checks + 1;
+        this.add(this.pending, Kind.CLEAN, Expected.create(), TestPath.ANY);
+        return this;
+    }
+
+    public unsafe Verify* diagnostics(Expected* expected) {
+        this.checks = this.checks + 1;
+        if (expected.reaches_codegen()) {
+            this.add(this.pending, Kind.ERROR, expected, TestPath.CODEGEN);
+        } else {
+            this.add(this.pending, Kind.ERROR, expected, TestPath.ANY);
+        }
+        return this;
+    }
+
+    public unsafe Verify* crashes(Expected* expected) {
+        this.checks = this.checks + 1;
+        Config* config = this.config;
+        if (config.crash) {
+            this.add(this.pending, Kind.CRASH, expected, TestPath.LINK);
+        }
+        return this;
+    }
+
+    public unsafe Verify* stops_at(i32 line, Expected* expected) {
+        this.checks = this.checks + 1;
+        Config* config = this.config;
+        if (config.debug) {
+            TestCase* test = this.add(this.pending, Kind.DEBUG, expected, TestPath.LINK);
+            test.line = line;
+        }
+        return this;
+    }
+
+    public unsafe Verify* links_library(str library, Expected* expected) {
+        this.checks = this.checks + 1;
+        Config* config = this.config;
+        if (config.library) {
+            TestCase* test = this.add(this.pending, Kind.LIBRARY, expected, TestPath.LINK);
+            Source* source = Sources.text(Reflection.terminated_view(library));
+            TestNode* node = test.node;
+            test.library = Runner.output_path(config, node.name, "_library.djinn");
+            TextFiles.write(test.library, source.text, (i32)strlen(source.text));
+        }
+        return this;
+    }
+
+    public static unsafe void selftest() {
+        Verify* verify = (Verify*)current_verify;
+        verify.checks = verify.checks + 1;
+        verify.add(Sources.file(""), Kind.SELFTEST, Expected.create(), TestPath.ANY);
+    }
+}

@@ -1,8 +1,0 @@
-hello djinn, count=3
-big=5000000000 small=7 ratio=2.5 ready=true
-sum=3 view=view neg=-3
-hello djinn, count=3!big=5000000000 small=7 ratio=2.5 ready=true
-[hello djinn, count=3] plain
-{3} and }
-{count} stays text
-only text|9

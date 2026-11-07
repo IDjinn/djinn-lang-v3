@@ -3,7 +3,7 @@ namespace djinnc;
 struct NodeLayout {
     public static void build() {
         Arena* arena = Memory.arena();
-        ast_layout = arena.zalloc((u64)NodeKinds.COUNT * NodeField.COUNT, 1);
+        ast_layout = arena.zalloc((u64)NodeKinds.COUNT * (u64)NodeField.COUNT, 1);
         ast_extra_sizes = arena.zalloc((u64)NodeKinds.COUNT, 1);
 
         NodeLayout.list_only(NodeKind::PROGRAM);

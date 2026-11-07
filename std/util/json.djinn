@@ -1,0 +1,71 @@
+import std::types;
+
+namespace std::util;
+
+extern "C" {
+    void*? __djinn_json_parse(i8* text, i32 length);
+    void __djinn_json_free(void* document);
+    void* __djinn_json_root(void* document);
+    void*? __djinn_json_get(void* value, i8* key);
+    void*? __djinn_json_at(void* value, i32 index);
+    i32 __djinn_json_length(void* value);
+    i32 __djinn_json_kind(void* value);
+    i64 __djinn_json_int(void* value);
+    f64 __djinn_json_real(void* value);
+    i32 __djinn_json_bool(void* value);
+    i8* __djinn_json_string(void* value);
+}
+
+struct Json {
+    const i32 NULL_KIND = 0;
+    const i32 BOOL = 1;
+    const i32 INT = 2;
+    const i32 REAL = 3;
+    const i32 STRING = 4;
+    const i32 ARRAY = 5;
+    const i32 OBJECT = 6;
+
+    public static void*? parse(i8* text, i32 length) {
+        return __djinn_json_parse(text, length);
+    }
+
+    public static void release(void* document) {
+        __djinn_json_free(document);
+    }
+
+    public static void* root(void* document) {
+        return __djinn_json_root(document);
+    }
+
+    public static void*? get(void* value, i8* key) {
+        return __djinn_json_get(value, key);
+    }
+
+    public static void*? at(void* value, i32 index) {
+        return __djinn_json_at(value, index);
+    }
+
+    public static i32 length(void* value) {
+        return __djinn_json_length(value);
+    }
+
+    public static i32 kind(void* value) {
+        return __djinn_json_kind(value);
+    }
+
+    public static i64 as_int(void* value) {
+        return __djinn_json_int(value);
+    }
+
+    public static f64 as_real(void* value) {
+        return __djinn_json_real(value);
+    }
+
+    public static bool as_bool(void* value) {
+        return __djinn_json_bool(value) == 1;
+    }
+
+    public static i8* as_text(void* value) {
+        return __djinn_json_string(value);
+    }
+}

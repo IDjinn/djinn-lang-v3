@@ -9,7 +9,7 @@ impl TypeChecker {
         }
         Node* pattern = symbols.find_constant(template, variant_atom);
         if (pattern == null) {
-            return null;
+            return (Node*)0;
         }
         GenericParams* params = template.generics;
         IdList* found = IdList.create();
@@ -23,8 +23,8 @@ impl TypeChecker {
         }
         for (mut i32 p = 0; p < found.length; p = p + 1) {
             if (found.get(p) == 0) {
-                this.error(call, "cannot infer the type arguments of the generic enum; write them or give the expected type");
-                return null;
+                this.error_code(call, DiagnosticErrors.CANNOT_INFER_TYPE_ARGUMENT, "cannot infer the type arguments of the generic enum; write them or give the expected type");
+                return (Node*)0;
             }
         }
         symbols.blame = call;
@@ -40,8 +40,8 @@ impl TypeChecker {
             SymbolTable* known = this.symbols;
             StructInfo* generic_owner = known.enum_of_type(owner_type);
             if (generic_owner == null) {
-                this.error(callee, "type is not an enum");
-                return null;
+                this.error_code(callee, DiagnosticErrors.NOT_AN_ENUM, "type is not an enum");
+                return (Node*)0;
             }
             ptr<i8> variant_text = callee.text();
             i32 variant_length = (i32)strlen(variant_text);
@@ -56,7 +56,7 @@ impl TypeChecker {
             }
         }
         if (split < 0) {
-            return null;
+            return (Node*)0;
         }
         AtomTable* atoms = Ast.atoms();
         u32 full = atoms.intern_copy(text, (u32)split);
@@ -64,7 +64,7 @@ impl TypeChecker {
         SymbolTable* symbols = this.symbols;
         StructInfo* owner = symbols.find_struct(full, base, this.scope);
         if (owner == null || !owner.is_enum) {
-            return null;
+            return (Node*)0;
         }
         u32 variant_atom = Ast.intern_base_name(text, length);
         if (owner.is_template) {
@@ -140,14 +140,14 @@ impl TypeChecker {
             }
             u32 actual = this.check_expression(node.child(a), hint);
             if (!this.unify(parameter.type(), actual, generics, found)) {
-                this.error(node.child(a), "argument conflicts with the inferred type argument");
-                return null;
+                this.error_code(node.child(a), DiagnosticErrors.CANNOT_INFER_TYPE_ARGUMENT, "argument conflicts with the inferred type argument");
+                return (FunctionInfo*)0;
             }
         }
         for (mut i32 i = 0; i < count; i = i + 1) {
             if (found.get(i) == 0) {
-                this.error(node, "cannot infer a type argument of this generic function");
-                return null;
+                this.error_code(node, DiagnosticErrors.CANNOT_INFER_TYPE_ARGUMENT, "cannot infer a type argument of this generic function");
+                return (FunctionInfo*)0;
             }
         }
         SymbolTable* symbols = this.symbols;

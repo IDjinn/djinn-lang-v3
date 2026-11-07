@@ -1,9 +1,0 @@
-import std::math;
-import std::types;
-namespace app;
-
-i32 main() {
-    f64 root = sqrt(144.0);
-    f64 power = pow(2.0, 10.0);
-    return (i32)root + (i32)power - 1000;
-}

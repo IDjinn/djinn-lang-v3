@@ -1,0 +1,249 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct MutableTests {
+    [Test]
+    void BasicMutableVariables() {
+        str source = """
+namespace math {
+    i32 add(i32 a, i32 b) {
+        return a + b;
+    }
+}
+
+import math;
+namespace test;
+
+i32 main() {
+    auto mut result = 10;
+    result = math::add(1, 1);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(2));
+    }
+
+    [Test]
+    void InvalidImmutableAssingment() {
+        str source = """
+namespace math {
+    i32 add(i32 a, i32 b) {
+        return a + b;
+    }
+}
+
+import math;
+namespace test;
+
+i32 main() {
+    auto result = 10;
+    result = math::add(1, 1);
+    return result;
+}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.ASSIGN_TO_IMMUTABLE));
+    }
+}
+
+struct OwnershipTests {
+    [Test]
+    void CopyTypesDoNotMove() {
+        str source = """
+i32 main() {
+    i32 x = 42;
+    i32 y = x;  // Copy, not move
+    return x + y;  // Both can be used
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(84));
+    }
+
+    [Test]
+    void FloatCopyTypes() {
+        str source = """
+i32 main() {
+    f64 x = 3.14;
+    f64 y = x;
+    i32 res = 1;
+    return res;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void PointerCopyTypes() {
+        str source = """
+i32 main() {
+    i32 value = 10;
+    i32* p1 = &value;
+    i32* p2 = p1;  // Copy pointer, not move
+    return *p1 + *p2;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void StructMoveSemantics() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 main() {
+    Data d1 = { .value = 100 };
+    Data d2 = d1;  // Move d1 to d2
+    return d2.value;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(100));
+    }
+
+    [Test]
+    void UseAfterMove() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 main() {
+    Data d1 = { .value = 42 };
+    Data d2 = d1;  // Move d1 to d2
+    return d1.value;  // Error: use after move
+}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.USE_AFTER_MOVE));
+    }
+
+    [Test]
+    void DoubleMoveError() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 main() {
+    Data d1 = { .value = 10 };
+    Data d2 = d1;  // First move
+    Data d3 = d1;  // Error: d1 already moved
+    return 0;
+}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.USE_AFTER_MOVE));
+    }
+
+    [Test]
+    void ReinitializeAfterMove() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 main() {
+    Data mut d1 = { .value = 10 };
+    Data d2 = d1;  // Move d1 to d2
+    d1 = { .value = 20 };  // Reinitialize d1
+    return d1.value + d2.value;  // Both valid
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+
+    [Test]
+    void ScopeOwnership() {
+        str source = """
+i32 main() {
+    i32 mut res = 0;
+    {
+        i32 x = 10;
+        res = x;
+    }
+    return res;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void NestedScopeOwnership() {
+        str source = """
+i32 main() {
+    i32 mut res = 0;
+    {
+        i32 a = 1;
+        {
+            i32 b = 2;
+            res = a + b;
+        }
+    }
+    return res;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(3));
+    }
+
+    [Test]
+    void FunctionParameterCopyType() {
+        str source = """
+i32 increment(i32 x) {
+    return x + 1;
+}
+
+i32 main() {
+    i32 val = 10;
+    i32 res = increment(val);
+    return val + res;  // val is still valid (copy type)
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(21));
+    }
+
+    [Test]
+    void IfStatementOwnership() {
+        str source = """
+i32 main() {
+    i32 x = 10;
+    i32 mut res = 0;
+    if (x > 5) {
+        res = x;
+    }
+    return res;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void WhileLoopOwnership() {
+        str source = """
+i32 main() {
+    i32 mut counter = 0;
+    i32 mut sum = 0;
+    while (counter < 5) {
+        sum = sum + counter;
+        counter = counter + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void ForLoopOwnership() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 0; i < 5; i = i + 1) {
+        sum = sum + i;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+}

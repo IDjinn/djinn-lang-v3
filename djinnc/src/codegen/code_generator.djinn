@@ -25,6 +25,8 @@ struct CodeGenerator {
 
     bool library_mode;
 
+    bool keep_frames;
+
     i32 module_taken;
 
     public static unsafe CodeGenerator* create(Diagnostics* diagnostics, ptr<i8> module_name) {
@@ -90,6 +92,21 @@ struct CodeGenerator {
         }
     }
 
+    public bool check(Node* program) {
+        SemanticAnalyzer* analyzer = SemanticAnalyzer.create(this.diagnostics, this.symbols);
+        if (!analyzer.collect(program)) {
+            return false;
+        }
+        TypeChecker* checker = TypeChecker.create(this.diagnostics, this.symbols);
+        if (!checker.run()) {
+            return false;
+        }
+        this.declare_structs();
+        ReflectionDiagnostics.check(this.symbols, this.diagnostics, this.reflect_mode);
+        Diagnostics* diagnostics = this.diagnostics;
+        return !diagnostics.failed();
+    }
+
     public bool generate(Node* program) {
         SemanticAnalyzer* analyzer = SemanticAnalyzer.create(this.diagnostics, this.symbols);
         if (!analyzer.collect(program)) {
@@ -153,12 +170,16 @@ struct CodeGenerator {
     }
 
     void error(Node* at, ptr<i8> message) {
+        this.error_code(at, DiagnosticErrors.CODEGEN, message);
+    }
+
+    void error_code(Node* at, i32 code, ptr<i8> message) {
         Diagnostics* diagnostics = this.diagnostics;
-        diagnostics.error_in(at.file_name(), at.line(), at.column(), message);
+        diagnostics.error_span(code, at.file_name(), at.line(), at.column(), at.length(), message);
     }
 
     static ptr<ptr> array_of(i32 count) {
-        return (ptr<ptr>)Memory.zalloc(((i64)count + 1) * 8);
+        return (ptr<ptr>)Memory.zalloc(((u64)count + 1) * 8);
     }
 
     static unsafe ptr<i8> base_name(ptr<i8> qualified) {
@@ -226,6 +247,7 @@ struct CodeGenerator {
         }
         if (kind == NodeKind::CAST) {
             Value* operand = this.gen_expression(node.first());
+            this.check_float_cast(node, operand, type);
             return Value.create(this.coerce(operand, type), type);
         }
         if (kind == NodeKind::INDEX) {
@@ -271,7 +293,7 @@ struct CodeGenerator {
             return this.gen_member(node);
         }
 
-        this.error(node, "expression is not supported by code generation yet");
+        this.error_code(node, DiagnosticErrors.CODEGEN_NOT_SUPPORTED, "expression is not supported by code generation yet");
         return this.fallback();
     }
 }

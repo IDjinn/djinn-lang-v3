@@ -3,7 +3,7 @@ import std::types;
 namespace std::logger;
 
 extern "C" {
-    void* logger_create(i8* name, i32 output, i32 level);
+    void* logger_get(i8* name, i32 output, i32 level);
     void logger_trace(void* logger, i8* format, ...);
     void logger_debug(void* logger, i8* format, ...);
     void logger_info(void* logger, i8* format, ...);
@@ -11,7 +11,6 @@ extern "C" {
     void logger_error(void* logger, i8* format, ...);
     void logger_fatal(void* logger, i8* format, ...);
     void logger_set_level(void* logger, i32 level);
-    void logger_destroy(void* logger);
 }
 
 enum LoggerOutput {
@@ -34,7 +33,7 @@ struct Logger {
 
     Logger(str loggerName){
         this.name = loggerName;
-        this.log = logger_create(loggerName.ptr(), 1, 0);
+        this.log = logger_get(loggerName.ptr(), 1, 0);
     }
 
     void trace(str message) {
@@ -63,9 +62,5 @@ struct Logger {
 
     void setLevel(i32 level) {
         logger_set_level(this.log, level);
-    }
-
-    void destroy() {
-        logger_destroy(this.log);
     }
 }

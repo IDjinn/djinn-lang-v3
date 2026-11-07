@@ -1,0 +1,30 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct CrashTests {
+    [Test]
+    void null_read() {
+        str source = """
+struct Box {
+    i32 value;
+}
+
+i32 read(Box*? box) {
+    return box.value;
+}
+
+i32 outer(Box*? box) {
+    return read(box);
+}
+
+i32 main() {
+    Box*? none = null;
+    return outer(none);
+}
+""";
+        Verify.source(source).crashes(Expected.contains("native stack trace").and_contains("read").and_contains("outer").and_contains("null_read.djinn:6").and_contains("null_read.djinn:10"));
+    }
+}

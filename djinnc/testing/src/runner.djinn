@@ -1,0 +1,523 @@
+namespace djinnc::testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+import testing;
+
+struct Kind {
+    const i32 RUN = 0;
+    const i32 ERROR = 2;
+    const i32 CRASH = 3;
+    const i32 SELFTEST = 4;
+    const i32 DEBUG = 5;
+    const i32 LIBRARY = 6;
+    const i32 CLEAN = 7;
+}
+
+struct Config {
+    ptr<i8> compiler;
+    ptr<i8> runtime_dir;
+    ptr<i8> runtime_lib;
+    ptr<i8> std_dir;
+    ptr<i8> out_dir;
+    ptr<i8> work_dir;
+    ptr<i8> filter;
+    ptr<i8> report;
+    i32 jobs;
+    i64 timeout_us;
+    i32 forced_paths;
+    i32 skipped_links;
+    bool link_debug;
+    bool lld;
+    bool crash;
+    bool debug;
+    bool library;
+    bool ok;
+}
+
+struct TestCase {
+    TestNode* node;
+    ptr<i8> source;
+    ptr<i8> binary;
+    i32 kind;
+    Expected* expected;
+    ptr<i8> library;
+    i32 phase;
+    bool std;
+    i32 line;
+    i32 requires;
+    i32 path;
+    i32 ran;
+    bool skipped;
+}
+
+struct Runner {
+    public static unsafe Config* parse_config() {
+        Config* config = (Config*)Allocator.zeroed(sizeof(Config));
+        config.std_dir = "std";
+        config.runtime_dir = "runtime";
+        config.jobs = 8;
+        config.timeout_us = 120000000;
+        config.ok = true;
+        mut i32 index = 1;
+        while (index < Process.argc()) {
+            ptr<i8> argument = Environment.argument(index);
+            ptr<i8> value = Environment.argument(index + 1);
+            if (Text.same(argument, "--link-debug")) {
+                config.link_debug = true;
+                index = index + 1;
+                continue;
+            }
+            if (Text.same(argument, "--crash")) {
+                config.crash = true;
+                index = index + 1;
+                continue;
+            }
+            if (Text.same(argument, "--debug")) {
+                config.debug = true;
+                index = index + 1;
+                continue;
+            }
+            if (Text.same(argument, "--library")) {
+                config.library = true;
+                index = index + 1;
+                continue;
+            }
+            if (Text.same(argument, "--lld")) {
+                config.lld = true;
+                index = index + 1;
+                continue;
+            }
+            if (Text.same(argument, "--compiler")) {
+                config.compiler = value;
+            } else if (Text.same(argument, "--runtime-dir")) {
+                config.runtime_dir = value;
+            } else if (Text.same(argument, "--runtime-lib")) {
+                config.runtime_lib = value;
+            } else if (Text.same(argument, "--std-dir")) {
+                config.std_dir = value;
+            } else if (Text.same(argument, "--out")) {
+                config.out_dir = value;
+            } else if (Text.same(argument, "--filter")) {
+                config.filter = value;
+            } else if (Text.same(argument, "--report")) {
+                config.report = value;
+            } else if (Text.same(argument, "--jobs")) {
+                config.jobs = Text.parse_integer(value, (i32)strlen(value));
+            } else if (Text.same(argument, "--require")) {
+                i32 path = Runner.path_named(value);
+                if (path == 0) {
+                    config.ok = false;
+                }
+                config.forced_paths = config.forced_paths | path;
+            } else {
+                config.ok = false;
+            }
+            index = index + 2;
+        }
+        if (config.compiler == null || config.runtime_lib == null || config.jobs < 1) {
+            config.ok = false;
+        }
+        if (((config.forced_paths & TestPath.LINK) != 0 || config.crash || config.debug || config.library) && config.out_dir == null) {
+            config.ok = false;
+        }
+        config.work_dir = config.out_dir;
+        if (config.work_dir == null) {
+            config.work_dir = Environment.variable("TEMP", Environment.variable("TMPDIR", "/tmp"));
+        }
+        return config;
+    }
+
+    public static unsafe i32 path_named(ptr<i8> name) {
+        if (Text.same(name, "Check")) {
+            return TestPath.CHECK;
+        }
+        if (Text.same(name, "IR")) {
+            return TestPath.IR;
+        }
+        if (Text.same(name, "JIT")) {
+            return TestPath.JIT;
+        }
+        if (Text.same(name, "Link")) {
+            return TestPath.LINK;
+        }
+        return 0;
+    }
+
+    public static unsafe i32 first_path(TestCase* test) {
+        i32 paths = test.requires;
+        if (test.kind == Kind.SELFTEST) {
+            return 0;
+        }
+        if (test.kind == Kind.RUN) {
+            if ((paths & TestPath.JIT) != 0) {
+                return TestPath.JIT;
+            }
+            return paths & TestPath.LINK;
+        }
+        if (test.kind == Kind.ERROR) {
+            if ((paths & TestPath.CODEGEN) != 0) {
+                return TestPath.IR;
+            }
+            return paths & TestPath.CHECK;
+        }
+        if (test.kind == Kind.CLEAN) {
+            if ((paths & TestPath.LINK) != 0) {
+                return TestPath.LINK;
+            }
+            if ((paths & TestPath.CODEGEN) != 0) {
+                return TestPath.IR;
+            }
+            return paths & TestPath.CHECK;
+        }
+        return paths & TestPath.LINK;
+    }
+
+    public static unsafe ptr<i8> base_name(ptr<i8> path) {
+        i32 length = (i32)strlen(path);
+        mut i32 start = 0;
+        for (mut i32 i = 0; i < length; i = i + 1) {
+            if (path[i] == 47 || path[i] == 92) {
+                start = i + 1;
+            }
+        }
+        mut i32 end = length;
+        if (length - start > 6 && Text.same(path + (length - 6), ".djinn")) {
+            end = length - 6;
+        }
+        return Text.duplicate(path + start, end - start);
+    }
+
+    public static unsafe ptr<i8> output_path(Config* config, ptr<i8> name, ptr<i8> extension) {
+        TextBuffer* path = TextBuffer.create();
+        path.append(config.work_dir);
+        path.append("/");
+        i32 length = (i32)strlen(name);
+        for (mut i32 i = 0; i < length; i = i + 1) {
+            if (name[i] == 47 || name[i] == 58) {
+                path.append_char(95);
+            } else {
+                path.append_char(name[i]);
+            }
+        }
+        path.append(extension);
+        return path.cstr();
+    }
+
+    public static unsafe TestCase* new_case(Config* config, ptr<i8> name, ptr<i8> path, i32 kind) {
+        TestCase* test = (TestCase*)Allocator.zeroed(sizeof(TestCase));
+        TestNode* node = TestNode.create(name, config.timeout_us);
+        node.data = (ptr)test;
+        test.node = node;
+        test.source = path;
+        test.kind = kind;
+        test.binary = Runner.output_path(config, name, ".exe");
+        return test;
+    }
+
+    public static unsafe void quote(TextBuffer* command, ptr<i8> text) {
+        command.append(" \"");
+        command.append(text);
+        command.append("\"");
+    }
+
+    public static unsafe ptr<i8> debug_command(TestCase* test) {
+        TextBuffer* command = TextBuffer.create();
+        command.append("lldb -b -o \"breakpoint set -f ");
+        command.append(Runner.base_name(test.source));
+        command.append(".djinn -l ");
+        command.append_int((i64)test.line);
+        command.append("\" -o run -o \"frame variable\" -o bt -o quit");
+        Runner.quote(command, test.binary);
+        return command.cstr();
+    }
+
+    public static unsafe ptr<i8> library_command(TestCase* test, Config* config) {
+        TestNode* node = test.node;
+        ptr<i8> library = Runner.output_path(config, node.name, ".djlib");
+        TextBuffer* command = TextBuffer.create();
+        command.append("\"");
+        if (test.phase == 2) {
+            command.append(test.binary);
+            command.append("\"");
+            return command.cstr();
+        }
+        command.append(config.compiler);
+        command.append("\"");
+        if (test.phase == 0) {
+            Runner.quote(command, test.library);
+            command.append(" --library -o");
+            Runner.quote(command, library);
+        } else {
+            Runner.quote(command, test.source);
+            command.append(" --lib");
+            Runner.quote(command, library);
+            command.append(" -o");
+            Runner.quote(command, test.binary);
+        }
+        if (config.lld) {
+            command.append(" --lld");
+        }
+        command.append(" --runtime-lib");
+        Runner.quote(command, config.runtime_lib);
+        command.append(" --runtime-dir");
+        Runner.quote(command, config.runtime_dir);
+        return command.cstr();
+    }
+
+    public static unsafe ptr<i8> build_command(TestCase* test, Config* config) {
+        if (test.kind == Kind.LIBRARY) {
+            return Runner.library_command(test, config);
+        }
+        TextBuffer* command = TextBuffer.create();
+        command.append("\"");
+        if (test.phase == 1 && test.kind == Kind.DEBUG) {
+            return Runner.debug_command(test);
+        }
+        if (test.phase == 1) {
+            command.append(test.binary);
+            command.append("\"");
+            return command.cstr();
+        }
+        command.append(config.compiler);
+        command.append("\"");
+        if (test.kind == Kind.SELFTEST) {
+            command.append(" --selftest");
+            return command.cstr();
+        }
+        Runner.quote(command, test.source);
+        if (test.kind == Kind.ERROR || test.kind == Kind.CLEAN) {
+            command.append(" --diagnostics-format=json");
+        }
+        if (test.path == TestPath.CHECK) {
+            command.append(" --check --runtime-dir");
+            Runner.quote(command, config.runtime_dir);
+            Runner.append_std(command, test, config);
+            return command.cstr();
+        }
+        if (test.path == TestPath.IR) {
+            command.append(" --no-link -o");
+            Runner.quote(command, test.binary);
+        } else if (test.path == TestPath.LINK) {
+            command.append(" -o");
+            Runner.quote(command, test.binary);
+            if (test.kind == Kind.CRASH || test.kind == Kind.DEBUG || config.link_debug) {
+                command.append(" -g");
+            }
+            if (config.lld) {
+                command.append(" --lld");
+            }
+        } else {
+            command.append(" --run");
+        }
+        command.append(" --runtime-lib");
+        Runner.quote(command, config.runtime_lib);
+        command.append(" --runtime-dir");
+        Runner.quote(command, config.runtime_dir);
+        Runner.append_std(command, test, config);
+        return command.cstr();
+    }
+
+    public static unsafe void append_std(TextBuffer* command, TestCase* test, Config* config) {
+        if (test.std) {
+            command.append(" --std --std-dir");
+            Runner.quote(command, config.std_dir);
+        }
+    }
+
+    public static unsafe ptr<i8> next_command(TestCase* test, Config* config) {
+        TestNode* node = test.node;
+        test.ran = test.ran | test.path;
+        node.tags = Runner.path_names(test.ran);
+        return Runner.build_command(test, config);
+    }
+
+    public static unsafe ptr<i8> with_snippet(ptr<i8> prefix, ptr<i8> output) {
+        TextBuffer* reason = TextBuffer.create();
+        reason.append(prefix);
+        i32 length = (i32)strlen(output);
+        mut i32 limit = length;
+        if (limit > 400) {
+            limit = 400;
+        }
+        if (limit > 0) {
+            reason.append(": ");
+            reason.append_slice(output, limit);
+        }
+        return reason.cstr();
+    }
+
+    public static unsafe ptr<i8> exit_mismatch(i32 expected, i32 actual) {
+        TextBuffer* reason = TextBuffer.create();
+        reason.append("expected exit ");
+        reason.append_int((i64)expected);
+        reason.append(", got ");
+        reason.append_int((i64)actual);
+        return reason.cstr();
+    }
+
+    public static unsafe ptr<i8> check_diagnostics(TestCase* test) {
+        TestNode* node = test.node;
+        Expected* expected = test.expected;
+        if (node.exit_code < 0) {
+            return Runner.with_snippet("the compiler crashed", node.output);
+        }
+        ptr<i8> reason = DiagnosticComparer.compare(expected, DiagnosticReader.read(node.output), test.source);
+        if (reason == null && node.exit_code != 0 && !expected.wants_error()) {
+            return Runner.with_snippet("expected no errors", node.output);
+        }
+        return reason;
+    }
+
+    public static unsafe ptr<i8> check_output(TestCase* test) {
+        TestNode* node = test.node;
+        Expected* expected = test.expected;
+        ItemList* patterns = expected.output;
+        for (mut i32 i = 0; i < patterns.length; i = i + 1) {
+            ptr<i8> pattern = (ptr<i8>)patterns.get(i);
+            if (!Text.contains(node.output, pattern)) {
+                TextBuffer* reason = TextBuffer.create();
+                reason.append("missing in the output: ");
+                reason.append(pattern);
+                return reason.cstr();
+            }
+        }
+        return null;
+    }
+
+    public static unsafe ptr<i8> check_crash(TestCase* test) {
+        TestNode* node = test.node;
+        if (node.exit_code == 0) {
+            return "expected the program to crash";
+        }
+        return Runner.check_output(test);
+    }
+
+    public static unsafe ptr<i8> check_run(TestCase* test) {
+        TestNode* node = test.node;
+        Expected* expected = test.expected;
+        if (expected.any_failure) {
+            if (node.exit_code == 0) {
+                return "expected a non-zero exit code";
+            }
+            return Runner.check_output(test);
+        }
+        if (node.exit_code != expected.exit_code) {
+            return Runner.exit_mismatch(expected.exit_code, node.exit_code);
+        }
+        if (expected.stdout_text != null && !Text.same(node.stdout_text, expected.stdout_text)) {
+            return "stdout differs";
+        }
+        return Runner.check_output(test);
+    }
+
+    public static unsafe void advance(TestCase* test, Config* config, Scheduler* pool) {
+        pool.proceed(test.node, Runner.next_command(test, config));
+    }
+
+    public static unsafe void finish(TestCase* test, Config* config, Scheduler* pool) {
+        TestNode* node = test.node;
+        mut ptr<i8> reason = null;
+        if (test.kind == Kind.ERROR || test.kind == Kind.CLEAN) {
+            reason = Runner.check_diagnostics(test);
+            if (test.path == TestPath.IR) {
+                Runner.remove_ir(test);
+            }
+        } else if (test.kind == Kind.SELFTEST) {
+            if (node.exit_code != 0) {
+                reason = Runner.with_snippet("selftest failed", node.output);
+            }
+        } else if (test.kind == Kind.LIBRARY && test.phase == 2) {
+            reason = Runner.check_run(test);
+        } else if (test.kind == Kind.LIBRARY || (test.phase == 0 && test.path == TestPath.LINK)) {
+            if (node.exit_code == 0) {
+                test.phase = test.phase + 1;
+                Runner.advance(test, config, pool);
+                return;
+            }
+            reason = Runner.with_snippet("compile failed", node.output);
+        } else if (test.kind == Kind.CRASH) {
+            reason = Runner.check_crash(test);
+        } else if (test.kind == Kind.DEBUG) {
+            reason = Runner.check_output(test);
+        } else {
+            reason = Runner.check_run(test);
+            if (reason == null && test.path == TestPath.JIT && (test.requires & TestPath.LINK) != 0) {
+                test.path = TestPath.LINK;
+                test.phase = 0;
+                Runner.advance(test, config, pool);
+                return;
+            }
+        }
+        if (pool.complete(node, reason)) {
+            test.phase = 0;
+            test.path = Runner.first_path(test);
+        }
+    }
+
+    public static unsafe void remove_ir(TestCase* test) {
+        TextBuffer* path = TextBuffer.create();
+        path.append(test.binary);
+        path.append(".ll");
+        remove(path.cstr());
+    }
+
+    public static unsafe ptr<i8> path_names(i32 paths) {
+        TextBuffer* names = TextBuffer.create();
+        if ((paths & TestPath.CHECK) != 0) {
+            names.append("Check ");
+        }
+        if ((paths & TestPath.IR) != 0) {
+            names.append("IR ");
+        }
+        if ((paths & TestPath.JIT) != 0) {
+            names.append("JIT ");
+        }
+        if ((paths & TestPath.LINK) != 0) {
+            names.append("Link ");
+        }
+        if (names.length > 0) {
+            names.length = names.length - 1;
+        }
+        return names.cstr();
+    }
+
+    public static void print_usage() {
+        printf("usage: runner --compiler <djinnc> --runtime-lib <lib> [--runtime-dir <dir>] [--std-dir <dir>]\n");
+        printf("              [--require Check|IR|JIT|Link] [--link-debug] [--crash] [--debug] [--library] [--out <absolute dir> [--lld]] [--filter <text>] [--jobs <n>] [--report <file>]\n");
+    }
+
+    public static unsafe i32 run(Verify* verify) {
+        Config* config = verify.config;
+        ItemList* cases = verify.cases;
+        Scheduler* pool = Scheduler.create(config.jobs);
+        for (mut i32 i = 0; i < cases.length; i = i + 1) {
+            TestCase* test = (TestCase*)cases.get(i);
+            TestNode* node = test.node;
+            if (node.state != TestState.DONE) {
+                node.command = Runner.next_command(test, config);
+            }
+            pool.add(node);
+        }
+        mut ptr next = pool.wait();
+        while (next != null) {
+            TestNode* node = (TestNode*)next;
+            Runner.finish((TestCase*)node.data, config, pool);
+            next = pool.wait();
+        }
+        TestReport.print_summary(pool);
+        if (config.skipped_links > 0) {
+            printf("%d link runs skipped: they need --out\n", config.skipped_links);
+        }
+        if (config.report != null) {
+            TestReport.write_json(pool, config.report);
+        }
+        ItemList* nodes = pool.nodes;
+        if (TestReport.passed(nodes) == nodes.length) {
+            return 0;
+        }
+        return 1;
+    }
+}

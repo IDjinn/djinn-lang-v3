@@ -139,11 +139,11 @@ impl CodeGenerator {
 
     unsafe FunctionInfo* formatter_of(u32 type) {
         if (!Types.is_struct(type)) {
-            return null;
+            return (FunctionInfo*)0;
         }
         StructInfo* owner = this.struct_of(type);
         if (owner.contracts == null) {
-            return null;
+            return (FunctionInfo*)0;
         }
         PointerList* contracts = owner.contracts;
         mut bool formattable = false;
@@ -154,12 +154,12 @@ impl CodeGenerator {
             }
         }
         if (!formattable) {
-            return null;
+            return (FunctionInfo*)0;
         }
         SymbolTable* symbols = this.symbols;
         FunctionInfo* method = symbols.find_method(owner, Ast.intern_base_name("format", 6));
         if (method == null || method.return_type != this.symbols_core_type("string")) {
-            return null;
+            return (FunctionInfo*)0;
         }
         return method;
     }

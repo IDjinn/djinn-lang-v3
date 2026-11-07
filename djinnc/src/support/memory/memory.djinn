@@ -20,8 +20,8 @@ struct Memory {
         free((ptr)arena);
     }
 
-    public static ptr zalloc(i64 count) {
+    public static ptr zalloc(u64 count) {
         Arena* arena = Memory.arena();
-        return arena.zalloc((u64)count, 16);
+        return arena.zalloc(count, 16);
     }
 }

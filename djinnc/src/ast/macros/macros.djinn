@@ -19,7 +19,7 @@ struct Macros {
                 return info;
             }
         }
-        return null;
+        return (MacroInfo*)0;
     }
 
     public static unsafe MacroInfo* declare(u32 atom, ptr<i8> name) {

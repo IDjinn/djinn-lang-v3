@@ -28,7 +28,7 @@ impl Parser {
         }
         if (this.kind_of(token) == TokenKind::SEMICOLON) {
             this.advance();
-            return null;
+            return (Node*)0;
         }
         if (this.kind_of(token) == TokenKind::RETURN) {
             this.advance();

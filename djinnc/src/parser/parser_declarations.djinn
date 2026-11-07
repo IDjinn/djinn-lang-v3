@@ -9,7 +9,7 @@ impl Parser {
             return;
         }
         if (owner.count() <= before) {
-            this.attach_attributes(found, null, AttributeTarget.OTHER);
+            this.attach_attributes(found, (Node*)0, AttributeTarget.OTHER);
             return;
         }
         Node* member = owner.child(before);
@@ -32,14 +32,14 @@ impl Parser {
                 && (this.has_attribute(attributes, "intrinsic") || this.has_attribute(attributes, "no_mangle"));
             this.bodyless_seen = false;
             if (!provided) {
-                this.diagnostics.error(this.line_of(this.bodyless_token), this.column_of(this.bodyless_token), "expected '{' (a function without a body is only allowed in [intrinsic] and [no_mangle] structs)");
+                this.diagnostics.error(DiagnosticErrors.MISPLACED_BODYLESS_FUNCTION, this.line_of(this.bodyless_token), this.column_of(this.bodyless_token), "expected '{' (a function without a body is only allowed in [intrinsic] and [no_mangle] structs)");
             }
         }
         if (declaration != null && declaration.kind() == NodeKind::STRUCT_DECL && this.has_attribute(attributes, "no_mangle")) {
-            return null;
+            return (Node*)0;
         }
         if (declaration != null && declaration.kind() == NodeKind::STRUCT_DECL && this.has_attribute(attributes, "intrinsic") && !declared_bodyless) {
-            return null;
+            return (Node*)0;
         }
         if (attributes.length > 0) {
             mut i32 target_kind = AttributeTarget.OTHER;
@@ -191,7 +191,7 @@ impl Parser {
             }
         }
         if (this.match(TokenKind::SEMICOLON)) {
-            return null;
+            return (Node*)0;
         }
         Node* node = Node.create_list(NodeKind::STRUCT_DECL, start);
         node.set_text(this.copy_of(name));
@@ -368,7 +368,7 @@ impl Parser {
 
         if (is_async && compile_time != 0) {
             this.fail("a constexpr or consteval function cannot be async");
-            return null;
+            return (Node*)0;
         }
 
         i32 start = this.current();

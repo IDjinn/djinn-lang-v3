@@ -14,3 +14,20 @@ struct task<T> {
     public T get_result();
     public void destroy();
 }
+
+extern "C" {
+    i64 __djinn_unix_timestamp_ms();
+}
+
+struct Task {
+    public static async void pause() {
+        std::builtin::coro.suspend();
+    }
+
+    public static async void delay(i64 milliseconds) {
+        i64 deadline = __djinn_unix_timestamp_ms() + milliseconds;
+        while (__djinn_unix_timestamp_ms() < deadline) {
+            std::builtin::coro.suspend();
+        }
+    }
+}

@@ -60,7 +60,7 @@ struct PointerList {
 
     void grow() {
         i32 newCapacity = this.capacity * 2;
-        ptr<ptr> newData = (ptr<ptr>)Memory.zalloc((i64)newCapacity * 8);
+        ptr<ptr> newData = (ptr<ptr>)Memory.zalloc((u64)newCapacity * 8);
         memcpy(newData, this.data, (u64)this.length * 8);
         this.data = newData;
         this.capacity = newCapacity;

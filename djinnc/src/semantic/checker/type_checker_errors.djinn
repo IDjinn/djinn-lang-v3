@@ -3,14 +3,14 @@ namespace djinnc;
 impl TypeChecker {
     unsafe FunctionInfo* call_target(Node* node) {
         if (node.kind() != NodeKind::CALL) {
-            return null;
+            return (FunctionInfo*)0;
         }
         Node* callee = node.first();
         i32 kind = callee.symbol_kind();
         if (kind == SymbolKind.FUNCTION || kind == SymbolKind.STATIC_METHOD || kind == SymbolKind.INSTANCE_METHOD) {
             return (FunctionInfo*)callee.symbol();
         }
-        return null;
+        return (FunctionInfo*)0;
     }
 
     unsafe FunctionInfo* thrower_of(Node* node) {
@@ -18,22 +18,22 @@ impl TypeChecker {
             if (node.symbol_kind() == SymbolKind.FUNCTION) {
                 return (FunctionInfo*)node.symbol();
             }
-            return null;
+            return (FunctionInfo*)0;
         }
         FunctionInfo* callee = this.call_target(node);
         if (callee != null && !callee.is_async && callee.has_throws) {
             return callee;
         }
-        return null;
+        return (FunctionInfo*)0;
     }
 
     unsafe StructInfo* error_struct(u32 type) {
         if (!Types.is_struct(type)) {
-            return null;
+            return (StructInfo*)0;
         }
         SymbolTable* symbols = this.symbols;
         if (symbols.enum_of_type(type) != null) {
-            return null;
+            return (StructInfo*)0;
         }
         return symbols.struct_at(Types.struct_index(type));
     }
@@ -43,13 +43,13 @@ impl TypeChecker {
             return;
         }
         if (source.throws_any) {
-            this.error(at, "this call can throw any error: the enclosing function must declare a plain 'throws'");
+            this.error_code(at, DiagnosticErrors.THROWS_TYPE_MISMATCH, "this call can throw any error: the enclosing function must declare a plain 'throws'");
             return;
         }
         IdList* types = source.throws_types;
         for (mut i32 i = 0; i < types.length; i = i + 1) {
             if (!current.allows(types.get(i))) {
-                this.error(at, "an error of this call is not covered by the enclosing function's throws clause");
+                this.error_code(at, DiagnosticErrors.THROWS_TYPE_MISMATCH, "an error of this call is not covered by the enclosing function's throws clause");
                 return;
             }
         }
@@ -58,7 +58,7 @@ impl TypeChecker {
     unsafe void require_propagation(Node* at, FunctionInfo* source) {
         FunctionInfo* current = this.function;
         if (current == null || !current.has_throws) {
-            this.error(at, "this call can fail: use 'try' or declare 'throws' on the enclosing function");
+            this.error_code(at, DiagnosticErrors.MISSING_TRY, "this call can fail: use 'try' or declare 'throws' on the enclosing function");
             return;
         }
         this.require_covered(at, source, current);
@@ -77,16 +77,16 @@ impl TypeChecker {
     unsafe void check_throw(Node* node) {
         u32 type = this.check_expression(node.first(), 0);
         if (Types.is_void(type)) {
-            this.error(node, "a void value cannot be thrown");
+            this.error_code(node, DiagnosticErrors.ERROR_HANDLING, "a void value cannot be thrown");
             return;
         }
         FunctionInfo* current = this.function;
         if (current == null || !current.has_throws) {
-            this.error(node, "'throw' needs the enclosing function to declare 'throws'");
+            this.error_code(node, DiagnosticErrors.THROW_OUTSIDE_THROWS, "'throw' needs the enclosing function to declare 'throws'");
             return;
         }
         if (!current.allows(type)) {
-            this.error(node, "thrown error type is not listed in the throws clause");
+            this.error_code(node, DiagnosticErrors.THROWS_TYPE_MISMATCH, "thrown error type is not listed in the throws clause");
             return;
         }
         StructInfo* error = this.error_struct(type);
@@ -104,7 +104,7 @@ impl TypeChecker {
         this.try_target = saved;
         FunctionInfo* source = this.thrower_of(operand);
         if (source == null) {
-            this.error(node, "'try' needs a call to a function that declares 'throws'");
+            this.error_code(node, DiagnosticErrors.TRY_ON_NON_THROWING, "'try' needs a call to a function that declares 'throws'");
             return type;
         }
         Node* fallback = node.second();
@@ -113,7 +113,7 @@ impl TypeChecker {
             return type;
         }
         if (Types.is_void(type)) {
-            this.error(node, "a void call cannot have a '?:' fallback");
+            this.error_code(node, DiagnosticErrors.TRY_WITHOUT_FALLBACK, "a void call cannot have a '?:' fallback");
             return type;
         }
         u32 fallback_type = this.check_expression(fallback, type);
@@ -139,7 +139,7 @@ impl TypeChecker {
                 has_success = true;
                 binding_type = success_type;
                 if (Types.is_void(success_type) && arm.count() > 0) {
-                    this.error(arm, "a void call has no result to bind");
+                    this.error_code(arm, DiagnosticErrors.ERROR_HANDLING, "a void call has no result to bind");
                     continue;
                 }
             } else if (Strings.same(pattern, "Error")) {
@@ -147,17 +147,17 @@ impl TypeChecker {
                 has_catch_all = true;
                 binding_type = any_error;
                 if (any_error == 0) {
-                    this.error(arm, "the 'Error' arm needs the core 'Error' type");
+                    this.error_code(arm, DiagnosticErrors.ERROR_HANDLING, "the 'Error' arm needs the core 'Error' type");
                     continue;
                 }
             } else {
                 u32 matched = this.arm_error_type(arm, source);
                 if (matched == 0) {
-                    this.error(arm, "unknown error type in switch arm");
+                    this.error_code(arm, DiagnosticErrors.ERROR_HANDLING, "unknown error type in switch arm");
                     continue;
                 }
                 if (!source.allows(matched)) {
-                    this.error(arm, "this call does not throw that error type");
+                    this.error_code(arm, DiagnosticErrors.ERROR_HANDLING, "this call does not throw that error type");
                     continue;
                 }
                 arm.set_op(3);
@@ -166,7 +166,7 @@ impl TypeChecker {
                 binding_type = matched;
             }
             if (arm.count() > 1) {
-                this.error(arm, "a switch arm binds at most one value");
+                this.error_code(arm, DiagnosticErrors.ERROR_HANDLING, "a switch arm binds at most one value");
                 continue;
             }
 
@@ -192,7 +192,7 @@ impl TypeChecker {
         }
 
         if (!has_success) {
-            this.error(node, "an error switch needs a 'Result' arm for the success value");
+            this.error_code(node, DiagnosticErrors.SWITCH_NOT_EXHAUSTIVE, "an error switch needs a 'Result' arm for the success value");
         }
         if (!has_catch_all) {
             this.require_unhandled(node, source, handled);
@@ -226,7 +226,7 @@ impl TypeChecker {
 
     unsafe void require_unhandled(Node* node, FunctionInfo* source, IdList* handled) {
         if (source.throws_any) {
-            this.error(node, "this call can throw any error: the switch needs an 'Error' arm");
+            this.error_code(node, DiagnosticErrors.SWITCH_NOT_EXHAUSTIVE, "this call can throw any error: the switch needs an 'Error' arm");
             return;
         }
         IdList* types = source.throws_types;
@@ -238,7 +238,7 @@ impl TypeChecker {
                 }
             }
             if (!covered) {
-                this.error(node, "the switch is not exhaustive: handle every error type of the call or add an 'Error' arm");
+                this.error_code(node, DiagnosticErrors.SWITCH_NOT_EXHAUSTIVE, "the switch is not exhaustive: handle every error type of the call or add an 'Error' arm");
                 return;
             }
         }

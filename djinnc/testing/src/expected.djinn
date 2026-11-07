@@ -1,0 +1,150 @@
+namespace djinnc::testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+import testing;
+
+struct ExpectedDiagnostic {
+    i32 code;
+    bool is_warning;
+    i32 line;
+    i32 column;
+    i32 end_line;
+    i32 end_column;
+    ptr<i8> message;
+    ItemList* arguments;
+    bool found;
+}
+
+struct Expected {
+    i32 exit_code;
+    bool any_failure;
+    ptr<i8> stdout_text;
+    ItemList* output;
+    ItemList* diagnostics;
+
+    public static unsafe Expected* create() {
+        Expected* expected = (Expected*)Allocator.zeroed(sizeof(Expected));
+        expected.output = ItemList.create();
+        expected.diagnostics = ItemList.create();
+        return expected;
+    }
+
+    public static unsafe Expected* exit(i32 code) {
+        Expected* expected = Expected.create();
+        expected.exit_code = code;
+        return expected;
+    }
+
+    public static unsafe Expected* failure() {
+        Expected* expected = Expected.create();
+        expected.any_failure = true;
+        return expected;
+    }
+
+    public static unsafe Expected* error(i32 code) {
+        Expected* expected = Expected.create();
+        return expected.and_error(code);
+    }
+
+    public static unsafe Expected* warning(i32 code) {
+        Expected* expected = Expected.create();
+        return expected.and_warning(code);
+    }
+
+    public static unsafe Expected* contains(ptr<i8> text) {
+        Expected* expected = Expected.create();
+        return expected.and_contains(text);
+    }
+
+    unsafe Expected* add_diagnostic(i32 code, bool is_warning) {
+        ExpectedDiagnostic* diagnostic = (ExpectedDiagnostic*)Allocator.zeroed(sizeof(ExpectedDiagnostic));
+        diagnostic.code = code;
+        diagnostic.is_warning = is_warning;
+        diagnostic.arguments = ItemList.create();
+        ItemList* diagnostics = this.diagnostics;
+        diagnostics.push((ptr)diagnostic);
+        return this;
+    }
+
+    unsafe ExpectedDiagnostic* last_diagnostic() {
+        ItemList* diagnostics = this.diagnostics;
+        return (ExpectedDiagnostic*)diagnostics.get(diagnostics.length - 1);
+    }
+
+    public unsafe Expected* and_error(i32 code) {
+        return this.add_diagnostic(code, false);
+    }
+
+    public unsafe Expected* and_warning(i32 code) {
+        return this.add_diagnostic(code, true);
+    }
+
+    public unsafe Expected* at(i32 line, i32 column) {
+        ExpectedDiagnostic* diagnostic = this.last_diagnostic();
+        diagnostic.line = line;
+        diagnostic.column = column;
+        return this;
+    }
+
+    public unsafe Expected* at_range(i32 line, i32 column, i32 end_line, i32 end_column) {
+        ExpectedDiagnostic* diagnostic = this.last_diagnostic();
+        diagnostic.line = line;
+        diagnostic.column = column;
+        diagnostic.end_line = end_line;
+        diagnostic.end_column = end_column;
+        return this;
+    }
+
+    public unsafe Expected* at_position(SourcePosition* position) {
+        return this.at(position.line, position.column);
+    }
+
+    public unsafe Expected* with_message(ptr<i8> text) {
+        ExpectedDiagnostic* diagnostic = this.last_diagnostic();
+        diagnostic.message = text;
+        return this;
+    }
+
+    public unsafe Expected* with_arguments(ptr<i8> text) {
+        ExpectedDiagnostic* diagnostic = this.last_diagnostic();
+        ItemList* arguments = diagnostic.arguments;
+        arguments.push((ptr)text);
+        return this;
+    }
+
+    public unsafe bool wants_error() {
+        ItemList* diagnostics = this.diagnostics;
+        for (mut i32 i = 0; i < diagnostics.length; i = i + 1) {
+            ExpectedDiagnostic* diagnostic = (ExpectedDiagnostic*)diagnostics.get(i);
+            if (!diagnostic.is_warning) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public unsafe bool reaches_codegen() {
+        ItemList* diagnostics = this.diagnostics;
+        for (mut i32 i = 0; i < diagnostics.length; i = i + 1) {
+            ExpectedDiagnostic* diagnostic = (ExpectedDiagnostic*)diagnostics.get(i);
+            if (diagnostic.code >= 4000 && diagnostic.code < 5000) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public unsafe Expected* and_contains(ptr<i8> text) {
+        ItemList* output = this.output;
+        output.push((ptr)text);
+        return this;
+    }
+
+    public unsafe Expected* stdout(ptr<i8> text) {
+        this.stdout_text = text;
+        return this;
+    }
+}

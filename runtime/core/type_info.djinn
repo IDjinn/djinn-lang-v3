@@ -8,6 +8,7 @@ struct TypeInfo {
 struct AttributeInfo {
     i8* name;
     i8* value;
+    void* payload;
 }
 struct FieldInfo {
     i8* name;

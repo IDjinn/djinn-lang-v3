@@ -1,0 +1,174 @@
+namespace testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+
+struct TestState {
+    const i32 PENDING = 0;
+    const i32 RUNNING = 1;
+    const i32 EXITED = 2;
+    const i32 DONE = 3;
+}
+
+struct TestNode {
+    ptr<i8> name;
+    ptr<i8> command;
+    ptr<i8> tags;
+    ptr data;
+    i32 state;
+    ptr process;
+    i64 started_us;
+    i64 elapsed_us;
+    i64 timeout_us;
+    i32 exit_code;
+    ptr<i8> stdout_text;
+    ptr<i8> output;
+    ptr<i8> reason;
+    bool passed;
+    i32 retries;
+    i32 max_retries;
+
+    public static unsafe TestNode* create(ptr<i8> name, i64 timeout_us) {
+        TestNode* node = (TestNode*)Allocator.zeroed(sizeof(TestNode));
+        node.name = name;
+        node.timeout_us = timeout_us;
+        node.tags = "";
+        return node;
+    }
+
+    public void fail(ptr<i8> reason) {
+        this.reason = reason;
+        this.state = TestState.DONE;
+    }
+}
+
+struct Scheduler {
+    ItemList* nodes;
+    i32 jobs;
+    i32 next;
+    i32 running;
+    i32 finished;
+
+    public static unsafe Scheduler* create(i32 jobs) {
+        Scheduler* scheduler = (Scheduler*)Allocator.zeroed(sizeof(Scheduler));
+        scheduler.nodes = ItemList.create();
+        scheduler.jobs = jobs;
+        return scheduler;
+    }
+
+    public unsafe void add(TestNode* node) {
+        ItemList* nodes = this.nodes;
+        nodes.push((ptr)node);
+    }
+
+    public unsafe ptr wait() {
+        ItemList* nodes = this.nodes;
+        while (this.finished < nodes.length) {
+            this.start_pending();
+            mut bool progressed = false;
+            for (mut i32 i = 0; i < this.next; i = i + 1) {
+                TestNode* node = (TestNode*)nodes.get(i);
+                if (node.state != TestState.RUNNING) {
+                    continue;
+                }
+                if (__djinn_process_poll(node.process) == 1) {
+                    this.collect(node);
+                    return (ptr)node;
+                }
+                if (__djinn_now_us() - node.started_us > node.timeout_us) {
+                    this.time_out(node);
+                    progressed = true;
+                }
+            }
+            if (!progressed) {
+                __djinn_thread_sleep(1);
+            }
+        }
+        return null;
+    }
+
+    public unsafe void proceed(TestNode* node, ptr<i8> command) {
+        if (!this.launch(node, command)) {
+            this.finish(node, "could not start the process");
+        }
+    }
+
+    public unsafe bool complete(TestNode* node, ptr<i8> reason) {
+        if (reason != null && node.exit_code < 0 && node.retries < node.max_retries) {
+            node.retries = node.retries + 1;
+            node.started_us = 0;
+            printf("RETRY %s (the process crashed)\n", node.name);
+            this.proceed(node, node.command);
+            return true;
+        }
+        this.finish(node, reason);
+        return false;
+    }
+
+    unsafe void start_pending() {
+        ItemList* nodes = this.nodes;
+        while (this.running < this.jobs && this.next < nodes.length) {
+            TestNode* node = (TestNode*)nodes.get(this.next);
+            this.next = this.next + 1;
+            if (node.state == TestState.DONE) {
+                TestReport.print_node(node);
+                this.finished = this.finished + 1;
+                continue;
+            }
+            this.running = this.running + 1;
+            this.proceed(node, node.command);
+        }
+    }
+
+    static unsafe ptr start_process(ptr<i8> command) {
+        return switch Process.start((i8*)command, "", 0) {
+            Value child -> (ptr)child,
+            Empty -> null
+        };
+    }
+
+    unsafe bool launch(TestNode* node, ptr<i8> command) {
+        if (node.started_us == 0) {
+            node.started_us = __djinn_now_us();
+        }
+        node.process = Scheduler.start_process(command);
+        if (node.process == null) {
+            return false;
+        }
+        node.state = TestState.RUNNING;
+        return true;
+    }
+
+    unsafe void collect(TestNode* node) {
+        ptr process = node.process;
+        node.exit_code = __djinn_process_exit_code(process);
+        node.stdout_text = Text.without_carriage_returns((ptr<i8>)__djinn_process_stdout_data(process), __djinn_process_stdout_length(process));
+        TextBuffer* output = TextBuffer.create();
+        output.append(node.stdout_text);
+        output.append(Text.without_carriage_returns((ptr<i8>)__djinn_process_stderr_data(process), __djinn_process_stderr_length(process)));
+        node.output = output.cstr();
+        node.state = TestState.EXITED;
+        __djinn_process_free(process);
+        node.process = null;
+    }
+
+    unsafe void time_out(TestNode* node) {
+        __djinn_process_kill(node.process);
+        __djinn_process_poll(node.process);
+        __djinn_process_free(node.process);
+        node.process = null;
+        this.finish(node, "timeout");
+    }
+
+    unsafe void finish(TestNode* node, ptr<i8> reason) {
+        node.reason = reason;
+        node.elapsed_us = __djinn_now_us() - node.started_us;
+        node.passed = reason == null;
+        node.state = TestState.DONE;
+        this.running = this.running - 1;
+        this.finished = this.finished + 1;
+        TestReport.print_node(node);
+    }
+}

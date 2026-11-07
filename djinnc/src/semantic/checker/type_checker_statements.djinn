@@ -41,7 +41,7 @@ impl TypeChecker {
         this.loop_depth = 0;
         this.switch_depth = 0;
         this.unsafe_depth = 0;
-        this.try_target = null;
+        this.try_target = (Node*)0;
         LocalScopes* scopes = this.scopes;
         scopes.reset_to(0);
         PointerList* borrows = this.borrows;
@@ -101,7 +101,7 @@ impl TypeChecker {
             case SPAWN_STMT:
                 u32 spawned = this.check_expression(node.first(), 0);
                 if (this.task_result(spawned) == 0) {
-                    this.error(node, "'spawn' needs the task returned by an async function");
+                    this.error_code(node, DiagnosticErrors.AWAIT_NEEDS_TASK, "'spawn' needs the task returned by an async function");
                 }
             case RETURN:
                 this.check_return(node);
@@ -138,16 +138,16 @@ impl TypeChecker {
                 scopes.reset_to(mark);
             case BREAK:
                 if (this.loop_depth == 0 && this.switch_depth == 0) {
-                    this.error(node, "'break' outside of a loop or switch");
+                    this.error_code(node, DiagnosticErrors.INVALID_JUMP, "'break' outside of a loop or switch");
                 }
             case CONTINUE:
                 if (this.loop_depth == 0) {
-                    this.error(node, "'continue' outside of a loop");
+                    this.error_code(node, DiagnosticErrors.INVALID_JUMP, "'continue' outside of a loop");
                 }
             case SWITCH:
                 this.check_switch(node);
             default:
-                this.error(node, "statement is not supported yet");
+                this.error_code(node, DiagnosticErrors.NOT_SUPPORTED_YET, "statement is not supported yet");
         }
     }
 
@@ -170,7 +170,7 @@ impl TypeChecker {
             variant = symbols.find_constant(enumeration, Ast.intern_base_name(text + start, (i32)strlen(text + start)));
         }
         if (variant == null) {
-            this.error(label, "case label must name a variant of the switched enum");
+            this.error_code(label, DiagnosticErrors.INVALID_CASE, "case label must name a variant of the switched enum");
             return;
         }
         label.set_symbol(SymbolKind.CONSTANT, (ptr)variant);
@@ -183,7 +183,7 @@ impl TypeChecker {
         StructInfo* enumeration = symbols.enum_of_type(value_type);
         bool over_enum = enumeration != null && !enumeration.has_payload;
         if (!over_enum && !Types.is_integer(value_type)) {
-            this.error(node.first(), "switch value must be an integer or an enum");
+            this.error_code(node.first(), DiagnosticErrors.INVALID_CASE, "switch value must be an integer or an enum");
         }
         mut bool has_default = false;
         this.switch_depth = this.switch_depth + 1;
@@ -191,7 +191,7 @@ impl TypeChecker {
             Node* arm = node.child(i);
             if (arm.first() == null) {
                 if (has_default) {
-                    this.error(arm, "switch has more than one 'default'");
+                    this.error_code(arm, DiagnosticErrors.INVALID_CASE, "switch has more than one 'default'");
                 }
                 has_default = true;
             } else if (over_enum) {
@@ -199,7 +199,7 @@ impl TypeChecker {
             } else {
                 u32 label_type = this.check_expression(arm.first(), value_type);
                 if (!Types.is_integer(label_type)) {
-                    this.error(arm.first(), "case label must be an integer constant");
+                    this.error_code(arm.first(), DiagnosticErrors.INVALID_CASE, "case label must be an integer constant");
                 }
             }
             LocalScopes* scopes = this.scopes;
@@ -226,7 +226,7 @@ impl TypeChecker {
     void require_condition(Node* node, u32 type) {
         bool usable = Types.is_integer(type) || Types.is_float(type) || Types.is_pointer(type);
         if (!usable) {
-            this.error(node, "condition must be a number or a pointer");
+            this.error_code(node, DiagnosticErrors.INVALID_CONDITION, "condition must be a number or a pointer");
         }
     }
 
@@ -242,15 +242,22 @@ impl TypeChecker {
         }
         if (declared == Types.auto_type()) {
             if (initial == 0) {
-                this.error(node, "'auto' variable needs an initializer");
+                this.error_code(node, DiagnosticErrors.INVALID_VARIABLE, "'auto' variable needs an initializer");
                 declared = Types.i32_type();
             } else {
                 declared = initial;
             }
         }
         if (Types.is_void(declared)) {
-            this.error(node, "variable cannot have type void");
+            this.error_code(node, DiagnosticErrors.INVALID_VARIABLE, "variable cannot have type void");
             declared = Types.i32_type();
+        }
+        Node* initializer = node.first();
+        if (initializer != null) {
+            if (initializer.kind() == NodeKind::NEW_EXPR && initial == Types.pointer_to(declared)) {
+                declared = initial;
+            }
+            this.require_value_type(initializer, initial, declared);
         }
 
         LocalVariable* variable = (LocalVariable*)Memory.zalloc(sizeof(LocalVariable));
@@ -262,11 +269,11 @@ impl TypeChecker {
         node.set_symbol(SymbolKind.LOCAL, (ptr)variable);
         node.set_value_type(declared);
         if (node.first() != null) {
-            this.move_from(node.first(), null);
+            this.move_from(node.first(), (Node*)0);
         }
         if (node.op() != 0) {
             if (node.flag()) {
-                this.error(node, "a constexpr variable cannot be mut");
+                this.error_code(node, DiagnosticErrors.INVALID_VARIABLE, "a constexpr variable cannot be mut");
             }
             this.evaluate_variable(variable, node);
         }
@@ -282,16 +289,17 @@ impl TypeChecker {
         u32 expected = info.return_type;
         if (node.first() == null) {
             if (!Types.is_void(expected)) {
-                this.error(node, "missing return value");
+                this.error_code(node, DiagnosticErrors.RETURN_MISMATCH, "missing return value");
             }
             return;
         }
         if (Types.is_void(expected)) {
-            this.error(node, "void function cannot return a value");
+            this.error_code(node, DiagnosticErrors.RETURN_MISMATCH, "void function cannot return a value");
             this.check_expression(node.first(), 0);
             return;
         }
-        this.check_expression(node.first(), expected);
+        u32 returned = this.check_expression(node.first(), expected);
+        this.require_value_type(node.first(), returned, expected);
         this.check_returned_borrow(node.first());
     }
 

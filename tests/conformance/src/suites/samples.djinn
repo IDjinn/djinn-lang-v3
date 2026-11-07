@@ -1,0 +1,3911 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct SamplesTests {
+    [Test]
+    void arith() {
+        str source = """
+i32 add(i32 a, i32 b) {
+    return a + b;
+}
+
+i32 main() {
+    mut i32 total = 0;
+    for (mut i32 i = 1; i <= 10; i = i + 1) {
+        total = total + add(i, i);
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(110));
+    }
+
+    [Test]
+    void arrays() {
+        str source = """
+i32 sum(i32[] values) {
+    mut i32 total = 0;
+    for (mut u32 i = 0; i < values.length; i = i + 1) {
+        total = total + values[i];
+    }
+    return total;
+}
+
+i32 main() {
+    i32[] numbers = [1, 2, 3, 4];
+    numbers[0] = 10;
+    str name = "djinn";
+    i64[] wide = [5, 6];
+    if (name.is_empty()) {
+        return 1;
+    }
+    return sum(numbers) + (i32)name.length + (i32)wide[1] + (i32)numbers.length + sum([7, 8]);
+}
+""";
+        Verify.source(source).runs(Expected.exit(49));
+    }
+
+    [Test]
+    void async_basic() {
+        str source = """
+async i32 twice(i32 value) {
+    return value * 2;
+}
+
+async i32 chain(i32 value) {
+    i32 first = await twice(value);
+    i32 second = await twice(first);
+    return first + second;
+}
+
+async void noop() {
+    return;
+}
+
+i32 main() {
+    await noop();
+    i32 direct = await twice(5);
+    i32 nested = await chain(3);
+    return direct + nested;
+}
+""";
+        Verify.source(source).runs(Expected.exit(28));
+    }
+
+    [Test]
+    void async_main() {
+        str source = """
+async i32 compute(i32 a, i32 b) {
+    return a + b;
+}
+
+async void background() {
+    return;
+}
+
+async i32 main() {
+    spawn background();
+    i32 sum = await compute(20, 22);
+    return sum;
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void attr_location() {
+        str source = """
+attribute Location(AttributeTarget.Parameter) {
+    i8* fileName;
+    i32 line;
+    i32 column;
+}
+
+attribute Marker(AttributeTarget.All);
+
+i32 line_of([Location] Location site) {
+    return site.line;
+}
+
+i32 pick([Marker] i32 value, [Location] Location site) {
+    return value + site.line;
+}
+
+i32 main() {
+    i32 here = line_of();
+    if (unlikely(here == 0)) {
+        trap();
+    }
+    assume(here > 0);
+    return here + pick(1);
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void attribute_payload() {
+        str source = """
+struct Phase {
+    const i32 IR = 1;
+    const i32 JIT = 2;
+}
+
+attribute Stage(AttributeTarget.All) {
+    i32 mask;
+    i8* label;
+}
+
+[Stage(Phase.IR | Phase.JIT, label = "both")]
+i32 target() {
+    return 1;
+}
+
+[Stage(mask = 4)]
+i32 other() {
+    return 2;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(target);
+    Stage* stage = (Stage*)info.attrs[0].payload;
+    if (stage.mask != 3) {
+        return 1;
+    }
+    if (stage.label[0] != 98) {
+        return 2;
+    }
+    MethodInfo* second = typeof(other);
+    Stage* partial = (Stage*)second.attrs[0].payload;
+    if (partial.mask != 4 || partial.label != null) {
+        return 3;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void attribute_payload_namespace() {
+        str source = """
+namespace app;
+
+attribute Limits(AttributeTarget.All) {
+    i32 first;
+    i32 second;
+}
+
+[Limits(second = 20, first = 3)]
+i32 target() {
+    return 1;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(target);
+    Limits* limits = (Limits*)info.attrs[0].payload;
+    return limits.first + limits.second;
+}
+""";
+        Verify.source(source).runs(Expected.exit(23));
+    }
+
+    [Test]
+    void attribute_payload_namespace_constant() {
+        str source = """
+namespace app;
+
+struct Phase {
+    const i32 IR = 1;
+    const i32 JIT = 2;
+}
+
+attribute Stage(AttributeTarget.All) {
+    i32 mask;
+}
+
+[Stage(Phase.IR | Phase.JIT)]
+i32 target() {
+    return 1;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(target);
+    Stage* stage = (Stage*)info.attrs[0].payload;
+    return stage.mask;
+}
+""";
+        Verify.source(source).runs(Expected.exit(3));
+    }
+
+    [Test]
+    void attribute_payload_consteval() {
+        str source = """
+attribute Only(AttributeTarget.All) {
+    bool windows;
+    bool linux;
+    i32 pointer;
+}
+
+[Only(Platform.Windows, Platform.Linux, Runtime.PointerSize)]
+i32 target() {
+    return 1;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(target);
+    Only* only = (Only*)info.attrs[0].payload;
+    mut i32 result = 0;
+    if (only.windows != only.linux) { result = 1; }
+    return result + only.pointer * 10;
+}
+""";
+        Verify.source(source).runs(Expected.exit(81));
+    }
+
+    [Test]
+    void attributes() {
+        str source = """
+[Align(16)]
+struct Vec4 {
+    i32 x;
+    i32 y;
+}
+
+struct Math {
+    [ForceInline]
+    [Hot]
+    public static i32 add(i32 a, i32 b) {
+        return a + b;
+    }
+
+    [NoInline, Cold]
+    public static i32 rare() {
+        return 5;
+    }
+
+    [Llvm("mustprogress")]
+    public static i32 twice(i32 value) {
+        return value * 2;
+    }
+}
+
+[Deprecated(message = "use add")]
+i32 old_add(i32 a, i32 b) {
+    return a + b;
+}
+
+[NoRecurse]
+i32 main() {
+    Vec4 v = { .x = 1, .y = 2 };
+    return Math.add(v.x, v.y) + Math.rare() + Math.twice(4) + old_add(1, 1);
+}
+""";
+        Verify.source(source).runs(Expected.exit(18));
+    }
+
+    [Test]
+    void attributes_applied() {
+        str source = """
+[Align(32)]
+struct Block {
+    i32 a;
+    i32 b;
+}
+
+struct Device {
+    [Volatile]
+    i32 status;
+    i32 plain;
+}
+
+[Volatile]
+unsafe static mut i32 ticks = 0;
+
+[NonNull]
+i32* identity(i32* value) {
+    return value;
+}
+
+[Align(64)]
+i32 aligned_function() {
+    return 3;
+}
+
+i32 poll(Device* device) {
+    mut i32 seen = 0;
+    for (mut i32 i = 0; i < 3; i++) {
+        seen = seen + device.status;
+    }
+    return seen;
+}
+
+i32 main() {
+    Block block = { .a = 1, .b = 2 };
+    if (sizeof(Block) != 32) { return 1; }
+    mut i32 number = 7;
+    i32* same = identity(&number);
+    if (*same != 7) { return 2; }
+    Device device = { .status = 2, .plain = 0 };
+    if (poll(&device) != 6) { return 3; }
+    unsafe { ticks = 5; ticks++; }
+    unsafe { if (ticks != 6) { return 4; } }
+    return aligned_function() + block.a + block.b - 6;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void borrow() {
+        str source = """
+i32 main() {
+    i32 a = 5;
+    i32* first = &a;
+    i32* second = &a;
+    mut i32 b = 7;
+    if (a == 5) {
+        i32* inner = &b;
+    }
+    b = 8;
+    return *first + *second + b;
+}
+""";
+        Verify.source(source).runs(Expected.exit(18));
+    }
+
+    [Test]
+    void coalesce() {
+        str source = """
+i32 main() {
+    mut i32 value = 5;
+    i32* present = &value;
+    i32*? missing = null;
+    i32* chosen = missing ?? present;
+    i32* kept = present ?? missing;
+    i32* last = missing ?? missing ?? present;
+    return *chosen + *kept + *last;
+}
+""";
+        Verify.source(source).runs(Expected.exit(15));
+    }
+
+    [Test]
+    void constexpr_test() {
+        str source = """
+constexpr i32 BASE = 6 * 7;
+constexpr i32 NEXT = BASE + 1;
+constexpr bool FLAG = NEXT > 40;
+constexpr i32 LATER = EARLIER + 1;
+constexpr i32 EARLIER = 9;
+
+constexpr i32 square(i32 n) {
+    return n * n;
+}
+
+constexpr i32 factorial(i32 n) {
+    mut i32 result = 1;
+    for (mut i32 i = 2; i <= n; i = i + 1) {
+        result = result * i;
+    }
+    return result;
+}
+
+constexpr i32 fib(i32 n) {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+consteval i32 cube(i32 n) {
+    return n * n * n;
+}
+
+constexpr i64 shifted(i64 x) {
+    return x << 40;
+}
+
+constexpr f64 half(f64 x) {
+    return x / 2.0;
+}
+
+i32 runtime_square(i32 n) {
+    return square(n);
+}
+
+i32 main() {
+    constexpr i32 local = factorial(5);
+    mut i32 total = 0;
+    if constexpr FLAG {
+        total = total + 1;
+    } else {
+        total = total + 100;
+    }
+    total = total + local + fib(10) + cube(3) + runtime_square(4) + LATER;
+    constexpr i32 high = (i32)(shifted(1) >> 40);
+    total = total + high + NEXT - BASE;
+    f64 h = half(9.0);
+    if (h > 4.0) {
+        total = total + 1;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(232));
+    }
+
+    [Test]
+    void constexpr_loops() {
+        str source = """
+constexpr u32 mask(u32 bits) {
+    return (1 << bits) - 1;
+}
+
+constexpr i32 collatz(i32 n) {
+    mut i32 steps = 0;
+    mut i32 value = n;
+    while (value != 1) {
+        if (value % 2 == 0) {
+            value = value / 2;
+        } else {
+            value = value * 3 + 1;
+        }
+        steps = steps + 1;
+    }
+    return steps;
+}
+
+constexpr i32 pick(i32 n) {
+    switch (n) {
+        case 1:
+            return 10;
+        case 2:
+            return 20;
+        default:
+            return 5;
+    }
+    return 0;
+}
+
+constexpr u8 wrapped(i32 n) {
+    return (u8)(n + 250);
+}
+
+constexpr i32 sum_to(i32 n) {
+    mut i32 total = 0;
+    for (mut i32 i = 1; i <= n; i = i + 1) {
+        if (i == 5) {
+            continue;
+        }
+        if (i > 8) {
+            break;
+        }
+        total = total + i;
+    }
+    return total;
+}
+
+i32 main() {
+    return collatz(27) + pick(2) + (i32)wrapped(10) + sum_to(10) + (i32)mask(4);
+}
+""";
+        Verify.source(source).runs(Expected.exit(181));
+    }
+
+    [Test]
+    void constexpr_strings() {
+        str source = """
+extern "C" { i32 printf(i8* format, ...); }
+constexpr i8* GREETING = "hello, djinn";
+
+constexpr i32 length(i8* text) {
+    mut i32 n = 0;
+    while (text[n] != 0) {
+        n = n + 1;
+    }
+    return n;
+}
+
+constexpr i32 count_char(i8* text, i8 wanted) {
+    mut i32 total = 0;
+    mut i8* cursor = text;
+    while (*cursor != 0) {
+        if (*cursor == wanted) {
+            total = total + 1;
+        }
+        cursor = cursor + 1;
+    }
+    return total;
+}
+
+constexpr i8* tail(i8* text, i32 skip) {
+    return text + skip;
+}
+
+constexpr i32 LEN = length(GREETING);
+constexpr i32 LS = count_char("a lazy llama", 108);
+
+consteval i32 first_after(i8* text) { return text[7]; }
+
+i32 main() {
+    i8* rest = tail(GREETING, 7);
+    printf("%s %d %d %d\n", rest, LEN, LS, first_after(GREETING));
+    return LEN + LS;
+}
+""";
+        Verify.source(source).runs(Expected.exit(15).stdout("djinn 12 3 100\n"));
+    }
+
+    [Test]
+    void constructors() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    i32 sum() {
+        return this.x + this.y;
+    }
+}
+
+struct Counter {
+    i32 count;
+
+    Counter() {
+        this.count = 5;
+        this.bump();
+    }
+
+    void bump() {
+        this.count = this.count + 1;
+    }
+}
+
+struct Box<T> {
+    T value;
+
+    Box(T v) {
+        this.value = v;
+    }
+
+    T get() {
+        return this.value;
+    }
+}
+
+struct Pair<K, V> {
+    K first;
+    V second;
+
+    Pair(K a, V b) {
+        this.first = a;
+        this.second = b;
+    }
+}
+
+i32 main() {
+    Point p = Point(10, 20);
+    Point* heap = new Point(1, 2);
+    Counter c = Counter();
+    Box<i32> box = Box<i32>(7);
+    Box<i32>* shared = new Box<i32>(9);
+    Pair<i32, i64> pair = Pair<i32, i64>(3, 4);
+    return p.sum() + heap.sum() + c.count + box.get() + shared.get() + pair.first + (i32)pair.second;
+}
+""";
+        Verify.source(source).runs(Expected.exit(62));
+    }
+
+    [Test]
+    void control() {
+        str source = """
+i32 main() {
+    mut i32 count = 0;
+    mut i32 n = 0;
+    while (n < 20) {
+        n = n + 1;
+        if (n % 2 == 0 && n > 4) {
+            continue;
+        }
+        if (n > 15) {
+            break;
+        }
+        count = count + 1;
+    }
+    return count;
+}
+""";
+        Verify.source(source).runs(Expected.exit(10));
+    }
+
+    [Test]
+    void enum_fields() {
+        str source = """
+extern i32 strlen(i8* text);
+
+enum Kind(i32 flag, i8* name, i32 width) {
+    PROGRAM(0, "Program", 7),
+    IMPORT(10, "Import", 6),
+    WHILE(3, "While", 5)
+}
+
+i32 weigh(Kind kind) {
+    return kind.flag * 100 + kind.width;
+}
+
+i32 main() {
+    Kind first = Kind::IMPORT;
+    Kind second = Kind::WHILE;
+    i32 total = weigh(first) + weigh(second) + strlen(Kind::PROGRAM.name) + strlen(second.name) + first.getValue();
+    if (first == Kind::IMPORT && second != Kind::PROGRAM) {
+        return total - 1333;
+    }
+    return 99;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void enum_is() {
+        str source = """
+union Message {
+    Empty(),
+    Number(i32),
+    Pair(i32, i32)
+}
+
+enum Light {
+    Red(),
+    Green()
+}
+
+i32 score(Message m) {
+    mut i32 total = 0;
+    if (m is Message::Empty) {
+        total = total + 1;
+    }
+    if (m is Message::Number n) {
+        total = total + n;
+    }
+    if (m is Message::Pair a b) {
+        total = total + a * b;
+    }
+    return total;
+}
+
+i32 main() {
+    Light light = Light::Green();
+    mut i32 total = score(Message::Empty()) + score(Message::Number(7)) + score(Message::Pair(3, 4));
+    if (light is Light::Green) {
+        total = total + 100;
+    }
+    if (light is Light::Red) {
+        total = total + 1000;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(120));
+    }
+
+    [Test]
+    void enum_methods() {
+        str source = """
+enum Light {
+    Red(),
+    Green(),
+    Blue()
+}
+
+union Message {
+    Empty(),
+    Number(i32),
+    Pair(i32, i32)
+}
+
+interface Ranked {
+    i32 rank();
+}
+
+interface Named {
+    i32 id();
+}
+
+interface Sized {
+    i32 size();
+}
+
+impl Ranked for Light {
+    i32 rank() {
+        return switch this {
+            Red -> 1,
+            Green -> 2,
+            Blue -> 3
+        };
+    }
+}
+
+impl Message {
+    i32 weight() {
+        return switch this {
+            Empty -> 1,
+            Number n -> n,
+            Pair a b -> a * b
+        };
+    }
+}
+
+struct Crate {
+    i32 number;
+    i32 volume;
+}
+
+impl Named, Sized for Crate {
+    i32 id() {
+        return this.number;
+    }
+
+    i32 size() {
+        return this.volume;
+    }
+}
+
+extern "C" {
+    void* malloc(u64 size);
+}
+
+i32 main() {
+    Light light = Light::Green();
+    Message pair = Message::Pair(3, 4);
+    Message number = Message::Number(7);
+    Crate* crate = (Crate*)malloc(sizeof(Crate));
+    crate.number = 5;
+    crate.volume = 6;
+    return light.rank() + pair.weight() + number.weight() + crate.id() + crate.size();
+}
+""";
+        Verify.source(source).runs(Expected.exit(32));
+    }
+
+    [Test]
+    void enum_payload_layout() {
+        str source = """
+union optional<T> {
+    Some(T),
+    None()
+}
+
+union Shape {
+    Circle(i64),
+    Rect(i32, i64),
+    Label(string),
+    Nothing()
+}
+
+struct Point {
+    i32 x;
+    i64 y;
+}
+
+i32 area(Shape shape) {
+    return switch shape {
+        Circle r -> (i32)r,
+        Rect w h -> w * (i32)h,
+        Label text -> (i32)text.length,
+        Nothing -> 0
+    };
+}
+
+i32 main() {
+    optional<string> greeting = optional<string>::Some("hello");
+    i32 a = switch greeting { Some s -> (i32)s.length, None -> 0 };
+    Point p = { .x = 3, .y = 4 };
+    optional<Point> boxed = optional<Point>::Some(p);
+    i32 b = switch boxed { Some q -> q.x + (i32)q.y, None -> 0 };
+    i32 c = area(Shape::Rect(6, 7)) + area(Shape::Label("abc")) + area(Shape::Circle(2)) + area(Shape::Nothing());
+    return a + b + c;
+}
+""";
+        Verify.source(source).runs(Expected.exit(59));
+    }
+
+    [Test]
+    void enum_switch_statement() {
+        str source = """
+enum Tone {
+    Low,
+    Mid,
+    High
+}
+
+i32 weigh(Tone tone) {
+    mut i32 total = 0;
+    switch (tone) {
+        case Low:
+            total = 1;
+        case Tone::Mid:
+            total = 20;
+        default:
+            total = 300;
+    }
+    return total;
+}
+
+i32 main() {
+    Tone peak = Tone::High;
+    return weigh(Tone::Low) + weigh(Tone::Mid) + weigh(peak) - 300;
+}
+""";
+        Verify.source(source).runs(Expected.exit(21));
+    }
+
+    [Test]
+    void enum_switch_wildcard() {
+        str source = """
+enum Tone {
+    Low,
+    Mid,
+    High,
+    Peak
+}
+
+i32 weight(Tone tone) {
+    return switch tone {
+        Low -> 1,
+        Mid -> 2,
+        _ -> 10
+    };
+}
+
+i32 main() {
+    Tone peak = Tone::Peak();
+    i32 total = weight(Tone::Low()) + weight(Tone::Mid()) + weight(Tone::High()) + weight(peak);
+    if (peak == Tone::Peak() && peak != Tone::Low()) {
+        return total;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(23));
+    }
+
+    [Test]
+    void enum_value() {
+        str source = """
+enum Tone {
+    A(),
+    B(),
+    C()
+}
+
+enum Shade {
+    X(),
+    Y()
+}
+
+struct Holder {
+    Tone kind;
+    u32 token;
+}
+
+i32 main() {
+    Holder h = { .kind = Tone::C(), .token = 2 };
+    Tone back = Tone::C();
+    mut i32 total = 0;
+    if (h.kind == back) { total = total + 1; }
+    if (h.kind != Tone::A()) { total = total + 2; }
+    if (h.kind == Tone::B()) { total = total + 100; }
+    total = total + h.kind.getValue();
+    Shade o = Shade::Y();
+    total = total + o.getValue();
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(6));
+    }
+
+    [Test]
+    void enums() {
+        str source = """
+enum Color {
+    Red(),
+    Green(),
+    Blue()
+}
+
+enum Level {
+    Low = 10,
+    Mid,
+    High
+}
+
+i32 weight(Color c) {
+    switch (c) {
+        case Color::Red():
+            return 1;
+        case Color::Green():
+            return 2;
+        default:
+            return 3;
+    }
+    return 0;
+}
+
+i32 main() {
+    Color c = Color::Green();
+    mut i32 total = weight(c) + weight(Color::Blue());
+    if (c == Color::Green()) {
+        total = total + 10;
+    }
+    if (c != Color::Red()) {
+        total = total + 20;
+    }
+    Level l = Level::Mid();
+    total = total + (i32)l;
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(46));
+    }
+
+    [Test]
+    void error_async() {
+        str source = """
+struct OddError {
+    i32 value;
+
+    OddError(i32 value) {
+        this.value = value;
+    }
+}
+
+async i32 half(i32 value) throws(OddError) {
+    if (value % 2 != 0) {
+        throw OddError(value);
+    }
+    return value / 2;
+}
+
+async i32 run() {
+    i32 first = try await half(8) ?: -1;
+    i32 second = try await half(7) ?: 20;
+    return first + second;
+}
+
+i32 main() {
+    i32 total = await run();
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(24));
+    }
+
+    [Test]
+    void error_basic() {
+        str source = """
+struct DivisionByZeroError {
+    i32 dividend;
+
+    DivisionByZeroError(i32 dividend) {
+        this.dividend = dividend;
+    }
+}
+
+i32 division(i32 value, i32 divisor) throws(DivisionByZeroError) {
+    if (divisor == 0) {
+        throw DivisionByZeroError(value);
+    }
+    return value / divisor;
+}
+
+i32 main() {
+    i32 ok = try division(10, 2) ?: -1;
+    i32 recovered = try division(1, 0) ?: 100;
+    return ok + recovered;
+}
+""";
+        Verify.source(source).runs(Expected.exit(105));
+    }
+
+    [Test]
+    void error_primitive() {
+        str source = """
+i32 check(i32 value) throws(bool) {
+    if (value < 0) {
+        throw true;
+    }
+    return value;
+}
+
+i32 main() {
+    i32 first = switch check(4) {
+        Result v -> v,
+        bool e -> 100
+    };
+    i32 second = switch check(-1) {
+        Result v -> v,
+        bool e -> 3
+    };
+    return first + second;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void error_propagate() {
+        str source = """
+struct DivisionByZeroError {
+    i32 dividend;
+
+    DivisionByZeroError(i32 dividend) {
+        this.dividend = dividend;
+    }
+}
+
+i32 inner(i32 value) throws(DivisionByZeroError) {
+    if (value == 0) {
+        throw DivisionByZeroError(value);
+    }
+    return value;
+}
+
+i32 middle(i32 value) throws(DivisionByZeroError) {
+    i32 result = inner(value);
+    return result + 1;
+}
+
+i32 wide(i32 value) throws {
+    i32 result = try middle(value);
+    return result;
+}
+
+i32 main() {
+    i32 first = try middle(0) ?: 10;
+    i32 second = switch wide(0) {
+        Result v -> v,
+        Error e -> 5
+    };
+    i32 third = try middle(3) ?: 0;
+    return first + second + third;
+}
+""";
+        Verify.source(source).runs(Expected.exit(19));
+    }
+
+    [Test]
+    void error_switch() {
+        str source = """
+struct DivisionByZeroError {
+    i32 dividend;
+
+    DivisionByZeroError(i32 dividend) {
+        this.dividend = dividend;
+    }
+}
+
+struct NegativeError {
+    i32 code;
+
+    NegativeError(i32 code) {
+        this.code = code;
+    }
+}
+
+i32 parse(i32 input) throws(DivisionByZeroError, NegativeError) {
+    if (input == 0) {
+        throw DivisionByZeroError(7);
+    }
+    if (input < 0) {
+        throw NegativeError(30);
+    }
+    return input;
+}
+
+i32 main() {
+    i32 first = switch parse(5) {
+        Result v -> v,
+        DivisionByZeroError e -> e.dividend,
+        NegativeError e -> e.code
+    };
+    i32 second = switch parse(0) {
+        Result v -> v,
+        DivisionByZeroError e -> e.dividend,
+        NegativeError e -> e.code
+    };
+    i32 third = switch parse(-1) {
+        Result v -> v,
+        DivisionByZeroError e -> e.dividend,
+        NegativeError e -> e.code
+    };
+    return first + second + third;
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void error_task() {
+        str source = """
+async i32 half(i32 value) throws(bool) {
+    if (value % 2 != 0) {
+        throw true;
+    }
+    return value / 2;
+}
+
+async i32 plain() {
+    return 5;
+}
+
+i32 main() {
+    task<i32, bool> pending = half(6);
+    task<i32> simple = plain();
+    i32 first = try await pending ?: -1;
+    i32 second = await simple;
+    return first + second;
+}
+""";
+        Verify.source(source).runs(Expected.exit(8));
+    }
+
+    [Test]
+    void for_in_arr() {
+        str source = """
+struct Bag {
+    i32[] items;
+}
+
+i32[] make() {
+    return [4, 5, 6];
+}
+
+i32 sum_bag(Bag* bag) {
+    mut i32 total = 0;
+    for (i32 item in bag.items) {
+        total = total + item;
+    }
+    return total;
+}
+
+i32 main() {
+    i32[] numbers = [1, 2, 3, 4];
+    mut i32 total = 0;
+    for (i32 n in numbers) {
+        total = total + n;
+    }
+    if (total != 10) { return 1; }
+
+    mut i32 skipped = 0;
+    for (auto n in numbers) {
+        if (n == 2) { continue; }
+        if (n == 4) { break; }
+        skipped = skipped + n;
+    }
+    if (skipped != 4) { return 2; }
+
+    mut i32 produced = 0;
+    for (i32 n in make()) {
+        produced = produced + n;
+    }
+    if (produced != 15) { return 3; }
+
+    for (i32 n in [10, 20]) {
+        produced = produced + n;
+    }
+    if (produced != 45) { return 4; }
+
+    Bag bag = { .items = [7, 8] };
+    if (sum_bag(&bag) != 15) { return 5; }
+
+    mut i32 nested = 0;
+    for (i32 a in numbers) {
+        for (i32 b in 0..2) {
+            nested = nested + a * b;
+        }
+    }
+    if (nested != 10) { return 6; }
+
+    i32[] names = [1, 2];
+    for (i32 n in numbers) { }
+    if (numbers.length != 4 || names.length != 2) { return 7; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void generic_enum_infer() {
+        str source = """
+union optional<T> {
+    Some(T),
+    None()
+}
+
+union result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+enum MathError {
+    DivByZero(),
+    Negative()
+}
+
+result<i32, MathError> div(i32 a, i32 b) {
+    if (b == 0) {
+        return result::Err(MathError::DivByZero());
+    }
+    return result::Ok(a / b);
+}
+
+optional<i64> wrap(i64 value) {
+    return optional::Some(value);
+}
+
+i32 main() {
+    auto inferred = optional::Some(7);
+    i32 first = switch inferred { Some v -> v, None -> 0 };
+    i32 second = switch div(40, 4) { Ok v -> v, Err e -> 1000 };
+    i32 third = switch div(1, 0) { Ok v -> v, Err e -> 5 };
+    i32 fourth = switch wrap(3) { Some v -> (i32)v, None -> 0 };
+    return first + second + third + fourth;
+}
+""";
+        Verify.source(source).runs(Expected.exit(25));
+    }
+
+    [Test]
+    void generic_functions() {
+        str source = """
+interface Comparable<T> {
+    i32 compare(T other);
+}
+
+struct Pair<K, V> {
+    K key;
+    V value;
+}
+
+struct Score : Comparable<Score> {
+    i32 points;
+
+    i32 compare(Score other) {
+        return this.points - other.points;
+    }
+}
+
+T first<T>(T a, T b) {
+    return a;
+}
+
+T larger<T>(T a, T b) where T : Comparable<T> {
+    if (a.compare(b) >= 0) {
+        return a;
+    }
+    return b;
+}
+
+K keyOf<K, V>(Pair<K, V> pair) {
+    return pair.key;
+}
+
+i32 deref<T>(T* pointer) {
+    return 1;
+}
+
+i32 main() {
+    i32 a = first(7, 9);
+    i64 b = first<i64>(30, 40);
+    Score low = { .points = 3 };
+    Score high = { .points = 11 };
+    Score best = larger(low, high);
+    Pair<i32, i64> pair = { .key = 5, .value = 90 };
+    i32 key = keyOf(pair);
+    return a + (i32)b + best.points + key + deref(&a);
+}
+""";
+        Verify.source(source).runs(Expected.exit(54));
+    }
+
+    [Test]
+    void generic_impl() {
+        str source = """
+interface Sized {
+    i32 size();
+}
+
+struct Box<T> {
+    T value;
+    i32 count;
+}
+
+impl Box<T> {
+    T get() {
+        return this.value;
+    }
+
+    void put(T item) {
+        this.value = item;
+        this.count = this.count + 1;
+    }
+}
+
+impl Sized for Box<T> {
+    i32 size() {
+        return this.count;
+    }
+}
+
+extern "C" {
+    void* malloc(u64 size);
+}
+
+i32 main() {
+    Box<i32>* numbers = (Box<i32>*)malloc(sizeof(Box<i32>));
+    numbers.count = 0;
+    numbers.put(30);
+    numbers.put(12);
+    Box<i64>* wide = (Box<i64>*)malloc(sizeof(Box<i64>));
+    wide.count = 0;
+    wide.put(100);
+    return numbers.get() + numbers.size() + (i32)wide.get() + wide.size();
+}
+""";
+        Verify.source(source).runs(Expected.exit(115));
+    }
+
+    [Test]
+    void generic_interfaces() {
+        str source = """
+interface Equatable<T> {
+    operator ==(T left, T right) -> bool;
+}
+
+interface Comparable<T> {
+    i32 compare(T other);
+}
+
+struct Point : Equatable<Point>, Comparable<Point> {
+    i32 x;
+    i32 y;
+
+    operator ==(Point left, Point right) -> bool {
+        return left.x == right.x && left.y == right.y;
+    }
+
+    i32 compare(Point other) {
+        return this.x - other.x;
+    }
+}
+
+struct Sorted<T> where T : Comparable<T> {
+    T low;
+    T high;
+
+    i32 order() {
+        return this.low.compare(this.high);
+    }
+}
+
+i32 main() {
+    Point a = { .x = 9, .y = 1 };
+    Point b = { .x = 4, .y = 1 };
+    Sorted<Point> pair = { .low = a, .high = b };
+    mut i32 total = pair.order();
+    if (a == a) {
+        total = total + 10;
+    }
+    if (a != b) {
+        total = total + 20;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(35));
+    }
+
+    [Test]
+    void generic_methods() {
+        str source = """
+interface Equatable<T> {
+    operator ==(T left, T right) -> bool;
+}
+
+struct Holder<T> {
+    T value;
+
+    T pick<U>(U marker, T other) {
+        return other;
+    }
+
+    U convert<U>(U seed) {
+        return seed;
+    }
+}
+
+struct Utility {
+    public static T twice<T>(T item) {
+        return item;
+    }
+}
+
+bool same<T>(T a, T b) where T : Equatable<T> {
+    return a == b;
+}
+
+i32 main() {
+    Holder<i32> holder = { .value = 4 };
+    i32 a = holder.pick(true, 20);
+    i64 b = holder.convert<i64>(30);
+    i32 c = Utility.twice(5);
+    mut i32 total = a + (i32)b + c;
+    if (same(3, 3)) {
+        total = total + 1;
+    }
+    if (same(1, 2)) {
+        total = total + 100;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(56));
+    }
+
+    [Test]
+    void generics() {
+        str source = """
+struct Pair<K, V> {
+    K key;
+    V value;
+
+    K first() {
+        return this.key;
+    }
+}
+
+struct Wrapper<T> {
+    T data;
+    i32 id;
+}
+
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+interface IValue {
+    i32 getValue();
+}
+
+struct Container<T> where T : IValue {
+    T item;
+
+    i32 read() {
+        return this.item.getValue();
+    }
+}
+
+struct MyItem : IValue {
+    i32 data;
+
+    i32 getValue() {
+        return this.data;
+    }
+}
+
+Pair<i32, i32> makePair(i32 k, i32 v) {
+    return { .key = k, .value = v };
+}
+
+i32 unwrap(optional<i32> maybe) {
+    return switch maybe {
+        Empty -> 0,
+        Value v -> v
+    };
+}
+
+i32 main() {
+    auto p = makePair(5, 10);
+    Wrapper<Pair<i32, i32>> w = { .data = p, .id = 3 };
+    Pair<i32, i64> mixed = { .key = 4, .value = 100 };
+    MyItem item = { .data = 7 };
+    Container<MyItem> box = { .item = item };
+    optional<i32> some = optional<i32>::Value(20);
+    optional<i32> none = optional<i32>::Empty();
+    return p.key + p.value + w.data.value + w.id + mixed.first() + box.read() + unwrap(some) + unwrap(none);
+}
+""";
+        Verify.source(source).runs(Expected.exit(59));
+    }
+
+    [Test]
+    void globals() {
+        str source = """
+unsafe static mut i32 counter = 5;
+static i32 step = 3;
+unsafe static mut i8*? label = null;
+
+i32 bump() {
+    counter = counter + step;
+    return counter;
+}
+
+i32 main() {
+    bump();
+    if (label == null) {
+        return bump();
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(11));
+    }
+
+    [Test]
+    void heap_aligned() {
+        str source = """
+extern "C" {
+    void __djinn_free_aligned(void* pointer);
+}
+
+[Align(64)]
+struct Line {
+    i32 a;
+    i32 b;
+}
+
+[Align(4096)]
+struct Page {
+    i64 id;
+}
+
+i32 main() {
+    Line* line = new Line();
+    Page* page = new Page();
+    line.a = 3;
+    line.b = 4;
+    page.id = 5;
+    unsafe {
+        u64 line_address = (u64)(ptr)line;
+        u64 page_address = (u64)(ptr)page;
+        if ((line_address & 63) != 0) {
+            return 1;
+        }
+        if ((page_address & 4095) != 0) {
+            return 2;
+        }
+        __djinn_free_aligned((void*)line);
+        __djinn_free_aligned((void*)page);
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void impl_many_structs() {
+        str source = """
+interface Named {
+    i32 id();
+}
+
+interface Scaled {
+    i32 scale(i32 factor);
+}
+
+struct Circle {
+    i32 radius;
+}
+
+struct Triangle {
+    i32 base;
+}
+
+struct Square {
+    i32 side;
+}
+
+enum Tone {
+    Low,
+    High
+}
+
+impl Named for Circle, Square {
+    [ForceInline]
+    i32 id() {
+        return 7;
+    }
+}
+
+impl Named, Scaled for Tone, Triangle {
+    i32 id() {
+        return 3;
+    }
+
+    i32 scale(i32 factor) {
+        return factor * 2;
+    }
+}
+
+struct Plain {
+    i32 value;
+}
+
+impl Named for Plain {
+    [ForceInline]
+    i32 id() {
+        return 11;
+    }
+}
+
+i32 total<T>(T item) where T : Named {
+    return item.id();
+}
+
+i32 main() {
+    Circle circle = { .radius = 1 };
+    Square square = { .side = 2 };
+    Tone tone = Tone::High();
+    Plain plain = { .value = 5 };
+    Triangle triangle = { .base = 3 };
+    i32 named = total(circle) + total(square) + total(tone) + total(triangle);
+    if (named != 7 + 7 + 3 + 3) { return 1; }
+    if (triangle.scale(4) != 8 || tone.scale(5) != 10) { return 2; }
+    if (total(plain) != 11) { return 3; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void impl_many_types() {
+        str source = """
+interface Hashable {
+    u64 hash();
+}
+
+impl Hashable for u8, u16, i32 {
+    u64 hash() {
+        return (u64)this;
+    }
+}
+
+u64 digest<K>(K key) where K : Hashable {
+    return key.hash();
+}
+
+i32 main() {
+    u8 a = 3;
+    u16 b = 4;
+    i32 c = 5;
+    return (i32)(digest(a) + digest(b) + digest(c));
+}
+""";
+        Verify.source(source).runs(Expected.exit(12));
+    }
+
+    [Test]
+    void implicit_this() {
+        str source = """
+struct Counter {
+    i32 total;
+
+    void add(i32 amount) {
+        total = total + amount;
+    }
+
+    i32 read() {
+        return total * 2;
+    }
+}
+
+i32 main() {
+    Counter counter = { .total = 1 };
+    counter.add(4);
+    counter.add(5);
+    return counter.read();
+}
+""";
+        Verify.source(source).runs(Expected.exit(20));
+    }
+
+    [Test]
+    void increment() {
+        str source = """
+struct Counter {
+    i32 value;
+}
+
+constexpr i32 triangle(i32 limit) {
+    mut i32 total = 0;
+    for (mut i32 i = 0; i < limit; i++) {
+        total = total + i;
+    }
+    return total;
+}
+
+i32 main() {
+    mut i32 a = 5;
+    i32 old = a++;
+    i32 fresh = ++a;
+    i32 down = a--;
+    i32 under = --a;
+    if (old != 5 || fresh != 7 || down != 7 || under != 5 || a != 5) { return 1; }
+
+    mut Counter counter = { .value = 10 };
+    counter.value++;
+    ++counter.value;
+    if (counter.value != 12) { return 2; }
+
+    i32[] values = [1, 2, 3];
+    mut i32 at = 0;
+    values[at++] = 10;
+    values[at++] = 20;
+    if (at != 2 || values[0] != 10 || values[1] != 20 || values[2] != 3) { return 3; }
+
+    mut f64 ratio = 1.5;
+    ratio++;
+    if (ratio != 2.5) { return 4; }
+
+    mut u8 small = 255;
+    small++;
+    if (small != 0) { return 5; }
+
+    mut i32 loops = 0;
+    for (mut i32 i = 0; i < 4; i++) { loops++; }
+    if (loops != 4) { return 6; }
+    if (triangle(5) != 10) { return 7; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void interfaces() {
+        str source = """
+interface Shape {
+    i32 sides;
+    i32 area();
+}
+
+interface Scalable {
+    i32 scaled(i32 factor);
+}
+
+struct Square : interface Shape {
+    i32 sides;
+    i32 edge;
+
+    i32 area() {
+        return this.edge * this.edge;
+    }
+}
+
+struct Rect {
+    i32 sides;
+    i32 w;
+    i32 h;
+}
+
+impl Rect {
+    i32 area() {
+        return this.w * this.h;
+    }
+}
+
+impl Shape for Rect {
+}
+
+impl Scalable for Rect {
+    i32 scaled(i32 factor) {
+        return this.area() * factor;
+    }
+}
+
+extern "C" {
+    void* malloc(u64 size);
+}
+
+i32 main() {
+    Square* square = (Square*)malloc(sizeof(Square));
+    square.sides = 4;
+    square.edge = 3;
+    Rect* rect = (Rect*)malloc(sizeof(Rect));
+    rect.sides = 4;
+    rect.w = 2;
+    rect.h = 5;
+    return square.area() + rect.area() + rect.scaled(2) + square.sides;
+}
+""";
+        Verify.source(source).runs(Expected.exit(43));
+    }
+
+    [Test]
+    void interp_const() {
+        str source = """
+i32 main() {
+    str name = "Allan";
+    i32 age = 12;
+    string text = $"{name} is {age}";
+    mut i32 counter = 5;
+    string live = $"c={counter}";
+    return (i32)text.length * 10 + (i32)live.length;
+}
+""";
+        Verify.source(source).runs(Expected.exit(113));
+    }
+
+    [Test]
+    void interp_format() {
+        str source = """
+extern "C" {
+    i32 printf(i8* format, ...);
+}
+
+i32 main() {
+    i32 count = 42;
+    i32 negative = -7;
+    f64 ratio = 3.14159;
+    str view = "abcdef";
+    bool ready = true;
+
+    string right = $"[{count:6}]";
+    printf("%s\n", right.ptr());
+    string left = $"[{count:-6}]";
+    printf("%s\n", left.ptr());
+    string zeros = $"[{count:06}] [{negative:06}]";
+    printf("%s\n", zeros.ptr());
+    string fixed = $"[{ratio:.2}] [{ratio:8.3}] [{ratio:-8.1}] [{ratio:08.2}]";
+    printf("%s\n", fixed.ptr());
+    string text = $"[{view:8}] [{view:-8}] [{view:.3}] [{view:6.2}]";
+    printf("%s\n", text.ptr());
+    string flags = $"[{ready:7}] [{count + 1:4}] [{count * 2:3}]";
+    printf("%s\n", flags.ptr());
+    string wide = $"[{count:1}] [{count:2}]";
+    printf("%s\n", wide.ptr());
+
+    mut i32 total = 0;
+    for (auto i in 0..4) {
+        total = total + i;
+    }
+    for (auto j in [1..3]) {
+        total = total + j;
+    }
+    return total + (i32)right.length;
+}
+""";
+        Verify.source(source).runs(Expected.exit(20).stdout("[    42]\n[42    ]\n[000042] [-00007]\n[3.14] [   3.142] [3.1     ] [00003.14]\n[  abcdef] [abcdef  ] [abc] [    ab]\n[   true] [  43] [ 84]\n[42] [42]\n"));
+    }
+
+    [Test]
+    void intrinsic_constants() {
+        str source = """
+i32 main() {
+    mut i32 platforms = 0;
+    if (Platform.Windows) { platforms++; }
+    if (Platform.Linux) { platforms++; }
+    if (Platform.MacOs) { platforms++; }
+    if (platforms > 1) { return 1; }
+
+    mut i32 architectures = 0;
+    if (Arch.X64) { architectures++; }
+    if (Arch.X86) { architectures++; }
+    if (Arch.Arm64) { architectures++; }
+    if (architectures > 1) { return 2; }
+
+    mut i32 builds = 0;
+    if (Build.Debug) { builds++; }
+    if (Build.Release) { builds++; }
+    if (builds != 1) { return 3; }
+
+    if (Arch.X64 && Runtime.PointerSize != 8) { return 4; }
+    if (Runtime.PointerSize != 4 && Runtime.PointerSize != 8) { return 5; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void intrinsics() {
+        str source = """
+struct Pair {
+    i32 a;
+    i32 b;
+}
+
+i32 main() {
+    i32 sizeof = 3;
+    i64 bytes = (i64)sizeof(Pair);
+    return sizeof + (i32)bytes;
+}
+""";
+        Verify.source(source).runs(Expected.exit(11));
+    }
+
+    [Test]
+    void macros() {
+        str source = """
+macro double_it {
+    (local expression v) => { v + v }
+}
+
+macro mul {
+    (expression a, expression b) => { a * b }
+}
+
+macro op {
+    (add, expression a, expression b) => { a + b }
+    (sub, expression a, expression b) => { a - b }
+    (local expression v) => { v * 2 }
+}
+
+macro get_value {
+    (identifier name) => { name }
+}
+
+macro feature {
+    (enabled, expression code) => { code }
+    (disabled, expression code) => void
+}
+
+macro sum_squares {
+    local (expression a, expression b) => { a * a + b * b }
+}
+
+macro size_hint {
+    (type T) => { 8 }
+}
+
+static i32 base = 7;
+unsafe static mut i32 counter = 0;
+
+i32 next() {
+    counter = counter + 1;
+    return counter;
+}
+
+i32 main() {
+    i32 a = double_it(next());
+    i32 b = mul(2 + 3, 4 + 1);
+    i32 c = op(add, 10, 5) + op(sub, 10, 5) + op(3);
+    i32 d = get_value(base);
+    i32 e = feature(enabled, 4) + feature(disabled, 99);
+    i32 f = sum_squares(next(), next());
+    i32 g = size_hint(i32);
+    return a + b + c + d + e + f + g;
+}
+""";
+        Verify.source(source).runs(Expected.exit(85));
+    }
+
+    [Test]
+    void named_args() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    i32 scaled(i32 factor, i32 offset) {
+        return this.x * factor + this.y + offset;
+    }
+}
+
+struct Pair<K, V> {
+    K first;
+    V second;
+
+    Pair(K first, V second) {
+        this.first = first;
+        this.second = second;
+    }
+}
+
+i32 clamp(i32 value, i32 low, i32 high) {
+    if (value < low) {
+        return low;
+    }
+    if (value > high) {
+        return high;
+    }
+    return value;
+}
+
+i32 main() {
+    Point a = Point(y: 4, x: 3);
+    Point* b = new Point(x: 1, y: 2);
+    Pair<i32, i64> pair = Pair<i32, i64>(second: 5, first: 6);
+    i32 low = clamp(50, high: 10, low: 0);
+    return a.x * 10 + a.y + b.scaled(offset: 100, factor: 2) + pair.first + (i32)pair.second + low;
+}
+""";
+        Verify.source(source).runs(Expected.exit(159));
+    }
+
+    [Test]
+    void namespaces() {
+        str source = """
+namespace math {
+    i32 twice(i32 value) {
+        return value * 2;
+    }
+
+    struct Pair {
+        i32 left;
+        i32 right;
+    }
+}
+
+namespace text {
+    i32 twice(i32 value) {
+        return value * 3;
+    }
+
+    struct Pair {
+        i32 first;
+        i32 second;
+        i32 third;
+    }
+}
+
+namespace math {
+    i32 offset() {
+        return twice(1) + 1;
+    }
+}
+
+namespace outer {
+    namespace inner {
+        i32 deep() {
+            return 7;
+        }
+    }
+
+    i32 reach() {
+        return inner::deep() + 1;
+    }
+}
+
+i32 main() {
+    i32 sizes = (i32)sizeof(math::Pair) + (i32)sizeof(text::Pair);
+    return math::twice(4) + text::twice(2) + math::offset() + outer::reach() + sizes;
+}
+""";
+        Verify.source(source).runs(Expected.exit(45));
+    }
+
+    [Test]
+    void no_return_panic() {
+        str source = """
+[NoReturn]
+void fail() {
+    panic("unreachable state");
+}
+
+i32 pick(i32 value) {
+    if (value > 0) {
+        return value;
+    }
+    fail();
+}
+
+i32 main() {
+    return pick(9);
+}
+""";
+        Verify.source(source).runs(Expected.exit(9));
+    }
+
+    [Test]
+    void object_is() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 classify(object value) {
+    if (value is i64 big) {
+        return (i32)big;
+    }
+    if (value is Point point) {
+        return point.x * point.y;
+    }
+    if (value is i32 small) {
+        return small + 1;
+    }
+    return 0;
+}
+
+i32 main() {
+    Point point = { .x = 6, .y = 7 };
+    object boxed = 5;
+    mut i32 total = classify(40) + classify((i64)7) + classify(point) + classify(2.5);
+    if (boxed is i32 five && !(boxed is i64)) {
+        total = total + five;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(95));
+    }
+
+    [Test]
+    void operators() {
+        str source = """
+struct Vec2 {
+    i32 x;
+    i32 y;
+}
+
+impl Vec2 {
+    operator +(Vec2 left, Vec2 right) -> Vec2 {
+        return { .x = left.x + right.x, .y = left.y + right.y };
+    }
+
+    operator ==(Vec2 left, Vec2 right) -> bool {
+        return left.x == right.x && left.y == right.y;
+    }
+}
+
+struct Money {
+    i32 cents;
+
+    operator -(Money left, Money right) -> Money {
+        return { .cents = left.cents - right.cents };
+    }
+}
+
+i32 main() {
+    Vec2 a = { .x = 1, .y = 2 };
+    Vec2 b = { .x = 3, .y = 4 };
+    Vec2 c = a + b;
+    Money m = { .cents = 50 };
+    Money n = { .cents = 8 };
+    Money d = m - n;
+    mut i32 total = c.x + c.y;
+    if (a == b) {
+        total = total + 100;
+    }
+    if (a != b) {
+        total = total + 20;
+    }
+    if (c == b + a) {
+        total = total + 2;
+    }
+    return total + d.cents;
+}
+""";
+        Verify.source(source).runs(Expected.exit(74));
+    }
+
+    [Test]
+    void operators_unary_index() {
+        str source = """
+struct Vec2 {
+    i32 x;
+    i32 y;
+}
+
+impl Vec2 {
+    operator -(Vec2 value) -> Vec2 {
+        return { .x = -value.x, .y = -value.y };
+    }
+
+    operator ~(Vec2 value) -> Vec2 {
+        return { .x = value.y, .y = value.x };
+    }
+
+    operator !(Vec2 value) -> bool {
+        return value.x == 0 && value.y == 0;
+    }
+
+    operator &&(Vec2 left, Vec2 right) -> bool {
+        return left.x != 0 && right.x != 0;
+    }
+
+    operator ||(Vec2 left, Vec2 right) -> bool {
+        return left.x != 0 || right.x != 0;
+    }
+}
+
+struct Grid {
+    i32 a;
+    i32 b;
+    i32 c;
+
+    operator get[](Grid grid, i32 index) -> i32 {
+        if (index == 0) {
+            return grid.a;
+        }
+        if (index == 1) {
+            return grid.b;
+        }
+        return grid.c;
+    }
+
+    operator set[](Grid* grid, i32 index, i32 value) -> void {
+        if (index == 0) {
+            grid.a = value;
+        } else if (index == 1) {
+            grid.b = value;
+        } else {
+            grid.c = value;
+        }
+    }
+}
+
+i32 main() {
+    Vec2 a = { .x = 1, .y = 2 };
+    Vec2 zero = { .x = 0, .y = 0 };
+    Vec2 negated = -a;
+    Vec2 swapped = ~a;
+    mut i32 total = negated.x + negated.y + swapped.x * 10;
+    if (!zero) {
+        total = total + 100;
+    }
+    if (!a) {
+        total = total + 1000;
+    }
+    if (a && swapped) {
+        total = total + 5;
+    }
+    if (zero || a) {
+        total = total + 3;
+    }
+    if (zero && a) {
+        total = total + 1000;
+    }
+    mut Grid grid = { .a = 1, .b = 2, .c = 3 };
+    grid[1] = 10;
+    grid[2] = grid[0] + grid[1];
+    return total + grid[1] + grid[2];
+}
+""";
+        Verify.source(source).runs(Expected.exit(146));
+    }
+
+    [Test]
+    void optional_niche() {
+        str source = """
+union optional<T> {
+    Some(T),
+    None()
+}
+
+struct Pair {
+    i32 left;
+    i32 right;
+}
+
+optional<Pair*> pick(Pair* pair, bool present) {
+    if (present) {
+        return optional<Pair*>::Some(pair);
+    }
+    return optional<Pair*>::None();
+}
+
+i32 total(optional<Pair*> maybe) {
+    return switch maybe { Some p -> p.left + p.right, None -> 100 };
+}
+
+i32 main() {
+    mut Pair pair = { .left = 3, .right = 4 };
+    Pair* address = &pair;
+    i32 present = total(pick(address, true));
+    i32 absent = total(pick(address, false));
+    optional<i32*> none_number = optional<i32*>::None();
+    i32 empty = switch none_number { Some n -> 1, None -> 0 };
+    i32 size = (i32)sizeof(optional<Pair*>);
+    return present + absent + empty + size;
+}
+""";
+        Verify.source(source).runs(Expected.exit(115));
+    }
+
+    [Test]
+    void optional_sugar() {
+        str source = """
+union optional<T> {
+    Some(T),
+    None()
+}
+
+struct Pair {
+    i32 left;
+    i32 right;
+}
+
+Pair*? find(Pair* pair, bool present) {
+    if (present) {
+        return optional<Pair*>::Some(pair);
+    }
+    return optional<Pair*>::None();
+}
+
+i32? half(i32 value) {
+    if (value % 2 == 0) {
+        return optional<i32>::Some(value / 2);
+    }
+    return optional<i32>::None();
+}
+
+i32 main() {
+    mut Pair pair = { .left = 3, .right = 4 };
+    Pair* address = &pair;
+    i32 a = switch find(address, true) { Some p -> p.left, None -> 0 };
+    i32 b = switch find(address, false) { Some p -> 1, None -> 10 };
+    i32 c = switch half(8) { Some v -> v, None -> 0 };
+    i32 d = switch half(7) { Some v -> v, None -> 20 };
+    return a + b + c + d + (i32)sizeof(Pair*?);
+}
+""";
+        Verify.source(source).runs(Expected.exit(45));
+    }
+
+    [Test]
+    void output() {
+        str source = """
+extern "C" {
+    i32 printf(i8* format, ...);
+}
+
+i32 main() {
+    printf("hello djinnc\n");
+    printf("%d\n", 40 + 2);
+    return 3;
+}
+""";
+        Verify.source(source).runs(Expected.exit(3).stdout("hello djinnc\n42\n"));
+    }
+
+    [Test]
+    void overloads() {
+        str source = """
+struct Vec {
+    i32 x;
+    i32 y;
+
+    Vec(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    Vec(i32 both) {
+        this.x = both;
+        this.y = both;
+    }
+
+    Vec() {
+        this.x = 1;
+        this.y = 1;
+    }
+
+    i32 scaled(i32 factor) {
+        return (this.x + this.y) * factor;
+    }
+
+    i32 scaled(Vec other) {
+        return this.x * other.x + this.y * other.y;
+    }
+
+    i32 scaled() {
+        return this.x + this.y;
+    }
+
+    operator +(Vec left, Vec right) -> Vec {
+        return Vec(left.x + right.x, left.y + right.y);
+    }
+
+    operator +(Vec left, i32 amount) -> Vec {
+        return Vec(left.x + amount, left.y + amount);
+    }
+}
+
+i32 describe(i32 value) {
+    return value;
+}
+
+i32 describe(i64 value) {
+    return (i32)value + 100;
+}
+
+i32 describe(i32 a, i32 b) {
+    return a * b;
+}
+
+i32 main() {
+    Vec a = Vec(2, 3);
+    Vec b = Vec(4);
+    Vec c = Vec();
+    Vec d = a + b;
+    Vec e = a + 10;
+    i64 wide = 5;
+    return describe(1) + describe(wide) + describe(2, 3) + a.scaled(2) + a.scaled(b) + c.scaled() + d.x + e.y;
+}
+""";
+        Verify.source(source).runs(Expected.exit(163));
+    }
+
+    [Test]
+    void ownership() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 take(Data data) {
+    return data.value;
+}
+
+i32 main() {
+    Data first = { .value = 10 };
+    Data mut second = first;
+    mut i32 total = second.value;
+    second = { .value = 20 };
+    total = total + second.value;
+    Data third = second;
+    i32 copy = 5;
+    i32 other = copy;
+    return total + third.value + copy + other + take(third);
+}
+""";
+        Verify.source(source).runs(Expected.exit(80));
+    }
+
+    [Test]
+    void pointer_sized() {
+        str source = """
+struct Pair {
+    i32 a;
+    i32 b;
+}
+
+usize measure(usize count) {
+    return count * (usize)sizeof(Pair);
+}
+
+i32 main() {
+    usize bytes = measure(3);
+    isize delta = 0 - 5;
+    usize tag = 7;
+    isize back = 2;
+    isize mixed = delta + (isize)bytes + (isize)tag + back;
+    return (i32)mixed;
+}
+""";
+        Verify.source(source).runs(Expected.exit(28));
+    }
+
+    [Test]
+    void pointers() {
+        str source = """
+extern "C" {
+    i32 printf(i8* format, ...);
+}
+
+void fill(i32* values, i32 count) {
+    for (mut i32 i = 0; i < count; i = i + 1) {
+        values[i] = i * i;
+    }
+}
+
+i32 main() {
+    mut i32 buffer = 0;
+    i32* slot = &buffer;
+    *slot = 7;
+    printf("slot=%d\n", buffer);
+    return buffer;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void primitive_methods() {
+        str source = """
+interface Hashable {
+    u64 hash();
+}
+
+impl Hashable for u64 {
+    u64 hash() {
+        return this * 31 + 7;
+    }
+}
+
+impl Hashable for i32 {
+    u64 hash() {
+        return (u64)(u32)this + 1;
+    }
+}
+
+impl bool {
+    i32 weight() {
+        if (this) {
+            return 10;
+        }
+        return 1;
+    }
+}
+
+u64 digest<K>(K key) where K : Hashable {
+    return key.hash();
+}
+
+i32 main() {
+    u64 big = 3;
+    i32 small = 4;
+    var a = big.hash();
+    auto b = small.hash();
+    bool ready = true;
+    u64 c = digest(big) + digest(small);
+    return (i32)(a + b + c) + ready.weight();
+}
+""";
+        Verify.source(source).runs(Expected.exit(220));
+    }
+
+    [Test]
+    void properties() {
+        str source = """
+struct Account {
+    i32 balance;
+    i32 limit { get; set; }
+    i32 doubled => balance * 2;
+    i32 available {
+        get => balance + limit;
+    }
+    i32 level {
+        get { return balance / 10; }
+        set { balance = value * 10; }
+    }
+}
+
+struct Wrapper {
+    Account account;
+    Account inner => account;
+}
+
+i32 main() {
+    Account account = { .balance = 50 };
+    account.limit = 7;
+    account.level = 8;
+    account.level = account.level + 1;
+    Wrapper wrapper = { .account = account };
+    i32 first = account.doubled + account.available + account.limit;
+    i32 second = wrapper.inner.balance;
+    return first + second - 200;
+}
+""";
+        Verify.source(source).runs(Expected.exit(174));
+    }
+
+    [Test]
+    void ptr_unsafe() {
+        str source = """
+unsafe i32 read_second(ptr<i32> values) {
+    return values[1];
+}
+
+i32 main() {
+    i32 first = 5;
+    i32 second = 9;
+    i32* typed = &first;
+    ptr<i32> raw = (ptr<i32>)typed;
+    unsafe {
+        i32 loaded = *raw;
+        if (loaded != 5) {
+            return 1;
+        }
+        ptr<i8> bytes = (ptr<i8>)raw;
+        ptr<i8> moved = bytes + 4;
+        ptr<i32> back = (ptr<i32>)moved;
+        i32* checked = (i32*)back;
+        if (checked == null) {
+            return 2;
+        }
+    }
+    return second;
+}
+""";
+        Verify.source(source).runs(Expected.exit(9));
+    }
+
+    [Test]
+    void range_for() {
+        str source = """
+i32 main() {
+    mut i32 total = 0;
+    for (i32 i in [1..10]) {
+        total = total + i;
+    }
+    for (i32 j in [0..4)) {
+        total = total + j;
+    }
+    for (i32 k in 0..3) {
+        for (i32 m in 0..=2) {
+            if (m == 1) {
+                continue;
+            }
+            total = total + k * m;
+        }
+    }
+    for (i32 n in 0..100) {
+        if (n == 5) {
+            break;
+        }
+        total = total + 1;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(72));
+    }
+
+    [Test]
+    void range_open_start() {
+        str source = """
+i32 main() {
+    mut i32 total = 0;
+    for (auto i in (0..4]) {
+        total = total + i;
+    }
+    for (i32 j in (0..4)) {
+        total = total + j;
+    }
+    for (i32 k in (1)..3) {
+        total = total + k;
+    }
+    i32 base = 1;
+    for (i32 m in (base + 1..5)) {
+        total = total + m;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(26));
+    }
+
+    [Test]
+    void reflect_enum() {
+        str source = """
+[Reflect]
+enum Kind(i32 flag, i8* name, i32 width) {
+    PROGRAM(0, "Program", 7),
+    IMPORT(10, "Import", 6),
+    WHILE(3, "While", 5)
+}
+
+enum Plain {
+    A,
+    B = 5,
+    C
+}
+
+i32 main() {
+    TypeInfo* info = typeof(Kind);
+    EnumInfo* kinds = Reflection.enumeration(info);
+    if (kinds == null || info.kind != 7 || !Reflection.reflected(info)) {
+        return 1;
+    }
+    VariantInfo* imported = Reflection.variant(kinds, 10);
+    if (imported == null || imported.name[0] != 73 || imported.payloadCount != 0) {
+        return 2;
+    }
+    HeaderInfo* name = Reflection.header(kinds, "name");
+    HeaderInfo* width = Reflection.header(kinds, "width");
+    HeaderInfo* flag = Reflection.header(kinds, "flag");
+    if (name == null || width == null || flag == null || Reflection.header(kinds, "missing") != null) {
+        return 3;
+    }
+    i8* text = Reflection.header_text(name, 10);
+    if (text[1] != 109 || Reflection.header_integer(width, 3) != 5 || Reflection.header_integer(flag, 3) != 3) {
+        return 4;
+    }
+    VariantInfo* named = Reflection.variant_named(kinds, "WHILE");
+    if (named == null || named.value != 3) {
+        return 5;
+    }
+    TypeInfo* plain = typeof(Plain);
+    if (plain.kind != 7 || Reflection.reflected(plain) || Reflection.enumeration(plain) != null) {
+        return 6;
+    }
+    return (i32)kinds.variantCount * 10 + (i32)kinds.headerCount;
+}
+""";
+        Verify.source(source).runs(Expected.exit(33));
+    }
+
+    [Test]
+    void reflect_format() {
+        str source = """
+struct Pair {
+    i32 left;
+    i32 right;
+}
+
+i32 total(...args) {
+    mut i32 sum = 0;
+    for (mut i32 i = 0; i < (i32)args.length; i = i + 1) {
+        object item = args[i];
+        if (item.type.kind == 2) {
+            i8** text = (i8**)item.data;
+            sum = sum + (i32)strlen(text[0]);
+        }
+    }
+    return sum;
+}
+
+i32 main() {
+    return total(Pair#fields, 5, Pair#interfaces);
+}
+""";
+        Verify.source(source).runs(Expected.exit(11));
+    }
+
+    [Test]
+    void reflect_function() {
+        str source = """
+attribute Tag(AttributeTarget.All);
+
+[Tag(5)]
+i32 add(i32 left, [Tag(8)] i64 right) {
+    return left + (i32)right;
+}
+
+void ping() {
+}
+
+async i32 later(i32 value) {
+    return value;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(add);
+    TypeInfo* small = typeof(i32);
+    TypeInfo* wide = typeof(i64);
+    if (info.paramCount != 2 || info.returnTypeId != small.id || info.funcPtr == null) {
+        return 1;
+    }
+    if (info.params[0].typeId != small.id || info.params[1].typeId != wide.id || info.params[1].name[0] != 114) {
+        return 2;
+    }
+    if (info.attrs[0].value[0] != 53 || info.params[1].attrs[0].value[0] != 56 || info.params[0].attrCount != 0) {
+        return 3;
+    }
+    MethodInfo* nothing = typeof(ping);
+    MethodInfo* suspended = typeof(later);
+    if (nothing.paramCount != 0 || (suspended.flags & 4) == 0 || (info.flags & 4) != 0) {
+        return 4;
+    }
+    return 7;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void reflect_interface() {
+        str source = """
+interface Drawable {
+    i32 sides;
+    i32 area();
+    i32 scale(i32 factor, i64 offset);
+}
+
+struct Square {
+    i32 sides;
+}
+
+impl Drawable for Square {
+    i32 area() {
+        return this.sides * this.sides;
+    }
+
+    i32 scale(i32 factor, i64 offset) {
+        return this.sides * factor + (i32)offset;
+    }
+}
+
+[Reflect]
+struct Marked : interface Drawable {
+    i32 sides;
+
+    i32 area() {
+        return 1;
+    }
+
+    i32 scale(i32 factor, i64 offset) {
+        return factor;
+    }
+}
+
+i32 main() {
+    TypeInfo* info = typeof(Drawable);
+    TypeInfoExt* ext = Reflection.ext(info);
+    TypeInfo* small = typeof(i32);
+    if (ext == null || info.kind != 9 || ext.fieldCount != 1 || ext.methodCount != 2 || ext.fields[0].name[0] != 115) {
+        return 1;
+    }
+    MethodInfo* scale = Reflection.method(ext, "scale");
+    if (scale == null || scale.paramCount != 2 || scale.params[0].typeId != small.id || scale.params[1].name[0] != 111) {
+        return 2;
+    }
+    TypeInfoExt* marked = Reflection.ext(typeof(Marked));
+    if (!Reflection.implements(marked, "Drawable") || scale.funcPtr != null) {
+        return 3;
+    }
+    return (i32)ext.methodCount * 10 + (i32)ext.fieldCount;
+}
+""";
+        Verify.source(source).runs(Expected.exit(21));
+    }
+
+    [Test]
+    void reflect_members() {
+        str source = """
+attribute Tag(AttributeTarget.All);
+
+interface Named {
+    i32 id();
+}
+
+[Tag(3)]
+struct Person {
+    i32 age;
+    i64 score;
+
+    Person(i32 age) {
+        this.age = age;
+    }
+
+    i32 id() {
+        return this.age;
+    }
+
+    i32 bonus {
+        get => this.age + 1;
+        set { this.age = value; }
+    }
+}
+
+impl Named for Person {
+}
+
+$inspect Person {
+    generate {
+        public i32 extra;
+    }
+}
+
+enum Kind(i32 flag, i8* name) {
+    A(0, "a"),
+    B(1, "b")
+}
+
+i32 main() {
+    FieldList fields = Person#fields;
+    MethodList methods = Person#methods;
+    MethodList constructors = Person#constructors;
+    PropertyList properties = Person#properties;
+    AttributeList attributes = Person#attributes;
+    NameList interfaces = Person#interfaces;
+    if (fields.length != 3 || fields.items[2].name[0] != 101) {
+        return 1;
+    }
+    if (methods.length != 1 || constructors.length != 1 || constructors.items[0].paramCount != 1) {
+        return 2;
+    }
+    if (properties.length != 1 || properties.items[0].name[0] != 98 || properties.items[0].getter == null || properties.items[0].setter == null) {
+        return 3;
+    }
+    if (attributes.length != 1 || interfaces.length != 1 || interfaces.items[0][0] != 78) {
+        return 4;
+    }
+    FieldList none = Kind#fields;
+    if (none.length != 0) {
+        return 5;
+    }
+    string text = fields.format();
+    if (text.length != 17) {
+        return 6;
+    }
+    return fields.length * 10 + methods.length;
+}
+""";
+        Verify.source(source).runs(Expected.exit(31));
+    }
+
+    [Test]
+    void reflect_union() {
+        str source = """
+attribute Tag(AttributeTarget.All);
+
+interface Named {
+    i32 sides();
+}
+
+[Reflect, Tag(4)]
+union Shape {
+    Circle(i64),
+    Rect(i32, i64),
+    Nothing()
+}
+
+impl Named for Shape {
+    [Tag(2)]
+    i32 sides() {
+        return switch this {
+            Circle r -> 0,
+            Rect w h -> 4,
+            Nothing -> 0
+        };
+    }
+}
+
+i32 main() {
+    TypeInfo* info = typeof(Shape);
+    EnumInfo* shapes = Reflection.enumeration(info);
+    TypeInfoExt* ext = Reflection.ext(info);
+    if (shapes == null || ext == null || info.kind != 8) {
+        return 1;
+    }
+    VariantInfo* rect = Reflection.variant_named(shapes, "Rect");
+    if (rect == null || rect.value != 1 || rect.payloadCount != 2) {
+        return 2;
+    }
+    TypeInfo* small = typeof(i32);
+    TypeInfo* wide = typeof(i64);
+    if (rect.payloadTypeIds[0] != small.id || rect.payloadTypeIds[1] != wide.id || rect.payloadOffsets[0] != 0 || rect.payloadOffsets[1] != 8) {
+        return 3;
+    }
+    MethodInfo* sides = Reflection.method(ext, "Shape.sides");
+    if (sides == null || sides.attrs[0].value[0] != 50 || ext.attrs[1].value[0] != 52) {
+        return 4;
+    }
+    if (!Reflection.implements(ext, "Named") || Reflection.implements(ext, "Other")) {
+        return 5;
+    }
+    return (i32)shapes.variantCount * 10 + (i32)ext.methodCount;
+}
+""";
+        Verify.source(source).runs(Expected.exit(31));
+    }
+
+    [Test]
+    void reflection() {
+        str source = """
+attribute Tag(AttributeTarget.All);
+
+[Reflect, Tag(7)]
+struct Player {
+    mut i32 hp;
+    i32 maxHp;
+    i8* name;
+
+    [Tag(9)]
+    public i32 heal(i32 amount) {
+        return this.hp + amount;
+    }
+}
+
+struct Plain {
+    i32 value;
+}
+
+i32 main() {
+    TypeInfoExt* info = (TypeInfoExt*)typeof(Player);
+    FieldInfo* fields = info.fields;
+    MethodInfo* methods = info.methods;
+    AttributeInfo* tags = info.attrs;
+    AttributeInfo* method_tags = methods[0].attrs;
+    if (info.base.size != 16 || fields[1].offset != 4 || fields[2].name[0] != 110) {
+        return 1;
+    }
+    if (tags[1].name[0] != 84 || tags[1].value[0] != 55 || method_tags[0].value[0] != 57) {
+        return 2;
+    }
+    TypeInfo* plain = typeof(Plain);
+    TypeInfo* number = typeof(i32);
+    TypeInfo* unsigned = typeof(u8);
+    if (plain.kind != 3 || number.kind != 0 || unsigned.kind != 4) {
+        return 3;
+    }
+    return (i32)info.fieldCount * 10 + (i32)info.methodCount + (i32)fields[0].flags * 100;
+}
+""";
+        Verify.source(source).runs(Expected.exit(131));
+    }
+
+    [Test]
+    void rvalue_member() {
+        str source = """
+struct Pair {
+    i32 left;
+    i32 right;
+}
+
+Pair make(i32 left, i32 right) {
+    return { .left = left, .right = right };
+}
+
+i32 main() {
+    i32 count = 12;
+    i32 text_length = (i32)($"n={count}").length;
+    return make(3, 4).left + make(3, 4).right + text_length;
+}
+""";
+        Verify.source(source).runs(Expected.exit(11));
+    }
+
+    [Test]
+    void strings() {
+        str source = """
+extern "C" {
+    i32 printf(i8* format, ...);
+}
+
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    i32 count = 3;
+    i64 big = 5000000000;
+    u32 small = 7;
+    f64 ratio = 2.5;
+    bool ready = true;
+    i8* name = "djinn";
+    str view = "view";
+    Point p = { .x = 1, .y = 2 };
+
+    string greeting = $"hello {name}, count={count}";
+    printf("%s\n", greeting.ptr());
+    string numbers = $"big={big} small={small} ratio={ratio} ready={ready}";
+    printf("%s\n", numbers.ptr());
+    string math = $"sum={p.x + p.y} view={view} neg={count - 6}";
+    printf("%s\n", math.ptr());
+    string joined = greeting + "!" + numbers;
+    printf("%s\n", joined.ptr());
+    string literal = "plain";
+    string nested = $"[{greeting}] {literal}";
+    printf("%s\n", nested.ptr());
+    string braces = $"{{{count}}} and }}";
+    printf("%s\n", braces.ptr());
+    string plain = "{count} stays text";
+    printf("%s\n", plain.ptr());
+    string empty = $"only text";
+    printf("%s|%d\n", empty.ptr(), (i32)empty.length);
+    return (i32)nested.length;
+}
+""";
+        Verify.source(source).runs(Expected.exit(28).stdout("hello djinn, count=3\nbig=5000000000 small=7 ratio=2.5 ready=true\nsum=3 view=view neg=-3\nhello djinn, count=3!big=5000000000 small=7 ratio=2.5 ready=true\n[hello djinn, count=3] plain\n{3} and }\n{count} stays text\nonly text|9\n"));
+    }
+
+    [Test]
+    void struct_values() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    i32 sum() {
+        return this.x + this.y;
+    }
+}
+
+struct Segment {
+    Point from;
+    Point to;
+}
+
+Point make(i32 a, i32 b) {
+    return { .x = a, .y = b };
+}
+
+i32 total(Point p) {
+    return p.x + p.y;
+}
+
+i32 main() {
+    Point p = make(3, 4);
+    i32 px = p.x;
+    mut Point q = p;
+    q.x = 10;
+    auto r = make(1, 2);
+    Segment s = { .from = { .x = 1, .y = 1 }, .to = r };
+    return px + q.x + total(r) + r.sum() + s.from.x + s.to.y;
+}
+""";
+        Verify.source(source).runs(Expected.exit(22));
+    }
+
+    [Test]
+    void structs() {
+        str source = """
+struct Kind {
+    const i32 SMALL = 3;
+    const i32 LARGE = 40;
+}
+
+struct Counter {
+    i32 total;
+    i32 steps;
+
+    public static Counter* create(i32 start) {
+        Counter* counter = (Counter*)malloc(sizeof(Counter));
+        counter.total = start;
+        counter.steps = 0;
+        return counter;
+    }
+
+    public void add(i32 amount) {
+        this.total = this.total + amount;
+        this.bump();
+    }
+
+    void bump() {
+        this.steps = this.steps + 1;
+    }
+
+    public i32 summary() {
+        return this.total + this.steps;
+    }
+}
+
+struct Pair {
+    Counter* left;
+    Counter* right;
+}
+
+extern "C" {
+    void* malloc(u64 size);
+}
+
+i32 main() {
+    Pair* pair = (Pair*)malloc(sizeof(Pair));
+    pair.left = Counter.create(Kind.SMALL);
+    pair.right = Counter.create(Kind.LARGE);
+    pair.left.add(2);
+    pair.right.add(1);
+    return pair.left.summary() + pair.right.summary();
+}
+""";
+        Verify.source(source).runs(Expected.exit(48));
+    }
+
+    [Test]
+    void switch_test() {
+        str source = """
+i32 classify(i32 n) {
+    switch (n) {
+        case 1:
+            return 10;
+        case 2:
+            return 20;
+        default:
+            return 5;
+    }
+    return 0;
+}
+
+i32 main() {
+    mut i32 total = classify(1) + classify(2) + classify(9);
+    for (mut i32 i = 0; i < 6; i = i + 1) {
+        switch (i) {
+            case 0:
+                continue;
+            case 3:
+                break;
+            default:
+                total = total + 1;
+        }
+        total = total + 10;
+    }
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(89));
+    }
+
+    [Test]
+    void tagged_enums() {
+        str source = """
+union Message {
+    Empty(),
+    Number(i32),
+    Pair(i32, i32)
+}
+
+enum Light {
+    Red(),
+    Green(),
+    Blue()
+}
+
+i32 describe(Message m) {
+    return switch m {
+        Empty -> 1,
+        Number n -> n,
+        Pair a b -> a * b
+    };
+}
+
+i32 rank(Light l) {
+    return switch l {
+        Red -> 1,
+        Green -> 2,
+        Blue -> 3
+    };
+}
+
+i32 main() {
+    Message a = Message::Empty();
+    Message b = Message::Number(7);
+    Message c = Message::Pair(3, 4);
+    mut i32 total = describe(a) + describe(b) + describe(c);
+    total = total + rank(Light::Blue()) + rank(Light::Red());
+    return total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(24));
+    }
+
+    [Test]
+    void typed_struct_init() {
+        str source = """
+struct Pair {
+    i32 left;
+    i32 right;
+}
+
+i32 main() {
+    auto pair = Pair { .left = 4, .right = 9 };
+    Pair other = Pair { .left = 1, .right = 2 };
+    return pair.left * pair.right + other.right;
+}
+""";
+        Verify.source(source).runs(Expected.exit(38));
+    }
+
+    [Test]
+    void variadic_pack() {
+        str source = """
+i32 total(i32 base, i32... values) {
+    mut i32 sum = base;
+    for (mut u32 i = 0; i < values.length; i = i + 1) {
+        sum = sum + values[i];
+    }
+    return sum;
+}
+
+i32 kinds(object... items) {
+    mut i32 mask = 0;
+    for (mut u32 i = 0; i < items.length; i = i + 1) {
+        TypeInfo* info = items[i].type;
+        mask = mask + (i32)info.kind * 10 + 1;
+    }
+    return mask;
+}
+
+i32 main() {
+    i32 a = total(1, 2, 3, 4);
+    i32 b = kinds(5, 2.5, "x");
+    return a + b;
+}
+""";
+        Verify.source(source).runs(Expected.exit(43));
+    }
+
+    [Test]
+    void new_into_struct_variable() {
+        str source = """
+struct User {
+    i32 id;
+    i32 age;
+
+    User(i32 id, i32 age) {
+        this.id = id;
+        this.age = age;
+    }
+}
+
+i32 main() {
+    mut User me = new User(1, 25);
+    me.age = 30;
+    me = new User(2, me.age);
+    return me.id + me.age;
+}
+""";
+        Verify.source(source).runs(Expected.exit(32));
+    }
+
+    [Test]
+    void nullable_pointer() {
+        str source = """
+struct Box {
+    i32 value;
+}
+
+i32 read(Box*? box) {
+    if (box == null) {
+        return 0 - 1;
+    }
+    return box.value;
+}
+
+i32 main() {
+    Box local = { .value = 7 };
+    Box* safe = &local;
+    mut Box*? maybe = null;
+    i32 empty = read(maybe);
+    maybe = safe;
+    return read(maybe) + empty;
+}
+""";
+        Verify.source(source).runs(Expected.exit(6));
+    }
+
+    [Test]
+    void rem_minus_one() {
+        str source = """
+i32 rem(i32 left, i32 right) {
+    return left % right;
+}
+
+i32 main() {
+    i32 minimum = 0 - 2147483647 - 1;
+    return rem(minimum, 0 - 1) + rem(7, 0 - 1) + rem(7, 4) + rem(0 - 7, 3) + 5;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void division_overflow() {
+        str source = """
+i32 divide(i32 left, i32 right) {
+    return left / right;
+}
+
+i32 main() {
+    i32 minimum = 0 - 2147483647 - 1;
+    return divide(minimum, 0 - 1);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at divide")).crashes(Expected.contains("integer overflow: the minimum value divided by -1").and_contains("division_overflow.djinn:2").and_contains("stack trace").and_contains("at divide"));
+    }
+
+    [Test]
+    void division_minus_one() {
+        str source = """
+i32 divide(i32 left, i32 right) {
+    return left / right;
+}
+
+i32 main() {
+    i64 wide = (0 - (i64)9223372036854775807) / 7;
+    i32 minimum = 0 - 2147483647 - 1;
+    i32 half = divide(minimum, 2);
+    mut i32 value = 0 - 20;
+    value /= 0 - 2;
+    return divide(0 - 7, 0 - 1) + divide(half, half) + value - 8 + (i32)(wide / wide);
+}
+""";
+        Verify.source(source).runs(Expected.exit(11));
+    }
+
+    [Test]
+    void division_by_zero() {
+        str source = """
+i32 divide(i32 left, i32 right) {
+    return left / right;
+}
+
+i32 main() {
+    return divide(10, 0);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at divide")).crashes(Expected.contains("division by zero").and_contains("division_by_zero.djinn:2").and_contains("stack trace").and_contains("at divide"));
+    }
+
+    [Test]
+    void unsigned_division_by_zero() {
+        str source = """
+u32 divide(u32 left, u32 right) {
+    return left / right;
+}
+
+i32 main() {
+    return (i32)divide(10, 0);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at divide")).crashes(Expected.contains("division by zero").and_contains("unsigned_division_by_zero.djinn:2").and_contains("stack trace").and_contains("at divide"));
+    }
+
+    [Test]
+    void wide_division_by_zero() {
+        str source = """
+i128 divide(i128 left, i128 right) {
+    return left / right;
+}
+
+i32 main() {
+    return (i32)divide(10, 0);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at divide")).crashes(Expected.contains("division by zero").and_contains("wide_division_by_zero.djinn:2").and_contains("stack trace").and_contains("at divide"));
+    }
+
+    [Test]
+    void remainder_by_zero() {
+        str source = """
+i32 remainder(i32 left, i32 right) {
+    return left % right;
+}
+
+i32 main() {
+    return remainder(10, 0);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at remainder")).crashes(Expected.contains("division by zero").and_contains("remainder_by_zero.djinn:2").and_contains("stack trace").and_contains("at remainder"));
+    }
+
+    [Test]
+    void compound_division_by_zero() {
+        str source = """
+i32 main() {
+    mut i32 value = 10;
+    i32 divisor = 0;
+    value /= divisor;
+    return value;
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at main")).crashes(Expected.contains("division by zero").and_contains("compound_division_by_zero.djinn:4").and_contains("stack trace").and_contains("at main"));
+    }
+
+    [Test]
+    void shift_left_too_far() {
+        str source = """
+i32 shift(i32 value, i32 amount) {
+    return value << amount;
+}
+
+i32 main() {
+    return shift(1, 32);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at shift")).crashes(Expected.contains("shift amount is out of range").and_contains("shift_left_too_far.djinn:2").and_contains("stack trace").and_contains("at shift"));
+    }
+
+    [Test]
+    void shift_right_too_far() {
+        str source = """
+u8 shift(u8 value, u8 amount) {
+    return value >> amount;
+}
+
+i32 main() {
+    return (i32)shift(1, 8);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at shift")).crashes(Expected.contains("shift amount is out of range").and_contains("shift_right_too_far.djinn:2").and_contains("stack trace").and_contains("at shift"));
+    }
+
+    [Test]
+    void shift_negative() {
+        str source = """
+i64 shift(i64 value, i64 amount) {
+    return value << amount;
+}
+
+i32 main() {
+    return (i32)shift(1, 0 - 1);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at shift")).crashes(Expected.contains("shift amount is out of range").and_contains("shift_negative.djinn:2").and_contains("stack trace").and_contains("at shift"));
+    }
+
+    [Test]
+    void nan_to_integer() {
+        str source = """
+i32 convert(f64 value) {
+    return (i32)value;
+}
+
+i32 main() {
+    f64 zero = 0.0;
+    return convert(zero / zero);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at convert")).crashes(Expected.contains("float value is out of range for the integer type").and_contains("nan_to_integer.djinn:2").and_contains("stack trace").and_contains("at convert"));
+    }
+
+    [Test]
+    void infinity_to_integer() {
+        str source = """
+i64 convert(f32 value) {
+    return (i64)value;
+}
+
+i32 main() {
+    f32 zero = 0.0;
+    return (i32)convert(1.0 / zero);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at convert")).crashes(Expected.contains("float value is out of range for the integer type").and_contains("infinity_to_integer.djinn:2").and_contains("stack trace").and_contains("at convert"));
+    }
+
+    [Test]
+    void large_float_to_integer() {
+        str source = """
+i32 convert(f64 value) {
+    return (i32)value;
+}
+
+i32 main() {
+    return convert(2147483648.0);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at convert")).crashes(Expected.contains("float value is out of range for the integer type").and_contains("large_float_to_integer.djinn:2").and_contains("stack trace").and_contains("at convert"));
+    }
+
+    [Test]
+    void negative_float_to_unsigned() {
+        str source = """
+u32 convert(f64 value) {
+    return (u32)value;
+}
+
+i32 main() {
+    return (i32)convert(0.0 - 1.0);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at convert")).crashes(Expected.contains("float value is out of range for the integer type").and_contains("negative_float_to_unsigned.djinn:2").and_contains("stack trace").and_contains("at convert"));
+    }
+
+    [Test]
+    void large_float_to_wide() {
+        str source = """
+i128 convert(f64 value) {
+    return (i128)value;
+}
+
+i32 main() {
+    return (i32)convert(1.0e39);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at convert")).crashes(Expected.contains("float value is out of range for the integer type").and_contains("large_float_to_wide.djinn:2").and_contains("stack trace").and_contains("at convert"));
+    }
+
+    [Test]
+    void rem_signs() {
+        str source = """
+i8 narrow(i8 left, i8 right) {
+    return left % right;
+}
+
+i16 short(i16 left, i16 right) {
+    return left % right;
+}
+
+i32 rem(i32 left, i32 right) {
+    return left % right;
+}
+
+i64 wide(i64 left, i64 right) {
+    return left % right;
+}
+
+i128 widest(i128 left, i128 right) {
+    return left % right;
+}
+
+i32 main() {
+    i32 minimum = 0 - 2147483647 - 1;
+    if (rem(minimum, 0 - 1) != 0) { return 1; }
+    if (rem(minimum, 1) != 0) { return 2; }
+    if (rem(0 - 10, 0 - 1) != 0) { return 3; }
+    if (rem(10, 0 - 1) != 0) { return 4; }
+    if (rem(0 - 10, 3) != 0 - 1) { return 5; }
+    if (rem(10, 0 - 3) != 1) { return 6; }
+    if (narrow(-128, -1) != 0) { return 7; }
+    if (short(-32768, -1) != 0) { return 8; }
+    if (wide((i64)1 << 63, 0 - 1) != 0) { return 9; }
+    if (widest((i128)1 << 127, 0 - 1) != 0) { return 10; }
+    if ((0 - 2147483647 - 1) % (0 - 1) != 0) { return 11; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void wide_division() {
+        str source = """
+i128 divide(i128 left, i128 right) {
+    return left / right;
+}
+
+i128 rem(i128 left, i128 right) {
+    return left % right;
+}
+
+u128 divide_unsigned(u128 left, u128 right) {
+    return left / right;
+}
+
+u128 rem_unsigned(u128 left, u128 right) {
+    return left % right;
+}
+
+i32 main() {
+    i128 big = (i128)1 << 100;
+    if (divide(big, (i128)1 << 98) != 4) { return 1; }
+    if (divide(0 - big, (i128)1 << 98) != 0 - 4) { return 2; }
+    if (rem(big + 1, 7) != (i128)3) { return 3; }
+    if (rem(0 - big - 1, 7) != 0 - (i128)3) { return 4; }
+    u128 top = (u128)1 << 127;
+    if (divide_unsigned(top + top - 1, top) != 1) { return 5; }
+    if (rem_unsigned(top + top - 1, top) != top - 1) { return 6; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void wide_float_conversion() {
+        str source = """
+i128 to_signed(f64 value) {
+    return (i128)value;
+}
+
+u128 to_unsigned(f32 value) {
+    return (u128)value;
+}
+
+f64 from_signed(i128 value) {
+    return (f64)value;
+}
+
+f32 from_unsigned(u128 value) {
+    return (f32)value;
+}
+
+i32 main() {
+    i128 big = (i128)1 << 100;
+    if (to_signed(0.0 - 3.5) != 0 - 3) { return 1; }
+    if (to_signed(1267650600228229401496703205376.0) != big) { return 2; }
+    if (to_unsigned(16777216.0) != 16777216) { return 3; }
+    if (from_signed(0 - big) != 0.0 - 1267650600228229401496703205376.0) { return 4; }
+    if (from_signed(7) != 7.0) { return 5; }
+    if (from_unsigned((u128)1 << 64) != 18446744073709551616.0) { return 6; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void implicit_widening() {
+        str source = """
+i64 widen(i32 value) {
+    return value;
+}
+
+u64 sum(u8 small, u32 large) {
+    return small + large;
+}
+
+f64 precise(f32 value) {
+    return value;
+}
+
+struct Holder {
+    i64 wide;
+}
+
+i32 main() {
+    i8 small = 3;
+    i16 medium = small;
+    i32 regular = medium;
+    i64 large = regular;
+    Holder holder = { .wide = regular };
+    f32 single = 1.5;
+    f64 double = single;
+    mut i64 total = large + widen(regular) + holder.wide;
+    total += regular;
+    if (sum((u8)2, (u32)3) != 5) { return 1; }
+    if (precise(single) != double) { return 2; }
+    if (regular + large != 6) { return 3; }
+    if (double + single != 3.0) { return 4; }
+    return (i32)total;
+}
+""";
+        Verify.source(source).runs(Expected.exit(12));
+    }
+
+    [Test]
+    void float_to_integer_limits() {
+        str source = """
+i32 signed(f64 value) {
+    return (i32)value;
+}
+
+i32 single(f32 value) {
+    return (i32)value;
+}
+
+u8 byte(f64 value) {
+    return (u8)value;
+}
+
+i64 wide(f64 value) {
+    return (i64)value;
+}
+
+u64 wide_unsigned(f64 value) {
+    return (u64)value;
+}
+
+bool flag(f64 value) {
+    return (bool)value;
+}
+
+bool from_integer(i32 value) {
+    return (bool)value;
+}
+
+i32 main() {
+    if (signed(2147483647.5) != 2147483647) { return 1; }
+    if (signed(0.0 - 2147483648.5) != 0 - 2147483647 - 1) { return 2; }
+    if (single(0.0 - 2147483648.0) != 0 - 2147483647 - 1) { return 3; }
+    if (byte(255.9) != 255) { return 4; }
+    if (byte(0.0 - 0.5) != 0) { return 5; }
+    if (wide(0.0 - 9223372036854775808.0) != (i64)1 << 63) { return 6; }
+    if (wide_unsigned(9223372036854775808.0) != (u64)1 << 63) { return 7; }
+    if (!flag(2.0) || !flag(0.5) || flag(0.0)) { return 8; }
+    if (!from_integer(2) || from_integer(0)) { return 9; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void integer_limits() {
+        str source = """
+i32 left(i32 value, i32 amount) {
+    return value << amount;
+}
+
+u8 right(u8 value, u8 amount) {
+    return value >> amount;
+}
+
+i32 arithmetic(i32 value, i32 amount) {
+    return value >> amount;
+}
+
+i32 main() {
+    if (left(1, 31) >= 0) { return 1; }
+    if (left(1, 0) != 1) { return 2; }
+    if (right((u8)128, (u8)7) != 1) { return 3; }
+    if (arithmetic(0 - 8, 1) != 0 - 4) { return 4; }
+    i32 largest = 2147483647;
+    i32 wrapped = largest + 1;
+    if (wrapped >= 0) { return 5; }
+    i32 minimum = wrapped;
+    if (0 - minimum != minimum) { return 6; }
+    mut u8 byte = 255;
+    byte++;
+    if (byte != 0) { return 7; }
+    i8 lowest = -128;
+    i8 highest = 127;
+    u8 largest_byte = 255;
+    u64 everything = 0xFFFFFFFFFFFFFFFF;
+    if (lowest + highest != -1) { return 8; }
+    if (largest_byte != (u8)255) { return 9; }
+    if ((everything >> 60) != 15) { return 10; }
+    i32 source = 300;
+    if ((u8)source != 44) { return 11; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void wide_division_limits() {
+        str source = """
+i128 divide(i128 left, i128 right) {
+    return left / right;
+}
+
+i128 rem(i128 left, i128 right) {
+    return left % right;
+}
+
+i128 minimum() {
+    return (i128)1 << 127;
+}
+
+i32 main() {
+    i128 min = minimum();
+    i128 max = 0 - (min + 1);
+    if (divide(min, 1) != min) { return 1; }
+    if (divide(min, 2) != 0 - ((i128)1 << 126)) { return 2; }
+    if (divide(min, 0 - 2) != (i128)1 << 126) { return 3; }
+    if (divide(min, min) != 1) { return 4; }
+    if (divide(max, min) != 0) { return 5; }
+    if (rem(min, 0 - 1) != 0) { return 6; }
+    if (rem(min, min) != 0) { return 7; }
+    if (rem(min, 3) != 0 - 2) { return 8; }
+    if (rem(max, min) != max) { return 9; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void wide_division_overflow() {
+        str source = """
+i128 divide(i128 left, i128 right) {
+    return left / right;
+}
+
+i32 main() {
+    return (i32)divide((i128)1 << 127, 0 - 1);
+}
+""";
+        Verify.source(source).runs(Expected.failure().and_contains("stack trace").and_contains("at divide")).crashes(Expected.contains("integer overflow: the minimum value divided by -1").and_contains("wide_division_overflow.djinn:2").and_contains("stack trace").and_contains("at divide"));
+    }
+
+    [Test]
+    void lists_reflected_types() {
+        str source = """
+[Reflect]
+struct First {
+    i32 value;
+}
+
+[Reflect]
+struct Second {
+    i32 value;
+}
+
+struct Hidden {
+    i32 value;
+}
+
+i32 main() {
+    return Reflection.type_count() * 10 + (i32)Reflection.type_at(1).name[0] - 83;
+}
+""";
+        Verify.source(source).runs(Expected.exit(20));
+    }
+}

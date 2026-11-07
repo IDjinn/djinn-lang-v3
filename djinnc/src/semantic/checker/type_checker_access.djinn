@@ -50,12 +50,13 @@ impl TypeChecker {
                     node.set_symbol(SymbolKind.CONSTANT, (ptr)sibling);
                     return sibling.value_type();
                 }
-                this.error(node, "undefined variable");
+                Diagnostics.add_argument(node.text());
+                this.error_code(node, DiagnosticErrors.UNDEFINED_VARIABLE, "undefined variable");
                 return Types.i32_type();
             }
             LocalScopes* scopes = this.scopes;
             if (variable.moved && this.assign_target != node) {
-                this.error(node, "use of moved value");
+                this.error_code(node, DiagnosticErrors.USE_AFTER_MOVE, "use of moved value");
             }
             if (scopes.find(node.name()) != null) {
                 node.set_symbol(SymbolKind.LOCAL, (ptr)variable);
@@ -83,7 +84,7 @@ impl TypeChecker {
                 return held;
             }
             if (!Types.is_sized_pointer(base)) {
-                this.error(node, "only pointers to sized types can be indexed");
+                this.error_code(node, DiagnosticErrors.INVALID_INDEX_TARGET, "only pointers to sized types can be indexed");
                 return Types.i32_type();
             }
             return Types.element(base);
@@ -92,7 +93,7 @@ impl TypeChecker {
         if (kind == NodeKind::UNARY && node.op_kind() == TokenKind::STAR) {
             u32 pointer = this.check_expression(node.first(), 0);
             if (!Types.is_sized_pointer(pointer)) {
-                this.error(node, "cannot dereference this value");
+                this.error_code(node, DiagnosticErrors.INVALID_DEREFERENCE, "cannot dereference this value");
                 return Types.i32_type();
             }
             if (Types.is_raw_pointer(pointer)) {
@@ -101,7 +102,7 @@ impl TypeChecker {
             return Types.element(pointer);
         }
 
-        this.error(node, "expression is not addressable");
+        this.error_code(node, DiagnosticErrors.NOT_ADDRESSABLE, "expression is not addressable");
         return Types.i32_type();
     }
 
@@ -112,8 +113,8 @@ impl TypeChecker {
         } else {
             type = this.check_expression(base, 0);
             if (Types.is_void(type)) {
-                this.error(base, "member access needs a struct or a pointer to one");
-                return null;
+                this.error_code(base, DiagnosticErrors.INVALID_MEMBER_ACCESS, "member access needs a struct or a pointer to one");
+                return (StructInfo*)0;
             }
         }
         mut u32 target = type;
@@ -128,8 +129,8 @@ impl TypeChecker {
         SymbolTable* symbols = this.symbols;
         if (!Types.is_struct(target)) {
             if (Types.is_void(target)) {
-                this.error(base, "member access on a value that is not a struct");
-                return null;
+                this.error_code(base, DiagnosticErrors.INVALID_MEMBER_ACCESS, "member access on a value that is not a struct");
+                return (StructInfo*)0;
             }
             return symbols.primitive_owner(target);
         }
@@ -139,7 +140,7 @@ impl TypeChecker {
     unsafe u32 check_field(Node* node) {
         Node* base = node.first();
         if (this.is_struct_name(base)) {
-            this.error(node, "a struct constant cannot be used as a variable");
+            this.error_code(node, DiagnosticErrors.INVALID_MEMBER_ACCESS, "a struct constant cannot be used as a variable");
             return Types.i32_type();
         }
         StructInfo* info = this.struct_of_base(base);
@@ -164,7 +165,8 @@ impl TypeChecker {
                 node.set_symbol(SymbolKind.PROPERTY_GET, (ptr)getter);
                 return getter.return_type;
             }
-            this.error(node, "struct has no such field");
+            Diagnostics.add_argument(node.text());
+            this.error_code(node, DiagnosticErrors.UNKNOWN_FIELD, "struct has no such field");
             return Types.i32_type();
         }
         node.set_symbol(SymbolKind.FIELD, (ptr)field);
@@ -182,7 +184,7 @@ impl TypeChecker {
     FunctionInfo* implicit_accessor(Node* node, ptr<i8> prefix) {
         FunctionInfo* current = this.function;
         if (current == null || !current.is_instance || current.owner == null) {
-            return null;
+            return (FunctionInfo*)0;
         }
         return this.find_accessor(current.owner, prefix, node.text());
     }
@@ -190,7 +192,7 @@ impl TypeChecker {
     Node* implicit_constant(Node* node) {
         FunctionInfo* current = this.function;
         if (current == null || current.owner == null) {
-            return null;
+            return (Node*)0;
         }
         SymbolTable* symbols = this.symbols;
         return symbols.find_constant(current.owner, node.name());
@@ -199,7 +201,7 @@ impl TypeChecker {
     FieldInfo* implicit_field(Node* node) {
         FunctionInfo* current = this.function;
         if (current == null || !current.is_instance || current.owner == null) {
-            return null;
+            return (FieldInfo*)0;
         }
         StructInfo* owner = current.owner;
         SymbolTable* symbols = this.symbols;
@@ -222,11 +224,11 @@ impl TypeChecker {
             base.set_symbol(SymbolKind.STRUCT_NAME, (ptr)info);
             Node* constant = symbols.find_constant(info, node.name());
             if (constant == null) {
-                this.error(node, "struct has no such constant");
+                this.error_code(node, DiagnosticErrors.UNKNOWN_CONSTANT, "struct has no such constant");
                 return Types.i32_type();
             }
             if (info.has_payload) {
-                this.error(node, "a payload enum is built with Enum::Variant(...)");
+                this.error_code(node, DiagnosticErrors.PAYLOAD_ENUM_SYNTAX, "a payload enum is built with Enum::Variant(...)");
             }
             node.set_symbol(SymbolKind.CONSTANT, (ptr)constant);
             return constant.value_type();
@@ -255,7 +257,7 @@ impl TypeChecker {
                 }
             }
             if (owner == null || owner.is_primitive || owner.is_template) {
-                this.error(node, "a reflection query needs a concrete struct, enum or union");
+                this.error_code(node, DiagnosticErrors.INVALID_REFLECTION_TARGET, "a reflection query needs a concrete struct, enum or union");
                 return Types.i32_type();
             }
             node.set_symbol(SymbolKind.TYPE, (ptr)(u64)subject);
@@ -279,20 +281,20 @@ impl TypeChecker {
                 FunctionInfo* function = known.find_function(reference.full_atom, reference.name_atom, this.scope);
                 if (function != null) {
                     if (function.is_template) {
-                        this.error(node, "typeof needs a concrete function: instantiate the generic function first");
+                        this.error_code(node, DiagnosticErrors.INVALID_REFLECTION_TARGET, "typeof needs a concrete function: instantiate the generic function first");
                     } else if (function.overload != null) {
-                        this.error(node, "typeof is ambiguous on an overloaded function");
+                        this.error_code(node, DiagnosticErrors.INVALID_REFLECTION_TARGET, "typeof is ambiguous on an overloaded function");
                     }
                     node.set_symbol(SymbolKind.FUNCTION, (ptr)function);
                     return Types.pointer_to(this.core_type("MethodInfo"));
                 }
             }
             if (measured == 0) {
-                this.error(node, "unknown type");
+                this.error_code(node, DiagnosticErrors.UNKNOWN_TYPE, "unknown type");
                 measured = Types.i32_type();
             }
             if (Types.is_void(measured) || measured == Types.auto_type()) {
-                this.error(node, "typeof needs a concrete type");
+                this.error_code(node, DiagnosticErrors.INVALID_REFLECTION_TARGET, "typeof needs a concrete type");
             }
             node.set_symbol(SymbolKind.TYPE, (ptr)(u64)measured);
             return Types.pointer_to(this.core_type("TypeInfo"));

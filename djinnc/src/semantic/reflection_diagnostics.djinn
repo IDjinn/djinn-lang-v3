@@ -11,7 +11,7 @@ struct ReflectionDiagnostics {
             }
             Node* target = use.target;
             if (reflect_mode == ReflectionMode.NONE) {
-                diagnostics.warning_in(target.file_name(), use.line, use.column, "[Reflect] is ignored because of --reflect-none");
+                diagnostics.warning_in(DiagnosticWarnings.REFLECT_IGNORED, target.file_name(), use.line, use.column, "[Reflect] is ignored because of --reflect-none");
                 continue;
             }
             if (target.kind() != NodeKind::STRUCT_DECL) {
@@ -31,9 +31,9 @@ struct ReflectionDiagnostics {
                 }
             }
             if (owner == null) {
-                diagnostics.warning_in(target.file_name(), use.line, use.column, "[Reflect] has no effect on a type alias");
+                diagnostics.warning_in(DiagnosticWarnings.REFLECT_IGNORED, target.file_name(), use.line, use.column, "[Reflect] has no effect on a type alias");
             } else if (owner.is_template && !instantiated) {
-                diagnostics.warning_in(target.file_name(), use.line, use.column, "[Reflect] has no effect on a generic type that is never instantiated");
+                diagnostics.warning_in(DiagnosticWarnings.REFLECT_IGNORED, target.file_name(), use.line, use.column, "[Reflect] has no effect on a generic type that is never instantiated");
             }
         }
     }

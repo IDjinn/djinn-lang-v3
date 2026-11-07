@@ -1,8 +1,0 @@
-struct Point {
-    i32 x;
-}
-
-i32 main() {
-    Point p;
-    return p.z;
-}

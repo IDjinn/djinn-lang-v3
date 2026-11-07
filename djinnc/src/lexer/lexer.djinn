@@ -54,7 +54,7 @@ struct Lexer {
     void error_at(i32 offset, ptr<i8> message) {
         SourceFile* file = this.file;
         Diagnostics* diagnostics = this.diagnostics;
-        diagnostics.error((i32)file.line_of((u32)offset), (i32)file.column_of((u32)offset), message);
+        diagnostics.error(DiagnosticErrors.LEXER, (i32)file.line_of((u32)offset), (i32)file.column_of((u32)offset), message);
     }
 
     unsafe i32 peek(i32 offset) {

@@ -1,0 +1,219 @@
+namespace testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+
+extern "C" {
+    ptr<i8> strstr(ptr<i8> haystack, ptr<i8> needle);
+    i32 strcmp(ptr<i8> left, ptr<i8> right);
+    i64 __djinn_now_us();
+    void __djinn_thread_sleep(i64 milliseconds);
+}
+
+struct Allocator {
+    public static unsafe ptr zeroed(u64 count) {
+        ptr memory = (ptr)__djinn_malloc(count);
+        memset(memory, 0, count);
+        return memory;
+    }
+}
+
+struct Text {
+    public static bool same(ptr<i8> left, ptr<i8> right) {
+        return strcmp(left, right) == 0;
+    }
+
+    public static bool contains(ptr<i8> text, ptr<i8> part) {
+        return strstr(text, part) != null;
+    }
+
+    public static unsafe ptr<i8> duplicate(ptr<i8> text, i32 length) {
+        ptr<i8> copy = (ptr<i8>)Allocator.zeroed((u64)length + 1);
+        memcpy(copy, text, (u64)length);
+        return copy;
+    }
+
+    public static bool is_digit(i32 c) {
+        return c >= 48 && c <= 57;
+    }
+
+    public static unsafe i32 parse_integer(ptr<i8> text, i32 length) {
+        mut i32 value = 0;
+        for (mut i32 i = 0; i < length; i = i + 1) {
+            value = value * 10 + (i32)text[i] - 48;
+        }
+        return value;
+    }
+
+    public static unsafe ptr<i8> without_carriage_returns(ptr<i8> data, i32 length) {
+        TextBuffer* text = TextBuffer.create();
+        for (mut i32 i = 0; i < length; i = i + 1) {
+            if (data[i] != 13) {
+                text.append_char((i32)data[i]);
+            }
+        }
+        return text.cstr();
+    }
+}
+
+struct Environment {
+    public static unsafe ptr<i8> argument(i32 index) {
+        return switch Process.argv(index) {
+            Value text -> (ptr<i8>)text,
+            Empty -> ""
+        };
+    }
+
+    public static unsafe ptr<i8> variable(ptr<i8> name, ptr<i8> fallback) {
+        return switch Process.env((i8*)name) {
+            Value text -> (ptr<i8>)text,
+            Empty -> fallback
+        };
+    }
+}
+
+struct TextBuffer {
+    ptr<i8> data;
+    i32 length;
+    i32 capacity;
+
+    public static unsafe TextBuffer* create() {
+        TextBuffer* buffer = (TextBuffer*)Allocator.zeroed(sizeof(TextBuffer));
+        buffer.capacity = 64;
+        buffer.data = (ptr<i8>)Allocator.zeroed(64);
+        return buffer;
+    }
+
+    public unsafe void append_char(i32 c) {
+        this.reserve(1);
+        this.data[this.length] = (i8)c;
+        this.length = this.length + 1;
+    }
+
+    public void append(ptr<i8> text) {
+        this.append_slice(text, (i32)strlen(text));
+    }
+
+    public unsafe void append_slice(ptr<i8> text, i32 count) {
+        this.reserve(count);
+        memcpy(this.data + this.length, text, (u64)count);
+        this.length = this.length + count;
+    }
+
+    public void append_int(i64 value) {
+        if (value < 0) {
+            this.append_char(45);
+            this.append_int(0 - value);
+            return;
+        }
+        if (value >= 10) {
+            this.append_int(value / 10);
+        }
+        this.append_char(48 + (i32)(value % 10));
+    }
+
+    public unsafe void append_json_string(ptr<i8> text) {
+        this.append_char(34);
+        i32 count = (i32)strlen(text);
+        for (mut i32 i = 0; i < count; i = i + 1) {
+            i32 c = (i32)text[i];
+            if (c == 34 || c == 92) {
+                this.append_char(92);
+                this.append_char(c);
+            } else if (c == 10) {
+                this.append_char(92);
+                this.append_char(110);
+            } else if (c == 9) {
+                this.append_char(92);
+                this.append_char(116);
+            } else if (c >= 0 && c < 32) {
+                this.append_char(32);
+            } else {
+                this.append_char(c);
+            }
+        }
+        this.append_char(34);
+    }
+
+    public unsafe ptr<i8> cstr() {
+        this.reserve(1);
+        this.data[this.length] = 0;
+        return this.data;
+    }
+
+    unsafe void reserve(i32 extra) {
+        i32 needed = this.length + extra + 1;
+        if (needed <= this.capacity) {
+            return;
+        }
+        mut i32 capacity = this.capacity * 2;
+        while (capacity < needed) {
+            capacity = capacity * 2;
+        }
+        ptr<i8> data = (ptr<i8>)Allocator.zeroed((u64)capacity);
+        memcpy(data, this.data, (u64)this.length);
+        this.data = data;
+        this.capacity = capacity;
+    }
+}
+
+struct ItemList {
+    ptr<ptr> data;
+    i32 length;
+    i32 capacity;
+
+    public static unsafe ItemList* create() {
+        ItemList* list = (ItemList*)Allocator.zeroed(sizeof(ItemList));
+        list.capacity = 8;
+        list.data = (ptr<ptr>)Allocator.zeroed(64);
+        return list;
+    }
+
+    public unsafe void push(ptr item) {
+        if (this.length == this.capacity) {
+            this.grow();
+        }
+        this.data[this.length] = item;
+        this.length = this.length + 1;
+    }
+
+    public unsafe ptr get(i32 index) {
+        return this.data[index];
+    }
+
+    unsafe void grow() {
+        i32 capacity = this.capacity * 2;
+        ptr<ptr> data = (ptr<ptr>)Allocator.zeroed((u64)capacity * 8);
+        memcpy(data, this.data, (u64)this.length * 8);
+        this.data = data;
+        this.capacity = capacity;
+    }
+}
+
+struct TextFiles {
+    public static unsafe ptr<i8> read(ptr<i8> path) {
+        FILE* file = fopen((i8*)path, "rb");
+        if (file == null) {
+            return null;
+        }
+        fseek(file, 0, 2);
+        i64 length = ftell(file);
+        fseek(file, 0, 0);
+        ptr<i8> buffer = (ptr<i8>)Allocator.zeroed((u64)length + 1);
+        fread(buffer, 1, (u64)length, file);
+        fclose(file);
+        return buffer;
+    }
+
+    public static unsafe bool write(ptr<i8> path, ptr<i8> data, i32 length) {
+        FILE* file = fopen((i8*)path, "wb");
+        if (file == null) {
+            return false;
+        }
+        u64 written = (u64)fwrite(data, 1, (u64)length, file);
+        fclose(file);
+        return written == (u64)length;
+    }
+}

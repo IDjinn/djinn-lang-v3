@@ -1,8 +1,15 @@
 namespace djinnc;
 
+unsafe static mut i32 diagnostics_json = 0;
+unsafe static mut ptr diagnostics_arguments = null;
+
 struct Diagnostics {
     ptr<i8> file;
     i32 errors;
+    ptr<i8> last_file;
+    i32 last_code;
+    i32 last_line;
+    i32 last_column;
 
     public static unsafe Diagnostics* create(ptr<i8> file) {
         Diagnostics* diagnostics = (Diagnostics*)Memory.zalloc(sizeof(Diagnostics));
@@ -10,27 +17,133 @@ struct Diagnostics {
         return diagnostics;
     }
 
-    public void error(i32 line, i32 column, ptr<i8> message) {
-        logger_error(Log.get(), "%s:%d:%d: error: %s", this.file, line, column, message);
-        this.errors = this.errors + 1;
+    public static unsafe void set_json(bool enabled) {
+        if (enabled) {
+            diagnostics_json = 1;
+        } else {
+            diagnostics_json = 0;
+        }
     }
 
-    public void warning(i32 line, i32 column, ptr<i8> message) {
-        logger_error(Log.get(), "%s:%d:%d: warning: %s", this.file, line, column, message);
+    public static unsafe bool json() {
+        return diagnostics_json == 1;
     }
 
-    public void warning_in(ptr<i8> file, i32 line, i32 column, ptr<i8> message) {
-        logger_error(Log.get(), "%s:%d:%d: warning: %s", file, line, column, message);
+    public static unsafe void add_argument(ptr<i8> text) {
+        if (diagnostics_arguments == null) {
+            diagnostics_arguments = (ptr)PointerList.create();
+        }
+        PointerList* list = (PointerList*)diagnostics_arguments;
+        list.push((ptr)text);
     }
 
-    public void error_in(ptr<i8> file, i32 line, i32 column, ptr<i8> message) {
-        logger_error(Log.get(), "%s:%d:%d: error: %s", file, line, column, message);
-        this.errors = this.errors + 1;
+    static unsafe PointerList* take_arguments() {
+        PointerList* list = (PointerList*)diagnostics_arguments;
+        diagnostics_arguments = null;
+        return list;
     }
 
-    public void error_near(i32 line, i32 column, ptr<i8> message, ptr<i8> found) {
-        logger_error(Log.get(), "%s:%d:%d: error: %s (found '%s')", this.file, line, column, message, found);
-        this.errors = this.errors + 1;
+    public static ptr<i8> code_text(i32 code) {
+        ByteBuffer* text = ByteBuffer.create();
+        text.append_char(69);
+        text.append_int((i64)code);
+        return text.cstr();
+    }
+
+    void emit(bool is_error, ptr<i8> file, i32 code, i32 line, i32 column, i32 length, ptr<i8> message, ptr<i8> found) {
+        PointerList* arguments = Diagnostics.take_arguments();
+        if (code == this.last_code && line == this.last_line && column == this.last_column && file == this.last_file) {
+            return;
+        }
+        this.last_file = file;
+        this.last_code = code;
+        this.last_line = line;
+        this.last_column = column;
+        ByteBuffer* out = ByteBuffer.create();
+        mut ptr<i8> severity = "warning";
+        if (is_error) {
+            severity = "error";
+        }
+        if (Diagnostics.json()) {
+            out.append("{\"severity\":\"");
+            out.append(severity);
+            out.append("\",\"code\":\"");
+            out.append(Diagnostics.code_text(code));
+            out.append("\",\"file\":");
+            out.append_json_string(file);
+            out.append(",\"line\":");
+            out.append_int((i64)line);
+            out.append(",\"column\":");
+            out.append_int((i64)column);
+            out.append(",\"length\":");
+            out.append_int((i64)length);
+            out.append(",\"end_line\":");
+            out.append_int((i64)line);
+            out.append(",\"end_column\":");
+            out.append_int((i64)(column + length));
+            out.append(",\"message\":");
+            out.append_json_string(message);
+            if (arguments != null) {
+                out.append(",\"args\":[");
+                for (mut i32 i = 0; i < arguments.length; i = i + 1) {
+                    if (i > 0) {
+                        out.append(",");
+                    }
+                    out.append_json_string((ptr<i8>)arguments.get(i));
+                }
+                out.append("]");
+            }
+            if (found != null) {
+                out.append(",\"found\":");
+                out.append_json_string(found);
+            }
+            out.append("}");
+        } else {
+            out.append(file);
+            out.append(":");
+            out.append_int((i64)line);
+            out.append(":");
+            out.append_int((i64)column);
+            out.append(": ");
+            out.append(severity);
+            out.append("[");
+            out.append(Diagnostics.code_text(code));
+            out.append("]: ");
+            out.append(message);
+            if (found != null) {
+                out.append(" (found '");
+                out.append(found);
+                out.append("')");
+            }
+        }
+        logger_error(Log.get(), "%s", out.cstr());
+        if (is_error) {
+            this.errors = this.errors + 1;
+        }
+    }
+
+    public void error(i32 code, i32 line, i32 column, ptr<i8> message) {
+        this.emit(true, this.file, code, line, column, 1, message, null);
+    }
+
+    public void warning(i32 code, i32 line, i32 column, ptr<i8> message) {
+        this.emit(false, this.file, code, line, column, 1, message, null);
+    }
+
+    public void warning_in(i32 code, ptr<i8> file, i32 line, i32 column, ptr<i8> message) {
+        this.emit(false, file, code, line, column, 1, message, null);
+    }
+
+    public void error_in(i32 code, ptr<i8> file, i32 line, i32 column, ptr<i8> message) {
+        this.emit(true, file, code, line, column, 1, message, null);
+    }
+
+    public void error_span(i32 code, ptr<i8> file, i32 line, i32 column, i32 length, ptr<i8> message) {
+        this.emit(true, file, code, line, column, length, message, null);
+    }
+
+    public void error_near(i32 code, i32 line, i32 column, ptr<i8> message, ptr<i8> found) {
+        this.emit(true, this.file, code, line, column, strlen(found), message, found);
     }
 
     public bool failed() {

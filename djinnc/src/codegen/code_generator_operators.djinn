@@ -12,6 +12,17 @@ impl CodeGenerator {
             return this.box_value(source);
         }
         ptr destination = this.llvm_type(target);
+        SymbolTable* symbols = this.symbols;
+        if (Types.is_pointer(from) && symbols.nullable_payload(target) == from) {
+            ptr wrapped = this.create_slot(target, "nullable.value");
+            LLVMBuildStore(this.builder, ref, LLVMBuildStructGEP2(this.builder, destination, wrapped, 0, "nullable.slot"));
+            return LLVMBuildLoad2(this.builder, destination, wrapped, "nullable.load");
+        }
+
+        bool to_flag = Types.is_integer(target) && Types.bits(target) == 1;
+        if (to_flag && (Types.is_float(from) || (Types.is_integer(from) && Types.bits(from) > 1))) {
+            return this.to_condition(source);
+        }
 
         if (Types.is_integer(from) && Types.is_integer(target)) {
             if (Types.bits(from) == Types.bits(target)) {
@@ -332,31 +343,126 @@ impl CodeGenerator {
             AMPERSAND -> Value.create(LLVMBuildAnd(builder, lhs, rhs, "and"), common),
             PIPE -> Value.create(LLVMBuildOr(builder, lhs, rhs, "or"), common),
             CARET -> Value.create(LLVMBuildXor(builder, lhs, rhs, "xor"), common),
-            LESS_LESS -> Value.create(LLVMBuildShl(builder, lhs, rhs, "shl"), common),
-            SLASH -> this.gen_division(is_signed, common, lhs, rhs),
-            PERCENT -> this.gen_remainder(is_signed, common, lhs, rhs),
-            GREATER_GREATER -> this.gen_shift_right(is_signed, common, lhs, rhs),
+            LESS_LESS -> this.gen_shift_left(node, common, lhs, rhs),
+            SLASH -> this.gen_division(node, is_signed, common, lhs, rhs),
+            PERCENT -> this.gen_remainder(node, is_signed, common, lhs, rhs),
+            GREATER_GREATER -> this.gen_shift_right(node, is_signed, common, lhs, rhs),
             _ -> this.unsupported_arithmetic(node, common, lhs)
         };
     }
 
-    Value* gen_division(bool is_signed, u32 common, ptr lhs, ptr rhs) {
-        if (is_signed) { return Value.create(LLVMBuildSDiv(this.builder, lhs, rhs, "sdiv"), common); }
+    // x % -1 is always 0, but srem of the minimum value by -1 is undefined and traps on x86, while x % 1 is also 0.
+    ptr remainder_divisor(ptr rhs) {
+        ptr type = LLVMTypeOf(rhs);
+        ptr minus_one = LLVMConstInt(type, (u64)(0 - 1), 1);
+        ptr is_minus_one = LLVMBuildICmp(this.builder, LlvmConst.INT_EQ, rhs, minus_one, "rem.minus_one");
+        return LLVMBuildSelect(this.builder, is_minus_one, LLVMConstInt(type, 1, 0), rhs, "rem.divisor");
+    }
+
+    unsafe void stop_when(ptr failed, Node* node, ptr<i8> message) {
+        if (LLVMIsConstant(failed) != 0 && LLVMIsNull(failed) != 0) {
+            return;
+        }
+        ptr stopped = this.new_block("check.failed");
+        ptr valid = this.new_block("check.valid");
+        LLVMBuildCondBr(this.builder, failed, stopped, valid);
+        LLVMPositionBuilderAtEnd(this.builder, stopped);
+        this.call_panic(this.string_constant(message), node);
+        LLVMBuildUnreachable(this.builder);
+        LLVMPositionBuilderAtEnd(this.builder, valid);
+    }
+
+    void check_divisor(Node* node, ptr rhs) {
+        ptr is_zero = LLVMBuildICmp(this.builder, LlvmConst.INT_EQ, rhs, LLVMConstNull(LLVMTypeOf(rhs)), "div.zero");
+        this.stop_when(is_zero, node, "division by zero");
+    }
+
+    void check_shift(Node* node, u32 common, ptr rhs) {
+        ptr width = LLVMConstInt(LLVMTypeOf(rhs), (u64)Types.bits(common), 0);
+        ptr too_far = LLVMBuildICmp(this.builder, LlvmConst.INT_UGE, rhs, width, "shift.range");
+        this.stop_when(too_far, node, "shift amount is out of range");
+    }
+
+    static f64 power_of_two(u32 exponent) {
+        mut f64 power = 1.0;
+        for (mut u32 i = 0; i < exponent; i = i + 1) {
+            power = power * 2.0;
+        }
+        return power;
+    }
+
+    // Truncation keeps values just outside the limits valid, so the signed lower limit is one below the minimum when the
+    // float can hold that value, and the minimum itself when it cannot.
+    void check_float_cast(Node* node, Value* source, u32 target) {
+        u32 from = source.type;
+        if (!Types.is_float(from) || !Types.is_integer(target) || Types.bits(target) == 1) {
+            return;
+        }
+        u32 bits = Types.bits(target);
+        mut u32 mantissa = 53;
+        if (Types.bits(from) == 32) {
+            mantissa = 24;
+        }
+        mut f64 upper = CodeGenerator.power_of_two(bits);
+        mut f64 lower = 0.0 - 1.0;
+        mut i32 lower_predicate = LlvmConst.REAL_OGT;
+        if (Types.is_signed(target)) {
+            upper = upper / 2.0;
+            lower = 0.0 - upper;
+            if (bits <= mantissa) {
+                lower = lower - 1.0;
+            } else {
+                lower_predicate = LlvmConst.REAL_OGE;
+            }
+        }
+        ptr value = source.ref;
+        ptr type = LLVMTypeOf(value);
+        ptr above = LLVMBuildFCmp(this.builder, lower_predicate, value, LLVMConstReal(type, lower), "cast.above");
+        ptr below = LLVMBuildFCmp(this.builder, LlvmConst.REAL_OLT, value, LLVMConstReal(type, upper), "cast.below");
+        ptr in_range = LLVMBuildAnd(this.builder, above, below, "cast.in_range");
+        this.stop_when(LLVMBuildNot(this.builder, in_range, "cast.invalid"), node, "float value is out of range for the integer type");
+    }
+
+    unsafe void check_division_overflow(Node* node, u32 common, ptr lhs, ptr rhs) {
+        ptr type = LLVMTypeOf(rhs);
+        ptr is_minus_one = LLVMBuildICmp(this.builder, LlvmConst.INT_EQ, rhs, LLVMConstInt(type, (u64)(0 - 1), 1), "div.minus_one");
+        if (LLVMIsConstant(is_minus_one) != 0 && LLVMIsNull(is_minus_one) != 0) {
+            return;
+        }
+        ptr minimum = LLVMBuildShl(this.builder, LLVMConstInt(type, 1, 0), LLVMConstInt(type, (u64)Types.bits(common) - 1, 0), "div.minimum");
+        ptr is_minimum = LLVMBuildICmp(this.builder, LlvmConst.INT_EQ, lhs, minimum, "div.is_minimum");
+        ptr overflow = LLVMBuildAnd(this.builder, is_minus_one, is_minimum, "div.overflow");
+        this.stop_when(overflow, node, "integer overflow: the minimum value divided by -1");
+    }
+
+    Value* gen_division(Node* node, bool is_signed, u32 common, ptr lhs, ptr rhs) {
+        this.check_divisor(node, rhs);
+        if (is_signed) {
+            this.check_division_overflow(node, common, lhs, rhs);
+            return Value.create(LLVMBuildSDiv(this.builder, lhs, rhs, "sdiv"), common);
+        }
         return Value.create(LLVMBuildUDiv(this.builder, lhs, rhs, "udiv"), common);
     }
 
-    Value* gen_remainder(bool is_signed, u32 common, ptr lhs, ptr rhs) {
-        if (is_signed) { return Value.create(LLVMBuildSRem(this.builder, lhs, rhs, "srem"), common); }
+    Value* gen_remainder(Node* node, bool is_signed, u32 common, ptr lhs, ptr rhs) {
+        this.check_divisor(node, rhs);
+        if (is_signed) { return Value.create(LLVMBuildSRem(this.builder, lhs, this.remainder_divisor(rhs), "srem"), common); }
         return Value.create(LLVMBuildURem(this.builder, lhs, rhs, "urem"), common);
     }
 
-    Value* gen_shift_right(bool is_signed, u32 common, ptr lhs, ptr rhs) {
+    Value* gen_shift_left(Node* node, u32 common, ptr lhs, ptr rhs) {
+        this.check_shift(node, common, rhs);
+        return Value.create(LLVMBuildShl(this.builder, lhs, rhs, "shl"), common);
+    }
+
+    Value* gen_shift_right(Node* node, bool is_signed, u32 common, ptr lhs, ptr rhs) {
+        this.check_shift(node, common, rhs);
         if (is_signed) { return Value.create(LLVMBuildAShr(this.builder, lhs, rhs, "ashr"), common); }
         return Value.create(LLVMBuildLShr(this.builder, lhs, rhs, "lshr"), common);
     }
 
     Value* unsupported_arithmetic(Node* node, u32 common, ptr lhs) {
-        this.error(node, "binary operator is not supported by code generation yet");
+        this.error_code(node, DiagnosticErrors.CODEGEN_NOT_SUPPORTED, "binary operator is not supported by code generation yet");
         return Value.create(lhs, common);
     }
 

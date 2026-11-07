@@ -1,9 +1,0 @@
-i32 runtime_value() {
-    return 3;
-}
-
-constexpr i32 VALUE = runtime_value();
-
-i32 main() {
-    return VALUE;
-}

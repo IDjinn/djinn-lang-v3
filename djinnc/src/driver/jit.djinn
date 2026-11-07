@@ -29,6 +29,7 @@ struct Jit {
             return 1;
         }
 
+        __djinn_link_debug_support();
         ptr jit = (ptr)0;
         if (!Jit.check(LLVMOrcCreateLLJIT(&jit, null), "cannot create the JIT")) {
             return 1;
@@ -41,12 +42,27 @@ struct Jit {
         }
         LLVMOrcJITDylibAddGenerator(dylib, runtime);
 
+        if (Linker.is_windows()) {
+            ptr crt = (ptr)0;
+            if (!Jit.check(LLVMOrcCreateDynamicLibrarySearchGeneratorForPath(&crt, "ucrtbase.dll", LLVMOrcLLJITGetGlobalPrefix(jit), null, null), "cannot load the C runtime")) {
+                return 1;
+            }
+            LLVMOrcJITDylibAddGenerator(dylib, crt);
+        }
+
         ptr process = (ptr)0;
         if (!Jit.check(LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(&process, LLVMOrcLLJITGetGlobalPrefix(jit), null, null), "cannot expose the process symbols")) {
             return 1;
         }
         LLVMOrcJITDylibAddGenerator(dylib, process);
 
+        LLVMSetDataLayout(gen.module, LLVMOrcLLJITGetDataLayoutStr(jit));
+        if (Linker.is_windows()) {
+            ptr legacy_write = LLVMGetNamedFunction(gen.module, "write");
+            if (legacy_write != null) {
+                LLVMSetValueName2(legacy_write, "_write", 6);
+            }
+        }
         gen.release_builders();
         gen.module_taken = 1;
         ptr shared_context = LLVMOrcCreateNewThreadSafeContextFromLLVMContext(gen.context);

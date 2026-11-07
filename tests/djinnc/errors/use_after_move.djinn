@@ -1,9 +1,0 @@
-struct Data {
-    i32 value;
-}
-
-i32 main() {
-    Data first = { .value = 1 };
-    Data second = first;
-    return first.value + second.value;
-}

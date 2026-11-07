@@ -1,8 +1,0 @@
-T identity<T>(T value) {
-    return value;
-}
-
-i32 main() {
-    MethodInfo* info = typeof(identity);
-    return (i32)info.paramCount;
-}

@@ -178,7 +178,7 @@ struct SymbolTable {
     unsafe TypeRef* find_alias(u32 full, u32 base, u32 scope) {
         i64 index = this.lookup(this.alias_map, full, base, scope);
         if (index < 0) {
-            return null;
+            return (TypeRef*)0;
         }
         PointerList* list = this.aliases;
         return (TypeRef*)list.get((i32)index);
@@ -191,6 +191,12 @@ struct SymbolTable {
             u32 optional_atom = atoms.intern_copy("optional", 8);
             StructInfo* optional_info = this.find_struct(optional_atom, optional_atom, scope);
             if (optional_info == null || !optional_info.is_template) {
+                if (kind == TypeKind.POINTER && !ref.is_signed) {
+                    u32 pointee = this.resolve_type(ref.element, scope);
+                    if (pointee != 0) {
+                        return Types.nullable_pointer_to(pointee);
+                    }
+                }
                 return 0;
             }
             TypeRef* inner = TypeRef.create(kind);
@@ -298,17 +304,44 @@ struct SymbolTable {
         list.push((ptr)info);
     }
 
+    public unsafe u32 nullable_payload(u32 type) {
+        StructInfo* info = this.enum_of_type(type);
+        if (info == null || info.node == null) {
+            return 0;
+        }
+        Node* declaration = info.node;
+        if (declaration.count() != 2) {
+            return 0;
+        }
+        Node* first = declaration.child(0);
+        Node* second = declaration.child(1);
+        mut Node* with_pointer = first;
+        mut Node* empty = second;
+        if (first.count() == 0) {
+            with_pointer = second;
+            empty = first;
+        }
+        if (empty.count() != 0 || with_pointer.count() != 1) {
+            return 0;
+        }
+        Node* payload = with_pointer.child(0);
+        if (!Types.is_pointer(payload.value_type())) {
+            return 0;
+        }
+        return payload.value_type();
+    }
+
     public StructInfo* enum_of_type(u32 type) {
         if (Types.is_struct(type)) {
             StructInfo* info = this.struct_at(Types.struct_index(type));
             if (info.is_enum) {
                 return info;
             }
-            return null;
+            return (StructInfo*)0;
         }
         i64 index = Types.enum_index(type);
         if (index < 0) {
-            return null;
+            return (StructInfo*)0;
         }
         return this.struct_at((u32)index);
     }
@@ -351,7 +384,7 @@ struct SymbolTable {
         AtomTable* atoms = Atoms.get();
         i64 library = this.find_child_namespace(0, atoms.intern_copy("std::types", 10));
         if (library < 0) {
-            return null;
+            return (StructInfo*)0;
         }
         return this.find_struct(atom, atom, (u32)library);
     }
@@ -388,7 +421,7 @@ struct SymbolTable {
     public unsafe InterfaceInfo* find_interface(u32 full, u32 base, u32 scope) {
         i64 index = this.lookup(this.interface_map, full, base, scope);
         if (index < 0) {
-            return null;
+            return (InterfaceInfo*)0;
         }
         PointerList* list = this.interfaces;
         return (InterfaceInfo*)list.get((i32)index);
@@ -397,10 +430,21 @@ struct SymbolTable {
     public unsafe StructInfo* find_struct(u32 full, u32 base, u32 scope) {
         i64 index = this.lookup(this.struct_map, full, base, scope);
         if (index < 0) {
-            return null;
+            return (StructInfo*)0;
         }
         PointerList* list = this.structs;
         return (StructInfo*)list.get((i32)index);
+    }
+
+    public unsafe StructInfo* find_struct_named(u32 base) {
+        PointerList* list = this.structs;
+        for (mut i32 i = 0; i < list.length; i = i + 1) {
+            StructInfo* info = (StructInfo*)list.get(i);
+            if (info != null && info.name_atom == base) {
+                return info;
+            }
+        }
+        return (StructInfo*)0;
     }
 
     static bool same_signature(FunctionInfo* left, FunctionInfo* right) {
@@ -463,7 +507,7 @@ struct SymbolTable {
     public unsafe FunctionInfo* find_function(u32 full, u32 base, u32 scope) {
         i64 index = this.lookup(this.function_map, full, base, scope);
         if (index < 0) {
-            return null;
+            return (FunctionInfo*)0;
         }
         PointerList* list = this.functions;
         return (FunctionInfo*)list.get((i32)index);
@@ -473,7 +517,7 @@ struct SymbolTable {
         U32Map* map = owner.method_map;
         i64 index = map.find(name);
         if (index < 0) {
-            return null;
+            return (FunctionInfo*)0;
         }
         PointerList* list = this.functions;
         return (FunctionInfo*)list.get((i32)index);
@@ -494,7 +538,7 @@ struct SymbolTable {
     public unsafe LocalVariable* find_global(u32 full, u32 base, u32 scope) {
         i64 index = this.lookup(this.global_map, full, base, scope);
         if (index < 0) {
-            return null;
+            return (LocalVariable*)0;
         }
         PointerList* list = this.globals;
         return (LocalVariable*)list.get((i32)index);
@@ -504,7 +548,7 @@ struct SymbolTable {
         U32Map* map = info.field_map;
         i64 index = map.find(name);
         if (index < 0) {
-            return null;
+            return (FieldInfo*)0;
         }
         PointerList* list = info.fields;
         return (FieldInfo*)list.get((i32)index);
@@ -514,7 +558,7 @@ struct SymbolTable {
         U32Map* map = info.constant_map;
         i64 index = map.find(name);
         if (index < 0) {
-            return null;
+            return (Node*)0;
         }
         PointerList* list = info.constants;
         return (Node*)list.get((i32)index);

@@ -6,6 +6,20 @@
 
 #include "djinn_runtime.h"
 
+#ifdef _WIN32
+#include <windows.h>
+static SRWLOCK loggers_lock = SRWLOCK_INIT;
+#define LOGGERS_LOCK() AcquireSRWLockExclusive(&loggers_lock)
+#define LOGGERS_UNLOCK() ReleaseSRWLockExclusive(&loggers_lock)
+#else
+#include <pthread.h>
+static pthread_mutex_t loggers_lock = PTHREAD_MUTEX_INITIALIZER;
+#define LOGGERS_LOCK() pthread_mutex_lock(&loggers_lock)
+#define LOGGERS_UNLOCK() pthread_mutex_unlock(&loggers_lock)
+#endif
+
+static Logger* loggers;
+
 static const char* level_names[] = {
     "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
 };
@@ -181,14 +195,41 @@ static void log_internal(Logger* logger, LogLevel level, const char* fmt, va_lis
     fflush(logger->output);
 }
 
-Logger* logger_create(const char* name, int output, LogLevel level)
+Logger* logger_get(const char* name, int output, LogLevel level)
 {
-    Logger* logger = malloc(sizeof(Logger));
-    logger->name = name;
-    logger->output = (output == 2) ? stderr : stdout;
-    logger->level = level;
-    logger->format[0] = '\0';
+    LOGGERS_LOCK();
+    Logger* logger = loggers;
+    while (logger != NULL && strcmp(logger->name, name) != 0)
+        logger = logger->next;
+    if (logger == NULL)
+    {
+        const size_t size = strlen(name) + 1;
+        logger = malloc(sizeof(Logger));
+        logger->name = malloc(size);
+        memcpy(logger->name, name, size);
+        logger->output = (output == 2) ? stderr : stdout;
+        logger->level = level;
+        logger->format[0] = '\0';
+        logger->next = loggers;
+        loggers = logger;
+    }
+    LOGGERS_UNLOCK();
     return logger;
+}
+
+void logger_destroy_all(void)
+{
+    LOGGERS_LOCK();
+    Logger* logger = loggers;
+    loggers = NULL;
+    LOGGERS_UNLOCK();
+    while (logger != NULL)
+    {
+        Logger* next = logger->next;
+        free(logger->name);
+        free(logger);
+        logger = next;
+    }
 }
 
 void logger_configure_from_properties(Logger* logger, const char* props_path)
@@ -288,9 +329,4 @@ void logger_fatal(Logger* logger, const char* fmt, ...)
     va_start(args, fmt);
     log_internal(logger, LOG_FATAL, fmt, args);
     va_end(args);
-}
-
-void logger_destroy(Logger* logger)
-{
-    free(logger);
 }

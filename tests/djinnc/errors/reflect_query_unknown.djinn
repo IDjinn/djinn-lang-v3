@@ -1,8 +1,0 @@
-struct Person {
-    i32 age;
-}
-
-i32 main() {
-    FieldList list = Person#nothing;
-    return list.length;
-}

@@ -41,7 +41,7 @@ void djinn_text_advance(djinn_text_builder* builder, i32 count) {
 }
 void* __djinn_text_begin() {
     djinn_text_builder* builder = (djinn_text_builder*)__djinn_malloc(sizeof(djinn_text_builder));
-    builder.data = null;
+    builder.data = (i8*)0;
     builder.length = 0;
     builder.capacity = 0;
     djinn_text_reserve(builder, 0);

@@ -14,7 +14,7 @@ impl Parser {
             this.parse_macro_rule(info, name);
         }
         this.expect(TokenKind::RBRACE, "expected '}' to close the macro");
-        return null;
+        return (Node*)0;
     }
 
     unsafe void parse_macro_rule(MacroInfo* info, i32 name_token) {
@@ -65,7 +65,7 @@ impl Parser {
         this.expect(TokenKind::RPAREN, "expected ')' to close the macro rule parameters");
         this.expect(TokenKind::ARROW, "expected '=>' after the macro rule parameters");
         if (this.match(TokenKind::VOID)) {
-            rule.body = null;
+            rule.body = (Node*)0;
         } else {
             this.expect(TokenKind::LBRACE, "expected '{' to open the macro body");
             rule.body = this.parse_expression();
@@ -85,7 +85,7 @@ impl Parser {
                 message.append(" has the same signature as rule ");
                 message.append_int(i + 1);
                 Diagnostics* diagnostics = this.diagnostics;
-                diagnostics.error(this.line_of(name_token), this.column_of(name_token), message.cstr());
+                diagnostics.error(DiagnosticErrors.MACRO, this.line_of(name_token), this.column_of(name_token), message.cstr());
                 this.failed = true;
             }
         }
@@ -173,7 +173,7 @@ impl Parser {
             message.append("no rule of macro '");
             message.append(info.name);
             message.append("' matches these arguments");
-            diagnostics.error(this.line_of(name_token), this.column_of(name_token), message.cstr());
+            diagnostics.error(DiagnosticErrors.MACRO, this.line_of(name_token), this.column_of(name_token), message.cstr());
             this.failed = true;
             return Node.create(NodeKind::NULL_LITERAL, name_token);
         }
@@ -243,7 +243,7 @@ impl Parser {
                 message.append("' is used ");
                 message.append_int(binding.uses);
                 message.append(" times without 'local', which may cause side effects");
-                warnings.warning(this.line_of(name_token), this.column_of(name_token), message.cstr());
+                warnings.warning(DiagnosticWarnings.MACRO_SIDE_EFFECT, this.line_of(name_token), this.column_of(name_token), message.cstr());
             }
         }
         if (scope_node != null) {

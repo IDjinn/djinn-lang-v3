@@ -49,7 +49,7 @@ djinnc djinnc -o build/stage2/djinnc --runtime-dir runtime
 Several `.djinn` files can be passed at once; they share types and namespaces and are processed in sorted order, so
 the output is deterministic.
 
-The runtime (`djinn_runtime.c`, `logger.c`) is compiled together with the program unless you pass a prebuilt library.
+The runtime (the `.c` files in `runtime/`) is compiled together with the program unless you pass a prebuilt library.
 `--runtime-dir` is the directory that holds those two files (the CMake build copies `runtime/` into the build
 directory).
 
@@ -58,12 +58,13 @@ directory).
 | Option | Effect |
 |---|---|
 | `-o <path>` | Output executable (default `a.out`). |
-| `--runtime-dir <dir>` | Directory with `djinn_runtime.c` and `logger.c` (default `runtime`). |
+| `--runtime-dir <dir>` | Directory with the runtime `.c` sources (default `runtime`). |
 | `--runtime-lib <lib>` | Link a prebuilt runtime instead of recompiling it (CMake target `djinn_runtime`). |
 | `--link-arg <arg>` | Extra linker argument; repeatable. |
 | `-O0`, `-O1`, `-O2`, `-O3`, `-Os`, `-Oz` | Optimization level: runs `default<ON>` through `LLVMRunPasses` and sets the backend codegen level. Without it the pipeline is `default<O0>`. |
 | `--lld` | Call the linker directly: `lld-link` on Windows, `ld.lld` on POSIX. Needs `--runtime-lib`. |
 | `--cpu <name\|native>` / `--features <+a,-b>` | Target CPU and feature list for code generation (default `generic`); `native` uses the host CPU and its features. |
+| `--lib-dir <dir>` | Where `libs:` in `djinn.proj` finds each `<name>.djlib` (default `build/libs`). |
 | `--std` / `--std-dir <dir>` | Compile the `std/` library too (also `libs: ['std']` in `djinn.proj`, or `DJINN_STD_DIR`); see [STD_ROADMAP.md](STD_ROADMAP.md). |
 | `--target <triple>` | Target triple (default: the host). Sets the width of `usize`/`isize`; non-x86 targets only support `--emit-ir`. |
 | `--run` | Run `main` in process through ORC LLJIT (`driver/jit.djinn`) instead of writing an object and linking. Needs `--runtime-lib` and the host target; the exit code of `main` is the exit code of djinnc. |
@@ -120,18 +121,31 @@ djinnc --selftest
 
 ### Samples and error cases
 
-[tests/djinnc/run.sh](../tests/djinnc/run.sh) runs the selftest, compiles and runs every file in
-`tests/djinnc/samples` (the expected exit code is in the matching `.exit`; an optional `.stdout` is compared too, ignoring `
-`) and checks that every file in
-`tests/djinnc/errors` fails with an `error:` diagnostic.
+The conformance runner holds these tests, with the source inline in `tests/conformance/src/suites/samples.djinn` and
+`errors.djinn`. Build it and run it from the repository root:
 
 ```bash
-tests/djinnc/run.sh <djinnc> <runtime dir> [runtime lib]
-DJINN_USE_LLD=1 tests/djinnc/run.sh <djinnc> <runtime dir> <runtime lib>   # through --lld
+DJINN_USE_LLD=1 bash tests/conformance/build.sh <djinnc> <runtime lib> build/runner
+build/runner --compiler <absolute djinnc> --runtime-lib <runtime lib> --filter SamplesTests
 ```
 
-To add a sample, drop `name.djinn` and `name.exit` (the exit code of `main`) into `tests/djinnc/samples`, plus `name.stdout` when the program prints. To add an
-error case, add a file to `tests/djinnc/errors` that must be rejected.
+To add a test, add a `[Test]` method to any struct in `tests/conformance/src/suites`. The runner finds it through
+reflection, so there is nothing to register:
+
+```djinn
+[Test]
+void returns_three() {
+    str source = """
+i32 main() {
+    return 3;
+}
+""";
+    Verify.source(source).runs(Expected.exit(3));
+}
+```
+
+An error case uses `Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.USE_AFTER_MOVE).at(3, 9))`. Any
+diagnostic that is missing or extra fails the test.
 
 ### Fixpoint
 

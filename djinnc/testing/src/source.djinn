@@ -1,0 +1,58 @@
+namespace djinnc::testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+import testing;
+
+struct SourcePosition {
+    i32 line;
+    i32 column;
+}
+
+struct Source {
+    ptr<i8> path;
+    ptr<i8> text;
+
+    public unsafe SourcePosition* find(ptr<i8> needle) {
+        SourcePosition* position = (SourcePosition*)Allocator.zeroed(sizeof(SourcePosition));
+        position.line = -1;
+        ptr<i8> contents = this.text;
+        ptr<i8> found = strstr(contents, needle);
+        if (found == null) {
+            return position;
+        }
+        position.line = 1;
+        position.column = 1;
+        for (mut ptr<i8> at = contents; at != found; at = at + 1) {
+            position.column = position.column + 1;
+            if (at[0] == 10) {
+                position.line = position.line + 1;
+                position.column = 1;
+            }
+        }
+        return position;
+    }
+}
+
+struct Sources {
+    public static unsafe Source* file(ptr<i8> path) {
+        Source* source = (Source*)Allocator.zeroed(sizeof(Source));
+        source.path = path;
+        return source;
+    }
+
+    public static unsafe Source* text(ptr<i8> text) {
+        Source* source = (Source*)Allocator.zeroed(sizeof(Source));
+        mut ptr<i8> start = text;
+        if (start[0] == 13) {
+            start = start + 1;
+        }
+        if (start[0] == 10) {
+            start = start + 1;
+        }
+        source.text = start;
+        return source;
+    }
+}

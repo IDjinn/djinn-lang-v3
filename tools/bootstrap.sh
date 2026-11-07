@@ -69,54 +69,21 @@ else
 fi
 
 echo "== samples on stage1, stage2 and stage3"
-failed=0
-for source in "$root"/tests/djinnc/samples/*.djinn; do
-    name="$(basename "$source" .djinn)"
-    expected="$(cat "$root/tests/djinnc/samples/$name.exit")"
-    expected_stdout="$root/tests/djinnc/samples/$name.stdout"
-    reference=""
-    for stage in stage1 stage2 stage3; do
-        binary="$out/samples/$name.$stage$ext"
-        if ! "$out/$stage/djinnc$ext" "$source" -o "$binary" --runtime-dir "$runtime" ${link_flags[@]+"${link_flags[@]}"} >"$out/samples/$name.$stage.log" 2>&1; then
-            echo "FAIL $name ($stage compile)"
-            failed=1
-            continue
-        fi
-        set +e
-        "$binary" >"$out/samples/$name.$stage.stdout"
-        code=$?
-        set -e
-        tr -d '\r' <"$out/samples/$name.$stage.stdout" >"$out/samples/$name.$stage.stdout.lf"
-        result="$code:$(cat "$out/samples/$name.$stage.stdout.lf")"
-        if [ "$code" != "$expected" ]; then
-            echo "FAIL $name ($stage exit $code, expected $expected)"
-            failed=1
-        elif [ -f "$expected_stdout" ] && ! cmp -s "$out/samples/$name.$stage.stdout.lf" "$expected_stdout"; then
-            echo "FAIL $name ($stage stdout differs from $name.stdout)"
-            failed=1
-        elif [ -n "$reference" ] && [ "$result" != "$reference" ]; then
-            echo "FAIL $name ($stage disagrees with stage1)"
-            failed=1
-        fi
-        [ -z "$reference" ] && reference="$result"
-    done
-    debug_binary="$out/samples/$name.debug$ext"
-    if ! "$out/stage2/djinnc$ext" "$source" -g -o "$debug_binary" --runtime-dir "$runtime" ${link_flags[@]+"${link_flags[@]}"} >"$out/samples/$name.debug.log" 2>&1; then
-        echo "FAIL $name (-g compile)"
-        failed=1
-    else
-        set +e
-        "$debug_binary" >/dev/null
-        code=$?
-        set -e
-        if [ "$code" != "$expected" ]; then
-            echo "FAIL $name (-g exit $code, expected $expected)"
-            failed=1
-        fi
-    fi
-    echo "done $name"
+absolute_out="$(cd "$out" && pwd)"
+runner_lib="$runtime_lib"
+if [ -z "$runner_lib" ]; then
+    bash "$root/tools/build_runtime.sh" --out "$out/runtime" >"$out/runtime.log" 2>&1
+    runner_lib="$absolute_out/runtime/djinn_runtime.lib"
+fi
+runner_flags=(--runtime-lib "$runner_lib" --runtime-dir "$runtime" --require Link --filter SamplesTests --out "$absolute_out/samples")
+[ "$use_lld" = 1 ] && runner_flags+=(--lld)
+DJINN_USE_LLD="${use_lld/#0/}" bash "$root/tests/conformance/build.sh" "$absolute_out/stage2/djinnc$ext" "$runner_lib" "$out/runner$ext" "$runtime"
+for stage in stage1 stage2 stage3; do
+    "$out/runner$ext" --compiler "$absolute_out/$stage/djinnc$ext" "${runner_flags[@]}" >"$out/samples.$stage.log" || { grep FAIL "$out/samples.$stage.log"; exit 1; }
+    echo "PASS samples on $stage"
 done
-[ "$failed" = 0 ] || exit 1
+"$out/runner$ext" --compiler "$absolute_out/stage2/djinnc$ext" "${runner_flags[@]}" --link-debug >"$out/samples.debug.log" || { grep FAIL "$out/samples.debug.log"; exit 1; }
+echo "PASS samples with -g"
 
 echo "== benchmark (stage2 compiling djinnc, best of 3)"
 best=0

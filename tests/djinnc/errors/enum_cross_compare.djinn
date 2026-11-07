@@ -1,8 +1,0 @@
-enum Tone { A(), B() }
-enum Shade { X(), Y() }
-i32 main() {
-    Tone k = Tone::A();
-    Shade o = Shade::X();
-    if (k == o) { return 1; }
-    return 0;
-}

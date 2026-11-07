@@ -16,7 +16,7 @@ impl TypeChecker {
         ByteBuffer* message = ByteBuffer.create();
         message.append(operation);
         message.append(" needs an 'unsafe' block or an 'unsafe' function");
-        this.error(at, message.cstr());
+        this.error_code(at, DiagnosticErrors.UNSAFE_REQUIRED, message.cstr());
     }
 
     void check_pointer_cast(Node* node, u32 target, u32 source) {

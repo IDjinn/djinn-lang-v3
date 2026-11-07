@@ -1,6 +1,0 @@
-i32 main() {
-    mut i32 value = 1;
-    i32* reference = &value;
-    value = 2;
-    return *reference;
-}

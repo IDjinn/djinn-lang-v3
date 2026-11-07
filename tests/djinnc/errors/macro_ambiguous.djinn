@@ -1,8 +1,0 @@
-macro pick {
-    (expression a) => { a }
-    (expression b) => { b }
-}
-
-i32 main() {
-    return pick(1);
-}

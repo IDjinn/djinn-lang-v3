@@ -39,7 +39,7 @@ struct LocalScopes {
             }
             index = index - 1;
         }
-        return null;
+        return (LocalVariable*)0;
     }
 
     public unsafe bool contains(LocalVariable* variable) {
@@ -53,8 +53,8 @@ struct LocalScopes {
 
     unsafe void grow() {
         i32 capacity = this.capacity * 2;
-        ptr<u32> names = (ptr<u32>)Memory.zalloc((i64)capacity * 4);
-        LocalVariable** variables = (LocalVariable**)Memory.zalloc((i64)capacity * 8);
+        ptr<u32> names = (ptr<u32>)Memory.zalloc((u64)capacity * 4);
+        LocalVariable** variables = (LocalVariable**)Memory.zalloc((u64)capacity * 8);
         memcpy(names, this.names, (u64)this.length * 4);
         memcpy(variables, this.variables, (u64)this.length * 8);
         this.names = names;

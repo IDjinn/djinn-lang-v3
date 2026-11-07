@@ -26,8 +26,8 @@ impl SemanticAnalyzer {
         TypeRef* target = declaration.type();
         PointerList* names = target.args;
         if (names == null || names.length != args.length) {
-            this.error(declaration, "impl must name every type parameter of the generic type");
-            return null;
+            this.error_code(declaration, DiagnosticErrors.INVALID_IMPL, "impl must name every type parameter of the generic type");
+            return (U32Map*)0;
         }
         U32Map* bindings = U32Map.create(Memory.arena(), 8);
         for (mut i32 a = 0; a < names.length; a = a + 1) {
@@ -55,7 +55,7 @@ impl SemanticAnalyzer {
         TypeRef* target = declaration.type();
         SymbolTable* symbols = this.symbols;
         if (target == null || target.kind == TypeKind.VOID || target.kind == TypeKind.AUTO || target.kind == TypeKind.NONE) {
-            return null;
+            return (StructInfo*)0;
         }
         if (target.kind != TypeKind.NAMED) {
             return symbols.primitive_owner(this.resolve(target, declaration));
@@ -66,7 +66,7 @@ impl SemanticAnalyzer {
     void collect_impl(Node* declaration) {
         StructInfo* owner = this.impl_target(declaration);
         if (owner == null) {
-            this.error(declaration, "impl target must be a struct, an enum or a primitive type");
+            this.error_code(declaration, DiagnosticErrors.INVALID_IMPL, "impl target must be a struct, an enum or a primitive type");
             return;
         }
         if (owner.is_template) {
@@ -83,7 +83,7 @@ impl SemanticAnalyzer {
                 constants.push((ptr)member);
                 member.set_value_type(this.resolve(member.type(), member));
             } else if (member.kind() != NodeKind::PARAMETER) {
-                this.error(member, "an impl block can only contain methods and constants");
+                this.error_code(member, DiagnosticErrors.INVALID_IMPL, "an impl block can only contain methods and constants");
             }
         }
     }
@@ -130,14 +130,14 @@ impl SemanticAnalyzer {
         message.append(" '");
         message.append(member);
         message.append("'");
-        this.error(at, message.cstr());
+        this.error_code(at, DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED, message.cstr());
     }
 
     unsafe void check_conformance(StructInfo* owner, TypeRef* reference, Node* at) {
         SymbolTable* symbols = this.symbols;
         InterfaceInfo* contract = symbols.find_interface(reference.full_atom, reference.name_atom, this.scope);
         if (contract == null) {
-            this.error(at, "unknown interface");
+            this.error_code(at, DiagnosticErrors.UNKNOWN_INTERFACE, "unknown interface");
             return;
         }
         Node* declaration = contract.node;
@@ -153,7 +153,7 @@ impl SemanticAnalyzer {
                 }
             } else {
                 if (given.length != params.count()) {
-                    this.error(at, "wrong number of interface type arguments");
+                    this.error_code(at, DiagnosticErrors.TYPE_ARGUMENT_COUNT, "wrong number of interface type arguments");
                     return;
                 }
                 interface_bindings = U32Map.create(Memory.arena(), 8);
@@ -163,7 +163,7 @@ impl SemanticAnalyzer {
                 }
             }
         } else if (reference.args != null) {
-            this.error(at, "interface is not generic");
+            this.error_code(at, DiagnosticErrors.UNKNOWN_INTERFACE, "interface is not generic");
             return;
         }
         U32Map* saved_bindings = symbols.bindings;
@@ -287,7 +287,7 @@ impl SemanticAnalyzer {
                 return declaration;
             }
         }
-        return null;
+        return (Node*)0;
     }
 
     void apply_inspections(Node* program) {
@@ -303,7 +303,7 @@ impl SemanticAnalyzer {
             } else if (declaration.kind() == NodeKind::INSPECT_DECL) {
                 Node* target = this.find_struct_node(root, this.last_segment(declaration.text()));
                 if (target == null) {
-                    this.error(declaration, "$inspect target is not a struct, enum or union declared in this program");
+                    this.error_code(declaration, DiagnosticErrors.INVALID_INSPECT_TARGET, "$inspect target is not a struct, enum or union declared in this program");
                     continue;
                 }
                 if (symbols.generate_disabled) {

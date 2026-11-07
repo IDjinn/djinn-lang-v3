@@ -20,15 +20,17 @@ typedef enum
     LOG_FATAL
 } LogLevel;
 
-typedef struct
+typedef struct Logger
 {
     FILE* output;
     LogLevel level;
-    const char* name;
+    char* name;
     char format[DJINN_LOG_FORMAT_MAX];
+    struct Logger* next;
 } Logger;
 
-Logger* logger_create(const char* name, int output, LogLevel level);
+Logger* logger_get(const char* name, int output, LogLevel level);
+void logger_destroy_all(void);
 void logger_configure_from_properties(Logger* logger, const char* props_path);
 
 void logger_set_level(Logger* logger, LogLevel level);
@@ -40,7 +42,5 @@ void logger_info(Logger* logger, const char* fmt, ...);
 void logger_warn(Logger* logger, const char* fmt, ...);
 void logger_error(Logger* logger, const char* fmt, ...);
 void logger_fatal(Logger* logger, const char* fmt, ...);
-
-void logger_destroy(Logger* logger);
 
 #endif //DJINN_LOGGER_H

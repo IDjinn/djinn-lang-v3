@@ -1,9 +1,0 @@
-extern "C" {
-    i32 printf(i8* format, ...);
-}
-
-i32 main() {
-    printf("hello djinnc\n");
-    printf("%d\n", 40 + 2);
-    return 3;
-}

@@ -1,0 +1,1345 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct ErrorsTests {
+    [Test]
+    void attribute_payload_not_constant() {
+        str source = """
+attribute Stage(AttributeTarget.All) {
+    i32 mask;
+}
+
+i32 runtime_value() {
+    return 3;
+}
+
+[Stage(runtime_value())]
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_ATTRIBUTE_ARGUMENT).at(9, 21));
+    }
+
+    [Test]
+    void attribute_payload_too_many() {
+        str source = """
+attribute Stage(AttributeTarget.All) {
+    i32 mask;
+}
+
+[Stage(1, 2)]
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNKNOWN_FIELD).at(5, 11));
+    }
+
+    [Test]
+    void attribute_payload_unknown_field() {
+        str source = """
+attribute Stage(AttributeTarget.All) {
+    i32 mask;
+}
+
+[Stage(nope = 1)]
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNKNOWN_FIELD).at(5, 8));
+    }
+
+    [Test]
+    void borrow_assign_while_borrowed() {
+        str source = """
+i32 main() {
+    mut i32 value = 1;
+    i32* reference = &value;
+    value = 2;
+    return *reference;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.BORROW_CONFLICT).at(4, 5));
+    }
+
+    [Test]
+    void borrow_exclusive_conflict() {
+        str source = """
+i32 main() {
+    mut i32 value = 1;
+    i32* first = &value;
+    i32* second = &value;
+    return *first + *second;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.BORROW_CONFLICT).at(4, 19));
+    }
+
+    [Test]
+    void borrow_move_while_borrowed() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 main() {
+    Data first = { .value = 1 };
+    Data* reference = &first;
+    Data second = first;
+    return reference.value + second.value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.BORROW_CONFLICT).at(8, 19));
+    }
+
+    [Test]
+    void borrow_return_local() {
+        str source = """
+i32* leak() {
+    i32 value = 1;
+    return &value;
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.BORROW_OUTLIVES_VALUE).at(3, 12));
+    }
+
+    [Test]
+    void break_outside_loop() {
+        str source = """
+i32 main() {
+    break;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_JUMP).at(2, 5));
+    }
+
+    [Test]
+    void compile_time_if_runtime() {
+        str source = """
+i32 main() {
+    mut i32 x = 1;
+    if constexpr x > 0 {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(3, 18));
+    }
+
+    [Test]
+    void consteval_runtime_argument() {
+        str source = """
+consteval i32 twice(i32 n) {
+    return n * 2;
+}
+
+i32 main() {
+    mut i32 x = 4;
+    return twice(x);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(7, 18));
+    }
+
+    [Test]
+    void constexpr_not_constant() {
+        str source = """
+i32 runtime_value() {
+    return 3;
+}
+
+constexpr i32 VALUE = runtime_value();
+
+i32 main() {
+    return VALUE;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(5, 36));
+    }
+
+    [Test]
+    void constructor_arguments() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+i32 main() {
+    Point p = Point(1);
+    return p.x;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTRUCTOR_CALL).at(12, 20));
+    }
+
+    [Test]
+    void enum_cross_compare() {
+        str source = """
+enum Tone { A(), B() }
+enum Shade { X(), Y() }
+i32 main() {
+    Tone k = Tone::A();
+    Shade o = Shade::X();
+    if (k == o) { return 1; }
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_OPERATOR_OPERAND).at(6, 11));
+    }
+
+    [Test]
+    void enum_payload() {
+        str source = """
+enum Shape {
+    Circle(i32),
+    Square
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.ENUM_WITH_PAYLOAD).at(1, 1));
+    }
+
+    [Test]
+    void error_missing_try() {
+        str source = """
+struct Failure;
+
+i32 risky() throws(Failure) {
+    throw Failure();
+}
+
+i32 main() {
+    return risky();
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.MISSING_TRY).at(8, 17));
+    }
+
+    [Test]
+    void error_switch_not_exhaustive() {
+        str source = """
+struct First;
+struct Second;
+
+i32 risky() throws(First, Second) {
+    throw First();
+}
+
+i32 main() {
+    return switch risky() {
+        Result v -> v,
+        First e -> 1
+    };
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.SWITCH_NOT_EXHAUSTIVE).at(9, 12));
+    }
+
+    [Test]
+    void error_throw_not_listed() {
+        str source = """
+struct Failure;
+struct Other;
+
+i32 risky() throws(Failure) {
+    throw Other();
+}
+
+i32 main() {
+    return try risky() ?: 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.THROWS_TYPE_MISMATCH).at(5, 5));
+    }
+
+    [Test]
+    void error_try_non_throwing() {
+        str source = """
+i32 plain() {
+    return 1;
+}
+
+i32 main() {
+    return try plain() ?: 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.TRY_ON_NON_THROWING).at(6, 12));
+    }
+
+    [Test]
+    void generic_constraint_violated() {
+        str source = """
+interface IValue {
+    i32 getValue();
+}
+
+struct Container<T> where T : IValue {
+    T item;
+}
+
+struct Plain {
+    i32 x;
+}
+
+i32 main() {
+    Plain p = { .x = 1 };
+    Container<Plain> c = { .item = p };
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED).at(15, 5));
+    }
+
+    [Test]
+    void generic_function_constraint() {
+        str source = """
+interface Comparable<T> {
+    i32 compare(T other);
+}
+
+struct Plain {
+    i32 x;
+}
+
+T larger<T>(T a, T b) where T : Comparable<T> {
+    return a;
+}
+
+i32 main() {
+    Plain a = { .x = 1 };
+    Plain b = { .x = 2 };
+    Plain c = larger(a, b);
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED).at(16, 21));
+    }
+
+    [Test]
+    void generic_interface_mismatch() {
+        str source = """
+interface Comparable<T> {
+    i32 compare(T other);
+}
+
+struct Point : Comparable<Point> {
+    i32 x;
+
+    i32 compare(i32 other) {
+        return this.x - other;
+    }
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED).at(5, 1));
+    }
+
+    [Test]
+    void generic_partial_constraint() {
+        str source = """
+interface IReadable {
+    i32 read();
+}
+
+interface IWritable {
+    void write(i32 value);
+}
+
+struct Store<T> where T : IReadable, IWritable {
+    T backend;
+}
+
+struct ReadOnly : IReadable {
+    i32 value;
+
+    i32 read() {
+        return this.value;
+    }
+}
+
+i32 main() {
+    Store<ReadOnly> s;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED).at(22, 5));
+    }
+
+    [Test]
+    void immutable_assignment() {
+        str source = """
+i32 main() {
+    i32 value = 1;
+    value = 2;
+    return value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.ASSIGN_TO_IMMUTABLE).at(3, 5));
+    }
+
+    [Test]
+    void increment_immutable() {
+        str source = """
+i32 main() {
+    i32 fixed = 1;
+    fixed++;
+    return fixed;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.ASSIGN_TO_IMMUTABLE).at(3, 5));
+    }
+
+    [Test]
+    void increment_rvalue() {
+        str source = """
+i32 value() { return 1; }
+i32 main() {
+    value()++;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_OPERATOR_OPERAND).at(3, 12));
+    }
+
+    [Test]
+    void inspect_missing_target() {
+        str source = """
+$inspect Ghost {
+    generate {
+        public i32 extra;
+    }
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_INSPECT_TARGET).at(1, 1));
+    }
+
+    [Test]
+    void interface_missing_method() {
+        str source = """
+interface Shape {
+    i32 area();
+}
+
+struct Blob : Shape {
+    i32 x;
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED).at(5, 1));
+    }
+
+    [Test]
+    void interface_wrong_signature() {
+        str source = """
+interface Shape {
+    i32 area();
+}
+
+struct Blob {
+    i32 x;
+}
+
+impl Shape for Blob {
+    i64 area() {
+        return 1;
+    }
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INTERFACE_NOT_IMPLEMENTED).at(9, 6));
+    }
+
+    [Test]
+    void macro_ambiguous() {
+        str source = """
+macro pick {
+    (expression a) => { a }
+    (expression b) => { b }
+}
+
+i32 main() {
+    return pick(1);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.MACRO).at(1, 7));
+    }
+
+    [Test]
+    void macro_no_match() {
+        str source = """
+macro pick {
+    (add, expression a) => { a }
+}
+
+i32 main() {
+    return pick(sub, 1);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.MACRO).at(6, 12));
+    }
+
+    [Test]
+    void overload_ambiguous() {
+        str source = """
+i32 pick(i32 a, i64 b) {
+    return 1;
+}
+
+i32 pick(i64 a, i32 b) {
+    return 2;
+}
+
+i32 main() {
+    return pick(1, 2);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.AMBIGUOUS_CALL).at(10, 16));
+    }
+
+    [Test]
+    void overload_none() {
+        str source = """
+struct P {
+    i32 x;
+}
+
+i32 take(i32 a) {
+    return a;
+}
+
+i32 take(i32 a, i32 b) {
+    return a;
+}
+
+i32 main() {
+    P p = { .x = 1 };
+    return take(p);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.NO_MATCHING_OVERLOAD).at(15, 16));
+    }
+
+    [Test]
+    void ptr_arithmetic_safe() {
+        str source = """
+i32 main() {
+    i32 value = 7;
+    ptr<i32> raw = (ptr<i32>)&value;
+    ptr<i32> next = raw + 1;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNSAFE_REQUIRED).at(4, 25));
+    }
+
+    [Test]
+    void ptr_deref_safe() {
+        str source = """
+i32 main() {
+    i32 value = 7;
+    ptr<i32> raw = (ptr<i32>)&value;
+    return *raw;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNSAFE_REQUIRED).at(4, 12));
+    }
+
+    [Test]
+    void ptr_from_integer_safe() {
+        str source = """
+i32 main() {
+    u64 address = 4096;
+    ptr<i32> raw = (ptr<i32>)address;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNSAFE_REQUIRED).at(3, 20));
+    }
+
+    [Test]
+    void ptr_index_safe() {
+        str source = """
+i32 main() {
+    i32 value = 7;
+    ptr<i32> raw = (ptr<i32>)&value;
+    return raw[0];
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNSAFE_REQUIRED).at(4, 15));
+    }
+
+    [Test]
+    void ptr_to_typed_safe() {
+        str source = """
+i32 main() {
+    i32 value = 7;
+    ptr raw = (ptr)&value;
+    i32* typed = (i32*)raw;
+    return *typed;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNSAFE_REQUIRED).at(4, 18));
+    }
+
+    [Test]
+    void recursive_enum() {
+        str source = """
+union Tree {
+    Leaf(i32),
+    Branch(Tree, Tree)
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INFINITE_SIZE_TYPE).at(1, 1));
+    }
+
+    [Test]
+    void recursive_struct() {
+        str source = """
+struct Node {
+    i32 value;
+    Node next;
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INFINITE_SIZE_TYPE).at(1, 1));
+    }
+
+    [Test]
+    void reflect_generic_function() {
+        str source = """
+T identity<T>(T value) {
+    return value;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(identity);
+    return (i32)info.paramCount;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_REFLECTION_TARGET).at(6, 24));
+    }
+
+    [Test]
+    void reflect_overloaded_function() {
+        str source = """
+i32 pick(i32 value) {
+    return value;
+}
+
+i32 pick(i64 value) {
+    return (i32)value;
+}
+
+i32 main() {
+    MethodInfo* info = typeof(pick);
+    return (i32)info.paramCount;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_REFLECTION_TARGET).at(10, 24));
+    }
+
+    [Test]
+    void reflect_query_unknown() {
+        str source = """
+struct Person {
+    i32 age;
+}
+
+i32 main() {
+    FieldList list = Person#nothing;
+    return list.length;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNEXPECTED_TOKEN).at(6, 28));
+    }
+
+    [Test]
+    void reflect_unknown_name() {
+        str source = """
+i32 main() {
+    TypeInfo* info = typeof(Missing);
+    return info.size;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNKNOWN_TYPE).at(2, 22));
+    }
+
+    [Test]
+    void static_mut_without_unsafe() {
+        str source = """
+static mut i32 counter = 0;
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNEXPECTED_TOKEN).at(1, 1));
+    }
+
+    [Test]
+    void undefined_variable() {
+        str source = """
+i32 main() {
+    return missing;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNDEFINED_VARIABLE).at(2, 12));
+    }
+
+    [Test]
+    void unknown_attribute() {
+        str source = """
+[NotAnAttribute]
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNKNOWN_ATTRIBUTE).at(1, 2));
+    }
+
+    [Test]
+    void unknown_field() {
+        str source = """
+struct Point {
+    i32 x;
+}
+
+i32 main() {
+    Point p;
+    return p.z;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNKNOWN_FIELD).at(7, 13));
+    }
+
+    [Test]
+    void unknown_type() {
+        str source = """
+i32 take(Missing* value) {
+    return 0;
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNKNOWN_TYPE).at(1, 10));
+    }
+
+    [Test]
+    void unsafe_without_mut() {
+        str source = """
+unsafe static i32 counter = 0;
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNEXPECTED_TOKEN).at(1, 15));
+    }
+
+    [Test]
+    void use_after_move() {
+        str source = """
+struct Data {
+    i32 value;
+}
+
+i32 main() {
+    Data first = { .value = 1 };
+    Data second = first;
+    return first.value + second.value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.USE_AFTER_MOVE).at(8, 12));
+    }
+
+    [Test]
+    void wrong_arguments() {
+        str source = """
+i32 add(i32 a, i32 b) {
+    return a + b;
+}
+
+i32 main() {
+    return add(1);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.WRONG_ARGUMENT_COUNT).at(6, 15));
+    }
+
+    [Test]
+    void null_into_integer() {
+        str source = """
+i32 main() {
+    i32 n = null;
+    return n;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(2, 13));
+    }
+
+    [Test]
+    void string_into_integer() {
+        str source = """
+i32 main() {
+    i32 n = "text";
+    return n;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(2, 13));
+    }
+
+    [Test]
+    void integer_into_struct() {
+        str source = """
+struct User {
+    i32 id;
+}
+
+i32 main() {
+    User user = 5;
+    return user.id;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(6, 17));
+    }
+
+    [Test]
+    void assign_null_to_integer() {
+        str source = """
+i32 main() {
+    mut i32 n = 1;
+    n = null;
+    return n;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(3, 9));
+    }
+
+    [Test]
+    void return_pointer_as_struct() {
+        str source = """
+struct User {
+    i32 id;
+}
+
+User make(User* source) {
+    return source;
+}
+
+i32 main() {
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(6, 12));
+    }
+
+    [Test]
+    void null_into_safe_pointer() {
+        str source = """
+struct Box {
+    i32 value;
+}
+
+i32 main() {
+    Box* box = null;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(6, 16));
+    }
+
+    [Test]
+    void nullable_into_safe_pointer() {
+        str source = """
+struct Box {
+    i32 value;
+}
+
+i32 main() {
+    Box*? maybe = null;
+    Box* box = maybe;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(7, 16));
+    }
+
+    [Test]
+    void null_argument_to_safe_pointer() {
+        str source = """
+struct Box {
+    i32 value;
+}
+
+i32 read(Box* box) {
+    return box.value;
+}
+
+i32 main() {
+    return read(null);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(10, 17));
+    }
+
+    [Test]
+    void null_into_field() {
+        str source = """
+struct Box { i32 v; }
+struct Holder { Box* box; }
+i32 main() {
+    Holder h = { .box = null };
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH).at(4, 25));
+    }
+
+    [Test]
+    void float_into_integer() {
+        str source = """
+i32 main() {
+    f64 value = 1.5;
+    i32 result = value;
+    return result;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void float_literal_into_integer() {
+        str source = """
+i32 main() {
+    i32 result = 1.5;
+    return result;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(2, 18));
+    }
+
+    [Test]
+    void integer_into_float() {
+        str source = """
+i32 main() {
+    i32 value = 1;
+    f64 result = value;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void narrow_integer() {
+        str source = """
+i32 main() {
+    i64 value = 1;
+    i32 result = value;
+    return result;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void narrow_float() {
+        str source = """
+i32 main() {
+    f64 value = 1.5;
+    f32 result = value;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void signed_into_unsigned() {
+        str source = """
+i32 main() {
+    i32 value = 1;
+    u32 result = value;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void unsigned_into_wider_signed() {
+        str source = """
+i32 main() {
+    u32 value = 1;
+    i64 result = value;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void bool_into_integer() {
+        str source = """
+i32 main() {
+    bool value = true;
+    i32 result = value;
+    return result;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 18));
+    }
+
+    [Test]
+    void integer_into_pointer() {
+        str source = """
+i32 main() {
+    i32 value = 1;
+    i32* result = value;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 19));
+    }
+
+    [Test]
+    void narrow_argument() {
+        str source = """
+i32 same(i32 value) {
+    return value;
+}
+
+i32 main() {
+    i64 value = 1;
+    return same(value);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(7, 17));
+    }
+
+    [Test]
+    void narrow_return() {
+        str source = """
+i32 main() {
+    i64 value = 1;
+    return value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(3, 12));
+    }
+
+    [Test]
+    void narrow_assignment() {
+        str source = """
+i32 main() {
+    i64 value = 1;
+    mut i32 result = 0;
+    result = value;
+    return result;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(4, 14));
+    }
+
+    [Test]
+    void narrow_compound_assignment() {
+        str source = """
+i32 main() {
+    i64 value = 1;
+    mut i32 result = 0;
+    result += value;
+    return result;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(4, 12));
+    }
+
+    [Test]
+    void narrow_field() {
+        str source = """
+struct Holder {
+    i32 value;
+}
+
+i32 main() {
+    i64 wide = 1;
+    Holder holder = { .value = wide };
+    return holder.value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(7, 32));
+    }
+
+    [Test]
+    void mixed_sign_operands() {
+        str source = """
+i32 main() {
+    i32 left = 1;
+    u32 right = 1;
+    u32 result = (u32)(left + right);
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(4, 29));
+    }
+
+    [Test]
+    void mixed_sign_comparison() {
+        str source = """
+i32 main() {
+    i32 left = 1;
+    u32 right = 1;
+    if (left < right) { return 1; }
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(4, 14));
+    }
+
+    [Test]
+    void integer_and_float_operands() {
+        str source = """
+i32 main() {
+    i32 left = 1;
+    f64 right = 1.5;
+    f64 result = left + right;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.IMPLICIT_CONVERSION).at(4, 23));
+    }
+
+    [Test]
+    void constant_division_by_zero() {
+        str source = """
+i32 main() {
+    i32 value = 10;
+    return value / 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(3, 20));
+    }
+
+    [Test]
+    void constant_remainder_by_zero() {
+        str source = """
+i32 main() {
+    i32 value = 10;
+    return value % (1 - 1);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(3, 23));
+    }
+
+    [Test]
+    void constant_shift_too_far() {
+        str source = """
+i32 main() {
+    i32 value = 1;
+    return value << 32;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(3, 21));
+    }
+
+    [Test]
+    void constant_shift_negative() {
+        str source = """
+i32 main() {
+    i32 value = 1;
+    return value >> (0 - 1);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(3, 24));
+    }
+
+    [Test]
+    void constant_division_overflow() {
+        str source = """
+i32 main() {
+    return (0 - 2147483647 - 1) / (0 - 1);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 33));
+    }
+
+    [Test]
+    void constant_float_out_of_range() {
+        str source = """
+i32 main() {
+    return (i32)1.0e30;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 12));
+    }
+
+    [Test]
+    void constexpr_division_overflow() {
+        str source = """
+constexpr i32 VALUE = (0 - 2147483647 - 1) / (0 - 1);
+
+i32 main() {
+    return VALUE;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(1, 44));
+    }
+
+    [Test]
+    void constexpr_float_out_of_range() {
+        str source = """
+constexpr i32 VALUE = (i32)1.0e30;
+
+i32 main() {
+    return VALUE;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(1, 23));
+    }
+
+    [Test]
+    void literal_out_of_range() {
+        str source = """
+i32 main() {
+    u8 value = 300;
+    return (i32)value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 16));
+    }
+
+    [Test]
+    void cast_literal_out_of_range() {
+        str source = """
+i32 main() {
+    return (i32)(u8)300;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 21));
+    }
+
+    [Test]
+    void negative_literal_into_unsigned() {
+        str source = """
+i32 main() {
+    u8 value = -1;
+    return (i32)value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 17));
+    }
+
+    [Test]
+    void literal_above_signed_maximum() {
+        str source = """
+i32 main() {
+    i8 value = 128;
+    return (i32)value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 16));
+    }
+
+    [Test]
+    void literal_below_signed_minimum() {
+        str source = """
+i32 main() {
+    i8 value = -129;
+    return (i32)value;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(2, 17));
+    }
+
+    [Test]
+    void literal_argument_out_of_range() {
+        str source = """
+i32 same(u8 value) {
+    return (i32)value;
+}
+
+i32 main() {
+    return same(256);
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(6, 17));
+    }
+
+    [Test]
+    void literal_operand_out_of_range() {
+        str source = """
+i32 main() {
+    u8 value = 1;
+    if (value == 300) { return 1; }
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(3, 18));
+    }
+
+    [Test]
+    void constant_cast_out_of_range() {
+        str source = """
+constexpr i32 LIMIT = 300;
+
+i32 main() {
+    return (i32)(u8)LIMIT;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(4, 17));
+    }
+
+    [Test]
+    void negative_constant_cast_to_unsigned() {
+        str source = """
+constexpr i32 LIMIT = -1;
+
+i32 main() {
+    return (i32)(u8)LIMIT;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.INVALID_CONSTANT_EXPRESSION).at(4, 17));
+    }
+}

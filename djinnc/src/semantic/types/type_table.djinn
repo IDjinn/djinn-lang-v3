@@ -111,6 +111,15 @@ struct TypeTable {
         return id;
     }
 
+    public u32 nullable_pointer_to(u32 element) {
+        return this.intern_scalar(6291456 + element, TypeKind.POINTER, element, false);
+    }
+
+    public unsafe bool is_nullable_pointer(u32 id) {
+        U32Map* scalars = this.scalars;
+        return scalars.find(6291456 + this.operand(id)) == (i64)id;
+    }
+
     public u32 raw_pointer_to(u32 element) {
         return this.intern_scalar(3145728 + element, TypeKind.POINTER, element, true);
     }

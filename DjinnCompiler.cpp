@@ -150,6 +150,14 @@ const std::string preludes[] = {
 
 const std::filesystem::path runtimePaths[] = {
     "runtime/djinn_runtime.c",
+    "runtime/scheduler.c",
+    "runtime/io_file.c",
+    "runtime/io_socket.c",
+    "runtime/diagnostics.c",
+    "runtime/threads.c",
+    "runtime/console.c",
+    "runtime/filesystem.c",
+    "runtime/process.c",
     "runtime/logger.c",
 };
 

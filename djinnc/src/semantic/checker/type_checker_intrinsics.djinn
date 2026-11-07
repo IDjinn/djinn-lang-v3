@@ -42,6 +42,6 @@ impl TypeChecker {
         if (Strings.same(group, "Runtime") && Strings.same(name, "PointerSize")) {
             return this.provided_constant(member, Types.i32_type(), (i64)(Target.pointer_bits() / 8));
         }
-        return null;
+        return (Node*)0;
     }
 }

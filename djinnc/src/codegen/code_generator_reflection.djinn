@@ -8,7 +8,7 @@ impl CodeGenerator {
             return named;
         }
         if (!Types.is_struct(type)) {
-            return null;
+            return (StructInfo*)0;
         }
         return symbols.struct_at(Types.struct_index(type));
     }
@@ -33,6 +33,33 @@ impl CodeGenerator {
             return true;
         }
         return Attributes.has(this.reflection_node(info), "Reflect");
+    }
+
+    unsafe void register_reflected_types() {
+        SymbolTable* symbols = this.symbols;
+        PointerList* structs = symbols.structs;
+        ptr<ptr> values = CodeGenerator.array_of(structs.length + 1);
+        mut i32 count = 0;
+        for (mut i32 i = 0; i < structs.length; i = i + 1) {
+            StructInfo* info = (StructInfo*)structs.get(i);
+            u32 type = Types.structure((u32)i);
+            if (info.origin == null && !info.is_enum && this.is_reflected(type)) {
+                values[count] = this.type_info_of(type);
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return;
+        }
+        ptr pointer_llvm = LLVMPointerTypeInContext(this.context, 0);
+        ptr i32_type = LLVMIntTypeInContext(this.context, 32);
+        ptr<ptr> params = CodeGenerator.array_of(2);
+        params[0] = pointer_llvm;
+        params[1] = i32_type;
+        ptr<ptr> args = CodeGenerator.array_of(2);
+        args[0] = this.constant_array(pointer_llvm, values, count, "__djinn_reflected_types");
+        args[1] = LLVMConstInt(i32_type, (u64)count, 0);
+        this.call_runtime("__djinn_reflect_register", LLVMVoidTypeInContext(this.context), params, args, 2);
     }
 
     ptr null_pointer() {
@@ -68,6 +95,36 @@ impl CodeGenerator {
         return "";
     }
 
+    unsafe ptr attribute_payload(AttributeUse* use, ptr<i8> name) {
+        if (use.payload == null || use.payload_type == 0) {
+            return this.null_pointer();
+        }
+        SymbolTable* symbols = this.symbols;
+        StructInfo* info = symbols.struct_at(Types.struct_index(use.payload_type));
+        PointerList* fields = info.fields;
+        Node* payload = use.payload;
+        ptr<ptr> values = CodeGenerator.array_of(fields.length);
+        for (mut i32 f = 0; f < fields.length; f = f + 1) {
+            FieldInfo* field = (FieldInfo*)fields.get(f);
+            mut ptr value = LLVMConstNull(this.llvm_type(field.type));
+            for (mut i32 a = 0; a < payload.count(); a = a + 1) {
+                Node* init = payload.child(a);
+                bool named = init.text() != null;
+                if ((named && init.name() == field.name_atom) || (!named && a == f)) {
+                    Value* constant = this.gen_expression(init.first());
+                    value = constant.ref;
+                }
+            }
+            values[f] = value;
+        }
+        ptr struct_type = this.llvm_type(use.payload_type);
+        ptr global = LLVMAddGlobal(this.module, struct_type, name);
+        LLVMSetInitializer(global, LLVMConstNamedStruct(struct_type, values, (u32)fields.length));
+        LLVMSetGlobalConstant(global, 1);
+        LLVMSetLinkage(global, LlvmConst.LINKAGE_INTERNAL);
+        return global;
+    }
+
     unsafe ptr attribute_table(Node* target, ptr<i8> owner_name) {
         PointerList* uses = Attributes.of(target);
         if (uses.length == 0) {
@@ -78,10 +135,11 @@ impl CodeGenerator {
         ptr<ptr> entries = CodeGenerator.array_of(uses.length);
         for (mut i32 i = 0; i < uses.length; i = i + 1) {
             AttributeUse* use = (AttributeUse*)uses.get(i);
-            ptr<ptr> values = CodeGenerator.array_of(2);
+            ptr<ptr> values = CodeGenerator.array_of(3);
             values[0] = LLVMBuildGlobalStringPtr(this.builder, use.name, "attr.name");
             values[1] = LLVMBuildGlobalStringPtr(this.builder, this.attribute_text(use), "attr.value");
-            entries[i] = LLVMConstNamedStruct(info_llvm, values, 2);
+            values[2] = this.attribute_payload(use, this.table_name(owner_name, ".payload", ""));
+            entries[i] = LLVMConstNamedStruct(info_llvm, values, 3);
         }
         return this.constant_array(info_llvm, entries, uses.length, owner_name);
     }
@@ -94,7 +152,7 @@ impl CodeGenerator {
                 return member;
             }
         }
-        return null;
+        return (Node*)0;
     }
 
     unsafe ptr field_table(StructInfo* info, u32 type, ptr<i8> prefix) {
@@ -210,6 +268,10 @@ impl CodeGenerator {
 
     unsafe bool is_reflected_method(FunctionInfo* method, StructInfo* info) {
         if (method.owner != info || method.is_template || method.node == null) {
+            return false;
+        }
+        Node* declaration = method.node;
+        if (declaration.first() == null && !declaration.is_header()) {
             return false;
         }
         return method.name[0] != 46;
@@ -587,7 +649,7 @@ impl CodeGenerator {
                 }
             }
         }
-        return null;
+        return (FunctionInfo*)0;
     }
 
     unsafe ptr property_list(StructInfo* info, ptr<i8> prefix) {

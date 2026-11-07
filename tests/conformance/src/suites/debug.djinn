@@ -1,0 +1,109 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct DebugTests {
+    [Test]
+    void enums() {
+        str source = """
+enum Level {
+    Low = 10,
+    Mid,
+    High
+}
+
+unsafe static mut i32 scale = 3;
+
+i32 weight(Level level) {
+    i32 base = (i32)level;
+    i32 result = base * scale;
+    return result;
+}
+
+i32 main() {
+    Level current = Level::Mid();
+    return weight(current);
+}
+""";
+        Verify.source(source)
+            .stops_at(12, Expected.contains("base = 11").and_contains("result = 33").and_contains("level = ").and_contains("weight"));
+    }
+
+    [Test]
+    void locals() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 add(i32 a, i32 b) {
+    i32 total = a + b;
+    return total;
+}
+
+i32 main() {
+    Point p = { .x = 3, .y = 4 };
+    i32 r = add(p.x, p.y);
+    return r;
+}
+""";
+        Verify.source(source)
+            .stops_at(8, Expected.contains("locals.djinn:8").and_contains("a = 3").and_contains("b = 4").and_contains("total = 7").and_contains("add(a=3, b=4)"))
+            .stops_at(14, Expected.contains("r = 7").and_contains("x = 3").and_contains("y = 4").and_contains("main"));
+    }
+
+    [Test]
+    void scopes() {
+        str source = """
+struct Node {
+    i32 value;
+    Node*? next;
+}
+
+i32 walk(Node* head) {
+    mut i32 sum = 0;
+    mut Node*? current = head;
+    while (current != null) {
+        i32 inner = current.value * 2;
+        sum = sum + inner;
+        current = current.next;
+    }
+    return sum;
+}
+
+i32 main() {
+    Node last = { .value = 5, .next = null };
+    Node first = { .value = 7, .next = &last };
+    return walk(&first);
+}
+""";
+        Verify.source(source)
+            .stops_at(11, Expected.contains("inner = 14").and_contains("sum = 0").and_contains("current = 0x"))
+            .stops_at(20, Expected.contains("value = 5").and_contains("value = 7").and_contains("next = NULL").and_contains("Node"));
+    }
+
+    [Test]
+    void structs() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 area(Point corner) {
+    i32 result = corner.x * corner.y;
+    return result;
+}
+
+i32 main() {
+    Point origin = { .x = 3, .y = 4 };
+    return area(origin);
+}
+""";
+        Verify.source(source)
+            .stops_at(8, Expected.contains("x = 3").and_contains("y = 4").and_contains("result = 12").and_contains("Point"));
+    }
+}

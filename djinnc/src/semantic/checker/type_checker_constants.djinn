@@ -3,7 +3,7 @@ namespace djinnc;
 impl TypeChecker {
     void check_constant(Node* member, u32 namespace_id) {
         this.scope = namespace_id;
-        this.function = null;
+        this.function = (FunctionInfo*)0;
         LocalScopes* scopes = this.scopes;
         scopes.reset_to(0);
         this.check_expression(member.first(), member.value_type());
@@ -12,7 +12,7 @@ impl TypeChecker {
     void check_enum_row(StructInfo* info, Node* variant) {
         Node* declaration = info.node;
         if (variant.count() != info.header_count) {
-            this.error(variant, "an enum variant must give a value for every enum field");
+            this.error_code(variant, DiagnosticErrors.MISSING_ENUM_FIELD_VALUE, "an enum variant must give a value for every enum field");
             return;
         }
         for (mut i32 k = 0; k < variant.count(); k = k + 1) {
@@ -26,18 +26,18 @@ impl TypeChecker {
             return;
         }
         this.scope = variable.namespace_id;
-        this.function = null;
+        this.function = (FunctionInfo*)0;
         LocalScopes* scopes = this.scopes;
         scopes.reset_to(0);
         Node* declaration = variable.node;
         declaration.set_value_type(variable.type);
         if (declaration.op() == 0) {
             variable.const_state = 3;
-            this.check_expression(declaration.first(), variable.type);
+            this.require_value_type(declaration.first(), this.check_expression(declaration.first(), variable.type), variable.type);
             return;
         }
         variable.const_state = 1;
-        this.check_expression(declaration.first(), variable.type);
+        this.require_value_type(declaration.first(), this.check_expression(declaration.first(), variable.type), variable.type);
         this.evaluate_variable(variable, declaration);
     }
 
@@ -63,13 +63,13 @@ impl TypeChecker {
         ByteBuffer* message = ByteBuffer.create();
         message.append(prefix);
         message.append(reason);
-        this.error(at, message.cstr());
+        this.error_code(at, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, message.cstr());
     }
 
     void evaluate_variable(LocalVariable* variable, Node* declaration) {
         Node* initial = declaration.first();
         if (initial == null) {
-            this.error(declaration, "a constexpr variable needs an initializer");
+            this.error_code(declaration, DiagnosticErrors.CONSTEXPR_NEEDS_INITIALIZER, "a constexpr variable needs an initializer");
             variable.const_state = 3;
             return;
         }
@@ -110,6 +110,64 @@ impl TypeChecker {
         node.set_op(3);
         if (node.third() != null) {
             this.check_statement(node.third());
+        }
+    }
+
+    void check_constant_operands(Node* node, TokenKind op, u32 common) {
+        bool division = op == TokenKind::SLASH || op == TokenKind::PERCENT;
+        bool shift = op == TokenKind::LESS_LESS || op == TokenKind::GREATER_GREATER;
+        if ((!division && !shift) || !Types.is_integer(common)) {
+            return;
+        }
+        ConstEval* evaluator = this.const_eval;
+        Node* amount = node.second();
+        if (!evaluator.evaluate(amount, amount.value_type(), amount.value_type())) {
+            return;
+        }
+        i64 value = evaluator.ri;
+        if (division && value == 0) {
+            this.error_code(amount, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, "division by zero");
+        }
+        if (shift && (value < 0 || value >= (i64)Types.bits(common))) {
+            this.error_code(amount, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, "shift amount is out of range");
+        }
+        if (op == TokenKind::SLASH && value == 0 - 1 && Types.is_signed(common)) {
+            Node* dividend = node.first();
+            if (evaluator.evaluate(dividend, dividend.value_type(), common) && evaluator.ri == ConstEval.minimum(ConstEval.describe(common))) {
+                this.error_code(node, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, "integer overflow: the minimum value divided by -1");
+            }
+        }
+    }
+
+    void require_literal_fits(Node* node, u32 type, bool negated) {
+        if (Types.bits(type) == 1) {
+            return;
+        }
+        mut i64 value = node.int_value();
+        if (negated) {
+            value = 0 - value;
+        }
+        if (!ConstEval.holds(value, !negated, ConstEval.describe(type))) {
+            this.error_code(node, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, "integer literal does not fit in its type");
+        }
+    }
+
+    void check_constant_cast(Node* node, u32 source, u32 target) {
+        if (source == target || !Types.is_integer(target) || Types.bits(target) == 1) {
+            return;
+        }
+        ConstEval* evaluator = this.const_eval;
+        Node* operand = node.first();
+        if ((!Types.is_float(source) && !Types.is_integer(source)) || !evaluator.evaluate(operand, source, source)) {
+            return;
+        }
+        i32 shape = ConstEval.describe(target);
+        if (Types.is_float(source)) {
+            if (!ConstEval.fits(evaluator.rf, shape)) {
+                this.error_code(node, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, "float value is out of range for the integer type");
+            }
+        } else if (!ConstEval.holds(evaluator.ri, !Types.is_signed(source), shape)) {
+            this.error_code(node, DiagnosticErrors.INVALID_CONSTANT_EXPRESSION, "integer constant does not fit in the target type");
         }
     }
 

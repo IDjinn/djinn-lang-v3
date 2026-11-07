@@ -1,0 +1,475 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct StdTests {
+    [Test]
+    void async_delay() {
+        str source = """
+import std::sys;
+import std::types;
+namespace app;
+
+async i32 check_delay() {
+    i64 start = __djinn_unix_timestamp_ms();
+    await Task.delay(60);
+    i64 elapsed = __djinn_unix_timestamp_ms() - start;
+    if (elapsed < 55) { return 10; }
+    return 0;
+}
+
+async i32 check_process() {
+    void*? started = Process.start("clang --version", "", 0);
+    return switch started {
+        Value child -> await wait_child(child),
+        Empty -> 20
+    };
+}
+
+async i32 wait_child(void* child) {
+    bool done = await Process.wait_async(child, 20000);
+    if (!done) { return 21; }
+    if (Process.exit_code(child) != 0) { return 22; }
+    if (Process.stdout_length(child) == 0) { return 23; }
+    return 0;
+}
+
+async i32 main() {
+    i32 first = await check_delay();
+    if (first != 0) { return first; }
+    return await check_process();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void collections() {
+        str source = """
+import std::collections;
+import std::types;
+namespace app;
+
+i32 main() {
+    array<i32> list = array<i32>();
+    for (mut i32 i = 0; i < 20; i = i + 1) {
+        list.push(i);
+    }
+    list.set(3, 100);
+    mut i32 total = list.get(3) + list.get(19);
+
+    map<i32, i32> table = map<i32, i32>();
+    for (mut i32 i = 0; i < 40; i = i + 1) {
+        table.set(i, i * 2);
+    }
+    if (!table.has(7) || table.has(99)) { return 1; }
+    total = total + table.get(7);
+    table.remove(7);
+    if (table.has(7)) { return 2; }
+
+    range window = { .start = 0, .end = 10, .step = 2, .start_inclusive = true, .end_inclusive = false };
+    total = total + window.length();
+    list.destroy();
+    table.destroy();
+    return total - 100;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(38));
+    }
+
+    [Test]
+    void console() {
+        str source = """
+import std::sys;
+import std::types;
+namespace app;
+
+i32 main() {
+    string name = "djinn";
+    str view = "view";
+    i32 count = 7;
+    Console.writeSync("hello {0} {1} {2}\n", name, view, count);
+    return count;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(7).stdout("hello djinn view 7\n"));
+    }
+
+    [Test]
+    void hash_version() {
+        str source = """
+import std::types;
+import std::util;
+namespace app;
+
+i32 main() {
+    i32 a = 5;
+    i64 b = 5;
+    if (a.hash() != 5) { return 1; }
+    if (b.hash() == 0) { return 2; }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void hash_wide() {
+        str source = """
+import std::types;
+namespace app;
+
+i32 main() {
+    f32 single = 1.5;
+    i128 wide = 7;
+    if (single.hash() == 0) { return 1; }
+    if (wide.hash() == 0) { return 2; }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void io() {
+        str source = """
+import std::io;
+import std::types;
+namespace app;
+
+i32 main() {
+    FILE* file = fopen("djinn_std_io.tmp", "wb");
+    if (file == null) { return 1; }
+    fputs("djinn", file);
+    fclose(file);
+    FILE* again = fopen("djinn_std_io.tmp", "rb");
+    if (again == null) { return 2; }
+    i32 first = getc(again);
+    fclose(again);
+    remove("djinn_std_io.tmp");
+    return first;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(100));
+    }
+
+    [Test]
+    void json_parse() {
+        str source = """
+import std::util;
+import std::types;
+import std::libc;
+namespace app;
+
+i32 check_diagnostic(void* item) {
+    void*? code = Json.get(item, "code");
+    return switch code {
+        Value c -> check_fields(item, c),
+        Empty -> 20
+    };
+}
+
+i32 check_fields(void* item, void* code) {
+    if (Json.as_int(code) != 2001) { return 21; }
+    void*? line = Json.get(item, "line");
+    return switch line {
+        Value l -> check_line(item, l),
+        Empty -> 22
+    };
+}
+
+i32 check_line(void* item, void* line) {
+    if (Json.as_int(line) != 3) { return 23; }
+    void*? args = Json.get(item, "args");
+    return switch args {
+        Value a -> check_args(a),
+        Empty -> 24
+    };
+}
+
+i32 check_args(void* args) {
+    if (Json.kind(args) != Json.ARRAY) { return 25; }
+    if (Json.length(args) != 2) { return 26; }
+    void*? first = Json.at(args, 0);
+    return switch first {
+        Value f -> check_first(f),
+        Empty -> 27
+    };
+}
+
+i32 check_first(void* first) {
+    if (Json.kind(first) != Json.STRING) { return 28; }
+    if (Json.length(first) != 6) { return 29; }
+    i8* text = Json.as_text(first);
+    if (text[0] != 66) { return 32; }
+    return 0;
+}
+
+i32 with_document(void* document) {
+    void* root = Json.root(document);
+    i32 result = check_diagnostic(root);
+    Json.release(document);
+    return result;
+}
+
+i32 main() {
+    i8* text = "{\"severity\":\"error\",\"code\":2001,\"line\":3,\"column\":10,\"args\":[\"BadOne\",\"x\"]}";
+    i32 parsed = switch Json.parse(text, (i32)strlen(text)) {
+        Value document -> with_document(document),
+        Empty -> 30
+    };
+    if (parsed != 0) { return parsed; }
+    i8* broken = "{\"code\": ";
+    i32 rejected = switch Json.parse(broken, (i32)strlen(broken)) {
+        Value document -> 31,
+        Empty -> 0
+    };
+    return rejected;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void logger() {
+        str source = """
+import std::logger;
+import std::types;
+namespace app;
+
+i32 main() {
+    Logger log = Logger("std");
+    Logger same = Logger("std");
+    Logger other = Logger("other");
+    log.info("ready");
+    if (log.log != same.log) {
+        return 1;
+    }
+    if (log.log == other.log) {
+        return 2;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void math() {
+        str source = """
+import std::math;
+import std::types;
+namespace app;
+
+i32 main() {
+    f64 root = sqrt(144.0);
+    f64 power = pow(2.0, 10.0);
+    return (i32)root + (i32)power - 1000;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(36));
+    }
+
+    [Test]
+    void optional_result() {
+        str source = """
+import std::types;
+namespace app;
+
+optional<i32> find(i32 x) {
+    if (x > 0) { return optional::Value(x); }
+    return optional::Empty();
+}
+
+result<i32, i32> check(i32 x) {
+    if (x > 0) { return result::Ok(x * 2); }
+    return result::Error(9);
+}
+
+i32 main() {
+    i32 some = switch find(4) { Value v -> v, Empty -> 100 };
+    i32 none = switch find(-1) { Value v -> v, Empty -> 1 };
+    i32 good = switch check(5) { Ok v -> v, Error e -> 1000 };
+    i32 bad = switch check(-5) { Ok v -> v, Error e -> e };
+    return some + none + good + bad;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(24));
+    }
+
+    [Test]
+    void process() {
+        str source = """
+import std::sys;
+import std::types;
+import std::libc;
+namespace app;
+
+i32 main() {
+    if (Process.argc() < 1) { return 1; }
+    i32 found = switch Process.env("PATH") { Value path -> (i32)strlen(path), Empty -> 0 };
+    if (found == 0) { return 2; }
+    i32 missing = switch Process.env("DJINN_NO_SUCH_VARIABLE") { Value path -> 1, Empty -> 0 };
+    if (missing != 0) { return 3; }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void process_spawn() {
+        str source = """
+import std::sys;
+import std::types;
+import std::libc;
+namespace app;
+
+i32 expect_success(void* child) {
+    if (!Process.wait(child, 20000)) { return 10; }
+    if (Process.exit_code(child) != 0) { return 11; }
+    if (Process.stdout_length(child) == 0) { return 12; }
+    return 0;
+}
+
+i32 expect_failure(void* child) {
+    if (!Process.wait(child, 20000)) { return 20; }
+    if (Process.exit_code(child) == 0) { return 21; }
+    if (Process.stderr_length(child) == 0) { return 22; }
+    return 0;
+}
+
+i32 main() {
+    i32 first = switch Process.start("clang --version", "", 0) {
+        Value child -> expect_success(child),
+        Empty -> 30
+    };
+    if (first != 0) { return first; }
+    i32 second = switch Process.start("clang --no-such-flag-xyz", "", 0) {
+        Value child -> expect_failure(child),
+        Empty -> 31
+    };
+    return second;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void semver() {
+        str source = """
+import std::util;
+import std::types;
+namespace app;
+
+bool valid(str text) {
+    return switch Version.parse(text) { Value v -> true, Empty -> false };
+}
+
+Version version(str text) {
+    return switch Version.parse(text) { Value v -> v, Empty -> Version.NONE };
+}
+
+i32 main() {
+    str[] accepted = [
+        "0.0.4", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-0.3.7", "1.0.0-x.7.z.92",
+        "1.0.0-x-y-z.--", "1.0.0-alpha+001", "1.0.0+20130313144700",
+        "1.0.0-beta+exp.sha.5114f85", "1.0.0+21AF26D3----117B344092BD"
+    ];
+    for (mut i32 i = 0; i < 10; i = i + 1) {
+        if (!valid(accepted[i])) { return 1 + i; }
+    }
+
+    str[] rejected = [
+        "", "1", "1.2", "01.2.3", "1.02.3", "1.2.03", "1.2.3-", "1.2.3-01",
+        "1.2.3-a..b", "1.2.3+", "1.2.3-a+", "1.2.3 ", "v1.2.3", "1.2.3.4"
+    ];
+    for (mut i32 i = 0; i < 14; i = i + 1) {
+        if (valid(rejected[i])) { return 20 + i; }
+    }
+
+    str[] ordered = [
+        "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2",
+        "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0", "2.0.0", "2.1.0", "2.1.1", "10.0.0"
+    ];
+    for (mut i32 i = 0; i + 1 < 12; i = i + 1) {
+        Version low = version(ordered[i]);
+        Version high = version(ordered[i + 1]);
+        if (!(low < high) || !(high > low) || low == high || !(low != high)) { return 40 + i; }
+    }
+
+    if (!(version("1.0.0+first") == version("1.0.0+second"))) { return 60; }
+    if (Version.identical(version("1.0.0+first"), version("1.0.0+second"))) { return 61; }
+    if (!version("1.0.0-rc.1").is_prerelease() || version("1.0.0").is_prerelease()) { return 62; }
+    Version parsed = version("3.4.5-beta.2+build.9");
+    if (parsed.major != 3 || parsed.minor != 4 || parsed.patch != 5) { return 63; }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void spectre() {
+        str source = """
+import std::sys;
+import std::types;
+namespace app;
+
+i32 main() {
+    Spectre.styledLn("bold", Spectre.BOLD);
+    Spectre.styled2Ln("warn", Spectre.FG_RED, Spectre.BOLD);
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0).stdout("[1mbold[0m\n[31;1mwarn[0m\n"));
+    }
+
+    [Test]
+    void version() {
+        str source = """
+import std::util;
+import std::types;
+namespace app;
+
+i32 main() {
+    Version older = { .major = 1, .minor = 2, .patch = 3 };
+    Version newer = { .major = 1, .minor = 3, .patch = 0 };
+    mut i32 total = 0;
+    if (older < newer) { total = total + 1; }
+    if (newer >= older) { total = total + 2; }
+    if (older != newer) { total = total + 4; }
+    return total;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(7));
+    }
+
+    [Test]
+    void nullable_pointer() {
+        str source = """
+import std::types;
+namespace app;
+
+struct Box {
+    i32 value;
+}
+
+i32 read(Box*? box) {
+    return switch box { Value found -> found.value, Empty -> 0 - 1 };
+}
+
+i32 main() {
+    Box local = { .value = 7 };
+    Box* safe = &local;
+    mut Box*? maybe = null;
+    i32 empty = read(maybe);
+    maybe = safe;
+    return read(maybe) + read(null) + read(safe) + empty;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(12));
+    }
+}

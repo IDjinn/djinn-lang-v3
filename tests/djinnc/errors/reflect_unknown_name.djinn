@@ -1,4 +1,0 @@
-i32 main() {
-    TypeInfo* info = typeof(Missing);
-    return info.size;
-}

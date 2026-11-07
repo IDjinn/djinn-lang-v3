@@ -25,7 +25,7 @@ struct Files {
         fseek(file, 0, 2);
         i32 size = (i32)ftell(file);
         fseek(file, 0, 0);
-        ptr<i8> buffer = (ptr<i8>)Memory.zalloc((i64)size + 1);
+        ptr<i8> buffer = (ptr<i8>)Memory.zalloc((u64)size + 1);
         fread(buffer, 1, (u64)size, file);
         fclose(file);
         length[0] = size;

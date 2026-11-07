@@ -1,8 +1,0 @@
-i32* leak() {
-    i32 value = 1;
-    return &value;
-}
-
-i32 main() {
-    return 0;
-}

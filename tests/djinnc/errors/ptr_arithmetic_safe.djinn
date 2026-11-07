@@ -1,6 +1,0 @@
-i32 main() {
-    i32 value = 7;
-    ptr<i32> raw = (ptr<i32>)&value;
-    ptr<i32> next = raw + 1;
-    return 0;
-}

@@ -1,0 +1,53 @@
+namespace testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+
+extern "C" {
+    i32 __djinn_call_entry(ptr address);
+    void __djinn_call_method(ptr address, ptr target);
+}
+
+struct TestMethods {
+    public static unsafe ptr attribute(MethodInfo* method, ptr<i8> name) {
+        for (mut i32 i = 0; i < (i32)method.attrCount; i = i + 1) {
+            if (Text.same((ptr<i8>)method.attrs[i].name, name)) {
+                return (ptr)method.attrs[i].payload;
+            }
+        }
+        return null;
+    }
+
+    public static unsafe bool is_test(MethodInfo* method) {
+        for (mut i32 i = 0; i < (i32)method.attrCount; i = i + 1) {
+            if (Text.same((ptr<i8>)method.attrs[i].name, "Test")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static unsafe bool has_tests(TypeInfo* type) {
+        TypeInfoExt* info = Reflection.ext(type);
+        for (mut i32 i = 0; i < (i32)info.methodCount; i = i + 1) {
+            if (TestMethods.is_test(&info.methods[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool can_call(MethodInfo* method) {
+        return (i32)method.paramCount == 0 && ((i32)method.flags & Reflection.METHOD_ASYNC) == 0;
+    }
+
+    public static unsafe void call(TypeInfo* type, MethodInfo* method) {
+        if (((i32)method.flags & Reflection.METHOD_STATIC) != 0) {
+            __djinn_call_entry((ptr)method.funcPtr);
+        } else {
+            __djinn_call_method((ptr)method.funcPtr, Allocator.zeroed((u64)type.size + 1));
+        }
+    }
+}

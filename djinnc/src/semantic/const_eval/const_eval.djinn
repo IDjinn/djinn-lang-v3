@@ -114,6 +114,58 @@ struct ConstEval {
         return (f64)value;
     }
 
+    public static i64 minimum(i32 shape) {
+        i32 bits = shape & 255;
+        if (bits >= 64) {
+            return (i64)1 << 63;
+        }
+        return 0 - ((i64)1 << (bits - 1));
+    }
+
+    public static bool holds(i64 value, bool from_unsigned, i32 shape) {
+        i32 bits = shape & 255;
+        bool is_signed = (shape & ConstEval.SIGNED) != 0;
+        if (value < 0 && from_unsigned) {
+            return !is_signed && bits >= 64;
+        }
+        if (value < 0) {
+            return is_signed && (bits >= 64 || value >= ConstEval.minimum(shape));
+        }
+        if (bits >= 64) {
+            return true;
+        }
+        if (is_signed) {
+            return value < (i64)1 << (bits - 1);
+        }
+        return value < (i64)1 << bits;
+    }
+
+    public static bool fits(f64 value, i32 shape) {
+        i32 bits = shape & 255;
+        mut f64 limit = 1.0;
+        for (mut i32 i = 0; i < bits; i = i + 1) {
+            limit = limit * 2.0;
+        }
+        if ((shape & ConstEval.SIGNED) == 0) {
+            return value > 0.0 - 1.0 && value < limit;
+        }
+        limit = limit / 2.0;
+        if (bits > 53) {
+            return value >= 0.0 - limit && value < limit;
+        }
+        return value > 0.0 - limit - 1.0 && value < limit;
+    }
+
+    static i64 truncate(f64 value, i32 shape) {
+        if (ConstEval.is_wide_unsigned(shape) && ConstEval.fits(value, shape)) {
+            return (i64)(u64)value;
+        }
+        if (ConstEval.fits(value, ConstEval.SIGNED | 64)) {
+            return (i64)value;
+        }
+        return 0;
+    }
+
     void convert(i32 from, i32 to) {
         if (from == to) {
             return;
@@ -137,7 +189,7 @@ struct ConstEval {
                 }
                 return;
             }
-            this.ri = (i64)this.rf;
+            this.ri = ConstEval.truncate(this.rf, to);
         }
         this.ri = ConstEval.wrap(this.ri, to);
     }
@@ -173,7 +225,7 @@ struct ConstEval {
         this.base = this.top;
         this.in_frame = false;
         this.reason = null;
-        this.blame = null;
+        this.blame = (Node*)0;
 
         i32 own = this.shape_of(own_type);
         i32 target = this.shape_of(target_type);
@@ -362,6 +414,10 @@ struct ConstEval {
         i32 to = this.shape_of(node.value_type());
         if ((from & ConstEval.NUMERIC) == 0 || (to & ConstEval.NUMERIC) == 0) {
             return this.fail(node, "only numeric casts can be evaluated at compile time");
+        }
+        bool to_number = (to & ConstEval.INTEGER) != 0 && (to & 255) != 1;
+        if ((from & ConstEval.FLOAT) != 0 && to_number && !ConstEval.fits(this.rf, to)) {
+            return this.fail(node, "float value is out of range for the integer type");
         }
         this.convert(from, to);
         return true;
@@ -606,6 +662,9 @@ struct ConstEval {
                 }
             } else if (b == 0 - 1) {
                 if (op == TokenKind::SLASH) {
+                    if ((shape & ConstEval.SIGNED) != 0 && a == ConstEval.minimum(shape)) {
+                        return this.fail(node, "integer overflow: the minimum value divided by -1");
+                    }
                     value = 0 - a;
                 }
             } else if (op == TokenKind::SLASH) {
@@ -623,10 +682,13 @@ struct ConstEval {
             if (b < 0 || b >= (i64)(shape & 255)) {
                 return this.fail(node, "shift amount is out of range");
             }
+            if (b >= 64) {
+                return this.fail(node, "constants wider than 64 bits cannot be shifted at compile time");
+            }
             if (op == TokenKind::LESS_LESS) {
                 value = a << b;
             } else if (wide_unsigned) {
-                value = (i64)((u64)a >> b);
+                value = (i64)((u64)a >> (u64)b);
             } else {
                 value = a >> b;
             }

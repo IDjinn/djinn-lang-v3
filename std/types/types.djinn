@@ -39,7 +39,7 @@ impl Hashable, Equatable for arr<T> {
 
 impl Hashable for i128, u128 {
     [ForceInline] u64 hash() {
-        u64 hi = this >> 64;
+        u64 hi = (u64)(this >> 64);
         u64 lo = (u64)this;
         mut u64 x = hi ^ (lo * 0x9e3779b97f4a7c15);
 
@@ -65,7 +65,7 @@ impl Hashable for i64, u64 {
 
 impl Hashable for i8, i16, i32, u8, u16, u32 {
      [ForceInline] u64 hash() {
-        return this;
+        return (u64)this;
     }
 }
 
@@ -125,6 +125,7 @@ struct TypeInfo {
 struct AttributeInfo {
     i8* name;
     i8* value;
+    void* payload;
 }
 
 struct FieldInfo {
@@ -227,11 +228,11 @@ struct string {
     }
 
     public i32 length() {
-        return this.length;
+        return (i32)this.length;
     }
 
     public i32 capacity() {
-        return this.capacity;
+        return (i32)this.capacity;
     }
 }
 
@@ -274,13 +275,13 @@ impl Hashable for str, string {
 
 impl Equatable for str {
     operator ==(str left, str right) -> bool {
-        return __djinn_compare_strings(left.data, right.data, left.length, right.length) == 1;
+        return __djinn_compare_strings(left.data, right.data, (i32)left.length, (i32)right.length) == 1;
     }
 }
 
 impl Equatable for string {
     operator ==(string left, string right) -> bool {
-        return __djinn_compare_strings(left.data, right.data, left.length, right.length) == 1;
+        return __djinn_compare_strings(left.data, right.data, (i32)left.length, (i32)right.length) == 1;
     }
 }
 

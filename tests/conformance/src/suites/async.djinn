@@ -1,0 +1,282 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct AsyncTests {
+    [Test]
+    void SimpleReturnValue() {
+        str source = """
+async i32 compute() {
+    return 42;
+}
+
+i32 main() {
+    i32 result = await compute();
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void WithParameter() {
+        str source = """
+async i32 double_val(i32 x) {
+    return x * 2;
+}
+
+i32 main() {
+    i32 result = await double_val(21);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void MultipleParameters() {
+        str source = """
+async i32 add(i32 a, i32 b) {
+    return a + b;
+}
+
+i32 main() {
+    i32 result = await add(30, 12);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void ExpressionComputation() {
+        str source = """
+async i32 compute(i32 x) {
+    return x * 2 + 1;
+}
+
+i32 main() {
+    i32 result = await compute(10);
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(21));
+    }
+
+    [Test]
+    void AsyncMain() {
+        str source = """
+async i32 get_value() {
+    return 99;
+}
+
+async i32 main() {
+    i32 val = await get_value();
+    return val;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void AsyncMainWithComputation() {
+        str source = """
+async i32 square(i32 x) {
+    return x * x;
+}
+
+async i32 main() {
+    i32 a = await square(3);
+    i32 b = await square(4);
+    return a + b;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(25));
+    }
+
+    [Test]
+    void DiagnosticsForNonWaitableAsync() {
+        str source = """
+async i32 get_value() {
+    return 99;
+}
+
+async i32 main() {
+    i32 val = get_value();
+    return val;
+}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH));
+    }
+
+    [Test]
+    void MultipleAwaitsSequential() {
+        str source = """
+async i32 get_a() {
+    return 10;
+}
+
+async i32 get_b() {
+    return 20;
+}
+
+i32 main() {
+    i32 a = await get_a();
+    i32 b = await get_b();
+    return a + b;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+
+    [Test]
+    void ThreeAwaitsAccumulate() {
+        str source = """
+async i32 val(i32 x) {
+    return x;
+}
+
+i32 main() {
+    i32 a = await val(10);
+    i32 b = await val(20);
+    i32 c = await val(30);
+    return a + b + c;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(60));
+    }
+
+    [Test]
+    void ChainedAwait() {
+        str source = """
+async i32 inner() {
+    return 10;
+}
+
+async i32 outer() {
+    i32 val = await inner();
+    return val + 5;
+}
+
+i32 main() {
+    i32 result = await outer();
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(15));
+    }
+
+    [Test]
+    void DeepChaining() {
+        str source = """
+async i32 level3() {
+    return 5;
+}
+
+async i32 level2() {
+    i32 val = await level3();
+    return val * 2;
+}
+
+async i32 level1() {
+    i32 val = await level2();
+    return val + 3;
+}
+
+i32 main() {
+    i32 result = await level1();
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(13));
+    }
+
+    [Test]
+    void ChainedAsyncMain() {
+        str source = """
+async i32 add(i32 a, i32 b) {
+    return a + b;
+}
+
+async i32 compute() {
+    i32 x = await add(10, 20);
+    i32 y = await add(x, 5);
+    return y;
+}
+
+async i32 main() {
+    i32 result = await compute();
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(35));
+    }
+
+    [Test]
+    void AwaitResultAsArgument() {
+        str source = """
+async i32 double_it(i32 x) {
+    return x * 2;
+}
+
+i32 main() {
+    i32 a = await double_it(5);
+    i32 b = await double_it(a);
+    return b;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void AwaitWithLocalComputation() {
+        str source = """
+async i32 fetch(i32 x) {
+    return x + 1;
+}
+
+i32 main() {
+    i32 val = await fetch(10);
+    i32 local = val * 3;
+    return local;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(33));
+    }
+
+    [Test]
+    void NonAsyncMainStillWorks() {
+        str source = """
+async i32 compute() {
+    return 77;
+}
+
+i32 main() {
+    i32 result = await compute();
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(77));
+    }
+}
+
+struct SpawnTests {
+    [Test]
+    void MultipleSpawnsParse() {
+        str source = """
+async i32 work(i32 x) {
+    return x;
+}
+
+async i32 main() {
+    spawn work(1);
+    spawn work(2);
+    spawn work(3);
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+}

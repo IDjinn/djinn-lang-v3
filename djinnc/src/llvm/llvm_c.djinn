@@ -54,6 +54,7 @@ extern "C" {
     ptr LLVMValueAsMetadata(ptr value);
     ptr LLVMCreateTargetData(ptr<i8> representation);
     void LLVMSetModuleDataLayout(ptr module, ptr layout);
+    void LLVMSetDataLayout(ptr module, ptr<i8> layout);
     void LLVMDisposeTargetData(ptr layout);
     void LLVMDisposeDIBuilder(ptr builder);
     ptr LLVMArrayType2(ptr element, u64 count);
@@ -85,6 +86,7 @@ extern "C" {
     void LLVMSetComdatSelectionKind(ptr comdat, i32 kind);
     ptr LLVMBuildArrayAlloca(ptr builder, ptr type, ptr count, ptr<i8> name);
     i32 LLVMIsConstant(ptr value);
+    i32 LLVMIsNull(ptr value);
     ptr LLVMConstArray2(ptr elementType, ptr<ptr> values, u64 length);
     ptr LLVMConstNamedStruct(ptr type, ptr<ptr> values, u32 count);
     void LLVMSetInitializer(ptr global, ptr value);
@@ -166,9 +168,11 @@ extern "C" {
     ptr LLVMOrcLLJITGetMainJITDylib(ptr jit);
     i8 LLVMOrcLLJITGetGlobalPrefix(ptr jit);
     ptr LLVMOrcLLJITGetObjLinkingLayer(ptr jit);
+    ptr<i8> LLVMOrcLLJITGetDataLayoutStr(ptr jit);
     ptr LLVMOrcLLJITAddLLVMIRModule(ptr jit, ptr dylib, ptr module);
     ptr LLVMOrcLLJITLookup(ptr jit, ptr<u64> result, ptr<i8> name);
     void LLVMOrcJITDylibAddGenerator(ptr dylib, ptr generator);
+    ptr LLVMOrcCreateDynamicLibrarySearchGeneratorForPath(ptr<ptr> result, ptr<i8> file_name, i8 prefix, ptr filter, ptr context);
     ptr LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(ptr<ptr> result, i8 prefix, ptr filter, ptr context);
     ptr LLVMOrcCreateStaticLibrarySearchGeneratorForPath(ptr<ptr> result, ptr layer, ptr<i8> path);
     ptr LLVMOrcCreateNewThreadSafeContextFromLLVMContext(ptr context);

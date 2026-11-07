@@ -1,0 +1,718 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct ControlFlowTests {
+    [Test]
+    void IfStatementTrueBranch() {
+        str source = """
+i32 main() {
+    i32 x = 10;
+    if (x > 5) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IfStatementFalseBranch() {
+        str source = """
+i32 main() {
+    i32 x = 3;
+    if (x > 5) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void IfElseStatementTrueBranch() {
+        str source = """
+i32 main() {
+    i32 x = 10;
+    if (x > 5) {
+        return 1;
+    } else {
+        return 2;
+    }
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IfElseStatementFalseBranch() {
+        str source = """
+i32 main() {
+    i32 x = 3;
+    if (x > 5) {
+        return 1;
+    } else {
+        return 2;
+    }
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(2));
+    }
+
+    [Test]
+    void IfElseIfElseStatement() {
+        str source = """
+i32 main() {
+    i32 x = 5;
+    if (x > 10) {
+        return 1;
+    } else if (x > 3) {
+        return 2;
+    } else {
+        return 3;
+    }
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(2));
+    }
+
+    [Test]
+    void NestedIfStatements() {
+        str source = """
+i32 main() {
+    i32 x = 10;
+    i32 y = 5;
+    if (x > 5) {
+        if (y > 3) {
+            return 1;
+        }
+        return 2;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IfWithEquality() {
+        str source = """
+i32 main() {
+    i32 x = 5;
+    if (x == 5) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IfWithNotEqual() {
+        str source = """
+i32 main() {
+    i32 x = 5;
+    if (x != 10) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IfWithLogicalAnd() {
+        str source = """
+i32 main() {
+    i32 x = 10;
+    i32 y = 5;
+    if (x > 5 && y > 3) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IfWithLogicalOr() {
+        str source = """
+i32 main() {
+    i32 x = 3;
+    i32 y = 10;
+    if (x > 5 || y > 5) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void WhileLoopSimple() {
+        str source = """
+i32 main() {
+    i32 mut x = 0;
+    while (x < 5) {
+        x = x + 1;
+    }
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void WhileLoopSum() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    i32 mut i = 1;
+    while (i <= 5) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(15));
+    }
+
+    [Test]
+    void WhileLoopWithBreak() {
+        str source = """
+i32 main() {
+    i32 mut x = 0;
+    while (x < 10) {
+        if (x == 5) {
+            break;
+        }
+        x = x + 1;
+    }
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void WhileLoopWithContinue() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    i32 mut i = 0;
+    while (i < 10) {
+        i = i + 1;
+        if (i == 5) {
+            continue;
+        }
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(9));
+    }
+
+    [Test]
+    void WhileLoopNeverExecutes() {
+        str source = """
+i32 main() {
+    i32 mut x = 10;
+    while (x < 5) {
+        x = x + 1;
+    }
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void DoWhileLoopSimple() {
+        str source = """
+i32 main() {
+    i32 mut x = 0;
+    do {
+        x = x + 1;
+    } while (x < 5);
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void DoWhileExecutesAtLeastOnce() {
+        str source = """
+i32 main() {
+    i32 mut x = 10;
+    do {
+        x = x + 1;
+    } while (x < 5);
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(11));
+    }
+
+    [Test]
+    void DoWhileWithBreak() {
+        str source = """
+i32 main() {
+    i32 mut x = 0;
+    do {
+        if (x == 3) {
+            break;
+        }
+        x = x + 1;
+    } while (x < 10);
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(3));
+    }
+
+    [Test]
+    void ForLoopSimple() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 0; i < 5; i = i + 1) {
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void ForLoopPostfix() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 0; i < 5; i++) {
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void ForLoopSum() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 1; i <= 10; i = i + 1) {
+        sum = sum + i;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+
+    [Test]
+    void ForLoopWithBreak() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 0; i < 10; i = i + 1) {
+        if (i == 5) {
+            break;
+        }
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void ForLoopWithContinue() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 0; i < 10; i = i + 1) {
+        if (i == 5) {
+            continue;
+        }
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(9));
+    }
+
+    [Test]
+    void ForLoopNested() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 mut i = 0; i < 3; i = i + 1) {
+        for (i32 mut j = 0; j < 3; j = j + 1) {
+            sum = sum + 1;
+        }
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(9));
+    }
+
+    [Test]
+    void RangeForSimple() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 0..5) {
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void RangeForSum() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 1..11) {
+        sum = sum + i;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+
+    [Test]
+    void RangeForWithBreak() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 0..10) {
+        if (i == 5) {
+            break;
+        }
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void RangeForWithContinue() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 0..10) {
+        if (i == 5) {
+            continue;
+        }
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(9));
+    }
+
+    [Test]
+    void RangeForNested() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 0..3) {
+        for (i32 j in 0..4) {
+            sum = sum + 1;
+        }
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(12));
+    }
+
+    [Test]
+    void RangeForVariableAccess() {
+        str source = """
+i32 main() {
+    i32 mut last = 0;
+    for (i32 i in 0..7) {
+        last = i;
+    }
+    return last;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+
+    [Test]
+    void RangeForInclusiveEnd() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 0..=5) {
+        sum = sum + 1;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+
+    [Test]
+    void RangeForInclusiveEndSum() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in 1..=10) {
+        sum = sum + i;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+
+    [Test]
+    void RangeForBracketClosed() {
+        str source = """
+i32 main() {
+    i32 mut last = 0;
+    for (i32 i in [0..5]) {
+        last = i;
+    }
+    return last;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void RangeForBracketHalfOpen() {
+        str source = """
+i32 main() {
+    i32 mut last = 0;
+    for (i32 i in [0..5)) {
+        last = i;
+    }
+    return last;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(4));
+    }
+
+    [Test]
+    void RangeForBracketClosedSum() {
+        str source = """
+i32 main() {
+    i32 mut sum = 0;
+    for (i32 i in [1..10]) {
+        sum = sum + i;
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+
+    [Test]
+    void SwitchStatementCase1() {
+        str source = """
+i32 main() {
+    i32 x = 1;
+    switch (x) {
+        case 1:
+            return 10;
+        case 2:
+            return 20;
+        default:
+            return 0;
+    }
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void SwitchStatementCase2() {
+        str source = """
+i32 main() {
+    i32 x = 2;
+    switch (x) {
+        case 1:
+            return 10;
+        case 2:
+            return 20;
+        default:
+            return 0;
+    }
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void SwitchStatementDefault() {
+        str source = """
+i32 main() {
+    i32 x = 99;
+    switch (x) {
+        case 1:
+            return 10;
+        case 2:
+            return 20;
+        default:
+            return 0;
+    }
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void SwitchStatementWithBreak() {
+        str source = """
+i32 main() {
+    i32 x = 1;
+    i32 mut result = 0;
+    switch (x) {
+        case 1:
+            result = 10;
+            break;
+        case 2:
+            result = 20;
+            break;
+        default:
+            result = 0;
+    }
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void SwitchStatementWithoutDefault() {
+        str source = """
+i32 main() {
+    i32 x = 1;
+    i32 mut result = 0;
+    switch (x) {
+        case 1:
+            result = 10;
+            break;
+        case 2:
+            result = 20;
+            break;
+    }
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void FibonacciIterative() {
+        str source = """
+i32 main() {
+    i32 n = 10;
+    i32 mut a = 0;
+    i32 mut b = 1;
+    for (i32 mut i = 0; i < n; i = i + 1) {
+        i32 temp = a + b;
+        a = b;
+        b = temp;
+    }
+    return a;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+
+    [Test]
+    void FactorialIterative() {
+        str source = """
+i32 main() {
+    i32 n = 5;
+    i32 mut result = 1;
+    for (i32 mut i = 1; i <= n; i = i + 1) {
+        result = result * i;
+    }
+    return result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(120));
+    }
+
+    [Test]
+    void NestedLoopsWithBreak() {
+        str source = """
+i32 main() {
+    i32 mut count = 0;
+    for (i32 mut i = 0; i < 5; i = i + 1) {
+        for (i32 mut j = 0; j < 5; j = j + 1) {
+            if (j == 3) {
+                break;
+            }
+            count = count + 1;
+        }
+    }
+    return count;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(15));
+    }
+
+    [Test]
+    void WhileWithMultipleConditions() {
+        str source = """
+i32 main() {
+    i32 mut x = 0;
+    i32 mut y = 10;
+    while (x < 5 && y > 5) {
+        x = x + 1;
+        y = y - 1;
+    }
+    return x + y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+}
+
+struct ErrorHandlingTests {
+    [Test]
+    void TryOnNonThrowingDiagnostic() {
+        str source = """
+i32 compute() {
+    return 1;
+}
+
+i32 main() {
+    i32 result = try compute() ?: 0;
+    return result;
+}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.TRY_ON_NON_THROWING));
+    }
+}

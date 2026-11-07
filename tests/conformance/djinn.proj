@@ -1,0 +1,16 @@
+project: "conformance"
+version: "0.1.0"
+
+compiler:
+  library-mode: false
+  reflection-mode: all
+
+  output:
+    file: "runner"
+    directory: "build/conformance"
+
+  libs: [
+    'std',
+    'testing',
+    'djinnc_testing'
+  ]

@@ -65,7 +65,7 @@ impl CodeGenerator {
             return;
         }
         if (dependency.layout_state == 1) {
-            this.error(at, "recursive type has infinite size; hold it through a pointer");
+            this.error_code(at, DiagnosticErrors.INFINITE_SIZE_TYPE, "recursive type has infinite size; hold it through a pointer");
             return;
         }
         this.define_struct(dependency);

@@ -1,0 +1,43 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct FloatIeeeTests {
+    [Test]
+    void follows_ieee() {
+        str source = """
+f64 divide(f64 left, f64 right) {
+    return left / right;
+}
+
+f64 rem(f64 left, f64 right) {
+    return left % right;
+}
+
+f32 narrow(f64 value) {
+    return (f32)value;
+}
+
+i32 main() {
+    f64 infinity = divide(1.0, 0.0);
+    f64 nan = divide(0.0, 0.0);
+    if (infinity <= 1.0e300) { return 1; }
+    if (divide(0.0 - 1.0, 0.0) >= 0.0 - 1.0e300) { return 2; }
+    if (nan == nan) { return 3; }
+    if (nan != nan) {
+        if (nan < 1.0 || nan > 1.0) { return 4; }
+    } else {
+        return 5;
+    }
+    f64 from_zero = rem(1.0, 0.0);
+    if (from_zero == from_zero) { return 6; }
+    if (rem(7.5, 2.0) != 1.5) { return 7; }
+    if ((f64)narrow(1.0e300) <= 1.0e300) { return 8; }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+}

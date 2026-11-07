@@ -75,7 +75,7 @@ impl TypeChecker {
         u32 atom = Ast.intern_base_name("task", 4);
         StructInfo* template = symbols.find_core_struct(atom);
         if (template == null || !template.is_template) {
-            this.error(at, "async functions need the core 'task' type");
+            this.error_code(at, DiagnosticErrors.MISSING_CORE_TYPE, "async functions need the core 'task' type");
             return Types.i32_type();
         }
         IdList* args = IdList.create();
@@ -90,7 +90,7 @@ impl TypeChecker {
         u32 operand = this.check_expression(node.first(), 0);
         u32 held = this.task_result(operand);
         if (held == 0) {
-            this.error(node, "'await' needs the task returned by an async function");
+            this.error_code(node, DiagnosticErrors.AWAIT_NEEDS_TASK, "'await' needs the task returned by an async function");
             return Types.i32_type();
         }
         u32 error = this.task_error(operand);
@@ -109,7 +109,7 @@ impl TypeChecker {
         TypeRef* named = node.type();
         Node* variant = symbols.find_constant(enumeration, named.name_atom);
         if (variant == null) {
-            this.error(node, "enum has no such variant");
+            this.error_code(node, DiagnosticErrors.UNKNOWN_VARIANT, "enum has no such variant");
             return Types.bool_type();
         }
         IsPattern* pattern = (IsPattern*)Memory.zalloc(sizeof(IsPattern));
@@ -118,7 +118,7 @@ impl TypeChecker {
         node.set_symbol(SymbolKind.CONSTANT, (ptr)pattern);
         if (!node.flag()) {
             if (variant.payload_count() != 0) {
-                this.error(node, "wrong number of bindings for the variant payload");
+                this.error_code(node, DiagnosticErrors.VARIANT_BINDING_COUNT, "wrong number of bindings for the variant payload");
             }
             return Types.bool_type();
         }
@@ -133,7 +133,7 @@ impl TypeChecker {
                 continue;
             }
             if (index >= variant.payload_count()) {
-                this.error(node, "wrong number of bindings for the variant payload");
+                this.error_code(node, DiagnosticErrors.VARIANT_BINDING_COUNT, "wrong number of bindings for the variant payload");
                 return Types.bool_type();
             }
             ByteBuffer* copy = ByteBuffer.create();
@@ -150,7 +150,7 @@ impl TypeChecker {
             start = i + 1;
         }
         if (index != variant.payload_count()) {
-            this.error(node, "wrong number of bindings for the variant payload");
+            this.error_code(node, DiagnosticErrors.VARIANT_BINDING_COUNT, "wrong number of bindings for the variant payload");
         }
         return Types.bool_type();
     }
@@ -164,7 +164,7 @@ impl TypeChecker {
         }
         u32 boxed = this.core_type("object");
         if (boxed == 0 || operand != boxed) {
-            this.error(node, "'is' needs an object value");
+            this.error_code(node, DiagnosticErrors.INVALID_IS_OPERAND, "'is' needs an object value");
         }
         u32 target = this.resolve_type(node.type(), node);
         LocalVariable* variable = (LocalVariable*)Memory.zalloc(sizeof(LocalVariable));
@@ -184,7 +184,7 @@ impl TypeChecker {
         u32 owned = this.core_type("string");
         u32 view = this.core_type("str");
         if (owned == 0) {
-            this.error(node, "string interpolation needs the core 'string' type");
+            this.error_code(node, DiagnosticErrors.MISSING_CORE_TYPE, "string interpolation needs the core 'string' type");
             return Types.i32_type();
         }
         for (mut i32 i = 1; i < node.count(); i = i + 2) {
@@ -193,16 +193,16 @@ impl TypeChecker {
             bool printable = Types.is_integer(type) || Types.is_float(type) || type == Types.byte_pointer()
                 || type == owned || type == view;
             if (!printable) {
-                this.error(part, "this value cannot be interpolated into a string");
+                this.error_code(part, DiagnosticErrors.INVALID_INTERPOLATION, "this value cannot be interpolated into a string");
             }
             Node* before = node.child(i - 1);
             i64 format = before.int_value() >> 32;
             bool numeric = (Types.is_integer(type) && type != Types.bool_type()) || Types.is_float(type);
             if (((format >> 16) & 4) != 0 && !Types.is_float(type) && !Types.is_pointer(type) && type != owned && type != view) {
-                this.error(part, "a precision in an interpolation format applies to floats and text only");
+                this.error_code(part, DiagnosticErrors.INVALID_INTERPOLATION, "a precision in an interpolation format applies to floats and text only");
             }
             if (((format >> 16) & 2) != 0 && !numeric) {
-                this.error(part, "zero padding in an interpolation format applies to numbers only");
+                this.error_code(part, DiagnosticErrors.INVALID_INTERPOLATION, "zero padding in an interpolation format applies to numbers only");
             }
         }
         return owned;
@@ -240,7 +240,7 @@ impl TypeChecker {
         SymbolTable* symbols = this.symbols;
         mut u32 element = this.array_element(expected);
         if (element == 0 && node.count() == 0) {
-            this.error(node, "an empty array literal needs an array type from its context");
+            this.error_code(node, DiagnosticErrors.LITERAL_NEEDS_CONTEXT, "an empty array literal needs an array type from its context");
             return Types.i32_type();
         }
         for (mut i32 i = 0; i < node.count(); i = i + 1) {
@@ -252,7 +252,7 @@ impl TypeChecker {
         u32 atom = Ast.intern_base_name("arr", 3);
         StructInfo* template = symbols.find_core_struct(atom);
         if (template == null || !template.is_template) {
-            this.error(node, "array literals need the core 'arr' type");
+            this.error_code(node, DiagnosticErrors.MISSING_CORE_TYPE, "array literals need the core 'arr' type");
             return Types.i32_type();
         }
         IdList* args = IdList.create();
@@ -269,7 +269,7 @@ impl TypeChecker {
             expected = this.resolve_type(node.type(), node);
         }
         if (expected == 0 || !Types.is_struct(expected) || symbols.enum_of_type(expected) != null) {
-            this.error(node, "a struct initializer needs a struct type from its context");
+            this.error_code(node, DiagnosticErrors.LITERAL_NEEDS_CONTEXT, "a struct initializer needs a struct type from its context");
             return Types.i32_type();
         }
         StructInfo* info = symbols.struct_at(Types.struct_index(expected));
@@ -283,11 +283,11 @@ impl TypeChecker {
                 field = symbols.find_field(info, init.name());
             }
             if (field == null) {
-                this.error(init, "struct has no such field");
+                this.error_code(init, DiagnosticErrors.UNKNOWN_FIELD, "struct has no such field");
                 this.check_expression(init.first(), 0);
             } else {
                 init.set_symbol(SymbolKind.FIELD, (ptr)field);
-                this.check_expression(init.first(), field.type);
+                this.require_value_type(init.first(), this.check_expression(init.first(), field.type), field.type);
             }
         }
         return expected;
@@ -305,7 +305,7 @@ impl TypeChecker {
         }
         StructInfo* owner = symbols.enum_of_type(subject_type);
         if (owner == null) {
-            this.error(node.first(), "switch expression needs an enum value");
+            this.error_code(node.first(), DiagnosticErrors.INVALID_SWITCH, "switch expression needs an enum value");
             return Types.i32_type();
         }
 
@@ -318,11 +318,11 @@ impl TypeChecker {
             Node* arm = node.child(i);
             if (Strings.same(arm.text(), "_")) {
                 if (wildcard) {
-                    this.error(arm, "the wildcard arm appears more than once");
+                    this.error_code(arm, DiagnosticErrors.INVALID_SWITCH, "the wildcard arm appears more than once");
                 }
                 wildcard = true;
                 if (arm.count() != 0) {
-                    this.error(arm, "the wildcard arm cannot bind a value");
+                    this.error_code(arm, DiagnosticErrors.INVALID_SWITCH, "the wildcard arm cannot bind a value");
                 }
                 u32 wildcard_type = this.check_expression(arm.first(), result);
                 if (result == 0) {
@@ -332,17 +332,17 @@ impl TypeChecker {
             }
             Node* variant = symbols.find_constant(owner, arm.name());
             if (variant == null) {
-                this.error(arm, "enum has no such variant");
+                this.error_code(arm, DiagnosticErrors.UNKNOWN_VARIANT, "enum has no such variant");
                 continue;
             }
             if (arm.symbol() != null) {
-                this.error(arm, "variant is matched more than once");
+                this.error_code(arm, DiagnosticErrors.INVALID_SWITCH, "variant is matched more than once");
             } else {
                 covered = covered + 1;
             }
             arm.set_symbol(SymbolKind.CONSTANT, (ptr)variant);
             if (arm.count() != variant.payload_count()) {
-                this.error(arm, "wrong number of bindings for the variant payload");
+                this.error_code(arm, DiagnosticErrors.VARIANT_BINDING_COUNT, "wrong number of bindings for the variant payload");
                 continue;
             }
 
@@ -366,7 +366,7 @@ impl TypeChecker {
             scopes.reset_to(mark);
         }
         if (covered < constants.length && !wildcard) {
-            this.error(node, "switch expression does not cover every variant");
+            this.error_code(node, DiagnosticErrors.SWITCH_NOT_COVERED, "switch expression does not cover every variant");
         }
         if (result == 0) {
             return Types.i32_type();

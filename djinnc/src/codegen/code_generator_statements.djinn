@@ -48,7 +48,7 @@ impl CodeGenerator {
                 LLVMBuildBr(this.builder, function_context.continue_block());
                 this.start_dead_block();
             default:
-                this.error(node, "statement is not supported by code generation yet");
+                this.error_code(node, DiagnosticErrors.CODEGEN_NOT_SUPPORTED, "statement is not supported by code generation yet");
         }
     }
 

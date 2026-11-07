@@ -1,9 +1,0 @@
-import std::sys;
-import std::types;
-namespace app;
-
-i32 main() {
-    Spectre.styledLn("bold", Spectre.BOLD);
-    Spectre.styled2Ln("warn", Spectre.FG_RED, Spectre.BOLD);
-    return 0;
-}

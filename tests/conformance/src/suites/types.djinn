@@ -1,0 +1,859 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct AddressOfTests {
+    [Test]
+    void StructLocalComparesWithItsPointer() {
+        str source = """
+namespace sample;
+
+struct Node {
+    i32 value;
+}
+
+i32 main() {
+    Node a = { .value = 7 };
+    Node* p = &a;
+    Node* q = &a;
+    if (p == q) {
+        return p.value;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void IntegerLocalDereferencesToItsValue() {
+        str source = """
+namespace sample;
+
+i32 main() {
+    i32 x = 5;
+    i32* p = &x;
+    return *p;
+}
+""";
+        Verify.source(source).runs(Expected.exit(5));
+    }
+}
+
+struct CastTests {
+    [Test]
+    void IntTruncation() {
+        str source = """
+i32 main() {
+    i64 big = 42;
+    i32 small = (i32)big;
+    return small;
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void IntWidening() {
+        str source = """
+i32 main() {
+    i8 small = 7;
+    i32 big = (i32)small;
+    return big;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void FloatToInt() {
+        str source = """
+i32 main() {
+    f64 pi = 3.14;
+    i32 x = (i32)pi;
+    return x;
+}
+""";
+        Verify.source(source).runs(Expected.exit(3));
+    }
+
+    [Test]
+    void IntToFloat() {
+        str source = """
+i32 main() {
+    i32 x = 5;
+    f64 y = (f64)x;
+    f64 z = y + 0.5;
+    return (i32)z;
+}
+""";
+        Verify.source(source).runs(Expected.exit(5));
+    }
+
+    [Test]
+    void ChainedCast() {
+        str source = """
+i32 main() {
+    i64 a = 100;
+    i8 b = (i8)a;
+    i32 c = (i32)b;
+    return c;
+}
+""";
+        Verify.source(source).runs(Expected.exit(100));
+    }
+
+    [Test]
+    void SameTypeCastNoop() {
+        str source = """
+i32 main() {
+    i32 x = 99;
+    i32 y = (i32)x;
+    return y;
+}
+""";
+        Verify.source(source).runs(Expected.exit(99));
+    }
+
+    [Test]
+    void CastInExpression() {
+        str source = """
+i32 main() {
+    i64 a = 10;
+    i64 b = 3;
+    i32 result = (i32)a + (i32)b;
+    return result;
+}
+""";
+        Verify.source(source).runs(Expected.exit(13));
+    }
+
+    [Test]
+    void FloatTruncation() {
+        str source = """
+i32 main() {
+    f64 big = 2.718;
+    f32 small = (f32)big;
+    return (i32)small;
+}
+""";
+        Verify.source(source).runs(Expected.exit(2));
+    }
+
+    [Test]
+    void PointerCast() {
+        str source = """
+i32 main() {
+    i32 x = 42;
+    i32* p = &x;
+    i8* raw = (i8*)p;
+    i32* back = (i32*)raw;
+    return *back;
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void CastLiteral() {
+        str source = """
+i32 main() {
+    i32 x = (i32)3.14;
+    return x;
+}
+""";
+        Verify.source(source).runs(Expected.exit(3));
+    }
+
+    [Test]
+    void NegativeFloatToInt() {
+        str source = """
+i32 main() {
+    f64 neg = 0.0 - 9.7;
+    i32 x = (i32)neg;
+    return 0 - x;
+}
+""";
+        Verify.source(source).runs(Expected.exit(9));
+    }
+}
+
+struct ConstFieldTests {
+    [Test]
+    void BasicConstFieldStaticAccess() {
+        str source = """
+struct Config {
+    const i32 MAX_SIZE = 100;
+}
+
+i32 main() {
+    return Config.MAX_SIZE;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(100));
+    }
+
+    [Test]
+    void ConstFieldUsedInStaticMethod() {
+        str source = """
+struct Math {
+    const i32 ZERO = 0;
+
+    public static i32 getZero() {
+        return ZERO;
+    }
+}
+
+i32 main() {
+    return Math.getZero();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void ConstFieldWithPublicModifier() {
+        str source = """
+struct Limits {
+    public const i32 MIN = 1;
+    public const i32 MAX = 42;
+}
+
+i32 main() {
+    return Limits.MAX;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void ConstFieldDoesNotAffectStructLayout() {
+        str source = """
+struct Data {
+    i32 x;
+    const i32 MAGIC = 7;
+    i32 y;
+}
+
+i32 main() {
+    Data d = { 10, 20 };
+    return d.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void ConstFieldNegativeValue() {
+        str source = """
+struct Constants {
+    const i32 NEG = -1;
+}
+
+i32 main() {
+    i32 x = 10 + Constants.NEG;
+    return x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(9));
+    }
+
+    [Test]
+    void ConstFieldWithoutInitializerError() {
+        str source = """
+struct Bad {
+    const i32 X;
+}
+
+void main() {}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.UNEXPECTED_TOKEN));
+    }
+
+    [Test]
+    void MultipleConstFields() {
+        str source = """
+struct Direction {
+    const i32 UP = 0;
+    const i32 DOWN = 1;
+    const i32 LEFT = 2;
+    const i32 RIGHT = 3;
+}
+
+i32 main() {
+    return Direction.RIGHT;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(3));
+    }
+
+    [Test]
+    void ConstFieldWithMixedRegularFields() {
+        str source = """
+struct Player {
+    const i32 MAX_HP = 100;
+    i32 hp;
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Player p = { 50, 10, 20 };
+    return Player.MAX_HP;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(100));
+    }
+}
+
+struct IsExpressionTests {
+    [Test]
+    void ObjectIsI32True() {
+        str source = """
+struct Inspector {
+    public static i32 check(...args) {
+        object first = args[0];
+        if (first is i32) {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+i32 main() {
+    return Inspector.check(42);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void ObjectIsI32False() {
+        str source = """
+struct Inspector {
+    public static i32 check(...args) {
+        object first = args[0];
+        if (first is i32) {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+i32 main() {
+    return Inspector.check(3.14);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void ObjectIsF64() {
+        str source = """
+struct Inspector {
+    public static i32 check(...args) {
+        object first = args[0];
+        if (first is f64) {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+i32 main() {
+    return Inspector.check(3.14);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void NegatedIsExpression() {
+        str source = """
+struct Inspector {
+    public static i32 check(...args) {
+        object first = args[0];
+        if (!(first is i32)) {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+i32 main() {
+    return Inspector.check(3.14);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void ErrorOnNonObjectOperand() {
+        str source = """
+i32 main() {
+    i32 x = 42;
+    if (x is i32) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().diagnostics(Expected.error(DiagnosticErrors.INVALID_IS_OPERAND));
+    }
+
+    [Test]
+    void BindingExtractsI32Value() {
+        str source = """
+struct Inspector {
+    public static i32 check(...args) {
+        object first = args[0];
+        if (first is i32 value) {
+            return value;
+        }
+        return -1;
+    }
+}
+
+i32 main() {
+    return Inspector.check(42);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void BindingNotUsedWhenTypeMismatch() {
+        str source = """
+struct Inspector {
+    public static i32 check(...args) {
+        object first = args[0];
+        if (first is i32 value) {
+            return value;
+        }
+        return -1;
+    }
+}
+
+i32 main() {
+    return Inspector.check(3.14);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(-1));
+    }
+
+    [Test]
+    void BindingWithDifferentTypes() {
+        str source = """
+struct Inspector {
+    public static i32 identify(...args) {
+        object first = args[0];
+        if (first is i32 intVal) {
+            return intVal;
+        }
+        if (first is i64 longVal) {
+            return (i32)longVal;
+        }
+        return 0;
+    }
+}
+
+i32 main() {
+    return Inspector.identify(99);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+}
+
+struct NativeTypesTests {
+    [Test]
+    void DeclarationsCompile() {
+        str source = """
+i32 main() {
+    nint count = 42;
+    nfloat ratio = 1.5;
+    ndouble precise = 2.5;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void NintMixesWithI64() {
+        str source = """
+i32 main() {
+    nint a = 100;
+    i64 b = 9000000000;
+    nint c = a + 1;
+    i64 d = b + a;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void NintNegation() {
+        str source = """
+i32 main() {
+    nint x = 5;
+    nint y = -x;
+    return (i32)(0 - y);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void NintAsFunctionSignature() {
+        str source = """
+nint offset(nint base, nint delta) {
+    return base + delta;
+}
+
+i32 main() {
+    nint r = offset(40, 2);
+    return (i32)r;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void NfloatNdoubleArithmetic() {
+        str source = """
+i32 main() {
+    nfloat a = 1.5;
+    nfloat b = a + 2.5;
+    ndouble c = 1.5;
+    ndouble d = c + b;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+}
+
+struct NonZeroTests {
+    [Test]
+    void DeclarationsCompile() {
+        str source = """
+i32 main() {
+    i32n signedNonZero = 5;
+    i32n negative = -5;
+    u32n unsignedNonZero = 10;
+    i64n wide = 3000000000;
+    i32 back = signedNonZero;
+    u32 backUnsigned = unsignedNonZero;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void ExplicitCastIsTrusted() {
+        str source = """
+i32 main() {
+    i32 plain = 1;
+    i32n trusted = (i32n)plain;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void CombinesWithOverflowSuffix() {
+        str source = """
+i32 main() {
+    i32nw a = 5;
+    i32wn b = 6;
+    u32nt c = 7;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void DivisionByNonZeroRuns() {
+        str source = """
+i32 main() {
+    i32n divisor = 10;
+    return 100 / divisor;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void NonZeroParamCallWithNonZeroConstantCompiles() {
+        str source = """
+i32 work(i32n b) {
+    return 100 / b;
+}
+
+i32 main() {
+    return work(10);
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void EntryCheckTrapsAtRuntime() {
+        str source = """
+i32 work(i32n b) {
+    return 100 / b;
+}
+
+i32 main() {
+    i32 zero = 0;
+    i32n d = (i32n)zero;
+    return work(d);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.failure());
+    }
+}
+
+struct NullableTests {
+    [Test]
+    void NullLiteralAllowedOnNullableType() {
+        str source = """
+struct User { i32 id; }
+
+i32 main() {
+    User*? u = null;
+    return 0;
+}
+""";
+        Verify.source(source).compiles();
+    }
+
+    [Test]
+    void NullLiteralForbiddenOnNonNullableStruct() {
+        str source = """
+struct User { i32 id; }
+
+i32 main() {
+    User u = null;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH));
+    }
+
+    [Test]
+    void NullLiteralForbiddenOnNonNullablePointer() {
+        str source = """
+i32 main() {
+    i8* p = null;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH));
+    }
+
+    [Test]
+    void NullLiteralForbiddenOnInteger() {
+        str source = """
+i32 main() {
+    i32 n = null;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH));
+    }
+
+    [Test]
+    void ReassignNullToNullableMutVariable() {
+        str source = """
+struct Box { i32 v; }
+
+i32 main() {
+    mut Box*? b = null;
+    b = null;
+    return 0;
+}
+""";
+        Verify.source(source).compiles();
+    }
+
+    [Test]
+    void ReassignNullToNonNullableErrors() {
+        str source = """
+struct Box { i32 v; }
+
+i32 main() {
+    mut Box* b = (Box*)0;
+    b = null;
+    return 0;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.VALUE_TYPE_MISMATCH));
+    }
+
+    [Test]
+    void CastNullableToNullableNoWarning() {
+        str source = """
+struct Box { i32 v; }
+
+i32 main() {
+    Box*? a = null;
+    Box*? b = (Box*?)a;
+    return 0;
+}
+""";
+        Verify.source(source).compiles();
+    }
+
+    [Test]
+    void CastIntegerToPointerNoWarning() {
+        str source = """
+struct Box { i32 v; }
+
+i32 main() {
+    Box* b = (Box*)0;
+    return 0;
+}
+""";
+        Verify.source(source).compiles();
+    }
+}
+
+struct PointerCompatTests {
+    [Test]
+    void VoidToTyped() {
+        str source = """
+i32 main() {
+    i32* data = malloc(4);
+    data[0] = 42;
+    i32 val = data[0];
+    free(data);
+    return val;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void TypedToVoid() {
+        str source = """
+i32 main() {
+    i32* data = malloc(4);
+    void* vp = data;
+    free(vp);
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void IncompatibleTypesHumanReadableMessage() {
+        str source = """
+i32 main() {
+    i64* data = malloc(8);
+    i32* wrong = data;
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void SameType() {
+        str source = """
+i32 main() {
+    i32* a = malloc(4);
+    i32* b = a;
+    free(b);
+    return 0;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+}
+
+struct PointerFieldTests {
+    [Test]
+    void ComparesWithLocalInsideNamespace() {
+        str source = """
+namespace sample;
+
+extern "C" {
+    void* malloc(u64 size);
+}
+
+struct Node {
+    i32 value;
+}
+
+struct Holder {
+    Node* node;
+}
+
+i32 main() {
+    Node* pointer = (Node*)malloc(sizeof(Node));
+    Holder* holder = (Holder*)malloc(sizeof(Holder));
+    holder.node = pointer;
+    if (holder.node == pointer) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(1));
+    }
+}
+
+struct UnsignedCompareTests {
+    [Test]
+    void OrderingUsesUnsignedPredicates() {
+        str source = """
+i32 main() {
+    u32 high = 4000000000;
+    u32 low = 5;
+    if (high > low) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(1));
+    }
+
+    [Test]
+    void CastWidensWithZeroExtension() {
+        str source = """
+i32 main() {
+    u32 value = 4294967295;
+    u64 wide = 4294967295;
+    if ((u64)value == wide) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(1));
+    }
+
+    [Test]
+    void SignedStillOrdersNegatives() {
+        str source = """
+i32 main() {
+    i32 negative = -5;
+    if (negative < 3) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(1));
+    }
+}

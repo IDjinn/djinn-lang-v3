@@ -60,6 +60,11 @@ struct Parser {
             }
             if (kind == TokenKind::IDENTIFIER && Strings.equals(list.text(i), list.text_length(i), "attribute")) {
                 Parser.collect_attribute_name(list, file, i);
+                bool declaration = i + 2 < file.token_end && list.kind(i + 1) == TokenKind::IDENTIFIER
+                    && (list.kind(i + 2) == TokenKind::LPAREN || list.kind(i + 2) == TokenKind::LBRACE || list.kind(i + 2) == TokenKind::SEMICOLON);
+                if (declaration && !(i > file.first_token && list.kind(i - 1) == TokenKind::LBRACKET)) {
+                    names.put(list.atom(i + 1), 1);
+                }
             }
             bool declaresUnion = kind == TokenKind::IDENTIFIER && Strings.equals(list.text(i), list.text_length(i), "union");
             bool declaresType = kind == TokenKind::STRUCT || kind == TokenKind::ENUM || kind == TokenKind::INTERFACE || declaresUnion;
@@ -219,7 +224,7 @@ struct Parser {
         if (this.kind_of(token) == TokenKind::END_OF_FILE) {
             found = "end of file";
         }
-        diagnostics.error_near(this.line_of(token), this.column_of(token), message, found);
+        diagnostics.error_near(DiagnosticErrors.UNEXPECTED_TOKEN, this.line_of(token), this.column_of(token), message, found);
         this.failed = true;
     }
 

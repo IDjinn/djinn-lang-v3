@@ -4,7 +4,7 @@ namespace djinnc;
 // snapshots it so Error.stackTrace can print the call chain.
 impl CodeGenerator {
     bool stack_enabled() {
-        return this.debug != null;
+        return this.debug != null || this.keep_frames;
     }
 
     unsafe void emit_frame_push(FunctionInfo* info) {
@@ -52,20 +52,24 @@ impl CodeGenerator {
     }
 
     unsafe Value* generate_panic(Node* node) {
+        Value* message = this.gen_expression(node.first());
+        this.call_panic(this.coerce(message, Types.byte_pointer()), node);
+        this.emit_noreturn();
+        return Value.create(null, Types.void_type());
+    }
+
+    unsafe void call_panic(ptr message, Node* at) {
         ptr i32_type = LLVMIntTypeInContext(this.context, 32);
         ptr pointer_llvm = LLVMPointerTypeInContext(this.context, 0);
-        Value* message = this.gen_expression(node.first());
         ptr<ptr> params = CodeGenerator.array_of(3);
         ptr<ptr> args = CodeGenerator.array_of(3);
         params[0] = pointer_llvm;
         params[1] = pointer_llvm;
         params[2] = i32_type;
-        args[0] = this.coerce(message, Types.byte_pointer());
-        args[1] = this.string_constant(node.file_name());
-        args[2] = LLVMConstInt(i32_type, (u64)node.line(), 0);
+        args[0] = message;
+        args[1] = this.string_constant(at.file_name());
+        args[2] = LLVMConstInt(i32_type, (u64)at.line(), 0);
         this.call_runtime("__djinn_panic", LLVMVoidTypeInContext(this.context), params, args, 3);
-        this.emit_noreturn();
-        return Value.create(null, Types.void_type());
     }
 
     ptr stack_text() {

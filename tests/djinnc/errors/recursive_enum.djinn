@@ -1,8 +1,0 @@
-union Tree {
-    Leaf(i32),
-    Branch(Tree, Tree)
-}
-
-i32 main() {
-    return 0;
-}

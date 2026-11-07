@@ -290,6 +290,22 @@ gtest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_test(NAME djinn_all_tests COMMAND tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 set_tests_properties(djinn_all_tests PROPERTIES LABELS aggregate)
 
+# Native test system: builds djinnc from a seed and runs tests/conformance.
+#   cmake -DDJINNC_SEED=<djinnc executable> ...
+#   ctest --test-dir build -L conformance
+set(DJINNC_SEED "" CACHE FILEPATH "Seed compiler that builds djinnc for the conformance tests")
+find_program(DJINN_BASH bash HINTS "C:/Program Files/Git/bin")
+if (DJINNC_SEED AND DJINN_BASH)
+    add_test(NAME djinn_conformance
+            COMMAND ${DJINN_BASH} tests/conformance/ctest.sh ${DJINNC_SEED}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME djinn_conformance_link
+            COMMAND ${DJINN_BASH} tests/conformance/ctest.sh ${DJINNC_SEED} --require Link --crash --library
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(djinn_conformance djinn_conformance_link PROPERTIES
+            LABELS conformance RESOURCE_LOCK djinn_conformance TIMEOUT 3600)
+endif ()
+
 add_custom_target(clean_djinn_build
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{TEMP}/djinn_build"
         COMMENT "Cleaning djinn_build temp directory"
@@ -308,9 +324,20 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 add_library(djinn_runtime STATIC
         runtime/djinn_runtime.c
+        runtime/scheduler.c
+        runtime/io_file.c
+        runtime/io_socket.c
+        runtime/diagnostics.c
+        runtime/threads.c
+        runtime/console.c
+        runtime/filesystem.c
+        runtime/process.c
         runtime/djinn_runtime.h
         runtime/logger.h
+        runtime/runtime_internal.h
         runtime/logger.c
+        runtime/third_party/yyjson/yyjson.c
+        runtime/json/djinn_json.c
 )
 target_include_directories(djinn_runtime PUBLIC "${CMAKE_SOURCE_DIR}/runtime")
 set_target_properties(djinn_runtime PROPERTIES LINKER_LANGUAGE C)

@@ -1,7 +1,0 @@
-i32 take(Missing* value) {
-    return 0;
-}
-
-i32 main() {
-    return 0;
-}

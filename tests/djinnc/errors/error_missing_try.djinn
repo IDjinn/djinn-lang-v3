@@ -1,9 +1,0 @@
-struct Failure;
-
-i32 risky() throws(Failure) {
-    throw Failure();
-}
-
-i32 main() {
-    return risky();
-}

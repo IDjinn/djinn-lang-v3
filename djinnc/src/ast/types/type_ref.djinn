@@ -66,14 +66,14 @@ struct TypeRef {
             TypeRef* parsed = TypeRef.from_primitive_name(atoms.text(atom), (i32)atoms.length(atom));
             if (parsed == null) {
                 map.put(atom, 0);
-                return null;
+                return (TypeRef*)0;
             }
             list.push((ptr)parsed);
             map.put(atom, (u32)list.length);
             found = (i64)list.length;
         }
         if (found == 0) {
-            return null;
+            return (TypeRef*)0;
         }
         TypeRef* template = (TypeRef*)list.get((i32)found - 1);
         TypeRef* copy = TypeRef.create(template.kind);
@@ -101,17 +101,20 @@ struct TypeRef {
         if (Strings.equals(text, length, "usize")) {
             return TypeRef.integer(32, false);
         }
-        if (Strings.equals(text, length, "nfloat") || Strings.equals(text, length, "ndouble")) {
+        if (Strings.equals(text, length, "nfloat")) {
+            return TypeRef.floating(32);
+        }
+        if (Strings.equals(text, length, "ndouble")) {
             return TypeRef.floating(64);
         }
         if (length < 2) {
-            return null;
+            return (TypeRef*)0;
         }
 
         i32 lead = text[0];
         bool isIntegerLead = lead == 105 || lead == 117;
         if (!isIntegerLead && lead != 102) {
-            return null;
+            return (TypeRef*)0;
         }
 
         mut i32 pos = 1;
@@ -121,14 +124,14 @@ struct TypeRef {
             pos = pos + 1;
         }
         if (pos == 1 || bits == 0) {
-            return null;
+            return (TypeRef*)0;
         }
 
         while (pos < length) {
             i32 suffix = text[pos];
             bool validSuffix = suffix == 119 || suffix == 116 || suffix == 99 || suffix == 115 || suffix == 110;
             if (!validSuffix || lead == 102) {
-                return null;
+                return (TypeRef*)0;
             }
             pos = pos + 1;
         }

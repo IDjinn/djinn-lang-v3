@@ -1,6 +1,0 @@
-i32 main() {
-    mut i32 value = 1;
-    i32* first = &value;
-    i32* second = &value;
-    return *first + *second;
-}

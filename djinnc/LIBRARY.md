@@ -14,6 +14,30 @@ djinnc lib.djinn --emit-lib-view -o view.txt     # build + inspection text (used
 
 `DJINN_BUILD_ID` is stored in the header as the build id when set (commit hash, CI number...).
 
+## Projects
+
+A `djinn.proj` builds a library with `library-mode: true`. `libs:` lists what the project uses: `std`, or a name that resolves
+to `<lib dir>/<name>.djlib`, where the directory comes from `--lib-dir` (default `build/libs`). `sources:` adds files outside
+`src/`, relative to the project. `reflection-mode: all` is the same as `--reflect-all`.
+
+```
+compiler:
+  library-mode: true
+  output:
+    file: "djinnc_testing.djlib"
+    directory: "build/libs"
+  libs: [
+    'std',
+    'testing'
+  ]
+  sources: [
+    '../src/support/source/diagnostic_code.djinn'
+  ]
+```
+
+A library can be built on another one. A `.djlib` has no dependency list, so the final program lists all of them.
+Import a library after `namespace`: an `import` above it does not expose the names.
+
 ## File layout (all integers little-endian)
 
 | Offset | Size | Field |

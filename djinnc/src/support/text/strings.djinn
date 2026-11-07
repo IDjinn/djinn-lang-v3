@@ -23,7 +23,7 @@ struct Strings {
     }
 
     public static ptr<i8> duplicate(ptr<i8> text, i32 length) {
-        ptr<i8> copy = (ptr<i8>)Memory.zalloc((i64)length + 1);
+        ptr<i8> copy = (ptr<i8>)Memory.zalloc((u64)length + 1);
         memcpy(copy, text, (u64)length);
         return copy;
     }

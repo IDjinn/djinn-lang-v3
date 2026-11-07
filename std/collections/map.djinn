@@ -146,7 +146,7 @@ struct map<Key, Value>
         mut u64 hash_result = 1;
         for (mut size i = 0u; i < this.capacity; i = i + 1u) {
             if (this.states[i] == (i8)1) {
-                hash_result = 31 * hash_result + this.keys[i]; // TODO: does not support non-integer generic types
+                hash_result = 31 * hash_result + (u64)this.keys[i]; // TODO: does not support non-integer generic types
             }
         }
         return hash_result;
@@ -159,7 +159,7 @@ struct map<Key, Value>
     }
 
     size _hash_index(Key key) {
-        mut u32 h = key;
+        mut u32 h = (u32)key;
         if (h < 0u) {
             h = 0u - h;
         }

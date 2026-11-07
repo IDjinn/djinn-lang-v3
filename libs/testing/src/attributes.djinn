@@ -1,0 +1,13 @@
+namespace testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+
+attribute Test(AttributeTarget.Method);
+
+attribute TestPolicy(AttributeTarget.Function | AttributeTarget.Method) {
+    i32 retry;
+    i32 timeout;
+}

@@ -20,6 +20,7 @@ unsafe i32 run_compiler() {
         return 2;
     }
 
+    Diagnostics.set_json(options.diagnostics_json);
     Target.init(options.target);
     Target.set_debug(options.debug);
     ObjectWriter.set_target(options.cpu, options.features);
@@ -149,8 +150,17 @@ unsafe i32 run_compiler() {
     SymbolTable* inspect_symbols = gen.symbols;
     inspect_symbols.generate_disabled = options.no_generate;
     gen.library_mode = options.library;
+    gen.keep_frames = options.run;
     if (options.debug) {
         gen.enable_debug((ptr<i8>)inputs.get(0), options.optimize, options.emit_asm || options.emit_ir);
+    }
+    if (options.check_only) {
+        if (!gen.check(program)) {
+            return 1;
+        }
+        monitor.lap("check");
+        monitor.finish();
+        return 0;
     }
     if (!gen.generate(program)) {
         return 1;

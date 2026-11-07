@@ -50,6 +50,20 @@ struct Types {
         return table.pointer_to(element);
     }
 
+    public static u32 nullable_pointer_to(u32 element) {
+        TypeTable* table = TypeTable.get();
+        return table.nullable_pointer_to(element);
+    }
+
+    public static bool is_nullable_pointer(u32 id) {
+        TypeTable* table = TypeTable.get();
+        return Types.is_pointer(id) && table.is_nullable_pointer(id);
+    }
+
+    public static bool is_safe_pointer(u32 id) {
+        return Types.is_pointer(id) && !Types.is_raw_pointer(id) && !Types.is_nullable_pointer(id);
+    }
+
     public static u32 raw_pointer_to(u32 element) {
         TypeTable* table = TypeTable.get();
         return table.raw_pointer_to(element);
@@ -111,6 +125,16 @@ struct Types {
 
     public static bool is_sized_pointer(u32 id) {
         return Types.is_pointer(id) && !Types.is_void(Types.element(id));
+    }
+
+    public static bool widens(u32 from, u32 to) {
+        if (Types.is_float(from)) {
+            return Types.is_float(to) && Types.bits(to) >= Types.bits(from);
+        }
+        if (!Types.is_integer(to) || (Types.bits(from) == 1) != (Types.bits(to) == 1)) {
+            return false;
+        }
+        return Types.is_signed(from) == Types.is_signed(to) && Types.bits(to) >= Types.bits(from);
     }
 
     public static u32 common(u32 left, u32 right) {

@@ -1,8 +1,0 @@
-i32 main() {
-    str name = "Allan";
-    i32 age = 12;
-    string text = $"{name} is {age}";
-    mut i32 counter = 5;
-    string live = $"c={counter}";
-    return (i32)text.length * 10 + (i32)live.length;
-}

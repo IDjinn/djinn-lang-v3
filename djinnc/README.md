@@ -7,7 +7,7 @@ Self-hosted Djinn compiler, written in Djinn and built by the C++ compiler (stag
 `source -> Lexer -> Parser (AST) -> CodeGen (LLVM-C) -> .obj (LLVMTargetMachineEmitToFile) -> clang/lld + runtime`
 
 The `.ll` is only written with `--emit-ir`, `--no-link` or `--keep-ir`. `--runtime-lib <lib>` links a precompiled runtime
-(CMake target `djinn_runtime`) instead of recompiling `djinn_runtime.c` and `logger.c`. `--lld` calls `lld-link` directly (Windows only, requires `--runtime-lib`; library search paths come from the `LIB`
+(CMake target `djinn_runtime`) instead of recompiling the runtime sources. `--lld` calls `lld-link` directly (Windows only, requires `--runtime-lib`; library search paths come from the `LIB`
 environment variable or `--link-arg /libpath:...`; `DJINN_LLD_LINK` overrides the executable), skipping the clang driver.
 On POSIX `--lld` calls `ld.lld` directly with the glibc startup files (`DJINN_LD_LLD`, `DJINN_CRT_DIR` and `DJINN_DYNAMIC_LINKER` override the
 executable, the crt directory and the dynamic loader). The test scripts take the runtime library as an optional third argument and add `--lld`

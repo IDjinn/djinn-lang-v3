@@ -55,6 +55,8 @@ struct Attributes {
             copy.target_kind = use.target_kind;
             copy.int_arg = use.int_arg;
             copy.text_arg = use.text_arg;
+            copy.payload = use.payload;
+            copy.payload_type = use.payload_type;
             copy.line = use.line;
             copy.column = use.column;
             Attributes.record(copy);

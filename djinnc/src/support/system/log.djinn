@@ -5,7 +5,7 @@ unsafe static mut ptr log_handle = null;
 struct Log {
     public static ptr get() {
         if (log_handle == null) {
-            log_handle = logger_create("djinnc", 2, 0);
+            log_handle = logger_get("djinnc", 2, 0);
             logger_set_format(log_handle, "{...}");
         }
         return log_handle;

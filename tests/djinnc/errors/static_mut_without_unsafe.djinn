@@ -1,5 +1,0 @@
-static mut i32 counter = 0;
-
-i32 main() {
-    return 0;
-}

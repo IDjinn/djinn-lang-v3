@@ -6,6 +6,8 @@ struct AttributeUse {
     i32 target_kind;
     i64 int_arg;
     ptr<i8> text_arg;
+    Node* payload;
+    u32 payload_type;
     i32 line;
     i32 column;
 }

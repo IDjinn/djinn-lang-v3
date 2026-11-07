@@ -16,7 +16,7 @@ impl SemanticAnalyzer {
                 info.node = declaration;
                 SymbolTable* symbols = this.symbols;
                 if (!symbols.add_interface(info)) {
-                    this.error(declaration, "interface is already defined");
+                    this.error_code(declaration, DiagnosticErrors.DUPLICATE_DEFINITION, "interface is already defined");
                 }
             }
         }
@@ -44,7 +44,7 @@ impl SemanticAnalyzer {
         }
         SymbolTable* symbols = this.symbols;
         if (!symbols.add_alias(this.scope, declaration.name(), base)) {
-            this.error(declaration, "type is already defined");
+            this.error_code(declaration, DiagnosticErrors.DUPLICATE_DEFINITION, "type is already defined");
         }
     }
 
@@ -70,7 +70,7 @@ impl SemanticAnalyzer {
         info.is_template = info.generics != null;
         SymbolTable* symbols = this.symbols;
         if (!symbols.add_struct(info)) {
-            this.error(declaration, "struct is already defined");
+            this.error_code(declaration, DiagnosticErrors.DUPLICATE_DEFINITION, "struct is already defined");
             return;
         }
         this.finish_struct(info, declaration);
@@ -96,7 +96,7 @@ impl SemanticAnalyzer {
                 }
             }
             if (info.has_payload && declaration.op() == 0) {
-                this.error(declaration, "an enum cannot carry a payload: declare it as a union");
+                this.error_code(declaration, DiagnosticErrors.ENUM_WITH_PAYLOAD, "an enum cannot carry a payload: declare it as a union");
             }
             if (!info.has_payload) {
                 info.type_id = Types.enumeration(info.index);
@@ -118,7 +118,7 @@ impl SemanticAnalyzer {
                 continue;
             }
             if (field_map.contains(member.name())) {
-                this.error(member, "field is already defined");
+                this.error_code(member, DiagnosticErrors.DUPLICATE_DEFINITION, "field is already defined");
                 continue;
             }
             FieldInfo* field = (FieldInfo*)Memory.zalloc(sizeof(FieldInfo));
@@ -186,7 +186,7 @@ impl SemanticAnalyzer {
             args.push(Types.void_type());
         }
         if (args.length != params.count()) {
-            this.error(blame, "wrong number of type arguments");
+            this.error_code(blame, DiagnosticErrors.TYPE_ARGUMENT_COUNT, "wrong number of type arguments");
             return Types.i32_type();
         }
 
@@ -261,7 +261,7 @@ impl SemanticAnalyzer {
                     if (method != null) {
                         method.bindings = impl_map;
                         if (!symbols.add_function(method)) {
-                            this.error(member, "function is already defined");
+                            this.error_code(member, DiagnosticErrors.DUPLICATE_DEFINITION, "function is already defined");
                         }
                     }
                 }
@@ -361,7 +361,7 @@ impl SemanticAnalyzer {
                     continue;
                 }
                 if (Types.is_void(argument)) {
-                    this.error(blame, "type argument does not satisfy a generic constraint");
+                    this.error_code(blame, DiagnosticErrors.CONSTRAINT_NOT_SATISFIED, "type argument does not satisfy a generic constraint");
                     continue;
                 }
                 argument_info = symbols.primitive_owner(argument);

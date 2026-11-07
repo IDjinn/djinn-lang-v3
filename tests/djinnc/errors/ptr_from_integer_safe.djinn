@@ -1,5 +1,0 @@
-i32 main() {
-    u64 address = 4096;
-    ptr<i32> raw = (ptr<i32>)address;
-    return 0;
-}

@@ -127,6 +127,15 @@ struct Node {
         return tokens.column(this.token);
     }
 
+    public i32 length() {
+        TokenList* tokens = TokenList.get();
+        i32 size = tokens.text_length(this.token);
+        if (size < 1) {
+            return 1;
+        }
+        return size;
+    }
+
     public bool is_header() {
         if (!Library.active()) {
             return false;
@@ -208,7 +217,7 @@ struct Node {
     public unsafe TypeRef* type() {
         u32 stored = this.get_field(NodeField.TYPE);
         if (stored == 0) {
-            return null;
+            return (TypeRef*)0;
         }
         PointerList* types = (PointerList*)ast_types;
         return (TypeRef*)types.get((i32)stored - 1);
@@ -223,7 +232,7 @@ struct Node {
     public unsafe GenericParams* generics() {
         u32 stored = this.get_field(NodeField.GENERICS);
         if (stored == 0) {
-            return null;
+            return (GenericParams*)0;
         }
         PointerList* lists = (PointerList*)ast_lists;
         return (GenericParams*)lists.get((i32)stored - 1);

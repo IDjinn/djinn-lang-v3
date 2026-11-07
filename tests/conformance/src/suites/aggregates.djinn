@@ -1,0 +1,1087 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct DestructuringTests {
+    [Test]
+    void BareBlockStillIntroducesScope() {
+        str source = """
+i32 main() {
+    {
+        i32 inner = 5;
+    }
+    return inner;
+}
+""";
+        Verify.source(source).diagnostics(Expected.error(DiagnosticErrors.UNDEFINED_VARIABLE));
+    }
+}
+
+struct EnumTests {
+    [Test]
+    void SimpleDefinition() {
+        str source = """
+enum Color {
+    Red(),
+    Green(),
+    Blue()
+}
+
+i32 main() {
+    Color c;
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void VariantConstruction() {
+        str source = """
+enum Status {
+    Active(),
+    Inactive()
+}
+
+i32 main() {
+    Status s = Status::Active();
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void VariantWithPayload() {
+        str source = """
+union Result {
+    Ok(i32),
+    Error(i32)
+}
+
+i32 main() {
+    Result r = Result::Ok(42);
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void MultiplePayloadTypes() {
+        str source = """
+union Message {
+    Empty(),
+    Text(i8*),
+    Number(i64),
+    Pair(i32, i32)
+}
+
+i32 main() {
+    Message m1 = Message::Empty();
+    Message m2 = Message::Number(100);
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void VariantWithMultipleFields() {
+        str source = """
+union Event {
+    Click(i32, i32),
+    KeyPress(i32),
+    Resize(i32, i32, i32, i32)
+}
+
+i32 main() {
+    Event click = Event::Click(100, 200);
+    Event resize = Event::Resize(0, 0, 800, 600);
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void GenericOptional() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    optional<i32> maybe_int = optional<i32>::Value(42);
+    optional<i32> nothing = optional<i32>::Empty();
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void GenericResult() {
+        str source = """
+union result<T, E> {
+    Ok(T),
+    Error(E)
+}
+
+i32 main() {
+    result<i32, i8*> success = result<i32, i8*>::Ok(100);
+    result<i32, i8*> failure = result<i32, i8*>::Error("error");
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void GenericWithPointerType() {
+        str source = """
+union opt<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    opt<str> maybe_string = opt<str>::Value("hello");
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void GenericWithFloatType() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    optional<f64> maybe_float = optional<f64>::Value(3.14159);
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void GenericMultipleInstantiations() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    optional<i32> a = optional<i32>::Value(1);
+    optional<i64> b = optional<i64>::Value(2);
+    optional<f32> c = optional<f32>::Value(3.0);
+    optional<f64> d = optional<f64>::Value(4.0);
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(0));
+    }
+
+    [Test]
+    void PatternMatchBasic() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    auto opt = optional<i32>::Value(69);
+
+    i32 result = switch opt {
+        Value val -> val,
+        Empty -> -1
+    };
+
+    return result;
+}
+""";
+        Verify.source(source).runs(Expected.exit(69));
+    }
+
+    [Test]
+    void PatternMatchEmpty() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    auto opt = optional<i32>::Empty();
+
+    i32 result = switch opt {
+        Value val -> val,
+        Empty -> -1
+    };
+
+    return result;
+}
+""";
+        Verify.source(source).runs(Expected.exit(-1));
+    }
+
+    [Test]
+    void PatternMatchResult() {
+        str source = """
+union result<T, E> {
+    Ok(T),
+    Error(E)
+}
+
+i32 main() {
+    auto r = result<i32, i32>::Ok(42);
+
+    i32 val = switch r {
+        Ok v -> v,
+        Error e -> e
+    };
+
+    return val;
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void PatternMatchResultError() {
+        str source = """
+union result<T, E> {
+    Ok(T),
+    Error(E)
+}
+
+i32 main() {
+    auto r = result<i32, i32>::Error(7);
+
+    i32 val = switch r {
+        Ok v -> v,
+        Error e -> e
+    };
+
+    return val;
+}
+""";
+        Verify.source(source).runs(Expected.exit(7));
+    }
+
+    [Test]
+    void PatternMatchWithComputation() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    auto opt = optional<i32>::Value(10);
+
+    i32 result = switch opt {
+        Value val -> val * 2 + 1,
+        Empty -> 0
+    };
+
+    return result;
+}
+""";
+        Verify.source(source).runs(Expected.exit(21));
+    }
+
+    [Test]
+    void PatternMatchNoPayload() {
+        str source = """
+enum Color {
+    Red(),
+    Green(),
+    Blue()
+}
+
+i32 main() {
+    Color c = Color::Green();
+
+    i32 result = switch c {
+        Red -> 1,
+        Green -> 2,
+        Blue -> 3
+    };
+
+    return result;
+}
+""";
+        Verify.source(source).runs(Expected.exit(2));
+    }
+
+    [Test]
+    void PatternMatchInFunction() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 unwrap_or(optional<i32> opt, i32 default_val) {
+    return switch opt {
+        Value val -> val,
+        Empty -> default_val
+    };
+}
+
+i32 main() {
+    auto a = optional<i32>::Value(50);
+    auto b = optional<i32>::Empty();
+
+    i32 x = unwrap_or(a, 0);
+    i32 y = unwrap_or(b, 99);
+
+    return x + y;
+}
+""";
+        Verify.source(source).runs(Expected.exit(149));
+    }
+
+    [Test]
+    void PatternMatchWildcardArm() {
+        str source = """
+union optional<T> {
+    Empty(),
+    Value(T)
+}
+
+i32 main() {
+    auto opt = optional<i32>::Empty();
+
+    i32 result = switch opt {
+        Value val -> val,
+        _ -> -1
+    };
+
+    return result;
+}
+""";
+        Verify.source(source).runs(Expected.exit(-1));
+    }
+}
+
+struct HashTests {
+    [Test]
+    void I32HashIsIdentity() {
+        str source = """
+import std::types;
+i32 main() {
+    i32 x = 42;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void U8HashIsIdentity() {
+        str source = """
+import std::types;
+i32 main() {
+    u8 x = 20u;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void I16HashIsIdentity() {
+        str source = """
+import std::types;
+i32 main() {
+    i16 x = 99;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void U16HashIsIdentity() {
+        str source = """
+import std::types;
+i32 main() {
+    u16 x = 150;
+    i32 h = (i32)x.hash();
+    return h;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(150));
+    }
+
+    [Test]
+    void I8HashIsIdentity() {
+        str source = """
+import std::types;
+i32 main() {
+    i8 x = 77;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(77));
+    }
+
+    [Test]
+    void U32HashIsIdentity() {
+        str source = """
+import std::types;
+i32 main() {
+    u32 x = 55;
+    i32 h = (i32)x.hash();
+    return h;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+
+    [Test]
+    void I64HashProducesNonZero() {
+        str source = """
+import std::types;
+i32 main() {
+    i64 x = 42;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.failure());
+    }
+
+    [Test]
+    void U64HashProducesNonZero() {
+        str source = """
+import std::types;
+i32 main() {
+    u64 x = 100;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.failure());
+    }
+
+    [Test]
+    void test_128HashProducesNonZero() {
+        str source = """
+import std::types;
+i32 main() {
+    i128 x = 121321300;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.failure());
+    }
+
+    [Test]
+    void U128HashProducesNonZero() {
+        str source = """
+import std::types;
+i32 main() {
+    u128 x = 121321300;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.failure());
+    }
+
+    [Test]
+    void HexLiteralHash() {
+        str source = """
+import std::types;
+i32 main() {
+    i32 x = 0xFF;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(255));
+    }
+
+    [Test]
+    void BinaryLiteralHash() {
+        str source = """
+import std::types;
+i32 main() {
+    i32 x = 0b101010;
+    return (i32)x.hash();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+}
+
+struct IndexAccessTests {
+    [Test]
+    void BasicRead() {
+        str source = """
+i32 main() {
+    i32* data = malloc(12);
+    data[0] = 10;
+    data[1] = 20;
+    data[2] = 30;
+    i32 val = data[1];
+    free(data);
+    return val;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void Write() {
+        str source = """
+i32 main() {
+    i32* data = malloc(12);
+    data[0] = 42;
+    i32 val = data[0];
+    free(data);
+    return val;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void WithMalloc() {
+        str source = """
+i32 main() {
+    i32* nums = malloc(20);
+    for (mut i32 i = 0; i < 5; i = i + 1) {
+        nums[i] = i * 10;
+    }
+    i32 res = nums[3];
+    free(nums);
+    return res;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+
+    [Test]
+    void I8Pointer() {
+        str source = """
+i32 main() {
+    i8* buf = malloc(4);
+    buf[0] = 65;
+    buf[1] = 66;
+    i32 val = buf[0];
+    free(buf);
+    return val;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(65));
+    }
+}
+
+struct StrTests {
+    [Test]
+    void LiteralCreatesStrStruct() {
+        str source = """
+i32 main() {
+    str s = "hello";
+    return (i32)s.length;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void EmptyLiteral() {
+        str source = """
+i32 main() {
+    str s = "";
+    return (i32)s.length;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void CoercionToI8PtrForPrintf() {
+        str source = """
+i32 main() {
+    str s = "hello";
+    printf("%s", s);
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void DirectLiteralCoercion() {
+        str source = """
+i32 main() {
+    printf("direct: %s\n", "world");
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void LenField() {
+        str source = """
+i32 main() {
+    str s = "abcdefghij";
+    return (i32)s.length;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void IsEmptyMethodTrue() {
+        str source = """
+i32 main() {
+    str s = "";
+    if (s.is_empty()) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void IsEmptyMethodFalse() {
+        str source = """
+i32 main() {
+    str s = "hello";
+    if (s.is_empty()) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void PassAsParameter() {
+        str source = """
+i32 getLen(str s) {
+    return (i32)s.length;
+}
+
+i32 main() {
+    str s = "test";
+    return getLen(s);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(4));
+    }
+}
+
+struct ArrTests {
+    [Test]
+    void LiteralCreatesArrStruct() {
+        str source = """
+i32 main() {
+    i32[] nums = [10, 20, 30];
+    return (i32)nums.length;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(3));
+    }
+
+    [Test]
+    void IndexRead() {
+        str source = """
+i32 main() {
+    i32[] nums = [10, 20, 30];
+    return nums[1];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void IndexWrite() {
+        str source = """
+i32 main() {
+    i32[] nums = [1, 2, 3];
+    nums[0] = 99;
+    return nums[0];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void LenField() {
+        str source = """
+i32 main() {
+    i32[] nums = [1, 2, 3, 4, 5];
+    return (i32)nums.length;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void IsEmptyMethodFalse() {
+        str source = """
+i32 main() {
+    i32[] nums = [42];
+    if (nums.is_empty()) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void SumElements() {
+        str source = """
+i32 main() {
+    i32[] nums = [10, 20, 30, 40];
+    mut i32 sum = 0;
+    for (mut u32 i = 0; i < nums.length; i = i + 1u) {
+        sum = sum + nums[i];
+    }
+    return sum;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(100));
+    }
+
+    [Test]
+    void WithPrintf() {
+        str source = """
+i32 main() {
+    i32[] nums = [5, 10, 15];
+    printf("len: %d\n", nums.length);
+    return nums[2];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(15));
+    }
+}
+
+struct FixedArrayTests {
+    [Test]
+    void BasicAllocation() {
+        str source = """
+i32 main() {
+    i8* buf = i8[64];
+    buf[0] = 42;
+    return (i32)buf[0];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void WriteAndReadMultiple() {
+        str source = """
+i32 main() {
+    i32* arr = i32[10];
+    arr[0] = 10;
+    arr[1] = 20;
+    arr[2] = 30;
+    return arr[0] + arr[1] + arr[2];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(60));
+    }
+
+    [Test]
+    void LoopFill() {
+        str source = """
+i32 main() {
+    i32* arr = i32[5];
+    for (mut i32 i = 0; i < 5; i = i + 1) {
+        arr[i] = i * 10;
+    }
+    return arr[3];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+
+    [Test]
+    void LargeBuffer() {
+        str source = """
+i32 main() {
+    i8* buf = i8[8192];
+    buf[0] = 1;
+    buf[8191] = 99;
+    return (i32)buf[8191];
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+}
+
+struct StringTests {
+    [Test]
+    void StructDefinition() {
+        str source = """
+i32 main() {
+    string s = { .data = (i8*)0, .length = 0, .capacity = 0 };
+    return (i32)s.length;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void IsEmptyMethod() {
+        str source = """
+i32 main() {
+    string s = { .data = (i8*)0, .length = 0, .capacity = 0 };
+    if (s.is_empty()) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void CapacityField() {
+        str source = """
+i32 main() {
+    string s = { .data = (i8*)0, .length = 5, .capacity = 16 };
+    return (i32)s.capacity;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(16));
+    }
+}
+
+struct StructTests {
+    [Test]
+    void Definition() {
+        str source = """
+struct Result {
+    i32 value;
+}
+
+void main() {
+    Result result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void BraceInitializerPositional() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { 10, 20 };
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void BraceInitializerDesignated() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { .x = 5, .y = 15 };
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void FieldAccess() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { .x = 42, .y = 10 };
+    return p.x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void FieldAccessSecondField() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { .x = 10, .y = 99 };
+    return p.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void MethodReturnWithBraceInit() {
+        str source = """
+struct Result {
+    i32 value;
+}
+
+Result sum(i32 a, i32 b) {
+    return { .value = a + b };
+}
+
+i32 main() {
+    auto res = sum(10, 20);
+    return res.value;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+
+    [Test]
+    void AutoInferStructType() {
+        str source = """
+struct Data {
+    i32 num;
+}
+
+Data createData(i32 n) {
+    return { .num = n };
+}
+
+i32 main() {
+    auto d = createData(77);
+    return d.num;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(77));
+    }
+
+    [Test]
+    void MultipleFieldsPositional() {
+        str source = """
+struct Vec3 {
+    i32 x;
+    i32 y;
+    i32 z;
+}
+
+i32 main() {
+    Vec3 v = { 1, 2, 3 };
+    return v.x + v.y + v.z;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+
+    [Test]
+    void FieldAccessInExpression() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p = { .x = 10, .y = 5 };
+    return p.x - p.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(5));
+    }
+
+    [Test]
+    void StructAsParameter() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 getX(Point p) {
+    return p.x;
+}
+
+i32 main() {
+    Point p = { .x = 123, .y = 456 };
+    return getX(p);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(123));
+    }
+}
+
+struct ImplTests {
+    [Test]
+    void MethodOnStruct() {
+        str source = """
+struct Counter {
+    i32 value;
+}
+
+impl Counter {
+    i32 get() {
+        return this.value;
+    }
+}
+
+i32 main() {
+    Counter c = { 42 };
+    return c.get();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void ConstAndMethodTogether() {
+        str source = """
+struct Config {
+    i32 timeout;
+}
+
+impl Config {
+    const i32 DEFAULT_TIMEOUT = 30;
+
+    i32 getTimeout() {
+        return this.timeout;
+    }
+}
+
+i32 main() {
+    Config c = { Config.DEFAULT_TIMEOUT };
+    return c.getTimeout();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(30));
+    }
+}

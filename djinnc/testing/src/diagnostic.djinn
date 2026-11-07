@@ -1,0 +1,247 @@
+namespace djinnc::testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+import testing;
+
+struct ActualDiagnostic {
+    bool is_warning;
+    i32 code;
+    ptr<i8> file;
+    i32 line;
+    i32 column;
+    i32 end_line;
+    i32 end_column;
+    ptr<i8> message;
+    ItemList* arguments;
+    bool claimed;
+}
+
+struct DiagnosticReader {
+    ptr<i8> text;
+    i32 at;
+
+    unsafe ptr<i8> read_string() {
+        TextBuffer* value = TextBuffer.create();
+        this.at = this.at + 1;
+        while (this.text[this.at] != 34 && this.text[this.at] != 0) {
+            if (this.text[this.at] == 92) {
+                this.at = this.at + 1;
+                i32 escaped = (i32)this.text[this.at];
+                if (escaped == 110) {
+                    value.append_char(10);
+                } else if (escaped == 114) {
+                    value.append_char(13);
+                } else if (escaped == 116) {
+                    value.append_char(9);
+                } else {
+                    value.append_char(escaped);
+                }
+            } else {
+                value.append_char((i32)this.text[this.at]);
+            }
+            this.at = this.at + 1;
+        }
+        this.at = this.at + 1;
+        return value.cstr();
+    }
+
+    unsafe i32 read_integer() {
+        i32 start = this.at;
+        while (Text.is_digit((i32)this.text[this.at])) {
+            this.at = this.at + 1;
+        }
+        return Text.parse_integer(this.text + start, this.at - start);
+    }
+
+    unsafe ItemList* read_strings() {
+        ItemList* values = ItemList.create();
+        this.at = this.at + 1;
+        while (this.text[this.at] == 34) {
+            values.push((ptr)this.read_string());
+            if (this.text[this.at] == 44) {
+                this.at = this.at + 1;
+            }
+        }
+        this.at = this.at + 1;
+        return values;
+    }
+
+    unsafe void skip_value() {
+        if (this.text[this.at] == 34) {
+            this.read_string();
+        } else {
+            this.read_integer();
+        }
+    }
+
+    unsafe ActualDiagnostic* read_diagnostic() {
+        ActualDiagnostic* diagnostic = (ActualDiagnostic*)Allocator.zeroed(sizeof(ActualDiagnostic));
+        diagnostic.arguments = ItemList.create();
+        this.at = 1;
+        while (this.text[this.at] == 34) {
+            ptr<i8> key = this.read_string();
+            this.at = this.at + 1;
+            if (Text.same(key, "severity")) {
+                diagnostic.is_warning = Text.same(this.read_string(), "warning");
+            } else if (Text.same(key, "code")) {
+                ptr<i8> code = this.read_string();
+                diagnostic.code = Text.parse_integer(code + 1, (i32)strlen(code) - 1);
+            } else if (Text.same(key, "file")) {
+                diagnostic.file = this.read_string();
+            } else if (Text.same(key, "line")) {
+                diagnostic.line = this.read_integer();
+            } else if (Text.same(key, "column")) {
+                diagnostic.column = this.read_integer();
+            } else if (Text.same(key, "end_line")) {
+                diagnostic.end_line = this.read_integer();
+            } else if (Text.same(key, "end_column")) {
+                diagnostic.end_column = this.read_integer();
+            } else if (Text.same(key, "message")) {
+                diagnostic.message = this.read_string();
+            } else if (Text.same(key, "args")) {
+                diagnostic.arguments = this.read_strings();
+            } else {
+                this.skip_value();
+            }
+            if (this.text[this.at] == 44) {
+                this.at = this.at + 1;
+            }
+        }
+        return diagnostic;
+    }
+
+    public static unsafe ItemList* read(ptr<i8> output) {
+        ItemList* diagnostics = ItemList.create();
+        DiagnosticReader* reader = (DiagnosticReader*)Allocator.zeroed(sizeof(DiagnosticReader));
+        reader.text = strstr(output, "{\"severity\":");
+        while (reader.text != null) {
+            diagnostics.push((ptr)reader.read_diagnostic());
+            reader.text = strstr(reader.text + reader.at, "{\"severity\":");
+        }
+        return diagnostics;
+    }
+}
+
+struct DiagnosticComparer {
+    public static unsafe bool same_arguments(ExpectedDiagnostic* expected, ActualDiagnostic* actual) {
+        ItemList* wanted = expected.arguments;
+        ItemList* given = actual.arguments;
+        if (wanted.length == 0) {
+            return true;
+        }
+        if (wanted.length != given.length) {
+            return false;
+        }
+        for (mut i32 i = 0; i < wanted.length; i = i + 1) {
+            if (!Text.same((ptr<i8>)wanted.get(i), (ptr<i8>)given.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static unsafe bool matches(ExpectedDiagnostic* expected, ActualDiagnostic* actual, ptr<i8> source) {
+        if (actual.claimed || expected.code != actual.code || expected.is_warning != actual.is_warning) {
+            return false;
+        }
+        if (expected.line != 0 && (expected.line != actual.line || expected.column != actual.column || !Text.same(actual.file, source))) {
+            return false;
+        }
+        if (expected.end_line != 0 && (expected.end_line != actual.end_line || expected.end_column != actual.end_column)) {
+            return false;
+        }
+        if (expected.message != null && !Text.contains(actual.message, expected.message)) {
+            return false;
+        }
+        return DiagnosticComparer.same_arguments(expected, actual);
+    }
+
+    public static unsafe void claim(ExpectedDiagnostic* expected, ItemList* actual, ptr<i8> source) {
+        for (mut i32 i = 0; i < actual.length && !expected.found; i = i + 1) {
+            ActualDiagnostic* candidate = (ActualDiagnostic*)actual.get(i);
+            if (DiagnosticComparer.matches(expected, candidate, source)) {
+                candidate.claimed = true;
+                expected.found = true;
+            }
+        }
+    }
+
+    public static unsafe void append_severity(TextBuffer* text, bool is_warning, i32 code) {
+        if (is_warning) {
+            text.append("warning E");
+        } else {
+            text.append("error E");
+        }
+        text.append_int((i64)code);
+    }
+
+    public static unsafe void append_missing(TextBuffer* text, ExpectedDiagnostic* expected) {
+        text.append("\n  missing ");
+        DiagnosticComparer.append_severity(text, expected.is_warning, expected.code);
+        if (expected.line != 0) {
+            text.append(" at ");
+            text.append_int((i64)expected.line);
+            text.append(":");
+            text.append_int((i64)expected.column);
+        }
+        if (expected.end_line != 0) {
+            text.append("-");
+            text.append_int((i64)expected.end_line);
+            text.append(":");
+            text.append_int((i64)expected.end_column);
+        }
+        if (expected.message != null) {
+            text.append(" with '");
+            text.append(expected.message);
+            text.append("'");
+        }
+    }
+
+    public static unsafe void append_unexpected(TextBuffer* text, ActualDiagnostic* actual) {
+        text.append("\n  unexpected ");
+        DiagnosticComparer.append_severity(text, actual.is_warning, actual.code);
+        text.append(" at ");
+        text.append(actual.file);
+        text.append(":");
+        text.append_int((i64)actual.line);
+        text.append(":");
+        text.append_int((i64)actual.column);
+        text.append(": ");
+        text.append(actual.message);
+    }
+
+    public static unsafe ptr<i8> compare(Expected* expected, ItemList* actual, ptr<i8> source) {
+        ItemList* wanted = expected.diagnostics;
+        for (mut i32 i = 0; i < wanted.length; i = i + 1) {
+            ExpectedDiagnostic* diagnostic = (ExpectedDiagnostic*)wanted.get(i);
+            diagnostic.found = false;
+            if (diagnostic.line != 0) {
+                DiagnosticComparer.claim(diagnostic, actual, source);
+            }
+        }
+        TextBuffer* text = TextBuffer.create();
+        for (mut i32 i = 0; i < wanted.length; i = i + 1) {
+            ExpectedDiagnostic* diagnostic = (ExpectedDiagnostic*)wanted.get(i);
+            DiagnosticComparer.claim(diagnostic, actual, source);
+            if (!diagnostic.found) {
+                DiagnosticComparer.append_missing(text, diagnostic);
+            }
+        }
+        for (mut i32 i = 0; i < actual.length; i = i + 1) {
+            ActualDiagnostic* diagnostic = (ActualDiagnostic*)actual.get(i);
+            if (!diagnostic.claimed) {
+                DiagnosticComparer.append_unexpected(text, diagnostic);
+            }
+        }
+        if (text.length == 0) {
+            return null;
+        }
+        TextBuffer* reason = TextBuffer.create();
+        reason.append("diagnostics differ:");
+        reason.append(text.cstr());
+        return reason.cstr();
+    }
+}

@@ -6,7 +6,7 @@ impl TypeChecker {
         message.append(before);
         message.append(name);
         message.append(after);
-        this.error(at, message.cstr());
+        this.error_code(at, DiagnosticErrors.BORROW_CONFLICT, message.cstr());
     }
 
     unsafe Borrow* conflicting_borrow(LocalVariable* source, bool exclusive) {
@@ -18,7 +18,7 @@ impl TypeChecker {
                 return borrow;
             }
         }
-        return null;
+        return (Borrow*)0;
     }
 
     unsafe void require_not_borrowed(Node* at, LocalVariable* source, ptr<i8> action) {
@@ -34,7 +34,7 @@ impl TypeChecker {
         message.append("' while it is borrowed by '");
         message.append(borrow.borrower.name);
         message.append("'");
-        this.error(at, message.cstr());
+        this.error_code(at, DiagnosticErrors.BORROW_CONFLICT, message.cstr());
     }
 
     unsafe void borrow_from(Node* initializer, LocalVariable* borrower) {
@@ -69,7 +69,7 @@ impl TypeChecker {
         }
         Node* operand = value.first();
         if (operand.kind() == NodeKind::IDENTIFIER && operand.symbol_kind() == SymbolKind.LOCAL) {
-            this.error(value, "cannot return a pointer to a local variable");
+            this.error_code(value, DiagnosticErrors.BORROW_OUTLIVES_VALUE, "cannot return a pointer to a local variable");
         }
     }
 }

@@ -41,6 +41,34 @@ struct ByteBuffer {
         this.append_char(48 + (i32)(value % 10));
     }
 
+    public unsafe void append_json_string(ptr<i8> text) {
+        this.append_char(34);
+        if (text != null) {
+            i32 count = strlen(text);
+            for (mut i32 i = 0; i < count; i = i + 1) {
+                i32 c = (i32)text[i];
+                if (c == 34 || c == 92) {
+                    this.append_char(92);
+                    this.append_char(c);
+                } else if (c == 10) {
+                    this.append_char(92);
+                    this.append_char(110);
+                } else if (c == 13) {
+                    this.append_char(92);
+                    this.append_char(114);
+                } else if (c == 9) {
+                    this.append_char(92);
+                    this.append_char(116);
+                } else if (c >= 0 && c < 32) {
+                    this.append_char(32);
+                } else {
+                    this.append_char(c);
+                }
+            }
+        }
+        this.append_char(34);
+    }
+
     public unsafe ptr<i8> cstr() {
         this.reserve(1);
         this.data[this.length] = 0;
@@ -56,7 +84,7 @@ struct ByteBuffer {
         while (newCapacity < needed) {
             newCapacity = newCapacity * 2;
         }
-        ptr<i8> newData = (ptr<i8>)Memory.zalloc((i64)newCapacity);
+        ptr<i8> newData = (ptr<i8>)Memory.zalloc((u64)newCapacity);
         memcpy(newData, this.data, (u64)this.length);
         this.data = newData;
         this.capacity = newCapacity;

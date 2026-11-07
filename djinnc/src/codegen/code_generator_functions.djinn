@@ -225,7 +225,7 @@ impl CodeGenerator {
         }
         if (user == null) {
             Diagnostics* diagnostics = this.diagnostics;
-            diagnostics.error(1, 1, "no 'main' function defined");
+            diagnostics.error(DiagnosticErrors.MISSING_MAIN, 1, 1, "no 'main' function defined");
             return;
         }
 
@@ -246,6 +246,7 @@ impl CodeGenerator {
         ptr<ptr> init_args = CodeGenerator.array_of(1);
         init_args[0] = LLVMConstInt(i32_type, 4, 0);
         LLVMBuildCall2(this.builder, init_type, init_fn, init_args, 1, "");
+        this.register_reflected_types();
 
         mut ptr exit_code = LLVMConstInt(i32_type, 0, 0);
         if (user.is_async) {
@@ -330,7 +331,7 @@ impl CodeGenerator {
 
     void warn_attribute(AttributeUse* use, ptr<i8> message) {
         Diagnostics* diagnostics = this.diagnostics;
-        diagnostics.warning(use.line, use.column, message);
+        diagnostics.warning(DiagnosticWarnings.ATTRIBUTE, use.line, use.column, message);
     }
 
     void align_function(FunctionInfo* info, AttributeUse* use) {
@@ -348,6 +349,7 @@ impl CodeGenerator {
         }
         if (!info.is_extern) {
             this.add_function_attribute(info.function, "nounwind");
+            this.add_attribute(info.function, 4294967295, "uwtable", 2);
         }
         PointerList* uses = Attributes.of(info.node);
         for (mut i32 i = 0; i < uses.length; i = i + 1) {

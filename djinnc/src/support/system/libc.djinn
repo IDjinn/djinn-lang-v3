@@ -25,6 +25,7 @@ extern "C" {
     i32 system(ptr<i8> command);
     i32 fflush(ptr stream);
     i32 __djinn_call_entry(ptr address);
+    void __djinn_link_debug_support();
     ptr<i8> getenv(ptr<i8> name);
 
     i64 __djinn_now_us();
@@ -32,7 +33,7 @@ extern "C" {
     ptr<i8> __djinn_argv(i32 index);
     ptr<i8> __djinn_list_files(ptr<i8> directory, ptr<i8> extension);
 
-    ptr logger_create(ptr<i8> name, i32 output, i32 level);
+    ptr logger_get(ptr<i8> name, i32 output, i32 level);
     void logger_set_format(ptr logger, ptr<i8> format);
     void logger_error(ptr logger, ptr<i8> format, ...);
     void logger_warn(ptr logger, ptr<i8> format, ...);

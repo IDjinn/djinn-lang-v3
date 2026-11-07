@@ -37,13 +37,15 @@ esac
 
 mkdir -p "$out"
 rm -f "$archive"
-for name in djinn_runtime logger; do
+for name in runtime_all logger; do
     "$clang" "${flags[@]}" "$root/runtime/$name.c" -o "$out/$name.o"
 done
+"$clang" "${flags[@]}" "$root/runtime/third_party/yyjson/yyjson.c" -o "$out/yyjson.o"
+"$clang" "${flags[@]}" "$root/runtime/json/djinn_json.c" -o "$out/djinn_json.o"
 
 if [ "$windows" = 1 ]; then
-    "$archiver" "-out:$archive" "$out/djinn_runtime.o" "$out/logger.o"
+    "$archiver" "-out:$archive" "$out/runtime_all.o" "$out/logger.o" "$out/yyjson.o" "$out/djinn_json.o"
 else
-    "$archiver" rcs "$archive" "$out/djinn_runtime.o" "$out/logger.o"
+    "$archiver" rcs "$archive" "$out/runtime_all.o" "$out/logger.o" "$out/yyjson.o" "$out/djinn_json.o"
 fi
 echo "$archive"

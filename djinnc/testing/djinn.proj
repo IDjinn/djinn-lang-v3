@@ -1,0 +1,18 @@
+project: "djinnc_testing"
+version: "0.1.0"
+
+compiler:
+  library-mode: true
+
+  output:
+    file: "djinnc_testing.djlib"
+    directory: "build/libs"
+
+  libs: [
+    'std',
+    'testing'
+  ]
+
+  sources: [
+    '../src/support/source/diagnostic_code.djinn'
+  ]

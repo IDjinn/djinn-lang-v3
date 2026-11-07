@@ -55,10 +55,7 @@ struct Linker {
         command.append(object_path);
         command.append("\" \"");
         command.append(options.runtime_lib);
-        command.append("\" /subsystem:console /defaultlib:msvcrt /defaultlib:legacy_stdio_definitions");
-        if (options.debug) {
-            command.append(" /debug");
-        }
+        command.append("\" /subsystem:console /defaultlib:msvcrt /defaultlib:legacy_stdio_definitions /debug");
         ByteBuffer* link_args = options.link_args;
         command.append(link_args.cstr());
         command.append(" \"/out:");
@@ -66,6 +63,39 @@ struct Linker {
         command.append("\"\"");
 
         return Process.run(command.cstr());
+    }
+
+    static void append_runtime_sources(ByteBuffer* command, ptr<i8> runtime_dir) {
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/djinn_runtime.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/scheduler.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/io_file.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/io_socket.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/diagnostics.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/threads.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/console.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/filesystem.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/process.c\"");
+        command.append(" \"");
+        command.append(runtime_dir);
+        command.append("/logger.c\"");
     }
 
     public static i32 link(Options* options, ptr<i8> object_path) {
@@ -88,13 +118,10 @@ struct Linker {
             command.append(options.runtime_lib);
             command.append("\"");
         } else {
-            command.append(" \"");
-            command.append(options.runtime_dir);
-            command.append("/djinn_runtime.c\" \"");
-            command.append(options.runtime_dir);
-            command.append("/logger.c\" -O2");
+            Linker.append_runtime_sources(command, options.runtime_dir);
+            command.append(" -O2");
         }
-        if (options.debug) {
+        if (options.debug || Linker.is_windows()) {
             command.append(" -g");
         }
         ByteBuffer* link_args = options.link_args;

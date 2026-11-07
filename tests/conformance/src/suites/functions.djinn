@@ -1,0 +1,698 @@
+namespace conformance;
+
+import testing;
+import djinnc::testing;
+import djinnc;
+
+struct ConstructorTests {
+    [Test]
+    void StackBasicFieldAccess() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+i32 main() {
+    Point p = Point(10, 20);
+    return p.x;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void StackSecondField() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+i32 main() {
+    Point p = Point(10, 20);
+    return p.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(20));
+    }
+
+    [Test]
+    void StackFieldExpression() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+i32 main() {
+    Point p = Point(30, 12);
+    return p.x + p.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void StackThreeFields() {
+        str source = """
+struct Vec3 {
+    i32 x;
+    i32 y;
+    i32 z;
+
+    Vec3(i32 x, i32 y, i32 z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+}
+
+i32 main() {
+    Vec3 v = Vec3(1, 2, 3);
+    return v.x + v.y + v.z;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(6));
+    }
+
+    [Test]
+    void StackPassedToFunction() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+i32 getX(Point p) {
+    return p.x;
+}
+
+i32 main() {
+    Point p = Point(99, 1);
+    return getX(p);
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void HeapBasicFieldAccess() {
+        str source = """
+struct User {
+    i32 id;
+    i32 age;
+
+    User(i32 id, i32 age) {
+        this.id = id;
+        this.age = age;
+    }
+}
+
+i32 main() {
+    User me = new User(1, 25);
+    return me.id;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void HeapSecondField() {
+        str source = """
+struct User {
+    i32 id;
+    i32 age;
+
+    User(i32 id, i32 age) {
+        this.id = id;
+        this.age = age;
+    }
+}
+
+i32 main() {
+    User me = new User(1, 69);
+    return me.age;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(69));
+    }
+
+    [Test]
+    void HeapFieldExpression() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    Point(i32 x, i32 y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+i32 main() {
+    Point p = new Point(30, 12);
+    return p.x + p.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void HeapThreeFields() {
+        str source = """
+struct Vec3 {
+    i32 x;
+    i32 y;
+    i32 z;
+
+    Vec3(i32 x, i32 y, i32 z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+}
+
+i32 main() {
+    Vec3 v = new Vec3(10, 20, 30);
+    return v.x + v.y + v.z;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(60));
+    }
+
+    [Test]
+    void HeapFieldAssignment() {
+        str source = """
+struct Counter {
+    i32 value;
+
+    Counter(i32 v) {
+        this.value = v;
+    }
+}
+
+i32 main() {
+    Counter c = new Counter(10);
+    c.value = 77;
+    return c.value;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(77));
+    }
+
+    [Test]
+    void StackAndHeapSameStruct() {
+        str source = """
+struct Pair {
+    i32 a;
+    i32 b;
+
+    Pair(i32 a, i32 b) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+i32 main() {
+    Pair stack = Pair(10, 20);
+    Pair heap = new Pair(30, 40);
+    return stack.a + heap.b;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(50));
+    }
+
+    [Test]
+    void GenericStackBasic() {
+        str source = """
+struct Box<T> {
+    T value;
+
+    Box(T v) {
+        this.value = v;
+    }
+}
+
+i32 main() {
+    Box<i32> b = Box<i32>(42);
+    return b.value;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void GenericStackNoArgs() {
+        str source = """
+struct Container<T> {
+    i32 count;
+
+    Container() {
+        this.count = 0;
+    }
+}
+
+i32 main() {
+    Container<i32> c = Container<i32>();
+    return c.count;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(0));
+    }
+
+    [Test]
+    void GenericStackTwoFields() {
+        str source = """
+struct Pair<K, V> {
+    K first;
+    V second;
+
+    Pair(K a, V b) {
+        this.first = a;
+        this.second = b;
+    }
+}
+
+i32 main() {
+    Pair<i32, i32> p = Pair<i32, i32>(10, 32);
+    return p.first + p.second;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void GenericStackMethodCall() {
+        str source = """
+struct Box<T> {
+    T value;
+
+    Box(T v) {
+        this.value = v;
+    }
+
+    public T get() {
+        return this.value;
+    }
+}
+
+i32 main() {
+    Box<i32> b = Box<i32>(77);
+    return b.get();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(77));
+    }
+
+    [Test]
+    void GenericStackMethodForwardReference() {
+        str source = """
+struct Container<T> {
+    T value;
+    i32 count;
+
+    Container(T v) {
+        this.value = v;
+        this.count = 1;
+        this.increment();
+    }
+
+    public void increment() {
+        this.count = this.count + 1;
+    }
+
+    public i32 getCount() {
+        return this.count;
+    }
+}
+
+i32 main() {
+    Container<i32> c = Container<i32>(10);
+    return c.getCount();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(2));
+    }
+
+    [Test]
+    void GenericHeapBasic() {
+        str source = """
+struct Box<T> {
+    T value;
+
+    Box(T v) {
+        this.value = v;
+    }
+}
+
+i32 main() {
+    Box<i32> b = new Box<i32>(99);
+    return b.value;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(99));
+    }
+
+    [Test]
+    void GenericHeapMethodCall() {
+        str source = """
+struct Box<T> {
+    T value;
+
+    Box(T v) {
+        this.value = v;
+    }
+
+    public T get() {
+        return this.value;
+    }
+
+    public void set(T v) {
+        this.value = v;
+    }
+}
+
+i32 main() {
+    Box<i32> b = new Box<i32>(10);
+    b.set(55);
+    return b.get();
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(55));
+    }
+}
+
+struct MethodTests {
+    [Test]
+    void BasicMethodWithBlock() {
+        str source = """
+struct Counter {
+    i32 value;
+
+    i32 getValue() {
+        return this.value;
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void ExpressionBodyArrow() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+
+    i32 getX() => this.x;
+    i32 getY() => this.y;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void MethodWithParameters() {
+        str source = """
+struct Calculator {
+    i32 result;
+
+    i32 add(i32 a, i32 b) {
+        return a + b;
+    }
+
+    i32 multiply(i32 a, i32 b) => a * b;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void PublicPrivateModifiers() {
+        str source = """
+struct Person {
+    i32 age;
+
+    public i32 getAge() => this.age;
+
+    private void setAge(i32 newAge) {
+        this.age = newAge;
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void StaticMethod() {
+        str source = """
+struct Math {
+    static i32 abs(i32 x) {
+        if (x < 0) {
+            return 0 - x;
+        }
+        return x;
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void VoidMethodWithBlock() {
+        str source = """
+struct Calculator {
+    i32 count;
+
+    void foo() {
+        this.count = this.count + 1;
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void MixedFieldsAndMethods() {
+        str source = """
+struct User {
+    i32 id;
+    i32 age;
+
+    i32 getId() => this.id;
+
+    void setId(i32 newId) {
+        this.id = newId;
+    }
+
+    i32 getAge() {
+        return this.age;
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+}
+
+struct OperatorOverloadTests {
+    [Test]
+    void ParseOperatorInInterface() {
+        str source = """
+interface IEquatable<T> {
+    operator ==(T left, T right) -> bool;
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void ParseOperatorInImpl() {
+        str source = """
+struct Vec2 {
+    i32 x;
+    i32 y;
+}
+
+impl Vec2 {
+    operator +(Vec2 left, Vec2 right) -> Vec2 {
+        return { .x = left.x + right.x, .y = left.y + right.y };
+    }
+}
+""";
+        Verify.source(source).with_std().compiles();
+    }
+
+    [Test]
+    void StructAddition() {
+        str source = """
+struct Vec2 {
+    i32 x;
+    i32 y;
+}
+
+impl Vec2 {
+    operator +(Vec2 left, Vec2 right) -> Vec2 {
+        return { .x = left.x + right.x, .y = left.y + right.y };
+    }
+}
+
+i32 main() {
+    Vec2 a = { .x = 1, .y = 2 };
+    Vec2 b = { .x = 3, .y = 4 };
+    Vec2 c = a + b;
+    return c.x + c.y;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(10));
+    }
+
+    [Test]
+    void StructEquality() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+impl Point {
+    operator ==(Point left, Point right) -> bool {
+        return left.x == right.x && left.y == right.y;
+    }
+}
+
+i32 main() {
+    Point a = { .x = 5, .y = 10 };
+    Point b = { .x = 5, .y = 10 };
+    if (a == b) {
+        return 1;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(1));
+    }
+
+    [Test]
+    void NotEqualDerivedFromEqual() {
+        str source = """
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+impl Point {
+    operator ==(Point left, Point right) -> bool {
+        return left.x == right.x && left.y == right.y;
+    }
+}
+
+i32 main() {
+    Point a = { .x = 1, .y = 2 };
+    Point b = { .x = 3, .y = 4 };
+    if (a != b) {
+        return 42;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(42));
+    }
+
+    [Test]
+    void BitwiseOperatorsOnPrimitives() {
+        str source = """
+i32 main() {
+    i32 a = 12;
+    i32 b = 10;
+
+    i32 and_result = a & b;
+    i32 or_result = a | b;
+    i32 xor_result = a ^ b;
+    i32 not_result = ~a;
+    i32 shl_result = 1 << 3;
+    i32 shr_result = 16 >> 2;
+
+    // and: 1000 = 8, or: 1110 = 14, xor: 0110 = 6
+    // not: depends on width, shl: 8, shr: 4
+    // Return sum of and + or + xor + shl + shr = 8 + 14 + 6 + 8 + 4 = 40
+    return and_result + or_result + xor_result + shl_result + shr_result;
+}
+""";
+        Verify.source(source).with_std().runs(Expected.exit(40));
+    }
+
+    [Test]
+    void OperatorInStructBody() {
+        str source = """
+struct Vec2 {
+    i32 x;
+    i32 y;
+
+    operator +(Vec2 left, Vec2 right) -> Vec2 {
+        return { .x = left.x + right.x, .y = left.y + right.y };
+    }
+}
+
+i32 main() {
+    Vec2 a = { .x = 10, .y = 20 };
+    Vec2 b = { .x = 5, .y = 7 };
+    Vec2 c = a + b;
+    return c.x + c.y;
+}
+""";
+        Verify.source(source).runs(Expected.exit(42));
+    }
+
+    [Test]
+    void MultipleOperatorsOnSameStruct() {
+        str source = """
+struct bool : i1;
+struct Vec2 {
+    i32 x;
+    i32 y;
+
+    operator +(Vec2 left, Vec2 right) -> Vec2 {
+        return { .x = left.x + right.x, .y = left.y + right.y };
+    }
+
+    operator ==(Vec2 left, Vec2 right) -> bool {
+        return left.x == right.x && left.y == right.y;
+    }
+}
+
+i32 main() {
+    Vec2 a = { .x = 3, .y = 4 };
+    Vec2 b = { .x = 3, .y = 4 };
+    Vec2 c = { .x = 6, .y = 8 };
+    Vec2 sum = a + b;
+    if (sum == c) {
+        return 99;
+    }
+    return 0;
+}
+""";
+        Verify.source(source).runs(Expected.exit(99));
+    }
+}

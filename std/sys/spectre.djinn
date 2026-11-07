@@ -91,7 +91,7 @@ struct Spectre {
 
     private static i32 writeText(i8* buf, i32 pos, i8* text) {
         i32 len = strlen(text);
-        memcpy(buf + pos, text, len);
+        memcpy(buf + pos, text, (u64)len);
         return pos + len;
     }
 
@@ -101,7 +101,7 @@ struct Spectre {
         pos = Spectre.writeCode(buf, pos, style);
         pos = Spectre.writeText(buf, pos, text);
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void styled2(i8* text, i32 s1, i32 s2) {
@@ -110,7 +110,7 @@ struct Spectre {
         pos = Spectre.writeCodes2(buf, pos, s1, s2);
         pos = Spectre.writeText(buf, pos, text);
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void styledLn(i8* text, i32 style) {
@@ -121,7 +121,7 @@ struct Spectre {
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void styled2Ln(i8* text, i32 s1, i32 s2) {
@@ -132,7 +132,7 @@ struct Spectre {
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void color256(i8* text, i32 color) {
@@ -145,7 +145,7 @@ struct Spectre {
         pos = pos + 1;
         pos = Spectre.writeText(buf, pos, text);
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void color256bg(i8* text, i32 color) {
@@ -158,7 +158,7 @@ struct Spectre {
         pos = pos + 1;
         pos = Spectre.writeText(buf, pos, text);
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void rgb(i8* text, i32 r, i32 g, i32 b) {
@@ -171,7 +171,7 @@ struct Spectre {
         pos = pos + 1;
         pos = Spectre.writeText(buf, pos, text);
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void rgbBg(i8* text, i32 r, i32 g, i32 b) {
@@ -184,13 +184,13 @@ struct Spectre {
         pos = pos + 1;
         pos = Spectre.writeText(buf, pos, text);
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void reset() {
         i8* buf = i8[8];
         i32 pos = Spectre.writeReset(buf, 0);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     private static bool tagMatch(i8* tag, i32 tagLen, i8* keyword) {
@@ -381,13 +381,13 @@ struct Spectre {
             }
 
             if (pos >= bufSize - 64) {
-                write(1, buf, pos);
+                write(1, buf, (u64)pos);
                 pos = 0;
             }
         }
 
         if (pos > 0) {
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
         }
     }
 
@@ -439,7 +439,7 @@ struct Spectre {
         }
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void ruleTitle(i8* title) {
@@ -472,7 +472,7 @@ struct Spectre {
 
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void panel(i8* content, i8* title) {
@@ -530,7 +530,7 @@ struct Spectre {
         buf[pos] = 10;
         pos = pos + 1;
 
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     private static i32 writeCursorErase(i8* buf, i32 pos) {
@@ -576,7 +576,7 @@ struct Spectre {
         } else {
             pos = Spectre.writeCursorHide(buf, pos);
         }
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void progressBar(i32 current, i32 total, i32 width) {
@@ -618,7 +618,7 @@ struct Spectre {
         pos = pos + len;
 
         pos = Spectre.writeReset(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
         __djinn_console_open_line(1);
     }
 
@@ -652,7 +652,7 @@ struct Spectre {
         pos = Spectre.writeText(buf, pos, question);
         buf[pos] = 32;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
 
         i8* input = i8[1024];
         i32 len = __djinn_read_line(input, 1023);
@@ -674,7 +674,7 @@ struct Spectre {
         pos = Spectre.writeText(buf, pos, question);
         buf[pos] = 32;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
 
         i32 len = __djinn_read_line(output, 1023);
         return len;
@@ -694,7 +694,7 @@ struct Spectre {
         pos = Spectre.writeReset(buf, pos);
         pos = Spectre.writeText(buf, pos, question);
         pos = Spectre.writeText(buf, pos, " [y/n] ");
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
 
         i8* input = i8[16];
         i32 len = __djinn_read_line(input, 15);
@@ -738,7 +738,7 @@ struct SpectreTable {
         i32 offset = idx * CELL_WIDTH;
         mut i32 len = strlen(text);
         if (len >= CELL_WIDTH) { len = CELL_WIDTH - 1; }
-        memcpy(this.headers + offset, text, len);
+        memcpy(this.headers + offset, text, (u64)len);
         this.headers[offset + len] = 0;
 
         if ((i8)len > this.colWidths[idx]) {
@@ -762,7 +762,7 @@ struct SpectreTable {
         i32 offset = (row * MAX_COLS + col) * CELL_WIDTH;
         mut i32 len = strlen(text);
         if (len >= CELL_WIDTH) { len = CELL_WIDTH - 1; }
-        memcpy(this.cells + offset, text, len);
+        memcpy(this.cells + offset, text, (u64)len);
         this.cells[offset + len] = 0;
 
         if ((i8)len > this.colWidths[col]) {
@@ -790,7 +790,7 @@ struct SpectreTable {
         }
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     private void renderRow(i8* buf, i8* rowData) {
@@ -804,7 +804,7 @@ struct SpectreTable {
 
             i8* cell = rowData + c * CELL_WIDTH;
             i32 len = strlen(cell);
-            memcpy(buf + pos, cell, len);
+            memcpy(buf + pos, cell, (u64)len);
             pos = pos + len;
 
             mut i32 pad = (i32)this.colWidths[c] - len;
@@ -821,7 +821,7 @@ struct SpectreTable {
         }
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public void render() {
@@ -869,7 +869,7 @@ struct SpectreTree {
     }
 
     private i8 encodeParent(i32 parentIdx) {
-        if (parentIdx < 0) { return (i8)255; }
+        if (parentIdx < 0) { return -1; }
         return (i8)parentIdx;
     }
 
@@ -885,7 +885,7 @@ struct SpectreTree {
         i32 offset = idx * LABEL_SIZE;
         mut i32 len = strlen(label);
         if (len >= LABEL_SIZE) { len = LABEL_SIZE - 1; }
-        memcpy(this.labels + offset, label, len);
+        memcpy(this.labels + offset, label, (u64)len);
         this.labels[offset + len] = 0;
 
         this.parentsBuf[idx] = this.encodeParent(parentIdx);
@@ -958,7 +958,7 @@ struct SpectreTree {
             }
             buf[pos] = 10;
             pos = pos + 1;
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
 
             i = i + 1;
         }
@@ -1003,7 +1003,7 @@ struct SpectreSpinner {
         buf[pos] = 32;
         pos = pos + 1;
         pos = Spectre.writeText(buf, pos, this.message);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
 
         this.frame = this.frame + 1;
     }
@@ -1019,7 +1019,7 @@ struct SpectreSpinner {
         buf[pos] = 10;
         pos = pos + 1;
         pos = Spectre.writeCursorShow(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 }
 
@@ -1063,7 +1063,7 @@ struct SpectreBar {
         pos = pos + len;
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void chart(i8* title) {
@@ -1089,7 +1089,7 @@ struct SpectreAlign {
         pos = Spectre.writeText(buf, pos, text);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void right(i8* text) {
@@ -1109,7 +1109,7 @@ struct SpectreAlign {
         pos = Spectre.writeText(buf, pos, text);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void repeat(i8 ch, i32 count) {
@@ -1121,13 +1121,13 @@ struct SpectreAlign {
             pos = pos + 1;
             i = i + 1;
             if (pos >= 500) {
-                write(1, buf, pos);
+                write(1, buf, (u64)pos);
                 pos = 0;
             }
         }
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 }
 
@@ -1164,7 +1164,7 @@ struct SpectreGrid {
         i32 offset = (row * MAX_COLS + col) * CELL_WIDTH;
         mut i32 len = strlen(text);
         if (len >= CELL_WIDTH) { len = CELL_WIDTH - 1; }
-        memcpy(this.cells + offset, text, len);
+        memcpy(this.cells + offset, text, (u64)len);
         this.cells[offset + len] = 0;
 
         if ((i8)len > this.colWidths[col]) {
@@ -1183,7 +1183,7 @@ struct SpectreGrid {
             while (c < this.numCols) {
                 i8* cell = this.cells + (r * MAX_COLS + c) * CELL_WIDTH;
                 i32 len = strlen(cell);
-                memcpy(buf + pos, cell, len);
+                memcpy(buf + pos, cell, (u64)len);
                 pos = pos + len;
 
                 mut i32 pad = (i32)this.colWidths[c] - len + 2;
@@ -1196,7 +1196,7 @@ struct SpectreGrid {
             }
             buf[pos] = 10;
             pos = pos + 1;
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
             r = r + 1;
         }
     }
@@ -1228,7 +1228,7 @@ struct SpectreColumns {
         while (i < itemCount) {
             i8* item = items + i * itemSize;
             i32 len = strlen(item);
-            memcpy(buf + pos, item, len);
+            memcpy(buf + pos, item, (u64)len);
             pos = pos + len;
 
             mut i32 pad = colW - len;
@@ -1242,7 +1242,7 @@ struct SpectreColumns {
             if (col >= numCols) {
                 buf[pos] = 10;
                 pos = pos + 1;
-                write(1, buf, pos);
+                write(1, buf, (u64)pos);
                 pos = 0;
                 col = 0;
             }
@@ -1251,7 +1251,7 @@ struct SpectreColumns {
         if (pos > 0) {
             buf[pos] = 10;
             pos = pos + 1;
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
         }
     }
 }
@@ -1296,7 +1296,7 @@ struct SpectreTextPath {
 
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 }
 
@@ -1305,9 +1305,9 @@ struct SpectreEmoji {
         i8* buf = i8[512];
         mut i32 pos = 0;
         pos = Spectre.writeCode(buf, pos, Spectre.FG_GREEN);
-        buf[pos] = (i8)0xE2;
-        buf[pos + 1] = (i8)0x9C;
-        buf[pos + 2] = (i8)0x93;
+        buf[pos] = -30;
+        buf[pos + 1] = -100;
+        buf[pos + 2] = -109;
         pos = pos + 3;
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 32;
@@ -1315,16 +1315,16 @@ struct SpectreEmoji {
         pos = Spectre.writeText(buf, pos, message);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void printCross(i8* message) {
         i8* buf = i8[512];
         mut i32 pos = 0;
         pos = Spectre.writeCode(buf, pos, Spectre.FG_RED);
-        buf[pos] = (i8)0xE2;
-        buf[pos + 1] = (i8)0x9C;
-        buf[pos + 2] = (i8)0x97;
+        buf[pos] = -30;
+        buf[pos + 1] = -100;
+        buf[pos + 2] = -105;
         pos = pos + 3;
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 32;
@@ -1332,16 +1332,16 @@ struct SpectreEmoji {
         pos = Spectre.writeText(buf, pos, message);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void printWarning(i8* message) {
         i8* buf = i8[512];
         mut i32 pos = 0;
         pos = Spectre.writeCode(buf, pos, Spectre.FG_YELLOW);
-        buf[pos] = (i8)0xE2;
-        buf[pos + 1] = (i8)0x9A;
-        buf[pos + 2] = (i8)0xA0;
+        buf[pos] = -30;
+        buf[pos + 1] = -102;
+        buf[pos + 2] = -96;
         pos = pos + 3;
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 32;
@@ -1349,16 +1349,16 @@ struct SpectreEmoji {
         pos = Spectre.writeText(buf, pos, message);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void printInfo(i8* message) {
         i8* buf = i8[512];
         mut i32 pos = 0;
         pos = Spectre.writeCode(buf, pos, Spectre.FG_BLUE);
-        buf[pos] = (i8)0xE2;
-        buf[pos + 1] = (i8)0x84;
-        buf[pos + 2] = (i8)0xB9;
+        buf[pos] = -30;
+        buf[pos + 1] = -124;
+        buf[pos + 2] = -71;
         pos = pos + 3;
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 32;
@@ -1366,7 +1366,7 @@ struct SpectreEmoji {
         pos = Spectre.writeText(buf, pos, message);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 }
 
@@ -1418,13 +1418,13 @@ struct SpectreLive {
             }
 
             if (pos >= 3800) {
-                write(1, buf, pos);
+                write(1, buf, (u64)pos);
                 pos = 0;
             }
         }
 
         if (pos > 0) {
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
         }
         this.lineCount = lines;
     }
@@ -1444,7 +1444,7 @@ struct SpectreLive {
         }
         pos = this.writeCursorUp(buf, pos, this.lineCount);
         pos = Spectre.writeCursorShow(buf, pos);
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
         this.lineCount = 0;
     }
 }
@@ -1474,7 +1474,7 @@ struct SpectreSelect {
         i32 offset = idx * OPTION_SIZE;
         mut i32 len = strlen(text);
         if (len >= OPTION_SIZE) { len = OPTION_SIZE - 1; }
-        memcpy(this.options + offset, text, len);
+        memcpy(this.options + offset, text, (u64)len);
         this.options[offset + len] = 0;
         this.count = idx + 1;
     }
@@ -1512,7 +1512,7 @@ struct SpectreSelect {
             i = i + 1;
         }
 
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     private void renderMultiOptions(i8* buf, i8* prompt, i32 cursor, i8* selected) {
@@ -1558,7 +1558,7 @@ struct SpectreSelect {
             i = i + 1;
         }
 
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public i32 prompt(i8* promptText) {
@@ -1592,7 +1592,7 @@ struct SpectreSelect {
                 upos = upos + ulen;
                 up[upos] = 65;
                 upos = upos + 1;
-                write(1, up, upos);
+                write(1, up, (u64)upos);
                 this.renderOptions(buf, promptText, selected);
             }
         }
@@ -1620,7 +1620,7 @@ struct SpectreSelect {
         cpos = cpos + clen;
         clearBuf[cpos] = 65;
         cpos = cpos + 1;
-        write(1, clearBuf, cpos);
+        write(1, clearBuf, (u64)cpos);
 
         if (selected >= 0) {
             i8* result = i8[256];
@@ -1631,7 +1631,7 @@ struct SpectreSelect {
             rpos = Spectre.writeReset(result, rpos);
             result[rpos] = 10;
             rpos = rpos + 1;
-            write(1, result, rpos);
+            write(1, result, (u64)rpos);
         }
 
         return selected;
@@ -1673,7 +1673,7 @@ struct SpectreSelect {
                 upos = upos + ulen;
                 up[upos] = 65;
                 upos = upos + 1;
-                write(1, up, upos);
+                write(1, up, (u64)upos);
                 this.renderMultiOptions(buf, promptText, cursor, selected);
             }
         }
@@ -1681,7 +1681,7 @@ struct SpectreSelect {
         Spectre.setCursorVisible(true);
         Spectre.rawDisable();
 
-        memcpy(results, selected, this.count);
+        memcpy(results, selected, (u64)this.count);
 
         i8* clearBuf = i8[512];
         mut i32 cpos = 0;
@@ -1703,7 +1703,7 @@ struct SpectreSelect {
         cpos = cpos + clen;
         clearBuf[cpos] = 65;
         cpos = cpos + 1;
-        write(1, clearBuf, cpos);
+        write(1, clearBuf, (u64)cpos);
 
         mut i32 si = 0;
         while (si < this.count) {
@@ -1716,7 +1716,7 @@ struct SpectreSelect {
                 rpos = Spectre.writeReset(result, rpos);
                 result[rpos] = 10;
                 rpos = rpos + 1;
-                write(1, result, rpos);
+                write(1, result, (u64)rpos);
             }
             si = si + 1;
         }
@@ -1777,13 +1777,13 @@ struct SpectreText {
                 i = i + 1;
             }
         } else {
-            memcpy(buf + pos, start, len);
+            memcpy(buf + pos, start, (u64)len);
             pos = pos + len;
         }
 
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void wrap(i8* text, i32 width, i32 align) {
@@ -1844,7 +1844,7 @@ struct SpectreBreakdown {
         if (idx >= MAX_ITEMS) { return; }
         mut i32 len = strlen(label);
         if (len >= LABEL_SIZE) { len = LABEL_SIZE - 1; }
-        memcpy(this.labels + idx * LABEL_SIZE, label, len);
+        memcpy(this.labels + idx * LABEL_SIZE, label, (u64)len);
         this.labels[idx * LABEL_SIZE + len] = 0;
         this.values[idx] = value;
         this.colors[idx] = color;
@@ -1904,7 +1904,7 @@ struct SpectreBreakdown {
         }
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public void destroy() {
@@ -2011,7 +2011,7 @@ struct SpectreCalendar {
             buf[pos] = 10;
             pos = pos + 1;
         }
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 }
 
@@ -2092,7 +2092,7 @@ struct SpectreFiglet {
             pos = Spectre.writeReset(buf, pos);
             buf[pos] = 10;
             pos = pos + 1;
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
             row = row + 1;
         }
     }
@@ -2105,8 +2105,8 @@ struct SpectreCanvas {
 
     public static SpectreCanvas create(i32 w, i32 h) {
         i32 size = w * h * 3;
-        i8* p = (i8*)__djinn_malloc(size);
-        memset(p, 0, size);
+        i8* p = (i8*)__djinn_malloc((u64)size);
+        memset(p, 0, (u64)size);
         SpectreCanvas c = { .pixels = p, .width = w, .height = h };
         return c;
     }
@@ -2138,7 +2138,7 @@ struct SpectreCanvas {
     }
 
     public void loadRgb(i8* data) {
-        memcpy(this.pixels, data, this.width * this.height * 3);
+        memcpy(this.pixels, data, (u64)(this.width * this.height * 3));
     }
 
     public void rainbow() {
@@ -2205,7 +2205,7 @@ struct SpectreCanvas {
                 pos = pos + len;
                 pos = Spectre.writeBytes(buf, pos, 3, 0xE2, 0x96, 0x80, 0);
                 if (pos >= 8000) {
-                    write(1, buf, pos);
+                    write(1, buf, (u64)pos);
                     pos = 0;
                 }
                 x = x + 1;
@@ -2213,7 +2213,7 @@ struct SpectreCanvas {
             pos = Spectre.writeReset(buf, pos);
             buf[pos] = 10;
             pos = pos + 1;
-            write(1, buf, pos);
+            write(1, buf, (u64)pos);
             y = y + 2;
         }
     }
@@ -2264,7 +2264,7 @@ struct SpectreException {
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 
     public static void frame(i8* method, i8* file, i32 line) {
@@ -2288,7 +2288,7 @@ struct SpectreException {
         pos = Spectre.writeReset(buf, pos);
         buf[pos] = 10;
         pos = pos + 1;
-        write(1, buf, pos);
+        write(1, buf, (u64)pos);
     }
 }
 
@@ -2339,7 +2339,7 @@ struct SpectreCli {
                 if (tokLen > nameLen && tok[nameLen] == 61) {
                     bool prefix = Spectre.tagMatch(tok, nameLen, name);
                     if (prefix) {
-                        memcpy(out, tok + nameLen + 1, tokLen - nameLen);
+                        memcpy(out, tok + nameLen + 1, (u64)(tokLen - nameLen));
                         return true;
                     }
                 }
@@ -2356,7 +2356,7 @@ struct SpectreCli {
             p = SpectreCli.nextToken(line, p, tok);
             if (p >= 0 && tok[0] != 45) {
                 if (seen == index) {
-                    memcpy(out, tok, strlen(tok) + 1);
+                    memcpy(out, tok, (u64)(strlen(tok) + 1));
                     return true;
                 }
                 seen = seen + 1;

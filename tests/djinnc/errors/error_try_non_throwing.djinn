@@ -1,7 +1,0 @@
-i32 plain() {
-    return 1;
-}
-
-i32 main() {
-    return try plain() ?: 0;
-}

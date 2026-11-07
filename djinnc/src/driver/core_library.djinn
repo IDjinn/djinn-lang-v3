@@ -8,7 +8,7 @@ struct CoreLibrary {
         ptr<i8> listing = __djinn_list_files(directory.cstr(), ".djinn");
         if (listing == null) {
             logger_error(Log.get(), "djinnc: cannot list the core library '%s' (see --runtime-dir)", directory.cstr());
-            return null;
+            return (PointerList*)0;
         }
         PointerList* paths = PointerList.create();
         i32 length = strlen(listing);

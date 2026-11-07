@@ -8,7 +8,7 @@ struct Arena {
 
     public static unsafe Arena* create(u64 block_size) {
         Arena* arena = (Arena*)malloc(sizeof(Arena));
-        arena.head = null;
+        arena.head = (ArenaBlock*)0;
         arena.block_size = block_size;
         arena.total_reserved = 0;
         arena.total_allocated = 0;

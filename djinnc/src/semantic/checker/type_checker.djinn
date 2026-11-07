@@ -20,6 +20,7 @@ struct TypeChecker {
     i32 unsafe_depth;
 
     Node* assign_target;
+    bool negated_literal;
 
     Node* try_target;
 
@@ -36,8 +37,12 @@ struct TypeChecker {
     }
 
     void error(Node* at, ptr<i8> message) {
+        this.error_code(at, DiagnosticErrors.SEMANTIC, message);
+    }
+
+    void error_code(Node* at, i32 code, ptr<i8> message) {
         Diagnostics* diagnostics = this.diagnostics;
-        diagnostics.error_in(at.file_name(), at.line(), at.column(), message);
+        diagnostics.error_span(code, at.file_name(), at.line(), at.column(), at.length(), message);
     }
 
     public u32 resolve_type(TypeRef* ref, Node* at) {
@@ -45,7 +50,7 @@ struct TypeChecker {
         symbols.blame = at;
         u32 resolved = symbols.resolve_type(ref, this.scope);
         if (resolved == 0) {
-            this.error(at, "unknown type");
+            this.error_code(at, DiagnosticErrors.UNKNOWN_TYPE, "unknown type");
             return Types.i32_type();
         }
         return resolved;
@@ -68,12 +73,13 @@ struct TypeChecker {
                     this.check_enum_row(info, constant);
                 }
             }
-            symbols.bindings = null;
+            symbols.bindings = (U32Map*)0;
         }
         PointerList* globals = symbols.globals;
         for (mut i32 i = 0; i < globals.length; i = i + 1) {
             this.check_global((LocalVariable*)globals.get(i));
         }
+        this.check_attribute_payloads();
         PointerList* functions = symbols.functions;
         for (mut i32 i = 0; i < functions.length; i = i + 1) {
             FunctionInfo* info = (FunctionInfo*)functions.get(i);
@@ -96,6 +102,11 @@ struct TypeChecker {
 
         switch (kind) {
             case INT_LITERAL:
+                bool negated = this.negated_literal;
+                this.negated_literal = false;
+                if (expected != 0 && Types.is_integer(expected)) {
+                    this.require_literal_fits(node, expected, negated);
+                }
                 if (expected != 0 && (Types.is_float(expected) || Types.is_integer(expected))) {
                     return expected;
                 }
@@ -120,7 +131,7 @@ struct TypeChecker {
             case BOOL_LITERAL:
                 return Types.bool_type();
             case NULL_LITERAL:
-                return Types.pointer_to(Types.void_type());
+                return this.check_null(expected);
             case IDENTIFIER:
                 return this.fold_constant(node, this.check_lvalue(node));
             case INDEX:
@@ -139,6 +150,7 @@ struct TypeChecker {
                 u32 target = this.resolve_type(node.type(), node);
                 u32 source = this.check_expression(node.first(), target);
                 this.check_pointer_cast(node, target, source);
+                this.check_constant_cast(node, source, target);
                 return target;
             case SWITCH_EXPR:
                 return this.check_switch_expression(node, expected);
@@ -160,7 +172,7 @@ struct TypeChecker {
                 return this.check_intrinsic_expression(node);
         }
 
-        this.error(node, "expression is not supported yet");
+        this.error_code(node, DiagnosticErrors.NOT_SUPPORTED_YET, "expression is not supported yet");
         return Types.i32_type();
     }
 
@@ -170,9 +182,9 @@ struct TypeChecker {
         }
         u32 measured = this.resolve_type(node.type(), node);
         if (Types.is_void(measured) || measured == Types.auto_type()) {
-            this.error(node, "sizeof of this type is not supported yet");
+            this.error_code(node, DiagnosticErrors.NOT_SUPPORTED_YET, "sizeof of this type is not supported yet");
         }
         node.set_symbol(SymbolKind.TYPE, (ptr)(u64)measured);
-        return Types.integer(Target.pointer_bits(), true);
+        return Types.integer(Target.pointer_bits(), false);
     }
 }

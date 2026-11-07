@@ -1,0 +1,20 @@
+namespace djinnc::testing;
+
+import std::sys;
+import std::types;
+import std::libc;
+import std::io;
+import testing;
+
+struct TestPath {
+    const i32 CHECK = 1;
+    const i32 IR = 2;
+    const i32 JIT = 4;
+    const i32 LINK = 8;
+    const i32 ANY = 15;
+    const i32 CODEGEN = 14;
+}
+
+attribute Requires(AttributeTarget.Function | AttributeTarget.Method) {
+    i32 paths;
+}

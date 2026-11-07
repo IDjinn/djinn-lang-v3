@@ -19,7 +19,7 @@ struct Console {
     const i32 bufferSize = 1024;
 
     public static c_result error(i8* message) {
-        return write(stderr, message, strlen(message));
+        return (c_result)write(stderr, message, (u64)strlen(message));
     }
 
     public static c_result printf(i8* format) {
@@ -36,7 +36,7 @@ struct Console {
     }
 
     public static async void* readLine() {
-        void* buffer = __djinn_malloc(bufferSize);
+        void* buffer = __djinn_malloc((u64)bufferSize);
         void* handle = std::builtin::coro.handle();
         i64 ret = __djinn_async_read(stdin, buffer, bufferSize, handle);
         std::builtin::coro.suspend();
@@ -100,19 +100,19 @@ struct Console {
                       // string maior que o buffer: flush atual + write direto
                       if (slen > flushAt) {
                           if (bpos > 0) {
-                              write(1, buf, bpos);
+                              write(1, buf, (u64)bpos);
                               bpos = 0;
                           }
-                          write(1, s, slen);
+                          write(1, s, (u64)slen);
                       } else {
-                          memcpy(buf + bpos, s, slen);
+                          memcpy(buf + bpos, s, (u64)slen);
                           bpos = bpos + slen;
                       }
                   }
 
                   // flush se buffer esta quase cheio
                   if (bpos >= flushAt) {
-                      write(1, buf, bpos);
+                      write(1, buf, (u64)bpos);
                       bpos = 0;
                   }
               }
@@ -122,7 +122,7 @@ struct Console {
               pos = pos + 1u;
 
               if (current == 10) {  // '\n' — flush on newline
-                  write(1, buf, bpos);
+                  write(1, buf, (u64)bpos);
                   bpos = 0;
               }
           }
@@ -130,14 +130,14 @@ struct Console {
 
       // Flush remaining
       if (bpos > 0) {
-          write(1, buf, bpos);
+          write(1, buf, (u64)bpos);
       }
   }
 
   // Builds a formatted string in a heap buffer (same placeholder syntax as
   // writeSync). Used by error construction for interpolated messages.
   public static str format(str format, ...args) {
-      i8* buf = (i8*)__djinn_malloc(bufSize);
+      i8* buf = (i8*)__djinn_malloc((u64)bufSize);
       mut i32 bpos = 0;
       mut size pos = 0u;
 
@@ -189,7 +189,7 @@ struct Console {
                       if (slen > room) {
                           slen = room;
                       }
-                      memcpy(buf + bpos, s, slen);
+                      memcpy(buf + bpos, s, (u64)slen);
                       bpos = bpos + slen;
                   }
               }
@@ -267,7 +267,7 @@ struct Console {
                           __djinn_async_write(stdout, s, slen64, handle);
                           std::builtin::coro.suspend();
                       } else {
-                          memcpy(buf + bpos, s, slen);
+                          memcpy(buf + bpos, s, (u64)slen);
                           bpos = bpos + slen;
                       }
                   }
